@@ -1,0 +1,16 @@
+{
+  "name": "accxlsx",
+  "version": "1.0.0",
+  "description": "",
+  "main": "accMDToXLSX.js",
+  "dependencies": {
+    "fs": "^0.0.1-security",
+    "xlsx": "^0.15.4"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}

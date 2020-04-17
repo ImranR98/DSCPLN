@@ -17,7 +17,7 @@ fi
 sudo cryptsetup luksOpen UUID="$HDDUUID" hdd
 sudo mount /dev/mapper/hdd "$HDDMOUNT"
 
-if [ ! -d "$HDDMOUNTBACKUPS" ] || [ -d "$HDDMOUNTPICTURES" ]; then
+if [ ! -d "$HDDMOUNTBACKUPS" ] || [ ! -d "$HDDMOUNTPICTURES" ]; then
     echo "Some directories from variables.sh are missing!"
     exit
 fi

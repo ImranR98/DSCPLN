@@ -45,7 +45,7 @@ fi
 "$REALTIMESYNCDIR"/realTimeSyncDirs.sh ~/Templates/ "$BACKUPS"/VariousHomeFiles/Templates > ~/IRRTSLogs/Templates.log &
 "$REALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.themes/ "$BACKUPS"/VariousHomeFiles/themes > ~/IRRTSLogs/themes.log &
 "$REALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.config/autostart/ "$BACKUPS"/VariousHomeFiles/autostart > ~/IRRTSLogs/autostart.log &
-"$REALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.local/share/gnome-shell/extensions/ "$BACKUPS"/VariousHomeFiles/gnome-shell-extensions > ~/IRRTSLogs/gnome-shell-extensions.log &
+# "$REALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.local/share/gnome-shell/extensions/ "$BACKUPS"/VariousHomeFiles/gnome-shell-extensions > ~/IRRTSLogs/gnome-shell-extensions.log &
 "$REALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.local/share/applications/ "$BACKUPS"/VariousHomeFiles/DesktopFiles > ~/IRRTSLogs/DesktopFiles.log &
 "$REALTIMESYNCDIR"/realTimeSyncFile.sh ~/.bashrc "$BACKUPS"/VariousHomeFiles > ~/IRRTSLogs/bashrc.log &
 "$REALTIMESYNCDIR"/realTimeSyncDirToZip.sh ~/.local/share/icons/ "$BACKUPS"/VariousHomeFiles > ~/IRRTSLogs/icons.log &

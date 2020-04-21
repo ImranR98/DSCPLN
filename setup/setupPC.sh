@@ -35,6 +35,8 @@ sudo apt install gimp -y
 sudo apt install gparted -y
 # Caffiene
 sudo apt install caffeine -y
+# Notify tools
+sudo apt install libnotify-bin -y
 # Syncthing
 curl -s https://syncthing.net/release-key.txt | sudo apt-key add -
 echo "deb https://apt.syncthing.net/ syncthing stable" | sudo tee /etc/apt/sources.list.d/syncthing.list
@@ -119,7 +121,7 @@ unzip "$BACKUPS"/VariousHomeFiles/icons.zip -d ~/.local/share/icons
 rsync -av "$BACKUPS"/VariousHomeFiles/autostart/ ~/.config/autostart
 unzip "$BACKUPS"/VariousHomeFiles/syncthing.zip -d ~/.config/syncthing
 rsync -av "$BACKUPS"/VariousHomeFiles/rclone/ ~/.config/rclone
-rsync -av "$BACKUPS"/VariousHomeFiles/gnome-shell-extensions/ ~/.local/share/gnome-shell/extensions
+#rsync -av "$BACKUPS"/VariousHomeFiles/gnome-shell-extensions/ ~/.local/share/gnome-shell/extensions
 rsync -av "$BACKUPS"/VariousHomeFiles/DesktopFiles/ ~/.local/share/applications
 cp "$BACKUPS"/VariousHomeFiles/.bashrc ~/
 # Next Steps

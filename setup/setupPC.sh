@@ -96,7 +96,7 @@ sudo apt install chrome-gnome-shell -y
 # Uninstall Geary
 sudo apt remove geary -y
 # Arc-Menu dependency
-sudo apt install gnome-shell-extensions gnome-menus gir1.2-gmenu-3.0
+sudo apt install gnome-shell-extensions gnome-menus gir1.2-gmenu-3.0 -y
 # Change nautilus bookmarks
 sed -i "s|HOME/Documents|HOME/Main|g" .config/user-dirs.dirs
 sed -i "s|HOME/Pictures|HOME/Main/Pictures|g" .config/user-dirs.dirs
@@ -120,5 +120,11 @@ rsync -av "$BACKUPS"/VariousHomeFiles/rclone/ ~/.config/rclone
 rsync -av "$BACKUPS"/VariousHomeFiles/gnome-shell-extensions/ ~/.local/share/gnome-shell/extensions
 rsync -av "$BACKUPS"/VariousHomeFiles/DesktopFiles/ ~/.local/share/applications
 cp "$BACKUPS"/VariousHomeFiles/.bashrc ~/
-# Restart GNOME Shell
-killall -3 gnome-shell
+# Next Steps
+echo 'Next steps:'
+echo 'Get a better wallpaper.'
+echo 'Enable and configure GNOME shell extensions.'
+echo 'Change the GNOME theme (or skip this since STTS will do that after restart).'
+echo 'Sign in to Firefox, Mailspring, and Thunderbird.'
+echo 'Add keyboard shortcuts.'
+echo 'Fix mouse scrolling.'

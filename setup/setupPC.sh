@@ -126,5 +126,10 @@ echo 'Get a better wallpaper.'
 echo 'Enable and configure GNOME shell extensions.'
 echo 'Change the GNOME theme (or skip this since STTS will do that after restart).'
 echo 'Sign in to Firefox, Mailspring, and Thunderbird.'
+echo 'Change the default search in Firefox, and add payment/address autofill by 
+extensions.formautofill.available to on, extensions.formautofill.creditCards.available to true, 
+and adding the right country code to extensions.formautofill.supportedCountries.'
 echo 'Add keyboard shortcuts.'
 echo 'Fix mouse scrolling.'
+echo 'Fix terminal colors, and copy/paste shortcuts (also in VSCode terminal).'
+echo 'Set git Username and email using git config --global user.name and git config --global user.email.'

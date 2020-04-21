@@ -93,6 +93,8 @@ sudo sed -i "s|Exec=|Exec=env MOZ_USE_XINPUT2=1 |g" /usr/share/applications/fire
 sudo apt install exfat-fuse exfat-utils -y
 # Gnome Shell host connector
 sudo apt install chrome-gnome-shell -y
+# Inotify Tools
+sudo apt install inotify-tools -y
 # Uninstall Geary
 sudo apt remove geary -y
 # Arc-Menu dependency

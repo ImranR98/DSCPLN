@@ -101,6 +101,15 @@ sudo apt install inotify-tools -y
 sudo apt remove geary -y
 # Arc-Menu dependency
 sudo apt install gnome-shell-extensions gnome-menus gir1.2-gmenu-3.0 -y
+# Clone and build Yaru theme
+DIR="$(pwd)"
+cd
+git clone https://github.com/ubuntu/yaru.git
+sudo apt install meson -y
+sudo apt install sassc -y
+meson "build" --prefix=/usr
+sudo ninja -C "build" install
+cd "$DIR"
 # Change nautilus bookmarks
 sed -i "s|HOME/Documents|HOME/Main|g" .config/user-dirs.dirs
 sed -i "s|HOME/Pictures|HOME/Main/Pictures|g" .config/user-dirs.dirs

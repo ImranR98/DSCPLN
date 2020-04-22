@@ -107,6 +107,7 @@ cd
 git clone https://github.com/ubuntu/yaru.git
 sudo apt install meson -y
 sudo apt install sassc -y
+cd yaru
 meson "build" --prefix=/usr
 sudo ninja -C "build" install
 cd "$DIR"

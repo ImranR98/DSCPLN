@@ -3,7 +3,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../../variables.sh
 echo "$BACKUPS"
 echo "$NUCSSH"
-if [ -z "$BACKUPS" ] || [ -z "$NUCSSH" ]; then
+echo "$NUCSSHPORT"
+if [ -z "$BACKUPS" ] || [ -z "$NUCSSH" ] || [ -z "$NUCSSHPORT" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
@@ -34,11 +35,11 @@ firstSSHCommand="$firstSSHCommand "'target="$(ls /var/snap/nextcloud/common/back
 firstSSHCommand="$firstSSHCommand "'if [ ! -f ~/calcardbackup/calcardbackup ]; then git clone https://codeberg.org/BernieO/calcardbackup.git; fi;'
 firstSSHCommand="$firstSSHCommand "'sudo ~/calcardbackup/calcardbackup /var/snap/nextcloud/current/nextcloud -p -z;'
 firstSSHCommand="$firstSSHCommand "'mkdir ~/NCDeckBackups; sudo nextcloud.occ deck:export imranr > ~/NCDeckBackups/NextCloud-Deck-$(date +"%Y-%m-%d").json;'
-ssh -t "$NUCSSH" "$firstSSHCommand"
+ssh -t "$NUCSSH" -p "$NUCSSHPORT" "$firstSSHCommand"
 
-rsync -av "$NUCSSH":./NCBackups/ "$BACKUPS"/NextCloud --delete
-rsync -av "$NUCSSH":./calcardbackup/backups/ "$BACKUPS"/NextCloud-Calendar-Contacts --delete
-rsync -av "$NUCSSH":./NCDeckBackups/ ~/.temp-NextCloudDeckBackup --delete
+rsync -av --rsh='ssh -p '"$NUCSSHPORT" "$NUCSSH":./NCBackups/ "$BACKUPS"/NextCloud --delete
+rsync -av --rsh='ssh -p '"$NUCSSHPORT" "$NUCSSH":./calcardbackup/backups/ "$BACKUPS"/NextCloud-Calendar-Contacts --delete
+rsync -av --rsh='ssh -p '"$NUCSSHPORT" "$NUCSSH":./NCDeckBackups/ ~/.temp-NextCloudDeckBackup --delete
 deckJSONFile="$(ls ~/.temp-NextCloudDeckBackup)"
 if [ ! -z "$deckJSONFile" ]; then
     validDeckJSON="$(node $HERE/isJSON.js ~/.temp-NextCloudDeckBackup/$deckJSONFile)"
@@ -57,4 +58,4 @@ secondSSHCommand="$secondSSHCommand "'sudo rm -rf ~/NCBackups;'
 secondSSHCommand="$secondSSHCommand "'sudo rm -rf /var/snap/nextcloud/common/backups/*;'
 secondSSHCommand="$secondSSHCommand "'sudo rm -rf ~/calcardbackup/backups;'
 secondSSHCommand="$secondSSHCommand "'sudo rm -rf ~/NCDeckBackups;'
-ssh -t "$NUCSSH" "$secondSSHCommand"
+ssh -t "$NUCSSH" -p "$NUCSSHPORT" "$secondSSHCommand"

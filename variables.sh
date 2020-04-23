@@ -15,3 +15,4 @@ export HDDMOUNTBACKUPS="$HDDMOUNT/Backups"
 export HDDMOUNTPICTURES="$HDDMOUNT/Pictures"
 export REALTIMESYNCDIR="$HERE1"/../realTimeSync
 export NUCSSH='user@irhome.ddns.net'
+export NUCSSHPORT='9999'

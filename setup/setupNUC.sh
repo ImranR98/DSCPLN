@@ -99,6 +99,7 @@ echo '	echo -e "\n${RED}WARNING: ${NC}Main not found. Was start.sh run?"' >> ~/.
 echo 'fi' >> ~/.bashrc
 echo '# Alias' >> ~/.bashrc
 echo 'alias start=~/start.sh' >> ~/.bashrc
+echo 'alias showssh="sudo netstat -tnpa | grep \"ESTABLISHED.*sshd\""' >> ~/.bashrc
 # Next Steps
 echo 'Next steps:'
 echo 'Prepare the NextCloud backup (extract it from the .tar, move it into /var/snap/nextcloud/common, and make sure it belongs to root (sudo chown -R root:root).'

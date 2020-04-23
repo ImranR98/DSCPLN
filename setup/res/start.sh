@@ -22,16 +22,5 @@ if [ ! -d "$HDDMOUNTBACKUPS" ] || [ ! -d "$HDDMOUNTPICTURES" ]; then
     exit
 fi
 
-if [ ! -d "$HDDMOUNTBACKUPS"/Jellyfin/config ]; then
-	mkdir "$HDDMOUNTBACKUPS"/Jellyfin/config
-fi
-
-if [ ! -d "$HDDMOUNTPICTURES"/Jellyfin/cache ]; then
-	mkdir "$HDDMOUNTPICTURES"/Jellyfin/cache
-fi
-
 syncthing &
 duplicati-server &
-sudo docker stop jellyfin
-sudo docker rm jellyfin
-sudo docker run -d --name jellyfin --volume "$HDDMOUNTBACKUPS"/Jellyfin/config:/config --volume "$HDDMOUNTBACKUPS"/Jellyfin/cache:/cache --volume "$HDDMOUNTPICTURES":/media --user 1000:1000 --net=host jellyfin/jellyfin

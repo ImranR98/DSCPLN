@@ -38,9 +38,7 @@ sudo apt-get install apt-transport-https ca-certificates curl gnupg-agent softwa
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
 sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
 sudo apt-get update
-sudo apt-get install docker-ce docker-ce-cli containerd.io -y
-# Jellyfin (on Docker)
-sudo docker pull jellyfin/jellyfin
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-compose -y
 # Sublime Text
 wget -qO - https://download.sublimetext.com/sublimehq-pub.gpg | sudo apt-key add -  > /dev/null 2>&1
 sudo apt install apt-transport-https -y
@@ -54,11 +52,6 @@ sudo apt-get install -y nodejs
 wget https://launchpad.net/veracrypt/trunk/1.24-update2/+download/veracrypt-1.24-Update2-Debian-10-amd64.deb -O veracrypt.deb > /dev/null 2>&1
 sudo apt install ./veracrypt.deb -y
 rm veracrypt.deb
-# VMWare Player
-wget https://download3.vmware.com/software/player/file/VMware-Player-15.5.1-15018445.x86_64.bundle -O vmplayer.bundle > /dev/null 2>&1
-chmod 750 vmplayer.bundle
-sudo ./vmplayer.bundle
-rm vmplayer.bundle
 # Duplicati
 wget https://updates.duplicati.com/beta/duplicati_2.0.5.1-1_all.deb -O duplicati.deb ? /dev/null 2>&1
 sudo dpkg -i duplicati.deb

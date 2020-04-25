@@ -38,6 +38,7 @@ firstSSHCommand="$firstSSHCommand "'mkdir ~/NCDeckBackups; sudo nextcloud.occ de
 ssh -t "$NEXTCLOUDSSH" -p "$NEXTCLOUDSSHPORT" "$firstSSHCommand"
 
 rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./NCBackups/ "$BACKUPS"/NextCloud --delete
+echo "$(date)" > "$BACKUPS"/NextCloud/lastBackedUp.txt
 #rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./calcardbackup/backups/ "$BACKUPS"/NextCloud-Calendar-Contacts --delete
 rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./NCDeckBackups/ ~/.temp-NextCloudDeckBackup --delete
 deckJSONFile="$(ls ~/.temp-NextCloudDeckBackup)"
@@ -45,6 +46,7 @@ if [ ! -z "$deckJSONFile" ]; then
     validDeckJSON="$(node $HERE/isJSON.js ~/.temp-NextCloudDeckBackup/$deckJSONFile)"
     if [ "$validDeckJSON" == 'true' ]; then
         rsync -av ~/.temp-NextCloudDeckBackup/ "$BACKUPS"/NextCloud-Deck --delete
+        echo "$(date)" > "$BACKUPS"/NextCloud-Deck/lastBackedUp.txt
     else
         echo "$validDeckJSON"
     fi

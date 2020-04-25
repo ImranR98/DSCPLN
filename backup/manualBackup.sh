@@ -19,13 +19,14 @@ echo "Pick an option:"
 echo ""
 echo "1 - Google Takeout"
 echo "2 - Balance.xlsx"
-echo "3 - MySeneca Email"
-echo "4 - WhatsApp"
-echo "5 - Seneca Matrix"
-echo "6 - Reddit"
-echo "7 - PS4 Saves"
-echo "8 - Backup to Hard Drive"
-echo "9 - Copy VMs"
+echo "3 - NextCloud"
+echo "4 - MySeneca Email"
+echo "5 - WhatsApp"
+echo "6 - Seneca Matrix"
+echo "7 - Reddit"
+echo "8 - PS4 Saves"
+echo "9 - Backup to Hard Drive"
+echo "10 - Copy VMs"
 echo ""
 echo "Anything else - exit"
 echo ""
@@ -48,6 +49,12 @@ case $choice in
 
 3)
   echo "==============================="
+  echo "NextCloud"
+  "$HERE"/scripts/nextCloud.sh
+  ;;
+
+4)
+  echo "==============================="
   echo "MySeneca Email"
   echo "==============================="
   echo "No automation available."
@@ -55,37 +62,37 @@ case $choice in
   echo "==============================="
   ;;
 
-4)
+5)
   echo "==============================="
   echo "WhatsApp"
   "$HERE"/scripts/WhatsApp.sh
   ;;
 
-5)
+6)
   echo "==============================="
   echo "Seneca Matrix"
   "$HERE"/scripts/SenecaMatrix.sh --nowait
   ;;
 
-6)
+7)
   echo "==============================="
   echo "Reddit"
   "$HERE"/scripts/redditBackup.sh
   ;;
 
-7)
+8)
   echo "==============================="
   echo "PS4 Saves"
   "$HERE"/scripts/PS4SavesCopy.sh
   ;;
 
-8)
+9)
   echo "==============================="
   echo "Backup to Hard Drive"
   "$HERE"/scripts/backupToHardDrive.sh
   ;;
 
-9)
+10)
   echo "==============================="
   echo "Copy VMs"
   "$HERE"/scripts/copyVMs.sh

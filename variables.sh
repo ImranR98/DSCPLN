@@ -14,5 +14,5 @@ export HDDMOUNT="/media/hdd" # If this is changed, change the Syncthing and Dupl
 export HDDMOUNTBACKUPS="$HDDMOUNT/Backups"
 export HDDMOUNTPICTURES="$HDDMOUNT/Pictures"
 export REALTIMESYNCDIR="$HERE1"/../realTimeSync
-export NUCSSH='user@irhome.ddns.net'
-export NUCSSHPORT='9999'
+export NEXTCLOUDSSH='user@nextcloud.example.com'
+export NEXTCLOUDSSHPORT='22'

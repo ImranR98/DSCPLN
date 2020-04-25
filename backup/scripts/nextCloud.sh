@@ -2,9 +2,9 @@
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../../variables.sh
 echo "$BACKUPS"
-echo "$NUCSSH"
-echo "$NUCSSHPORT"
-if [ -z "$BACKUPS" ] || [ -z "$NUCSSH" ] || [ -z "$NUCSSHPORT" ]; then
+echo "$NEXTCLOUDSSH"
+echo "$NEXTCLOUDSSHPORT"
+if [ -z "$BACKUPS" ] || [ -z "$NEXTCLOUDSSH" ] || [ -z "$NEXTCLOUDSSHPORT" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
@@ -35,11 +35,11 @@ firstSSHCommand="$firstSSHCommand "'target="$(ls /var/snap/nextcloud/common/back
 firstSSHCommand="$firstSSHCommand "'if [ ! -f ~/calcardbackup/calcardbackup ]; then git clone https://codeberg.org/BernieO/calcardbackup.git; fi;'
 firstSSHCommand="$firstSSHCommand "'sudo ~/calcardbackup/calcardbackup /var/snap/nextcloud/current/nextcloud -p -z;'
 firstSSHCommand="$firstSSHCommand "'mkdir ~/NCDeckBackups; sudo nextcloud.occ deck:export imranr > ~/NCDeckBackups/NextCloud-Deck-$(date +"%Y-%m-%d").json;'
-ssh -t "$NUCSSH" -p "$NUCSSHPORT" "$firstSSHCommand"
+ssh -t "$NEXTCLOUDSSH" -p "$NEXTCLOUDSSHPORT" "$firstSSHCommand"
 
-rsync -av --rsh='ssh -p '"$NUCSSHPORT" "$NUCSSH":./NCBackups/ "$BACKUPS"/NextCloud --delete
-rsync -av --rsh='ssh -p '"$NUCSSHPORT" "$NUCSSH":./calcardbackup/backups/ "$BACKUPS"/NextCloud-Calendar-Contacts --delete
-rsync -av --rsh='ssh -p '"$NUCSSHPORT" "$NUCSSH":./NCDeckBackups/ ~/.temp-NextCloudDeckBackup --delete
+rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./NCBackups/ "$BACKUPS"/NextCloud --delete
+rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./calcardbackup/backups/ "$BACKUPS"/NextCloud-Calendar-Contacts --delete
+rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./NCDeckBackups/ ~/.temp-NextCloudDeckBackup --delete
 deckJSONFile="$(ls ~/.temp-NextCloudDeckBackup)"
 if [ ! -z "$deckJSONFile" ]; then
     validDeckJSON="$(node $HERE/isJSON.js ~/.temp-NextCloudDeckBackup/$deckJSONFile)"
@@ -58,4 +58,4 @@ secondSSHCommand="$secondSSHCommand "'sudo rm -rf ~/NCBackups;'
 secondSSHCommand="$secondSSHCommand "'sudo rm -rf /var/snap/nextcloud/common/backups/*;'
 secondSSHCommand="$secondSSHCommand "'sudo rm -rf ~/calcardbackup/backups;'
 secondSSHCommand="$secondSSHCommand "'sudo rm -rf ~/NCDeckBackups;'
-ssh -t "$NUCSSH" -p "$NUCSSHPORT" "$secondSSHCommand"
+ssh -t "$NEXTCLOUDSSH" -p "$NEXTCLOUDSSHPORT" "$secondSSHCommand"

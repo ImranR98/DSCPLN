@@ -32,14 +32,11 @@ fi
 firstSSHCommand=''
 firstSSHCommand="$firstSSHCommand "'sudo nextcloud.export;'
 firstSSHCommand="$firstSSHCommand "'target="$(ls /var/snap/nextcloud/common/backups/)"; mkdir ~/NCBackups; sudo tar -cvf ~/NCBackups/$target.tar /var/snap/nextcloud/common/backups/$target;'
-#firstSSHCommand="$firstSSHCommand "'if [ ! -f ~/calcardbackup/calcardbackup ]; then git clone https://codeberg.org/BernieO/calcardbackup.git; fi;'
-#firstSSHCommand="$firstSSHCommand "'sudo ~/calcardbackup/calcardbackup /var/snap/nextcloud/current/nextcloud -p -z;'
 firstSSHCommand="$firstSSHCommand "'mkdir ~/NCDeckBackups; sudo nextcloud.occ deck:export imranr > ~/NCDeckBackups/NextCloud-Deck-$(date +"%Y-%m-%d").json;'
 ssh -t "$NEXTCLOUDSSH" -p "$NEXTCLOUDSSHPORT" "$firstSSHCommand"
 
 rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./NCBackups/ "$BACKUPS"/NextCloud --delete
 echo "$(date)" > "$BACKUPS"/NextCloud/lastBackedUp.txt
-#rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./calcardbackup/backups/ "$BACKUPS"/NextCloud-Calendar-Contacts --delete
 rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./NCDeckBackups/ ~/.temp-NextCloudDeckBackup --delete
 deckJSONFile="$(ls ~/.temp-NextCloudDeckBackup)"
 if [ ! -z "$deckJSONFile" ]; then
@@ -58,6 +55,5 @@ rm -rf ~/.temp-NextCloudDeckBackup
 secondSSHCommand=''
 secondSSHCommand="$secondSSHCommand "'sudo rm -rf ~/NCBackups;'
 secondSSHCommand="$secondSSHCommand "'sudo rm -rf /var/snap/nextcloud/common/backups/*;'
-#secondSSHCommand="$secondSSHCommand "'sudo rm -rf ~/calcardbackup/backups;'
 secondSSHCommand="$secondSSHCommand "'sudo rm -rf ~/NCDeckBackups;'
 ssh -t "$NEXTCLOUDSSH" -p "$NEXTCLOUDSSHPORT" "$secondSSHCommand"

@@ -1,13 +1,16 @@
 # ImranR-Backup-and-Setup
-Intel NUC PC acts as a Network Attached Storage device to sync my PC to, and this repo also contains scripts to automate various storage mounting, sync, and backup tasks.
+Setup my PC, NUC, and an Ubuntu VPS.
+- PC Syncs to NUC with Syncthing, and NUC backs up to Backblaze via Duplicati.
+- VPS runs NextCloud to Sync Calendar, Contacts, Notes, Deck, and Files (via SSH to NUC).
 
 ## Requirements
 A PC (called 'NUC' below) running a Debian based distro (Intel NUC w/ ubuntu) accessible via SSH.
 A PC running a Debian based distro (Laptop w/ Pop!\_OS), that can access the first PC via passwordless SSH.
+A PC (called 'VPS' below) running a Debian based distro (Google Cloud Compute VPS w/ ubuntu) accessible via SSH.
 
 ## Usage
 ### Setup
-Use scripts in /setup to setup both PCs (assuming fresh install).
+Use scripts in /setup to setup everything PCs (assuming fresh installs).
 ### Backup
 Assuming everything (Syncthing, Duplicati, etc) is setup:
 - Set backup/realTimeBackup.sh to run at startup on the PC.

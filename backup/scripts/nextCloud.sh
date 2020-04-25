@@ -17,9 +17,9 @@ if [ ! -d "$BACKUPS"/NextCloud ]; then
 	mkdir "$BACKUPS"/NextCloud
 fi
 
-if [ ! -d "$BACKUPS"/NextCloud-Calendar-Contacts ]; then
-	mkdir "$BACKUPS"/NextCloud-Calendar-Contacts
-fi
+#if [ ! -d "$BACKUPS"/NextCloud-Calendar-Contacts ]; then
+#	mkdir "$BACKUPS"/NextCloud-Calendar-Contacts
+#fi
 
 if [ ! -d "$BACKUPS"/NextCloud-Deck ]; then
 	mkdir "$BACKUPS"/NextCloud-Deck

@@ -17,9 +17,9 @@ if [ ! -d "$BACKUPS"/NextCloud ]; then
 	mkdir "$BACKUPS"/NextCloud
 fi
 
-#if [ ! -d "$BACKUPS"/NextCloud-Calendar-Contacts ]; then
-#	mkdir "$BACKUPS"/NextCloud-Calendar-Contacts
-#fi
+if [ ! -d "$BACKUPS"/Notes ]; then
+	mkdir "$BACKUPS"/Notes
+fi
 
 if [ ! -d "$BACKUPS"/NextCloud-Deck ]; then
 	mkdir "$BACKUPS"/NextCloud-Deck
@@ -37,6 +37,8 @@ ssh -t "$NEXTCLOUDSSH" -p "$NEXTCLOUDSSHPORT" "$firstSSHCommand"
 
 rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./NCBackups/ "$BACKUPS"/NextCloud --delete
 echo "$(date)" > "$BACKUPS"/NextCloud/lastBackedUp.txt
+rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./Notes/ "$BACKUPS"/Notes --delete
+echo "$(date)" > "$BACKUPS"/Notes/lastBackedUp.txt
 rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./NCDeckBackups/ ~/.temp-NextCloudDeckBackup --delete
 deckJSONFile="$(ls ~/.temp-NextCloudDeckBackup)"
 if [ ! -z "$deckJSONFile" ]; then

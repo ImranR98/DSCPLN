@@ -3,6 +3,8 @@
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
+while [ true ]; do
+
 echo "============="
 echo "ImranR Backup"
 echo "============="
@@ -100,3 +102,5 @@ case $choice in
   exit
   ;;
 esac
+echo ""
+done

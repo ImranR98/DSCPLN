@@ -13,7 +13,7 @@ fi
 FFFOLDER=$(ls ~/.mozilla/firefox/ | grep ".default-release$")
 if [ ! -z "$FFFOLDER" ]; then
 	if [ -f ~/.mozilla/firefox/"$FFFOLDER"/bookmarks.html ]; then
-        cp ~/.mozilla/firefox/"$FFFOLDER"/bookmarks.html "$BACKUPS"
+        cp -v ~/.mozilla/firefox/"$FFFOLDER"/bookmarks.html "$BACKUPS"
     else
         echo "No bookmarks.html found."
     fi

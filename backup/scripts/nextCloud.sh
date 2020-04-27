@@ -1,9 +1,6 @@
 #!/bin/bash
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../../variables.sh
-echo "$BACKUPS"
-echo "$NEXTCLOUDSSH"
-echo "$NEXTCLOUDSSHPORT"
 if [ -z "$BACKUPS" ] || [ -z "$NEXTCLOUDSSH" ] || [ -z "$NEXTCLOUDSSHPORT" ]; then
     echo "Some environment variables are missing!"
     exit

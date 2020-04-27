@@ -131,18 +131,30 @@ unzip "$BACKUPS"/VariousHomeFiles/icons.zip -d ~/.local/share/icons
 rsync -av "$BACKUPS"/VariousHomeFiles/autostart/ ~/.config/autostart
 unzip "$BACKUPS"/VariousHomeFiles/syncthing.zip -d ~/.config/syncthing
 rsync -av "$BACKUPS"/VariousHomeFiles/rclone/ ~/.config/rclone
-#rsync -av "$BACKUPS"/VariousHomeFiles/gnome-shell-extensions/ ~/.local/share/gnome-shell/extensions
 rsync -av "$BACKUPS"/VariousHomeFiles/DesktopFiles/ ~/.local/share/applications
 cp "$BACKUPS"/VariousHomeFiles/.bashrc ~/
+# Firefox preferences
+FFFOLDER=$(ls ~/.mozilla/firefox/ | grep ".default-release$")
+if [ ! -z "$FFFOLDER" ]; then
+    touch ~/.mozilla/firefox/"$FFFOLDER"/user.js
+    echo 'user_pref("extensions.formautofill.available", "on");' >> ~/.mozilla/firefox/"$FFFOLDER"/user.js
+    echo 'user_pref("extensions.formautofill.creditCards.available", true);' >> ~/.mozilla/firefox/"$FFFOLDER"/user.js
+    echo 'user_pref("extensions.formautofill.supportedCountries", "US,CA");' >> ~/.mozilla/firefox/"$FFFOLDER"/user.js
+    echo 'user_pref("browser.bookmarks.autoExportHTML", true);' >> ~/.mozilla/firefox/"$FFFOLDER"/user.js
+else
+    echo 'Firefox default folder was not found. You will have to make these changes to about:config manually:'
+    echo 'Add payment/address autofill by 
+    extensions.formautofill.available to on, extensions.formautofill.creditCards.available to true, 
+    and adding the right country code to extensions.formautofill.supportedCountries.'
+    echo 'Change browser.bookmarks.autoExportHTML to true.'
+fi
 # Next Steps
 echo 'Next steps:'
 echo 'Get a better wallpaper.'
+echo 'Change the default search in Firefox.'
 echo 'Enable and configure GNOME shell extensions.'
 echo 'Change the GNOME theme (or skip this since STTS will do that after restart).'
 echo 'Sign in to Firefox, Mailspring, and Thunderbird.'
-echo 'Change the default search in Firefox, and add payment/address autofill by 
-extensions.formautofill.available to on, extensions.formautofill.creditCards.available to true, 
-and adding the right country code to extensions.formautofill.supportedCountries.'
 echo 'Add keyboard shortcuts.'
 echo 'Fix mouse scrolling.'
 echo 'Fix terminal colors, and copy/paste shortcuts (also in VSCode terminal).'

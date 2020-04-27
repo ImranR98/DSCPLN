@@ -2,31 +2,23 @@
 # Backup files from various sources manually
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-source "$HERE"/../variables.sh
-if [ -z "$SCHOOL" ]; then
-    echo "Some environment variables are missing!"
-    exit
-fi
-if [ ! -d "$SCHOOL" ]; then
-    echo "Some directories from variables.sh are missing!"
-    exit
-fi
 
 echo "============="
 echo "ImranR Backup"
 echo "============="
 echo "Pick an option:"
 echo ""
-echo "1 - Google Takeout"
+echo "1 - NextCloud"
 echo "2 - Balance.xlsx"
-echo "3 - NextCloud"
+echo "3 - Seneca Matrix"
 echo "4 - MySeneca Email"
 echo "5 - WhatsApp"
-echo "6 - Seneca Matrix"
+echo "6 - Firefox Bookmarks"
 echo "7 - Reddit"
-echo "8 - PS4 Saves"
-echo "9 - Backup to Hard Drive"
-echo "10 - Copy VMs"
+echo "8 - Google Takeout"
+echo "9 - PS4 Saves"
+echo "10 - Backup to Hard Drive"
+echo "11 - Copy VMs"
 echo ""
 echo "Anything else - exit"
 echo ""
@@ -37,8 +29,8 @@ case $choice in
 
 1)
   echo "==============================="
-  echo "Google Takeout"
-  "$HERE"/scripts/googleTakeout.sh
+  echo "NextCloud"
+  "$HERE"/scripts/nextCloud.sh
   ;;
 
 2)
@@ -49,8 +41,8 @@ case $choice in
 
 3)
   echo "==============================="
-  echo "NextCloud"
-  "$HERE"/scripts/nextCloud.sh
+  echo "Seneca Matrix"
+  "$HERE"/scripts/SenecaMatrix.sh --nowait
   ;;
 
 4)
@@ -70,8 +62,8 @@ case $choice in
 
 6)
   echo "==============================="
-  echo "Seneca Matrix"
-  "$HERE"/scripts/SenecaMatrix.sh --nowait
+  echo "Firefox Bookmarks"
+  "$HERE"/scripts/firefoxBookmarks.sh
   ;;
 
 7)
@@ -82,17 +74,23 @@ case $choice in
 
 8)
   echo "==============================="
+  echo "Google Takeout"
+  "$HERE"/scripts/googleTakeout.sh
+  ;;
+
+9)
+  echo "==============================="
   echo "PS4 Saves"
   "$HERE"/scripts/PS4SavesCopy.sh
   ;;
 
-9)
+10)
   echo "==============================="
   echo "Backup to Hard Drive"
   "$HERE"/scripts/backupToHardDrive.sh
   ;;
 
-10)
+11)
   echo "==============================="
   echo "Copy VMs"
   "$HERE"/scripts/copyVMs.sh

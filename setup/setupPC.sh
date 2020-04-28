@@ -133,6 +133,15 @@ unzip "$BACKUPS"/VariousHomeFiles/syncthing.zip -d ~/.config/syncthing
 rsync -av "$BACKUPS"/VariousHomeFiles/rclone/ ~/.config/rclone
 rsync -av "$BACKUPS"/VariousHomeFiles/DesktopFiles/ ~/.local/share/applications
 cp "$BACKUPS"/VariousHomeFiles/.bashrc ~/
+# Keyboard Shortcuts
+gsettings set org.gnome.settings-daemon.plugins.media-keys calculator "['<Super>c']"
+gsettings set org.gnome.settings-daemon.plugins.media-keys home "['<Super>b']"
+gsettings set org.gnome.settings-daemon.plugins.media-keys terminal "['<Super>t']"
+gsettings set org.gnome.settings-daemon.plugins.media-keys www "['<Super>f']"
+gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/']"
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ name 'Sublime'
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ command '/opt/sublime_text/sublime_text'
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ binding '<Super>s'
 # Firefox preferences
 FFFOLDER=$(ls ~/.mozilla/firefox/ | grep ".default-release$")
 if [ ! -z "$FFFOLDER" ]; then
@@ -155,7 +164,6 @@ echo 'Change the default search in Firefox.'
 echo 'Enable and configure GNOME shell extensions.'
 echo 'Change the GNOME theme (or skip this since STTS will do that after restart).'
 echo 'Sign in to Firefox, Mailspring, and Thunderbird.'
-echo 'Add keyboard shortcuts.'
 echo 'Fix mouse scrolling.'
 echo 'Fix terminal colors, and copy/paste shortcuts (also in VSCode terminal).'
 echo 'Set git Username and email using git config --global user.name and git config --global user.email.'

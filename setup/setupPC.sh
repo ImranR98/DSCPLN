@@ -10,7 +10,8 @@ if [ ! -d "$MAIN" ] || [ ! -d "$BACKUPS" ] || [ ! -d "$VMS" ]; then
     echo "Some directories from variables.sh are missing!"
     exit
 fi
-
+# Start Nautilus so config files are created (modified later)
+nautilus &
 # cryptsetup
 sudo apt install cryptsetup -y
 # htop

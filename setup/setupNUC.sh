@@ -31,14 +31,6 @@ curl -s https://syncthing.net/release-key.txt | sudo apt-key add -
 echo "deb https://apt.syncthing.net/ syncthing stable" | sudo tee /etc/apt/sources.list.d/syncthing.list
 sudo apt-get update
 sudo apt-get install syncthing
-# Docker
-sudo apt-get remove docker docker-engine docker.io containerd runc
-sudo apt-get update
-sudo apt-get install apt-transport-https ca-certificates curl gnupg-agent software-properties-common -y
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-sudo apt-get update
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-compose -y
 # Sublime Text
 wget -qO - https://download.sublimetext.com/sublimehq-pub.gpg | sudo apt-key add -  > /dev/null 2>&1
 sudo apt install apt-transport-https -y
@@ -79,8 +71,35 @@ echo "MOZ_USE_XINPUT2 DEFAULT=1" | sudo tee -a /etc/security/pam_env.conf
 # start.sh and variables
 cp "$HERE"/res/start.sh ~
 cp "$HERE"/../variables.sh ~
-# calcardbackup
-git clone https://codeberg.org/BernieO/calcardbackup.git
+# Keyboard Shortcuts
+gsettings set org.gnome.settings-daemon.plugins.media-keys calculator "['<Super>c']"
+gsettings set org.gnome.settings-daemon.plugins.media-keys home "['<Super>b']"
+gsettings set org.gnome.settings-daemon.plugins.media-keys terminal "['<Super>t']"
+gsettings set org.gnome.settings-daemon.plugins.media-keys www "['<Super>f']"
+gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/']"
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ name 'Sublime'
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ command '/opt/sublime_text/sublime_text'
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ binding '<Super>s'
+# Firefox preferences
+FFFOLDER=$(ls ~/.mozilla/firefox/ | grep ".default-release$")
+if [ ! -z "$FFFOLDER" ]; then
+    touch ~/.mozilla/firefox/"$FFFOLDER"/user.js
+    echo 'user_pref("extensions.formautofill.available", "on");' >> ~/.mozilla/firefox/"$FFFOLDER"/user.js
+    echo 'user_pref("extensions.formautofill.creditCards.available", true);' >> ~/.mozilla/firefox/"$FFFOLDER"/user.js
+    echo 'user_pref("extensions.formautofill.supportedCountries", "US,CA");' >> ~/.mozilla/firefox/"$FFFOLDER"/user.js
+    echo 'user_pref("browser.bookmarks.autoExportHTML", true);' >> ~/.mozilla/firefox/"$FFFOLDER"/user.js
+else
+    echo 'Firefox default folder was not found. You will have to make these changes to about:config manually:'
+    echo 'Add payment/address autofill by 
+    extensions.formautofill.available to on, extensions.formautofill.creditCards.available to true, 
+    and adding the right country code to extensions.formautofill.supportedCountries.'
+    echo 'Change browser.bookmarks.autoExportHTML to true.'
+fi
+# git
+git config --global user.name 'Imran Remtulla'
+git config --global user.email 'iremtulla15@gmail.com'
+# Natural scrolling
+gsettings set org.gnome.desktop.peripherals.touchpad natural-scroll true
 # .bashrc
 echo '# Warn if '"$HDDMOUNT"'/Main doesn'"'"'t exist' >> ~/.bashrc
 echo 'RED="\033[0;31m"' >> ~/.bashrc

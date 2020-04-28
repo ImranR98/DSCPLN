@@ -164,12 +164,14 @@ else
     and adding the right country code to extensions.formautofill.supportedCountries.'
     echo 'Change browser.bookmarks.autoExportHTML to true.'
 fi
+# git
+git config --global user.name 'Imran Remtulla'
+git config --global user.email 'iremtulla15@gmail.com'
+# Natural scrolling
+gsettings set org.gnome.desktop.peripherals.touchpad natural-scroll true
 # Next Steps
 echo 'Next steps:'
 echo 'Change the default search in Firefox.'
-echo 'Enable and configure GNOME shell extensions.'
-echo 'Change the GNOME theme (or skip this since STTS will do that after restart).'
 echo 'Sign in to Firefox, Mailspring, and Thunderbird.'
-echo 'Fix mouse scrolling.'
+echo 'Enable and configure GNOME shell extensions.'
 echo 'Fix terminal colors, and copy/paste shortcuts (also in VSCode terminal).'
-echo 'Set git Username and email using git config --global user.name and git config --global user.email.'

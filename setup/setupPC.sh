@@ -142,6 +142,13 @@ gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "[
 gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ name 'Sublime'
 gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ command '/opt/sublime_text/sublime_text'
 gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ binding '<Super>s'
+# Background
+if [ ! -d ~/.local/share/backgrounds ]; then
+    mkdir ~/.local/share/backgrounds
+fi
+cp "$HERE"/res/BG.jpg ~/.local/share/backgrounds
+gsettings set org.gnome.desktop.background picture-uri "file:///home/$(whoami)/.local/share/backgrounds/BG.jpg"
+gsettings set org.gnome.desktop.screensaver picture-uri "file:///home/$(whoami)/.local/share/backgrounds/BG.jpg"
 # Firefox preferences
 FFFOLDER=$(ls ~/.mozilla/firefox/ | grep ".default-release$")
 if [ ! -z "$FFFOLDER" ]; then
@@ -159,7 +166,6 @@ else
 fi
 # Next Steps
 echo 'Next steps:'
-echo 'Get a better wallpaper.'
 echo 'Change the default search in Firefox.'
 echo 'Enable and configure GNOME shell extensions.'
 echo 'Change the GNOME theme (or skip this since STTS will do that after restart).'

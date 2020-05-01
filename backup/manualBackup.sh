@@ -13,10 +13,10 @@ echo ""
 echo "1 - NextCloud"
 echo "2 - Balance.xlsx"
 echo "3 - Seneca Matrix"
-echo "4 - MySeneca Email"
-echo "5 - WhatsApp"
-echo "6 - Firefox Bookmarks"
-echo "7 - Reddit"
+echo "4 - Firefox Bookmarks"
+echo "5 - Reddit"
+echo "6 - MySeneca Email"
+echo "7 - WhatsApp"
 echo "8 - Google Takeout"
 echo "9 - PS4 Saves"
 echo "10 - Backup to Hard Drive"
@@ -49,6 +49,18 @@ case $choice in
 
 4)
   echo "==============================="
+  echo "Firefox Bookmarks"
+  "$HERE"/scripts/firefoxBookmarks.sh
+  ;;
+
+5)
+  echo "==============================="
+  echo "Reddit"
+  "$HERE"/scripts/redditBackup.sh
+  ;;
+
+6)
+  echo "==============================="
   echo "MySeneca Email"
   echo "==============================="
   echo "No automation available."
@@ -56,22 +68,10 @@ case $choice in
   echo "==============================="
   ;;
 
-5)
+7)
   echo "==============================="
   echo "WhatsApp"
   "$HERE"/scripts/WhatsApp.sh
-  ;;
-
-6)
-  echo "==============================="
-  echo "Firefox Bookmarks"
-  "$HERE"/scripts/firefoxBookmarks.sh
-  ;;
-
-7)
-  echo "==============================="
-  echo "Reddit"
-  "$HERE"/scripts/redditBackup.sh
   ;;
 
 8)

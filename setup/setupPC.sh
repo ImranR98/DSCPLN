@@ -123,6 +123,12 @@ sudo sed -i "s|MUSIC=Music|# MUSIC=Music|g" /etc/xdg/user-dirs.defaults
 sudo sed -i "s|VIDEOS=Videos|# VIDEOS=Videos|g" /etc/xdg/user-dirs.defaults
 # Enable Firefox touch scrolling
 echo "MOZ_USE_XINPUT2 DEFAULT=1" | sudo tee -a /etc/security/pam_env.conf
+# comfortable-swipe
+sudo apt-get install git libinput-tools libxdo-dev g++
+git clone https://github.com/Hikari9/comfortable-swipe.git --depth 1
+cd comfortable-swipe
+bash install
+sudo gpasswd -a $USER $(ls -l /dev/input/event* | awk '{print $4}' | head --line=1)
 # Other File copying
 rsync -av "$BACKUPS"/.ssh/ ~/.ssh
 rsync -av "$VMS"/ ~/vmware
@@ -134,6 +140,7 @@ unzip "$BACKUPS"/VariousHomeFiles/syncthing.zip -d ~/.config/syncthing
 rsync -av "$BACKUPS"/VariousHomeFiles/rclone/ ~/.config/rclone
 rsync -av "$BACKUPS"/VariousHomeFiles/DesktopFiles/ ~/.local/share/applications
 cp "$BACKUPS"/VariousHomeFiles/.bashrc ~/
+cp "$BACKUPS"/VariousHomeFiles/comfortable-swipe.conf "$(comfortable-swipe config)"
 # Keyboard Shortcuts
 gsettings set org.gnome.settings-daemon.plugins.media-keys calculator "['<Super>c']"
 gsettings set org.gnome.settings-daemon.plugins.media-keys home "['<Super>b']"
@@ -170,9 +177,12 @@ git config --global user.name 'Imran Remtulla'
 git config --global user.email 'iremtulla15@gmail.com'
 # Natural scrolling
 gsettings set org.gnome.desktop.peripherals.touchpad natural-scroll true
+# Enable mouse movements while typing
+gsettings set org.gnome.desktop.peripherals.touchpad disable-while-typing false
 # Next Steps
 echo 'Next steps:'
 echo 'Change the default search in Firefox.'
 echo 'Sign in to Firefox, Mailspring, and Thunderbird.'
 echo 'Enable and configure GNOME shell extensions.'
 echo 'Fix terminal colors, and copy/paste shortcuts (also in VSCode terminal).'
+echo 'Log out and back in to enable comfortable-swipe.'

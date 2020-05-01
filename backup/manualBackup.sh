@@ -18,9 +18,9 @@ echo "5 - Reddit"
 echo "6 - MySeneca Email"
 echo "7 - WhatsApp"
 echo "8 - Google Takeout"
-echo "9 - PS4 Saves"
-echo "10 - Backup to Hard Drive"
-echo "11 - Copy VMs"
+echo "9 - Copy VMs"
+echo "10 - PS4 Saves"
+echo "11 - Backup to Hard Drive"
 echo ""
 echo "Anything else - exit"
 echo ""
@@ -82,20 +82,20 @@ case $choice in
 
 9)
   echo "==============================="
-  echo "PS4 Saves"
-  "$HERE"/scripts/PS4SavesCopy.sh
+  echo "Copy VMs"
+  "$HERE"/scripts/copyVMs.sh
   ;;
 
 10)
   echo "==============================="
-  echo "Backup to Hard Drive"
-  "$HERE"/scripts/backupToHardDrive.sh
+  echo "PS4 Saves"
+  "$HERE"/scripts/PS4SavesCopy.sh
   ;;
 
 11)
   echo "==============================="
-  echo "Copy VMs"
-  "$HERE"/scripts/copyVMs.sh
+  echo "Backup to Hard Drive"
+  "$HERE"/scripts/backupToHardDrive.sh
   ;;
 
 *)

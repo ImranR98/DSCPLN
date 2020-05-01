@@ -2,11 +2,11 @@
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../../variables.sh
-if [ -z "$BACKUPS" ] || [ -z "$JUNK" ]; then
+if [ -z "$BACKUPS" ] || [ -z "$OTHER" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$BACKUPS" ] || [ ! -d "$JUNK" ]; then
+if [ ! -d "$BACKUPS" ] || [ ! -d "$OTHER" ]; then
     echo "Some directories from variables.sh are missing!"
     exit
 fi
@@ -26,8 +26,8 @@ if [ ! -z "$mountpoint" ]; then
   echo "$(date)" > "$BACKUPS"/WhatsApp/lastBackedUp.txt
   rm -rf ~/.tmp/WhatsApp
   echo "WhatsApp backup done, running rsync to WhatsApp-AllMedia"
-  if [ ! -d "$JUNK"/WhatsApp-AllMedia ]; then
-	  mkdir "$JUNK"/WhatsApp-AllMedia
+  if [ ! -d "$OTHER"/WhatsApp-AllMedia ]; then
+	  mkdir "$OTHER"/WhatsApp-AllMedia
   fi
-  rsync -av "$BACKUPS"/WhatsApp/ "$JUNK"/WhatsApp-AllMedia
+  rsync -av "$BACKUPS"/WhatsApp/ "$OTHER"/WhatsApp-AllMedia
 fi

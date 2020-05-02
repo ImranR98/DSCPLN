@@ -124,11 +124,14 @@ sudo sed -i "s|VIDEOS=Videos|# VIDEOS=Videos|g" /etc/xdg/user-dirs.defaults
 # Enable Firefox touch scrolling
 echo "MOZ_USE_XINPUT2 DEFAULT=1" | sudo tee -a /etc/security/pam_env.conf
 # comfortable-swipe
+DIR="$(pwd)"
+cd
 sudo apt-get install git libinput-tools libxdo-dev g++
 git clone https://github.com/Hikari9/comfortable-swipe.git --depth 1
 cd comfortable-swipe
 bash install
 sudo gpasswd -a $USER $(ls -l /dev/input/event* | awk '{print $4}' | head --line=1)
+cd "$DIR"
 # Other File copying
 rsync -av "$BACKUPS"/.ssh/ ~/.ssh
 rsync -av "$VMS"/ ~/vmware

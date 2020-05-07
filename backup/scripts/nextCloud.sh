@@ -34,7 +34,7 @@ ssh -t "$NEXTCLOUDSSH" -p "$NEXTCLOUDSSHPORT" "$firstSSHCommand"
 
 rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./NCBackups/ "$BACKUPS"/NextCloud --delete
 echo "$(date)" > "$BACKUPS"/NextCloud/lastBackedUp.txt
-rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./Notes/ "$BACKUPS"/Notes --delete
+rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":/var/snap/nextcloud/common/nextcloud/data/imranr/files/Notes/ "$BACKUPS"/Notes --delete
 echo "$(date)" > "$BACKUPS"/Notes/lastBackedUp.txt
 rsync -av --rsh='ssh -p '"$NEXTCLOUDSSHPORT" "$NEXTCLOUDSSH":./NCDeckBackups/ ~/.temp-NextCloudDeckBackup --delete
 deckJSONFile="$(ls ~/.temp-NextCloudDeckBackup)"

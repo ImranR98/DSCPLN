@@ -10,7 +10,7 @@ echo "ImranR Backup"
 echo "============="
 echo "Pick an option:"
 echo ""
-echo "1 - NextCloud"
+echo "1 - Deck"
 echo "2 - Balance.xlsx"
 echo "3 - Seneca Matrix"
 echo "4 - Firefox Bookmarks"
@@ -31,8 +31,8 @@ case $choice in
 
 1)
   echo "==============================="
-  echo "NextCloud"
-  "$HERE"/scripts/nextCloud.sh
+  echo "Deck"
+  "$HERE"/scripts/deck.sh
   ;;
 
 2)

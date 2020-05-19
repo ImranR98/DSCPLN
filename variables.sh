@@ -14,5 +14,5 @@ export HDDMOUNT="/media/hdd" # If this is changed, change the Syncthing and Dupl
 export HDDMOUNTBACKUPS="$HDDMOUNT/Backups"
 export HDDMOUNTPICTURES="$HDDMOUNT/Pictures"
 export REALTIMESYNCDIR="$HERE1"/../realTimeSync
-export NEXTCLOUDSSH='root@nextcloud.example.com'
-export NEXTCLOUDSSHPORT='22'
+export CLOUDSSH='root@example.com'
+export CLOUDSSHPORT='22'

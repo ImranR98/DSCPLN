@@ -10,9 +10,9 @@ if [ ! -d "$BACKUPS" ]; then
     exit
 fi
 
-if [ ! -d "$BACKUPS"/Deck ]; then
-	mkdir "$BACKUPS"/Deck
+if [ ! -d "$BACKUPS"/MarkD ]; then
+	mkdir "$BACKUPS"/MarkD
 fi
 
-rsync -av --rsh='ssh -p '"$CLOUDSSHPORT" "$CLOUDSSH":/root/Deck/userData/ "$BACKUPS"/Deck --delete
-echo "$(date)" > "$BACKUPS"/Deck/lastBackedUp.txt
+rsync -av --rsh='ssh -p '"$CLOUDSSHPORT" "$CLOUDSSH":/root/MarkD/userData/ "$BACKUPS"/MarkD --delete
+echo "$(date)" > "$BACKUPS"/MarkD/lastBackedUp.txt

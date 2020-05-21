@@ -143,7 +143,7 @@ unzip "$BACKUPS"/VariousHomeFiles/syncthing.zip -d ~/.config/syncthing
 rsync -av "$BACKUPS"/VariousHomeFiles/rclone/ ~/.config/rclone
 rsync -av "$BACKUPS"/VariousHomeFiles/DesktopFiles/ ~/.local/share/applications
 cp "$BACKUPS"/VariousHomeFiles/.bashrc ~/
-cp "$BACKUPS"/VariousHomeFiles/comfortable-swipe.conf "$(comfortable-swipe config)"
+cp "$BACKUPS"/VariousHomeFiles/comfortable-swipe.conf "$(comfortable-swipe config path)"
 # Keyboard Shortcuts
 gsettings set org.gnome.settings-daemon.plugins.media-keys calculator "['<Super>c']"
 gsettings set org.gnome.settings-daemon.plugins.media-keys home "['<Super>b']"

@@ -47,5 +47,5 @@ fi
 "$REALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.config/autostart/ "$BACKUPS"/VariousHomeFiles/autostart > ~/IRRTSLogs/autostart.log &
 "$REALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.local/share/applications/ "$BACKUPS"/VariousHomeFiles/DesktopFiles > ~/IRRTSLogs/DesktopFiles.log &
 "$REALTIMESYNCDIR"/realTimeSyncFile.sh ~/.bashrc "$BACKUPS"/VariousHomeFiles > ~/IRRTSLogs/bashrc.log &
-"$REALTIMESYNCDIR"/realTimeSyncFile.sh "$(comfortable-swipe config)" "$BACKUPS"/VariousHomeFiles > ~/IRRTSLogs/comfortable-swipe.log &
+"$REALTIMESYNCDIR"/realTimeSyncFile.sh "$(comfortable-swipe config path)" "$BACKUPS"/VariousHomeFiles > ~/IRRTSLogs/comfortable-swipe.log &
 "$REALTIMESYNCDIR"/realTimeSyncDirToZip.sh ~/.local/share/icons/ "$BACKUPS"/VariousHomeFiles > ~/IRRTSLogs/icons.log &

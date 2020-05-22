@@ -98,6 +98,8 @@ sudo apt install exfat-fuse exfat-utils -y
 sudo apt install chrome-gnome-shell -y
 # Inotify Tools
 sudo apt install inotify-tools -y
+# Preload
+sudo apt install preload -y
 # Uninstall Geary
 sudo apt remove geary -y
 # Arc-Menu dependency

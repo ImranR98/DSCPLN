@@ -148,7 +148,7 @@ cp "$BACKUPS"/VariousHomeFiles/.bashrc ~/
 cp "$BACKUPS"/VariousHomeFiles/comfortable-swipe.conf "$(comfortable-swipe config path)"
 # Keyboard Shortcuts
 gsettings set org.gnome.settings-daemon.plugins.media-keys calculator "['<Super>c']"
-gsettings set org.gnome.settings-daemon.plugins.media-keys home "['<Super>b']"
+gsettings set org.gnome.settings-daemon.plugins.media-keys home "['<Super>h']"
 gsettings set org.gnome.settings-daemon.plugins.media-keys terminal "['<Super>t']"
 gsettings set org.gnome.settings-daemon.plugins.media-keys www "['<Super>f']"
 gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/']"

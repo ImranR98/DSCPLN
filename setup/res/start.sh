@@ -24,3 +24,4 @@ fi
 
 syncthing &
 duplicati-server &
+vncserver -localhost yes -geometry 1920x1080 -depth 24

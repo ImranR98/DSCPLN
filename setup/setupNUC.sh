@@ -41,6 +41,8 @@ wget https://updates.duplicati.com/beta/duplicati_2.0.5.1-1_all.deb -O duplicati
 sudo dpkg -i duplicati.deb
 rm duplicati.deb
 sudo apt --fix-broken install
+# TigerVNC
+sudo apt install tigervnc-standalone-server tigervnc-xorg-extension tigervnc-viewer -y
 # Add Close and Minimize buttons
 gsettings set org.gnome.desktop.wm.preferences button-layout ":minimize,maximize,close"
 # Show date and weekday in clock

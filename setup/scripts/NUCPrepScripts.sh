@@ -1,12 +1,12 @@
 # Setup .bashrc and start script for NUC
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
 source "$HERE"/../../variables.sh
 if [ -z "$NUCHDDMOUNT" ] || [ -z "$NUCHDDUUID" ] || [ -z "$NUCBACKUPS" ] || [ -z "$NUCPICTURES" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 # .bashrc
 BASHRCAPPEND="# Warn if /Main doesn't exist

@@ -1,5 +1,7 @@
 # Restore backed up home files
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
 source "$HERE"/../../variables.sh
 if [ -z "$PCMAIN" ] || [ -z "$PCBACKUPS" ] || [ -z "$PCVMS" ]; then
     echo "Some environment variables are missing!"

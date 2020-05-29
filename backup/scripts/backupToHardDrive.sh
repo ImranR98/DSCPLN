@@ -3,12 +3,12 @@
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../../variables.sh
-if [ -z "$MAIN" ]; then
+if [ -z "$PCMAIN" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$MAIN" ]; then
-    echo "Some directories from variables.sh are missing!"
+if [ ! -d "$PCMAIN" ]; then
+    echo "Some directories from ../variables.sh are missing!"
     exit
 fi
 
@@ -30,7 +30,7 @@ if [ -z "$1" ]; then
 else
 	SUDO_ASKPASS="$HELPER" sudo -A veracrypt --mount "/dev/$1"
 fi
-rsync -av --exclude '.stversions' --exclude '.stfolder' --exclude 'node_modules' "$MAIN"/ /media/veracrypt1/Main --delete
+rsync -av --exclude '.stversions' --exclude '.stfolder' --exclude 'node_modules' "$PCMAIN"/ /media/veracrypt1/Main --delete
 echo "$(date)" >/media/veracrypt1/Main/lastBackedUp.txt
 rm -rf /media/veracrypt1/.Trash-1000
 SUDO_ASKPASS="$HELPER" sudo -A veracrypt -d

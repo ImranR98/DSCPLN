@@ -2,12 +2,12 @@
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../../variables.sh
-if [ -z "$BACKUPS" ] || [ -z "$OTHER" ]; then
+if [ -z "$PCBACKUPS" ] || [ -z "$PCOTHER" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$BACKUPS" ] || [ ! -d "$OTHER" ]; then
-    echo "Some directories from variables.sh are missing!"
+if [ ! -d "$PCBACKUPS" ] || [ ! -d "$PCOTHER" ]; then
+    echo "Some directories from ../variables.sh are missing!"
     exit
 fi
 
@@ -18,16 +18,16 @@ if [ ! -z "$mountpoint" ]; then
   if [ -z "$(ls -a ~ | grep "^.tmp$")" ]; then
     mkdir ~/.tmp
   fi
-  if [ ! -d "$BACKUPS"/WhatsApp ]; then
-	  mkdir "$BACKUPS"/WhatsApp
+  if [ ! -d "$PCBACKUPS"/WhatsApp ]; then
+	  mkdir "$PCBACKUPS"/WhatsApp
   fi
   cp -rv "$mountpoint"/WhatsApp ~/.tmp
-  rsync -av ~/.tmp/WhatsApp/ "$BACKUPS"/WhatsApp --delete
-  echo "$(date)" > "$BACKUPS"/WhatsApp/lastBackedUp.txt
+  rsync -av ~/.tmp/WhatsApp/ "$PCBACKUPS"/WhatsApp --delete
+  echo "$(date)" > "$PCBACKUPS"/WhatsApp/lastBackedUp.txt
   rm -rf ~/.tmp/WhatsApp
   echo "WhatsApp backup done, running rsync to WhatsApp-AllMedia"
-  if [ ! -d "$OTHER"/WhatsApp-AllMedia ]; then
-	  mkdir "$OTHER"/WhatsApp-AllMedia
+  if [ ! -d "$PCOTHER"/WhatsApp-AllMedia ]; then
+	  mkdir "$PCOTHER"/WhatsApp-AllMedia
   fi
-  rsync -av "$BACKUPS"/WhatsApp/ "$OTHER"/WhatsApp-AllMedia
+  rsync -av "$PCBACKUPS"/WhatsApp/ "$PCOTHER"/WhatsApp-AllMedia
 fi

@@ -4,36 +4,36 @@
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../variables.sh
-if [ -z "$REALTIMESYNCDIR" ] || [ -z "$BACKUPS" ]; then
+if [ -z "$RELATIVEREALTIMESYNCDIR" ] || [ -z "$PCBACKUPS" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$REALTIMESYNCDIR" ] || [ ! -d "$BACKUPS" ]; then
-    echo "Some directories from variables.sh are missing!"
+if [ ! -d "$RELATIVEREALTIMESYNCDIR" ] || [ ! -d "$PCBACKUPS" ]; then
+    echo "Some directories from ../variables.sh are missing!"
     exit
 fi
 
 # Creating any non-existent backup directories
-if [ ! -d "$BACKUPS"/VariousHomeFiles ]; then
-	mkdir "$BACKUPS"/VariousHomeFiles
+if [ ! -d "$PCBACKUPS"/VariousHomeFiles ]; then
+	mkdir "$PCBACKUPS"/VariousHomeFiles
 fi
-if [ ! -d "$BACKUPS"/.ssh ]; then
-	mkdir "$BACKUPS"/.ssh
+if [ ! -d "$PCBACKUPS"/.ssh ]; then
+	mkdir "$PCBACKUPS"/.ssh
 fi
-if [ ! -d "$BACKUPS"/VariousHomeFiles/Templates ]; then
-	mkdir "$BACKUPS"/VariousHomeFiles/Templates
+if [ ! -d "$PCBACKUPS"/VariousHomeFiles/Templates ]; then
+	mkdir "$PCBACKUPS"/VariousHomeFiles/Templates
 fi
-if [ ! -d "$BACKUPS"/VariousHomeFiles/themes ]; then
-	mkdir "$BACKUPS"/VariousHomeFiles/themes
+if [ ! -d "$PCBACKUPS"/VariousHomeFiles/themes ]; then
+	mkdir "$PCBACKUPS"/VariousHomeFiles/themes
 fi
-if [ ! -d "$BACKUPS"/VariousHomeFiles/autostart ]; then
-	mkdir "$BACKUPS"/VariousHomeFiles/autostart
+if [ ! -d "$PCBACKUPS"/VariousHomeFiles/autostart ]; then
+	mkdir "$PCBACKUPS"/VariousHomeFiles/autostart
 fi
-if [ ! -d "$BACKUPS"/VariousHomeFiles/gnome-shell-extensions ]; then
-	mkdir "$BACKUPS"/VariousHomeFiles/gnome-shell-extensions
+if [ ! -d "$PCBACKUPS"/VariousHomeFiles/gnome-shell-extensions ]; then
+	mkdir "$PCBACKUPS"/VariousHomeFiles/gnome-shell-extensions
 fi
-if [ ! -d "$BACKUPS"/VariousHomeFiles/DesktopFiles ]; then
-	mkdir "$BACKUPS"/VariousHomeFiles/DesktopFiles
+if [ ! -d "$PCBACKUPS"/VariousHomeFiles/DesktopFiles ]; then
+	mkdir "$PCBACKUPS"/VariousHomeFiles/DesktopFiles
 fi
 
 # Create logs directory
@@ -41,11 +41,11 @@ if [ ! -d ~/IRRTSLogs ]; then
 	mkdir ~/IRRTSLogs
 fi
 
-"$REALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.ssh/ "$BACKUPS"/.ssh > ~/IRRTSLogs/ssh.log &
-"$REALTIMESYNCDIR"/realTimeSyncDirs.sh ~/Templates/ "$BACKUPS"/VariousHomeFiles/Templates > ~/IRRTSLogs/Templates.log &
-"$REALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.themes/ "$BACKUPS"/VariousHomeFiles/themes > ~/IRRTSLogs/themes.log &
-"$REALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.config/autostart/ "$BACKUPS"/VariousHomeFiles/autostart > ~/IRRTSLogs/autostart.log &
-"$REALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.local/share/applications/ "$BACKUPS"/VariousHomeFiles/DesktopFiles > ~/IRRTSLogs/DesktopFiles.log &
-"$REALTIMESYNCDIR"/realTimeSyncFile.sh ~/.bashrc "$BACKUPS"/VariousHomeFiles > ~/IRRTSLogs/bashrc.log &
-"$REALTIMESYNCDIR"/realTimeSyncFile.sh "$(comfortable-swipe config path)" "$BACKUPS"/VariousHomeFiles > ~/IRRTSLogs/comfortable-swipe.log &
-"$REALTIMESYNCDIR"/realTimeSyncDirToZip.sh ~/.local/share/icons/ "$BACKUPS"/VariousHomeFiles > ~/IRRTSLogs/icons.log &
+"$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.ssh/ "$PCBACKUPS"/.ssh > ~/IRRTSLogs/ssh.log &
+"$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirs.sh ~/Templates/ "$PCBACKUPS"/VariousHomeFiles/Templates > ~/IRRTSLogs/Templates.log &
+"$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.themes/ "$PCBACKUPS"/VariousHomeFiles/themes > ~/IRRTSLogs/themes.log &
+"$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.config/autostart/ "$PCBACKUPS"/VariousHomeFiles/autostart > ~/IRRTSLogs/autostart.log &
+"$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.local/share/applications/ "$PCBACKUPS"/VariousHomeFiles/DesktopFiles > ~/IRRTSLogs/DesktopFiles.log &
+"$RELATIVEREALTIMESYNCDIR"/realTimeSyncFile.sh ~/.bashrc "$PCBACKUPS"/VariousHomeFiles > ~/IRRTSLogs/bashrc.log &
+"$RELATIVEREALTIMESYNCDIR"/realTimeSyncFile.sh "$(comfortable-swipe config path)" "$PCBACKUPS"/VariousHomeFiles > ~/IRRTSLogs/comfortable-swipe.log &
+"$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirToZip.sh ~/.local/share/icons/ "$PCBACKUPS"/VariousHomeFiles > ~/IRRTSLogs/icons.log &

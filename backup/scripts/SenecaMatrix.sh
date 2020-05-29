@@ -2,17 +2,17 @@
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../../variables.sh
-if [ -z "$SCHOOL" ]; then
+if [ -z "$PCSCHOOL" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$SCHOOL" ]; then
-    echo "Some directories from variables.sh are missing!"
+if [ ! -d "$PCSCHOOL" ]; then
+    echo "Some directories from ../variables.sh are missing!"
     exit
 fi
 
-if [ ! -d "$SCHOOL"/Matrix ]; then
-	mkdir "$SCHOOL"/Matrix
+if [ ! -d "$PCSCHOOL"/Matrix ]; then
+	mkdir "$PCSCHOOL"/Matrix
 fi
-rsync -av iremtulla@matrix.senecac.on.ca:. "$SCHOOL"/Matrix --delete
-echo "$(date)" > "$SCHOOL"/Matrix/lastBackedUp.txt
+rsync -av iremtulla@matrix.senecac.on.ca:. "$PCSCHOOL"/Matrix --delete
+echo "$(date)" > "$PCSCHOOL"/Matrix/lastBackedUp.txt

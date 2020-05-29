@@ -39,7 +39,6 @@ syncthing &
 duplicati-server &
 vncserver -localhost yes -geometry 1920x1080 -depth 24"
 echo "$STARTSH" > ~/start.sh
-chmod u+x ~/start.sh
+chmod u+x ~/start.showssh
 
-echo 'Next steps:'
-echo 'Next, run "start" to mount the HDD and then setup Syncthing and Duplicati manually from their respective web GUIs.'
+echo "Done"

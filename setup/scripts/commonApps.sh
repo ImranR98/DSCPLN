@@ -45,7 +45,7 @@ sudo apt install gnome-shell-extensions gnome-menus gir1.2-gmenu-3.0 -y
 # comfortable-swipe
 DIR="$(pwd)"
 cd
-sudo apt-get install git libinput-tools libxdo-dev g++ -y
+sudo apt-get install git libinput-tools libxdo-dev libinih-dev g++ -y
 git clone https://github.com/Hikari9/comfortable-swipe.git --depth 1
 cd comfortable-swipe
 bash install

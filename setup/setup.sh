@@ -4,15 +4,16 @@ INSTRUCTIONS="Options:
 Common:
     1) Apps - Apps to install on both PC and NUC
     2) Tweaks - Settings to change on both PC and NUC
+    3) Common Next Steps - Manual steps to complete setup on both PC and NUC
 PC:
-    3) Apps - Apps to install on PC
-    4) Restore Files - Restore backed up home files - make sure Main has been copied to ~ first!
-    5) PC Tweaks - Change Nautilus bookmarks to point to main (run 4 first) and change the background
-    6) Next Steps - Manual steps to complete setup on PC
+    4) PC Apps - Apps to install on PC
+    5) Restore PC Files - Restore backed up home files - make sure Main has been copied to ~ first!
+    6) PC Tweaks - Change Nautilus bookmarks to point to main (run 4 first) and change the background
+    7) PC Next Steps - Manual steps to complete setup on PC
 NUC:
-    7) Apps - Apps to install on NUC
-    8) Prepare Scripts - Add custom aliases to .bashrc and generate start.sh.
-    9) Next Steps - Manual steps to complete setup on MUC
+    8) NUC Apps - Apps to install on NUC
+    9) Prepare NUC Scripts - Add custom aliases to .bashrc and generate start.sh.
+    10) NUC Next Steps - Manual steps to complete setup on MUC
 
 Enter an option number now:
 "
@@ -33,24 +34,27 @@ case $choice in
   "$HERE"/scripts/commonTweaks.sh
   ;;
 3)
-  "$HERE"/scripts/PCApps.sh
+  "$HERE"/scripts/commonNextSteps.sh
   ;;
 4)
-  "$HERE"/scripts/PCRestoreFiles.sh
+  "$HERE"/scripts/PCApps.sh
   ;;
 5)
-  "$HERE"/scripts/PCTweaks.sh
+  "$HERE"/scripts/PCRestoreFiles.sh
   ;;
 6)
-  "$HERE"/scripts/PCNextSteps.sh
+  "$HERE"/scripts/PCTweaks.sh
   ;;
 7)
-  "$HERE"/scripts/NUCApps.sh
+  "$HERE"/scripts/PCNextSteps.sh
   ;;
 8)
-  "$HERE"/scripts/NUCPrepScripts.sh
+  "$HERE"/scripts/NUCApps.sh
   ;;
 9)
+  "$HERE"/scripts/NUCPrepScripts.sh
+  ;;
+10)
   "$HERE"/scripts/NUCNextSteps.sh
   ;;
 *)

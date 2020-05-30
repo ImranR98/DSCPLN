@@ -13,6 +13,9 @@ echo "MOZ_USE_XINPUT2 DEFAULT=1" | sudo tee -a /etc/security/pam_env.conf
 # Keyboard Shortcuts
 gsettings set org.gnome.settings-daemon.plugins.media-keys home "['<Super>h']"
 gsettings set org.gnome.settings-daemon.plugins.media-keys www "['<Super>f']"
+gsettings set org.gnome.settings-daemon.plugins.media-keys terminal "['<Super>t']"
+gsettings set org.gnome.Terminal.Legacy.Keybindings:/org/gnome/terminal/legacy/keybindings/ copy '<Primary>c'
+gsettings set org.gnome.Terminal.Legacy.Keybindings:/org/gnome/terminal/legacy/keybindings/ paste '<Primary>v'
 gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-left "['<Ctrl><Super>Left']"
 gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-right "['<Ctrl><Super>Right']"
 gsettings set org.gnome.mutter.keybindings toggle-tiled-left "['<Alt><Super>Left']"
@@ -30,13 +33,6 @@ gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/or
 gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/ command '/usr/bin/code'
 gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/ binding '<Super>c'
 gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/']"
-# Background
-if [ ! -d ~/.local/share/backgrounds ]; then
-    mkdir ~/.local/share/backgrounds
-fi
-curl 'https://images.unsplash.com/photo-1488554378835-f7acf46e6c98?ixlib=rb-1.2.1&amp;q=80&amp;fm=jpg&amp;crop=entropy&amp;cs=tinysrgb&amp;dl=hao-wang-pVq6YhmDPtk-unsplash.jpg' -o ~/.local/share/backgrounds/BG.jpg
-gsettings set org.gnome.desktop.background picture-uri "file:///home/$(whoami)/.local/share/backgrounds/BG.jpg"
-gsettings set org.gnome.desktop.screensaver picture-uri "file:///home/$(whoami)/.local/share/backgrounds/BG.jpg"
 # Firefox preferences
 FFFOLDER=$(ls ~/.mozilla/firefox/ | grep ".default-release$")
 if [ ! -z "$FFFOLDER" ]; then

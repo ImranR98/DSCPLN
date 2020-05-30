@@ -7,7 +7,7 @@ Common:
 PC:
     3) Apps - Apps to install on PC
     4) Restore Files - Restore backed up home files - make sure Main has been copied to ~ first!
-    5) Nautilus Tweak - Change Nautilus bookmarks to point to main (run 4 first)
+    5) PC Tweaks - Change Nautilus bookmarks to point to main (run 4 first) and change the background
     6) Next Steps - Manual steps to complete setup on PC
 NUC:
     7) Apps - Apps to install on NUC
@@ -39,7 +39,7 @@ case $choice in
   "$HERE"/scripts/PCRestoreFiles.sh
   ;;
 5)
-  "$HERE"/scripts/PCNautilusTweak.sh
+  "$HERE"/scripts/PCTweaks.sh
   ;;
 6)
   "$HERE"/scripts/PCNextSteps.sh

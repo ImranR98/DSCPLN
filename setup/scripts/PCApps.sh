@@ -23,8 +23,8 @@ wget https://download.teamviewer.com/download/linux/teamviewer_amd64.deb -O team
 sudo apt install ./teamviewer.deb -y
 rm teamviewer.deb
 # VMWare Player
-wget https://download3.vmware.com/software/player/file/VMware-Player-15.5.1-15018445.x86_64.bundle -O vmplayer.bundle > /dev/null 2>&1
-chmod 750 vmplayer.bundle
+wget https://download3.vmware.com/software/player/file/VMware-Player-15.5.5-16285975.x86_64.bundle -O vmplayer.bundle > /dev/null 2>&1
+chmod u+x vmplayer.bundle
 sudo ./vmplayer.bundle
 rm vmplayer.bundle
 # Postman

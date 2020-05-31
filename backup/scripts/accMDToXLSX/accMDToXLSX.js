@@ -237,7 +237,7 @@ if (process.argv.length <= 3) {
 }
 let MDFilePath = process.argv[2]
 let balanceXLSXLocation = process.argv[3]
-console.log('Using Google Takeout to generate text to paste into Balance.xlsx...')
+console.log('Using Acc.md to generate text to paste into Balance.xlsx...')
 console.log(convertItemsToExcelReadyText(
     filterItemsByLastXLSXEntry(
         processLines(

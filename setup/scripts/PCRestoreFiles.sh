@@ -19,8 +19,7 @@ rsync -av "$PCBACKUPS"/VariousHomeFiles/Templates/ ~/Templates
 rsync -av "$PCBACKUPS"/VariousHomeFiles/themes/ ~/.themes
 unzip "$PCBACKUPS"/VariousHomeFiles/icons.zip -d ~/.local/share/icons
 rsync -av "$PCBACKUPS"/VariousHomeFiles/autostart/ ~/.config/autostart
-unzip "$PCBACKUPS"/VariousHomeFiles/syncthing.zip -d ~/.config/syncthing
-rsync -av "$PCBACKUPS"/VariousHomeFiles/rclone/ ~/.config/rclone
 rsync -av "$PCBACKUPS"/VariousHomeFiles/DesktopFiles/ ~/.local/share/applications
+rsync -av "$PCBACKUPS"/VariousHomeFiles/gnome-shell-extensions/ ~/.local/share/gnome-shell/extensions
 cp "$PCBACKUPS"/VariousHomeFiles/.bashrc ~/
 cp "$PCBACKUPS"/VariousHomeFiles/comfortable-swipe.conf "$(comfortable-swipe config path)"

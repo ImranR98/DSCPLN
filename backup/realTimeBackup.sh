@@ -46,6 +46,7 @@ fi
 "$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.themes/ "$PCBACKUPS"/VariousHomeFiles/themes > ~/IRRTSLogs/themes.log &
 "$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.config/autostart/ "$PCBACKUPS"/VariousHomeFiles/autostart > ~/IRRTSLogs/autostart.log &
 "$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.local/share/applications/ "$PCBACKUPS"/VariousHomeFiles/DesktopFiles > ~/IRRTSLogs/DesktopFiles.log &
+"$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.local/share/gnome-shell/extensions/ "$PCBACKUPS"/VariousHomeFiles/gnome-shell-extensions > ~/IRRTSLogs/GNOMEExtensions.log &
 "$RELATIVEREALTIMESYNCDIR"/realTimeSyncFile.sh ~/.bashrc "$PCBACKUPS"/VariousHomeFiles > ~/IRRTSLogs/bashrc.log &
 "$RELATIVEREALTIMESYNCDIR"/realTimeSyncFile.sh "$(comfortable-swipe config path)" "$PCBACKUPS"/VariousHomeFiles > ~/IRRTSLogs/comfortable-swipe.log &
 "$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirToZip.sh ~/.local/share/icons/ "$PCBACKUPS"/VariousHomeFiles > ~/IRRTSLogs/icons.log &

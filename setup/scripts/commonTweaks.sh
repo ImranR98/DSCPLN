@@ -10,6 +10,21 @@ gsettings set org.gnome.desktop.interface show-battery-percentage true
 # Enable Firefox touch scrolling
 sudo sed -i "s|Exec=|Exec=env MOZ_USE_XINPUT2=1 |g" /usr/share/applications/firefox.desktop
 echo "MOZ_USE_XINPUT2 DEFAULT=1" | sudo tee -a /etc/security/pam_env.conf
+# Disable middle click paste
+gsettings set org.gnome.desktop.interface gtk-enable-primary-paste false
+# Enable hot corner
+gsettings set org.gnome.desktop.interface enable-hot-corners true
+# Sleep after 30 min on battery
+gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-timeout 1800
+gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type "'suspend'"
+# Power button does nothing
+gsettings set gsettings get org.gnome.settings-daemon.plugins.power power-button-action "'nothing'"
+# Set the battery low warning to show up at 35%
+gsettings set org.gnome.settings-daemon.plugins.power percentage-low "35"
+# Set screen to dim after 15 minutes
+gsettings set org.gnome.desktop.session idle-delay "uint32 900"
+# Disable auto brightness
+gsettings set gsettings get org.gnome.settings-daemon.plugins.power ambient-enabled "false"
 # Keyboard Shortcuts
 gsettings set org.gnome.settings-daemon.plugins.media-keys home "['<Super>h']"
 gsettings set org.gnome.settings-daemon.plugins.media-keys www "['<Super>f']"
@@ -21,7 +36,7 @@ gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-right "['<Ctr
 gsettings set org.gnome.mutter.keybindings toggle-tiled-left "['<Alt><Super>Left']"
 gsettings set org.gnome.mutter.keybindings toggle-tiled-right "['<Alt><Super>Right']"
 gsettings set org.gnome.shell.keybindings toggle-overview "['<Super>Tab']"
-gsettings set org.gnome.desktop.wm.keybindings close "['<Super>q']"
+gsettings set org.gnome.desktop.wm.keybindings close "['<Super>w']"
 gsettings set org.gnome.desktop.wm.keybindings switch-applications "[]"
 gsettings set org.gnome.desktop.wm.keybindings switch-applications-backward "[]"
 gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/']"

@@ -35,6 +35,8 @@ gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-left "['<Ctrl
 gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-right "['<Ctrl><Super>Right']"
 gsettings set org.gnome.mutter.keybindings toggle-tiled-left "['<Alt><Super>Left']"
 gsettings set org.gnome.mutter.keybindings toggle-tiled-right "['<Alt><Super>Right']"
+gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-left "['<Ctrl><Shift><Alt>Left']"
+gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-right "['<Ctrl><Shift><Alt>Right']"
 gsettings set org.gnome.shell.keybindings toggle-overview "['<Super>Tab']"
 gsettings set org.gnome.desktop.wm.keybindings close "['<Super>w']"
 gsettings set org.gnome.desktop.wm.keybindings switch-applications "[]"

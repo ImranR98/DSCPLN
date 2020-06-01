@@ -36,7 +36,6 @@ rm veracrypt.deb
 sudo apt install docker.io
 sudo systemctl enable --now docker
 sudo usermod -a -G docker imranr
-newgrp docker
 # Exfat Support
 sudo apt install exfat-fuse exfat-utils -y
 # Gnome Shell host connector

@@ -32,10 +32,6 @@ sudo apt-get install nodejs -y
 wget https://launchpad.net/veracrypt/trunk/1.24-update2/+download/veracrypt-1.24-Update2-Debian-10-amd64.deb -O veracrypt.deb > /dev/null 2>&1
 sudo apt install ./veracrypt.deb -y
 rm veracrypt.deb
-# Docker
-sudo apt install docker.io
-sudo systemctl enable --now docker
-sudo usermod -a -G docker imranr
 # Exfat Support
 sudo apt install exfat-fuse exfat-utils -y
 # Gnome Shell host connector

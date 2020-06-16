@@ -36,8 +36,7 @@ if [ ! -d \"$NUCBACKUPS\" ] || [ ! -d \"$NUCPICTURES\" ]; then
 fi
 
 syncthing &
-duplicati-server &
-vncserver -localhost yes -geometry 1920x1080 -depth 24"
+duplicati-server &"
 echo "$STARTSH" > ~/start.sh
 chmod u+x ~/start.showssh
 

@@ -29,6 +29,31 @@ const urlsToSave = [
     { url: 'Webninja98/gilded', api: apiUrl2 }
 ]
 
+const mergeListings = (listing1, listing2) => {
+    let final = JSON.parse(JSON.stringify(listing1))
+    listing2.data.children.forEach(item1 => {
+        let found = false
+        listing1.data.children.forEach(item2 => {
+            if (item1.data.id == item2.data.id) found = true
+        })
+        if (!found) final.data.children.push(item2)
+    })
+    return final
+}
+
+const deleteDuplicatesFromListing = (listing) => {
+    let final = JSON.parse(JSON.stringify(listing))
+    final.data.children = []
+    listing.data.children.forEach(item1 => {
+        let found = false
+        final.data.children.forEach(item2 => {
+            if (item1.data.id == item2.data.id) found = true
+        })
+        if (!found) final.data.children.push(item1)
+    })
+    return final
+}
+
 const save = async (url, api, fileStoredIn) => {
     let filename = url.split('/').map(el => el.trim()).join('-')
     let res = JSON.parse((await simpleRequests.simpleHttpGet(`${api}/${url}`, headers)).body)
@@ -56,12 +81,9 @@ const save = async (url, api, fileStoredIn) => {
             fs.writeFileSync(`${fileStoredIn}/Oldest/${filename}.json`, JSON.stringify(res, null, '\t'))
         }
         if (fs.existsSync(`${fileStoredIn}/${filename}-cumulative.json`)) {
-            console.log('*-cumulative file exists, will add new data to it...')
-            cumulative = JSON.parse(fs.readFileSync(`${fileStoredIn}/${filename}-cumulative.json`).toString())
-            res.data.data.children = res.data.data.children.concat(cumulative.data.data.children)
-            res.data.data.children = res.data.data.children.map(el => JSON.stringify(el))
-            res.data.data.children = Array.from(new Set(res.data.data.children))
-            res.data.data.children = res.data.data.children.map(el => JSON.parse(el))
+            console.log('* cumulative file exists, will add new data to it...')
+            res.data = mergeListings(JSON.parse(fs.readFileSync(`${fileStoredIn}/${filename}-cumulative.json`).toString()).data, res.data)
+            res.data = deleteDuplicatesFromListing(res.data)
         }
         console.log('Saving to current directory...')
         fs.writeFileSync(`${fileStoredIn}/${filename}-cumulative.json`, JSON.stringify(res, null, '\t'))

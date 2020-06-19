@@ -64,7 +64,7 @@ case $choice in
   echo "MySeneca Email"
   echo "==============================="
   echo "No automation available."
-  echo "Get new email in thunderbird, then export to the Backup folder."
+  echo "Open email in outlook (in a Windows VM), then export to the Backup folder in .pst."
   echo "==============================="
   ;;
 

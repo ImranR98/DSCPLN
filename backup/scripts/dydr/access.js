@@ -31,7 +31,6 @@ const getAuthorizationURL = () => {
 
 const getAccess = async (code) => {
     let creds = loadCreds()
-    let expiryDate = new Date()
     let data = await simpleRequests.simpleHttpPost(
         'https://www.reddit.com/api/v1/access_token',
         {
@@ -44,14 +43,11 @@ const getAccess = async (code) => {
         }
     )
     let accessCreds = JSON.parse(data.body)
-    expiryDate.setTime(expiryDate.getTime() + ((accessCreds.expires_in / 3600) * 60 * 60 * 1000))
-    accessCreds.expiryDate = expiryDate.toISOString()
     fs.writeFileSync('./access.json', JSON.stringify(accessCreds, null, '\t'))
 }
 
 const refreshAccess = async (refreshToken) => {
     let creds = loadCreds()
-    let expiryDate = new Date()
     let data = await simpleRequests.simpleHttpPost(
         'https://www.reddit.com/api/v1/access_token',
         {
@@ -63,8 +59,7 @@ const refreshAccess = async (refreshToken) => {
         }
     )
     let accessCreds = JSON.parse(data.body)
-    expiryDate.setTime(expiryDate.getTime() + ((accessCreds.expires_in / 3600) * 60 * 60 * 1000))
-    accessCreds.expiryDate = expiryDate.toISOString()
+    accessCreds.refresh_token = refreshToken
     fs.writeFileSync('./access.json', JSON.stringify(accessCreds, null, '\t'))
 }
 

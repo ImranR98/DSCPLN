@@ -4,6 +4,7 @@ HERE1="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 export PCMAIN=~/Main
 export PCBACKUPS="$PCMAIN/Backups"
+export PCPICTURES="$PCMAIN/Pictures"
 export PCVMS="$PCMAIN/VMs"
 export PCSCHOOL="$PCMAIN/School"
 export PCOTHER="$PCMAIN/Other"

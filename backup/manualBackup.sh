@@ -19,7 +19,7 @@ echo "6 - MySeneca Email"
 echo "7 - WhatsApp"
 echo "8 - Google Takeout"
 echo "9 - Copy VMs"
-echo "10 - PS4 Saves"
+echo "10 - PS4 Saves & Media"
 echo "11 - Backup to Hard Drive"
 echo ""
 echo "Anything else - exit"
@@ -88,8 +88,8 @@ case $choice in
 
 10)
   echo "==============================="
-  echo "PS4 Saves"
-  "$HERE"/scripts/PS4SavesCopy.sh
+  echo "PS4 Saves & Media"
+  "$HERE"/scripts/PS4.sh
   ;;
 
 11)

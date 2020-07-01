@@ -36,7 +36,7 @@ const mergeListings = (listing1, listing2) => {
         listing1.data.children.forEach(item2 => {
             if (item1.data.id == item2.data.id) found = true
         })
-        if (!found) final.data.children.push(item2)
+        if (!found) final.data.children.push(item1)
     })
     return final
 }

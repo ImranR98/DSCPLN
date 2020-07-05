@@ -15,9 +15,7 @@ wget https://updates.getmailspring.com/download?platform=linuxDeb -O mailspring.
 sudo apt install ./mailspring.deb -y
 rm mailspring.deb
 # Chrome
-wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O chrome.deb > /dev/null 2>&1
-sudo apt install ./chrome.deb -y
-rm chrome.deb
+sudo apt install chromium -y
 # TeamViewer
 wget https://download.teamviewer.com/download/linux/teamviewer_amd64.deb -O teamviewer.deb > /dev/null 2>&1
 sudo apt install ./teamviewer.deb -y
@@ -28,10 +26,7 @@ chmod u+x vmplayer.bundle
 sudo ./vmplayer.bundle
 rm vmplayer.bundle
 # Postman
-wget https://dl.pstmn.io/download/latest/linux64 -O postman.tar.gz > /dev/null 2>&1
-tar -xvzf postman.tar.gz > /dev/null 2>&1
-sudo mv ./Postman /opt
-rm postman.tar.gz
+flatpak install flathub com.getpostman.Postman -y
 # Uninstall Geary
 sudo apt remove geary -y
 # Clone and build Yaru theme

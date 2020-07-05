@@ -20,6 +20,9 @@ fi
 if [ ! -d "$PCBACKUPS"/.ssh ]; then
 	mkdir "$PCBACKUPS"/.ssh
 fi
+if [ ! -d "$PCBACKUPS"/.atom ]; then
+	mkdir "$PCBACKUPS"/.atom
+fi
 if [ ! -d "$PCBACKUPS"/VariousHomeFiles/Templates ]; then
 	mkdir "$PCBACKUPS"/VariousHomeFiles/Templates
 fi
@@ -42,6 +45,7 @@ if [ ! -d ~/IRRTSLogs ]; then
 fi
 
 "$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.ssh/ "$PCBACKUPS"/.ssh > ~/IRRTSLogs/ssh.log &
+"$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.atom/ "$PCBACKUPS"/.atom > ~/IRRTSLogs/atom.log &
 "$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirs.sh ~/Templates/ "$PCBACKUPS"/VariousHomeFiles/Templates > ~/IRRTSLogs/Templates.log &
 "$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.themes/ "$PCBACKUPS"/VariousHomeFiles/themes > ~/IRRTSLogs/themes.log &
 "$RELATIVEREALTIMESYNCDIR"/realTimeSyncDirs.sh ~/.config/autostart/ "$PCBACKUPS"/VariousHomeFiles/autostart > ~/IRRTSLogs/autostart.log &

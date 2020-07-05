@@ -19,12 +19,10 @@ curl -s https://syncthing.net/release-key.txt | sudo apt-key add -
 echo "deb https://apt.syncthing.net/ syncthing stable" | sudo tee /etc/apt/sources.list.d/syncthing.list
 sudo apt-get update
 sudo apt-get install syncthing -y
-# Sublime Text
-wget -qO - https://download.sublimetext.com/sublimehq-pub.gpg | sudo apt-key add -  > /dev/null 2>&1
-sudo apt install apt-transport-https -y
-echo "deb https://download.sublimetext.com/ apt/stable/" | sudo tee /etc/apt/sources.list.d/sublime-text.list
-sudo apt update > /dev/null 2>&1
-sudo apt install sublime-text -y
+# Atom
+wget 'https://atom-installer.github.com/v1.48.0/atom-amd64.deb' -O atom.deb > /dev/null 2>&1
+sudo apt install ./atom.deb -y
+rm atom.deb
 # Node.js
 curl -sL https://deb.nodesource.com/setup_14.x | sudo -E bash -
 sudo apt-get install nodejs -y

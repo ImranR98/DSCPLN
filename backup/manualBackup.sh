@@ -14,13 +14,14 @@ echo "1 - MarkD"
 echo "2 - Balance.xlsx"
 echo "3 - Seneca Matrix"
 echo "4 - Firefox Bookmarks"
-echo "5 - Reddit"
-echo "6 - MySeneca Email"
-echo "7 - WhatsApp"
-echo "8 - Google Takeout"
-echo "9 - Copy VMs"
-echo "10 - PS4 Saves & Media"
-echo "11 - Backup to Hard Drive"
+echo "5 - SSH Directory"
+echo "6 - Reddit"
+echo "7 - MySeneca Email"
+echo "8 - WhatsApp"
+echo "9 - Google Takeout"
+echo "10 - Copy VMs"
+echo "11 - PS4 Saves & Media"
+echo "12 - Backup to Hard Drive"
 echo ""
 echo "Anything else - exit"
 echo ""
@@ -55,11 +56,17 @@ case $choice in
 
 5)
   echo "==============================="
+  echo "SSH Directory"
+  "$HERE"/scripts/SSH.sh
+  ;;
+
+6)
+  echo "==============================="
   echo "Reddit"
   "$HERE"/scripts/redditBackup.sh
   ;;
 
-6)
+7)
   echo "==============================="
   echo "MySeneca Email"
   echo "==============================="
@@ -68,31 +75,31 @@ case $choice in
   echo "==============================="
   ;;
 
-7)
+8)
   echo "==============================="
   echo "WhatsApp"
   "$HERE"/scripts/WhatsApp.sh
   ;;
 
-8)
+9)
   echo "==============================="
   echo "Google Takeout"
   "$HERE"/scripts/googleTakeout.sh
   ;;
 
-9)
+10)
   echo "==============================="
   echo "Copy VMs"
   "$HERE"/scripts/copyVMs.sh
   ;;
 
-10)
+11)
   echo "==============================="
   echo "PS4 Saves & Media"
   "$HERE"/scripts/PS4.sh
   ;;
 
-11)
+12)
   echo "==============================="
   echo "Backup to Hard Drive"
   "$HERE"/scripts/backupToHardDrive.sh

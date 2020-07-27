@@ -13,7 +13,7 @@ fi
 FFFOLDER=$(ls /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles | grep ".default-release$")
 if [ ! -z "$FFFOLDER" ]; then
 	if [ -f /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/bookmarks.html ]; then
-        cp -v/mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/bookmarks.html "$PCBACKUPS"
+        cp -v /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/bookmarks.html "$PCBACKUPS"
     else
         echo "No bookmarks.html found."
     fi

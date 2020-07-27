@@ -49,6 +49,7 @@ Run in WSL shell:
 
 Step 5 - Other
 Copy .ssh folder into home dir.
+Copy .bashrc into WSL home.
 Uninstall Windows bloatware
 Sign in to Firefox, Mailspring, and Office
 Install Creative Cloud + Photoshop + Acrobat, then disable all of CC's startup processes

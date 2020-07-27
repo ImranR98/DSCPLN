@@ -42,7 +42,7 @@ Run in WSL shell:
 	curl -sL https://deb.nodesource.com/setup_14.x | sudo -E bash -
 	sudo apt install nodejs -y
 
-Step 5 - Everything else
+Step 5 - Other
 Uninstall Windows bloatware
 Change default shell for Windows Terminal
 Sign in to Firefox, Mailspring, and Office
@@ -57,3 +57,6 @@ Firefox Config changes - run in a WSL shell:
 	echo 'user_pref("browser.bookmarks.autoExportHTML", true);' >> /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
 Double click the saved .deskpack file to change the Windows theme.
 Change default Apps
+
+Step 6 - Encryption
+Open Veracrypt and encrypt the system disk

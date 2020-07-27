@@ -3,26 +3,31 @@ Run in CMD as ADMIN:
 	@"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command " [System.Net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
 
 Step 2 - Install Windows Apps
-Run in Powershell:
-	choco install nodejs
-	choco install pgadmin4
-	choco install postman
-	choco install vmware-workstation-player
-	choco install teamviewer9
-	choco install mailspring
-	choco install vscode
-	choco install autohotkey
-	choco install microsoft-windows-terminal
-	choco install veracrypt
-	choco install sublimetext3
-	choco install syncthing-gtk
-	choco install syncthing
-	choco install caffeine
-	choco install chromium
-	choco install office365business
-	choco install auto-dark-mode
-	choco install flutter
-	choco install androidstudio
+Run in Powershell as admin:
+	choco install nodejs -y
+	choco install pgadmin4 -y
+	choco install postman -y
+	choco install vmware-workstation-player -y
+	choco install teamviewer9 -y
+	choco install mailspring -y
+	choco install vscode -y
+	choco install autohotkey -y
+	choco install microsoft-windows-terminal -y
+	choco install veracrypt -y
+	choco install sublimetext3 -y
+	choco install syncthing-gtk -y
+	choco install syncthing -y
+	choco install caffeine -y
+	choco install chromium -y
+	choco install office365business -y
+	choco install auto-dark-mode -y
+	choco install flutter -y
+	choco install androidstudio -y
+	choco install firefox -y
+	choco install searchwithmybrowser -y
+	choco install git -y
+	git config --global user.name 'Imran Remtulla'
+	git config --global user.email 'iremtulla15@gmail.com'
 
 STEP 3 - Enable WSL
 Run in Powershell:
@@ -44,7 +49,6 @@ Run in WSL shell:
 
 Step 5 - Other
 Uninstall Windows bloatware
-Change default shell for Windows Terminal
 Sign in to Firefox, Mailspring, and Office
 Install Creative Cloud + Photoshop + Acrobat, then disable all of CC's startup processes
 Change the default Firefox search

@@ -12,7 +12,7 @@ fi
 
 SSHFOLDER=$(ls -a "$WINDOWSHOME" | grep ".ssh$")
 if [ ! -z "$SSHFOLDER" ]; then
-    cp -v -r "$WINDOWSHOME/.ssh" "$PCBACKUPS/.ssh"
+    rsync -av "$WINDOWSHOME/.ssh/" "$PCBACKUPS/.ssh"
 else
     echo "SSH folder not found!"
 fi

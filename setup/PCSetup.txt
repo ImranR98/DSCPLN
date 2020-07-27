@@ -1,0 +1,59 @@
+STEP 1 - Enable Chocolatey
+Run in CMD as ADMIN:
+	@"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command " [System.Net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
+
+Step 2 - Install Windows Apps
+Run in Powershell:
+	choco install nodejs
+	choco install pgadmin4
+	choco install postman
+	choco install vmware-workstation-player
+	choco install teamviewer9
+	choco install mailspring
+	choco install vscode
+	choco install autohotkey
+	choco install microsoft-windows-terminal
+	choco install veracrypt
+	choco install sublimetext3
+	choco install syncthing-gtk
+	choco install syncthing
+	choco install caffeine
+	choco install chromium
+	choco install office365business
+	choco install auto-dark-mode
+	choco install flutter
+	choco install androidstudio
+
+STEP 3 - Enable WSL
+Run in Powershell:
+	dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+	dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+Restart
+Download and run:
+	https://wslstorestorage.blob.core.windows.net/wslblob/wsl_update_x64.msi
+	wsl --set-default-version 2
+Install Ubuntu from MS Store
+
+Step 4 - Configure WSL and install Apps
+Open WSL shell and finish setup
+Run in WSL shell:
+	git config --global user.name 'Imran Remtulla'
+	git config --global user.email 'iremtulla15@gmail.com'
+	curl -sL https://deb.nodesource.com/setup_14.x | sudo -E bash -
+	sudo apt install nodejs -y
+
+Step 5 - Everything else
+Uninstall Windows bloatware
+Change default shell for Windows Terminal
+Sign in to Firefox, Mailspring, and Office
+Install Creative Cloud + Photoshop + Acrobat, then disable all of CC's startup processes
+Change the default Firefox search
+Firefox Config changes - run in a WSL shell:
+	FFFOLDER=$(ls /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles | grep ".default-release$")
+	touch /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
+	echo 'user_pref("extensions.formautofill.available", "on");' >> /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
+	echo 'user_pref("extensions.formautofill.creditCards.available", true);' >> /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
+	echo 'user_pref("extensions.formautofill.supportedCountries", "US,CA");' >> /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
+	echo 'user_pref("browser.bookmarks.autoExportHTML", true);' >> /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
+Double click the saved .deskpack file to change the Windows theme.
+Change default Apps

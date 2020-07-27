@@ -23,20 +23,19 @@ fi
 if [ "$choice" = 0 ]; then
 	exit
 fi
-takeoutfile=$(find ~/Downloads | grep takeout-.*.zip$)
+takeoutfile=$(find '/mnt/c/Users/Imran Remtulla/Downloads' | grep takeout-.*.zip$)
 if [ ! -z "$takeoutfile" ]; then
 	echo "$takeoutfile" | while read -r line ; do
-    	unzip -o "$line" -d ~/Downloads/
+    	unzip -o "$line" -d '/mnt/c/Users/Imran Remtulla/Downloads/'
 		rm "$line"
 	done
-	downloads=~/Downloads
-	node "$HERE"/renameFilesEndingWithDot.js $downloads'/Takeout'
+	node "$HERE"/renameFilesEndingWithDot.js '/mnt/c/Users/Imran Remtulla/Downloads/Takeout'
 	if [ ! -d "$PCBACKUPS"/'Google Takeout' ]; then
 		mkdir "$PCBACKUPS"/'Google Takeout'
 	fi
-	rsync -av ~/Downloads/Takeout/ "$PCBACKUPS"/'Google Takeout' --delete
+	rsync -av '/mnt/c/Users/Imran Remtulla/Downloads/Takeout/' "$PCBACKUPS"/'Google Takeout' --delete
 	echo "$(date)" >"$PCBACKUPS"/'Google Takeout'/lastBackedUp.txt
-	rm -rf ~/Downloads/Takeout
+	rm -rf '/mnt/c/Users/Imran Remtulla/Downloads/Takeout'
 else
 	echo "No takeout zip found."
 	exit

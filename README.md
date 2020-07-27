@@ -4,7 +4,7 @@ Setup my PC and NUC.
 
 ## Requirements
 A PC (called 'NUC' below) running Linux (in this case, an Intel NUC w/ Ubuntu) accessible via SSH.
-A PC running Linux (in this case, a laptop w/ Windows 10 + WSL2), that can access the first PC via SSH.
+A PC running Windows 10 with WSL, that can access the first PC via SSH.
 
 ## Usage
 ### Setup

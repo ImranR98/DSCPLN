@@ -1,5 +1,6 @@
 #!/bin/bash
 # Backup files from various sources manually
+# Run from within WSL
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
@@ -15,13 +16,13 @@ echo "2 - Balance.xlsx"
 echo "3 - Seneca Matrix"
 echo "4 - Firefox Bookmarks"
 echo "5 - SSH Directory"
-echo "6 - Reddit"
-echo "7 - MySeneca Email"
-echo "8 - WhatsApp"
-echo "9 - Google Takeout"
-echo "10 - Copy VMs"
-echo "11 - PS4 Saves & Media"
-echo "12 - Backup to Hard Drive"
+echo "6 - WSL .bashrc"
+echo "7 - Reddit"
+echo "8 - MySeneca Email"
+echo "9 - WhatsApp"
+echo "10 - Google Takeout"
+echo "11 - Copy VMs"
+echo "12 - PS4 Saves & Media"
 echo ""
 echo "Anything else - exit"
 echo ""
@@ -62,11 +63,17 @@ case $choice in
 
 6)
   echo "==============================="
+  echo "WSL .bashrc"
+  "$HERE"/scripts/redditBackup.sh
+  ;;
+
+7) 
+  echo "==============================="
   echo "Reddit"
   "$HERE"/scripts/redditBackup.sh
   ;;
 
-7)
+8)
   echo "==============================="
   echo "MySeneca Email"
   echo "==============================="
@@ -75,34 +82,28 @@ case $choice in
   echo "==============================="
   ;;
 
-8)
+9)
   echo "==============================="
   echo "WhatsApp"
   "$HERE"/scripts/WhatsApp.sh
   ;;
 
-9)
+10)
   echo "==============================="
   echo "Google Takeout"
   "$HERE"/scripts/googleTakeout.sh
   ;;
 
-10)
+11)
   echo "==============================="
   echo "Copy VMs"
   "$HERE"/scripts/copyVMs.sh
   ;;
 
-11)
+12)
   echo "==============================="
   echo "PS4 Saves & Media"
   "$HERE"/scripts/PS4.sh
-  ;;
-
-12)
-  echo "==============================="
-  echo "Backup to Hard Drive"
-  "$HERE"/scripts/backupToHardDrive.sh
   ;;
 
 *)

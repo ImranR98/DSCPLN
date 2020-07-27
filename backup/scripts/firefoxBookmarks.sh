@@ -1,19 +1,19 @@
 #!/bin/bash
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../../variables.sh
-if [ -z "$PCBACKUPS" ]; then
+if [ -z "$PCBACKUPS" ] || [ -z "$WINDOWSHOME" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$PCBACKUPS" ]; then
+if [ ! -d "$PCBACKUPS" ] || [ ! -d "$WINDOWSHOME" ]; then
     echo "Some directories from ../variables.sh are missing!"
     exit
 fi
 
-FFFOLDER=$(ls ~/.mozilla/firefox/ | grep ".default-release$")
+FFFOLDER=$(ls /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles | grep ".default-release$")
 if [ ! -z "$FFFOLDER" ]; then
-	if [ -f ~/.mozilla/firefox/"$FFFOLDER"/bookmarks.html ]; then
-        cp -v ~/.mozilla/firefox/"$FFFOLDER"/bookmarks.html "$PCBACKUPS"
+	if [ -f /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/bookmarks.html ]; then
+        cp -v/mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/bookmarks.html "$PCBACKUPS"
     else
         echo "No bookmarks.html found."
     fi

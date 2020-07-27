@@ -11,5 +11,5 @@ if [ ! -d "$PCVMS" ]; then
     exit
 fi
 
-rsync -av ~/vmware/ "$PCVMS" --delete
+rsync -av '/mnt/c/Users/Imran Remtulla/Documents/Virtual Machine' "$PCVMS" --delete
 echo "$(date)" > "$PCVMS"/lastBackedUp.txt

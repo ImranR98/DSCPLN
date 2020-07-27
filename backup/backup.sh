@@ -64,7 +64,7 @@ case $choice in
 6)
   echo "==============================="
   echo "WSL .bashrc"
-  "$HERE"/scripts/redditBackup.sh
+  "$HERE"/scripts/WSLbashrc.sh
   ;;
 
 7) 

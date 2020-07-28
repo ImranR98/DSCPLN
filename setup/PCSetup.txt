@@ -17,7 +17,6 @@ Run in Powershell as admin:
 	choco install sublimetext3 -y
 	choco install syncthing-gtk -y
 	choco install syncthing -y
-	choco install caffeine -y
 	choco install chromium -y
 	choco install office365business -y
 	choco install auto-dark-mode -y
@@ -26,6 +25,8 @@ Run in Powershell as admin:
 	choco install firefox -y
 	choco install searchwithmybrowser -y
 	choco install git -y
+	choco install visualstudio2019community -y
+Run in Powershell:
 	git config --global user.name 'Imran Remtulla'
 	git config --global user.email 'iremtulla15@gmail.com'
 

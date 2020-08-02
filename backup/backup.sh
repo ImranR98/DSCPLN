@@ -14,15 +14,12 @@ echo ""
 echo "1 - MarkD"
 echo "2 - Balance.xlsx"
 echo "3 - Seneca Matrix"
-echo "4 - Firefox Bookmarks"
-echo "5 - SSH Directory"
-echo "6 - WSL .bashrc"
-echo "7 - Reddit"
-echo "8 - MySeneca Email"
-echo "9 - WhatsApp"
-echo "10 - Google Takeout"
-echo "11 - Copy VMs"
-echo "12 - PS4 Saves & Media"
+echo "4 - Various File Copying"
+echo "5 - Reddit"
+echo "6 - MySeneca Email"
+echo "7 - WhatsApp"
+echo "8 - Google Takeout"
+echo "9 - PS4 Saves & Media"
 echo ""
 echo "Anything else - exit"
 echo ""
@@ -51,56 +48,38 @@ case $choice in
 
 4)
   echo "==============================="
-  echo "Firefox Bookmarks"
-  "$HERE"/scripts/firefoxBookmarks.sh
+  echo "Various File Copying"
+  "$HERE"/scripts/variousFileCopying.sh
   ;;
 
-5)
-  echo "==============================="
-  echo "SSH Directory"
-  "$HERE"/scripts/SSH.sh
-  ;;
-
-6)
-  echo "==============================="
-  echo "WSL .bashrc"
-  "$HERE"/scripts/WSLbashrc.sh
-  ;;
-
-7) 
+5) 
   echo "==============================="
   echo "Reddit"
   "$HERE"/scripts/redditBackup.sh
   ;;
 
-8)
+6)
   echo "==============================="
   echo "MySeneca Email"
   echo "==============================="
   echo "No automation available."
-  echo "Open email in outlook (in a Windows VM), then export to the Backup folder in .pst."
+  echo "Open email account in Outlook, then export to the Backup folder in .pst."
   echo "==============================="
   ;;
 
-9)
+7)
   echo "==============================="
   echo "WhatsApp"
   "$HERE"/scripts/WhatsApp.sh
   ;;
 
-10)
+8)
   echo "==============================="
   echo "Google Takeout"
   "$HERE"/scripts/googleTakeout.sh
   ;;
 
-11)
-  echo "==============================="
-  echo "Copy VMs"
-  "$HERE"/scripts/copyVMs.sh
-  ;;
-
-12)
+9)
   echo "==============================="
   echo "PS4 Saves & Media"
   "$HERE"/scripts/PS4.sh

@@ -55,12 +55,12 @@ Sign in to Firefox, Mailspring, and Office
 Install Creative Cloud + Photoshop + Acrobat, then disable all of CC's startup processes
 Change the default Firefox search
 Firefox Config changes - run in a WSL shell:
-	FFFOLDER=$(ls /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles | grep ".default-release$")
-	touch /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
-	echo 'user_pref("extensions.formautofill.available", "on");' >> /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
-	echo 'user_pref("extensions.formautofill.creditCards.available", true);' >> /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
-	echo 'user_pref("extensions.formautofill.supportedCountries", "US,CA");' >> /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
-	echo 'user_pref("browser.bookmarks.autoExportHTML", true);' >> /mnt/c/Users/Imran\ Remtulla/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
+	FFFOLDER=$(ls /mnt/c/Users/ImranR/AppData/Roaming/Mozilla/Firefox/Profiles | grep ".default-release$")
+	touch /mnt/c/Users/ImranR/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
+	echo 'user_pref("extensions.formautofill.available", "on");' >> /mnt/c/Users/ImranR/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
+	echo 'user_pref("extensions.formautofill.creditCards.available", true);' >> /mnt/c/Users/ImranR/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
+	echo 'user_pref("extensions.formautofill.supportedCountries", "US,CA");' >> /mnt/c/Users/ImranR/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
+	echo 'user_pref("browser.bookmarks.autoExportHTML", true);' >> /mnt/c/Users/ImranR/AppData/Roaming/Mozilla/Firefox/Profiles/"$FFFOLDER"/user.js
 Double click the saved .deskpack file to change the Windows theme.
 Change default Apps
 

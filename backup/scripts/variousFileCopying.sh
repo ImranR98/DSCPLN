@@ -31,4 +31,4 @@ else
 fi
 
 echo "WSL Bashrc..."
-cp -v ~/.bashrc "$PCBACKUPS"
+cp -v ~/.bashrc "$PCBACKUPS"/nuc.bashrc

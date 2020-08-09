@@ -17,7 +17,7 @@ node "$HERE"/accMDToXLSX/accMDToXLSX.js "$PCACCMDPATH" "$PCDOCUMENTS"/Balance.xl
 echo "Results are shown above."
 
 if [ ! "$1" = '--nowait' ]; then
-    echo "Copy these results into a text editor and replace every 4 spaces with a tab character. This is needed because shitty OSes like Windows ignore tab characters in the terminal, even in WSL."
+    echo "Copy these results into a text editor and replace every '\t' with a tab character. This is needed because shitty OSes like Windows ignore tab characters in the terminal, even in WSL."
 	echo "Paste the results into Balance.xlsx, then press enter. Waiting..."
 	read choice
 	echo "$(date)" > "$PCDOCUMENTS"/balanceLastUpdated.txt

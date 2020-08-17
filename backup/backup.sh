@@ -11,7 +11,7 @@ echo "ImranR Backup"
 echo "============="
 echo "Pick an option:"
 echo ""
-echo "1 - MarkD"
+echo "1 - Notion"
 echo "2 - Balance.xlsx"
 echo "3 - Seneca Matrix"
 echo "4 - Various File Copying"
@@ -30,8 +30,8 @@ case $choice in
 
 1)
   echo "==============================="
-  echo "MarkD"
-  "$HERE"/scripts/markd.sh
+  echo "Notion"
+  echo "Not yet implemented. Do this manually"
   ;;
 
 2)

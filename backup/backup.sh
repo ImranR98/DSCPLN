@@ -31,7 +31,7 @@ case $choice in
 1)
   echo "==============================="
   echo "Notion"
-  echo "Not yet implemented. Do this manually"
+  "$HERE"/scripts/Notion.sh
   ;;
 
 2)

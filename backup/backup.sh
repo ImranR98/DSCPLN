@@ -13,13 +13,12 @@ echo "Pick an option:"
 echo ""
 echo "1 - Notion"
 echo "2 - Balance.xlsx"
-echo "3 - Seneca Matrix"
-echo "4 - Various File Copying"
-echo "5 - Reddit"
-echo "6 - MySeneca Email"
-echo "7 - WhatsApp"
-echo "8 - Google Takeout"
-echo "9 - PS4 Saves & Media"
+echo "3 - Various File Copying"
+echo "4 - Reddit"
+echo "5 - MySeneca Email"
+echo "6 - WhatsApp"
+echo "7 - Google Takeout"
+echo "8 - PS4 Saves & Media"
 echo ""
 echo "Anything else - exit"
 echo ""
@@ -42,23 +41,17 @@ case $choice in
 
 3)
   echo "==============================="
-  echo "Seneca Matrix"
-  "$HERE"/scripts/SenecaMatrix.sh --nowait
-  ;;
-
-4)
-  echo "==============================="
   echo "Various File Copying"
   "$HERE"/scripts/variousFileCopying.sh
   ;;
 
-5) 
+4) 
   echo "==============================="
   echo "Reddit"
   "$HERE"/scripts/redditBackup.sh
   ;;
 
-6)
+5)
   echo "==============================="
   echo "MySeneca Email"
   echo "==============================="
@@ -67,19 +60,19 @@ case $choice in
   echo "==============================="
   ;;
 
-7)
+6)
   echo "==============================="
   echo "WhatsApp"
   "$HERE"/scripts/WhatsApp.sh
   ;;
 
-8)
+7)
   echo "==============================="
   echo "Google Takeout"
   "$HERE"/scripts/googleTakeout.sh
   ;;
 
-9)
+8)
   echo "==============================="
   echo "PS4 Saves & Media"
   "$HERE"/scripts/PS4.sh

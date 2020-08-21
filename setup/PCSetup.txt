@@ -29,6 +29,7 @@ Run in Powershell as admin:
 Run in Powershell:
 	git config --global user.name 'Imran Remtulla'
 	git config --global user.email 'iremtulla15@gmail.com'
+	git config --global core.autocrlf false
 
 STEP 3 - Enable WSL
 Run in Powershell:

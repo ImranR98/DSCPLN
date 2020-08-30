@@ -33,9 +33,9 @@ if [ ! -z "$exportfile" ]; then
 	if [ ! -d "$PCBACKUPS"/'Medium' ]; then
 		mkdir "$PCBACKUPS"/'Medium'
 	fi
-	rsync -av '/mnt/c/Users/ImranR/Downloads/Takeout/' "$PCBACKUPS"/'Medium' --delete
+	rsync -av '/mnt/c/Users/ImranR/Downloads/Medium/' "$PCBACKUPS"/'Medium' --delete
 	echo "$(date)" >"$PCBACKUPS"/'Medium'/lastBackedUp.txt
-	rm -rf '/mnt/c/Users/ImranR/Downloads/Takeout'
+	rm -rf '/mnt/c/Users/ImranR/Downloads/Medium'
 else
 	echo "No export zip found."
 	exit

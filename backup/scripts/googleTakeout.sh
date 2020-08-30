@@ -3,11 +3,11 @@
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../../variables.sh
-if [ -z "$PCBACKUPS" ] || [ -z "$PCDOCUMENTS" ]; then
+if [ -z "$PCBACKUPS" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$PCBACKUPS" ] || [ ! -d "$PCDOCUMENTS" ]; then
+if [ ! -d "$PCBACKUPS" ]; then
     echo "Some directories from ../variables.sh are missing!"
     exit
 fi

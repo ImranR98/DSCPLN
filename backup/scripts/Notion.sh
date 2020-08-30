@@ -13,7 +13,7 @@ if [ ! -d "$PCBACKUPS" ] || [ ! -d "$PCDOCUMENTS" ]; then
 fi
 
 if [ ! "$1" = '--nowait' ]; then
-	echo "Create a 'Merkdown/CSV' backup from Notion and download it when ready."
+	echo "Create a 'Markdown/CSV' backup from Notion and download it when ready."
 	echo "After download is complete, press enter. To cancel, type 0 then press enter (run this command with --nowait to avoid this prompt). Waiting..."
 	read choice
 else

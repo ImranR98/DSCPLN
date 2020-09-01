@@ -14,11 +14,12 @@ echo ""
 echo "1 - Notion"
 echo "2 - Balance.xlsx"
 echo "3 - Various File Copying"
-echo "4 - Reddit"
-echo "5 - Medium"
-echo "6 - WhatsApp"
-echo "7 - Google Takeout"
-echo "8 - PS4 Saves & Media"
+echo "4 - Ryerson Moon"
+echo "5 - Reddit"
+echo "6 - Medium"
+echo "7 - WhatsApp"
+echo "8 - Google Takeout"
+echo "9 - PS4 Saves & Media"
 echo ""
 echo "Anything else - exit"
 echo ""
@@ -45,31 +46,37 @@ case $choice in
   "$HERE"/scripts/variousFileCopying.sh
   ;;
 
-4) 
+4)
+  echo "==============================="
+  echo "Ryerson Moon"
+  "$HERE"/scripts/RyersonMoon.sh
+  ;;
+
+5) 
   echo "==============================="
   echo "Reddit"
   "$HERE"/scripts/redditBackup.sh
   ;;
 
-5)
+6)
   echo "==============================="
   echo "Medium"
   "$HERE"/scripts/Medium.sh
   ;;
 
-6)
+7)
   echo "==============================="
   echo "WhatsApp"
   "$HERE"/scripts/WhatsApp.sh
   ;;
 
-7)
+8)
   echo "==============================="
   echo "Google Takeout"
   "$HERE"/scripts/googleTakeout.sh
   ;;
 
-8)
+9)
   echo "==============================="
   echo "PS4 Saves & Media"
   "$HERE"/scripts/PS4.sh

@@ -1,4 +1,4 @@
-// Uses the Reddit API and an App CLIENT_ID and CLIENT_SECRET from secrets.josn to get Access tokens for the User's Reddit account and save them to access.json
+// Uses the Reddit API and an App CLIENT_ID and CLIENT_SECRET from secrets.josn to get Access tokens for the User's Reddit account and save them to ${userName}-access.json
 
 const fs = require('fs')
 const express = require('express')
@@ -18,8 +18,24 @@ const scopes = [
     'report'
 ]
 
-const loadCreds = () => JSON.parse(fs.readFileSync('./secrets.json').toString())
-const loadAccess = () => JSON.parse(fs.readFileSync('./access.json').toString())
+if (process.argv.length <= 2) {
+    console.log('Please provide the path to save creds in the arguments.')
+    process.exit()
+}
+let userName = process.argv[2].split('/')
+userName = userName[userName.length - 1]
+
+const loadCreds = () => {
+    let creds = null
+    try {
+        creds = JSON.parse(fs.readFileSync(`./secrets.json`).toString())
+    } catch (err) {
+        console.log('Error loading creds. Make sure you Reddit API client ID and Secret are stored in secrets.json. secrets.template.json can be used as a starting point.')
+        process.exit(-1)
+    }
+    return creds
+}
+const loadAccess = () => JSON.parse(fs.readFileSync(`./${userName}-access.json`).toString())
 
 const getAuthorizationURL = () => {
     let creds = loadCreds()
@@ -43,7 +59,7 @@ const getAccess = async (code) => {
         }
     )
     let accessCreds = JSON.parse(data.body)
-    fs.writeFileSync('./access.json', JSON.stringify(accessCreds, null, '\t'))
+    fs.writeFileSync(`./${userName}-access.json`, JSON.stringify(accessCreds, null, '\t'))
 }
 
 const refreshAccess = async (refreshToken) => {
@@ -60,7 +76,7 @@ const refreshAccess = async (refreshToken) => {
     )
     let accessCreds = JSON.parse(data.body)
     accessCreds.refresh_token = refreshToken
-    fs.writeFileSync('./access.json', JSON.stringify(accessCreds, null, '\t'))
+    fs.writeFileSync(`./${userName}-access.json`, JSON.stringify(accessCreds, null, '\t'))
 }
 
 const app = express()
@@ -93,8 +109,8 @@ app.listen(port, () => {
         }).catch((err) => {
             console.log('An error occured:')
             console.log(err)
-            if (fs.existsSync('./access.json')) {
-                fs.unlinkSync('./access.json')
+            if (fs.existsSync(`./${userName}-access.json`)) {
+                fs.unlinkSync(`./${userName}-access.json`)
             }
             console.log('Please try again.')
             process.exit()

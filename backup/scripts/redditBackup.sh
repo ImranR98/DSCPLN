@@ -11,17 +11,25 @@ if [ ! -d "$PCBACKUPS" ]; then
     exit
 fi
 
+if [ -z "$1" ]; then
+    echo "Please provide a username"
+    exit
+fi
+
 if [ ! -d "$PCBACKUPS"/Reddit ]; then
     mkdir "$PCBACKUPS"/Reddit
 fi
-if [ ! -d "$PCBACKUPS"/Reddit/Oldest ]; then
-    mkdir "$PCBACKUPS"/Reddit/Oldest
+if [ ! -d "$PCBACKUPS"/Reddit/"$1" ]; then
+    mkdir "$PCBACKUPS"/Reddit/"$1"
 fi
-if [ ! -d "$PCBACKUPS"/Reddit/Latest ]; then
-    mkdir "$PCBACKUPS"/Reddit/Latest
+if [ ! -d "$PCBACKUPS"/Reddit/"$1"/Oldest ]; then
+    mkdir "$PCBACKUPS"/Reddit/"$1"/Oldest
+fi
+if [ ! -d "$PCBACKUPS"/Reddit/"$1"/Latest ]; then
+    mkdir "$PCBACKUPS"/Reddit/"$1"/Latest
 fi
 cd "$HERE"/dydr
-node access.js # Making sure access is available
-node backup.js "$PCBACKUPS"/Reddit # Running backup
+node access.js "$PCBACKUPS"/Reddit/"$1" # Making sure access is available
+node backup.js "$PCBACKUPS"/Reddit/"$1" # Running backup
 cd ..
-echo "$(date)" >"$PCBACKUPS"/Reddit/lastBackedUp.txt
+echo "$(date)" >"$PCBACKUPS"/Reddit/"$1"/lastBackedUp.txt

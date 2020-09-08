@@ -5,8 +5,15 @@ const simpleRequests = require('./simpleRequests')
 const apiUrl1 = 'https://oauth.reddit.com/api/v1'
 const apiUrl2 = 'https://oauth.reddit.com/user'
 
+if (process.argv.length <= 2) {
+    console.log('Please provide the path to save files in the arguments.')
+    process.exit()
+}
+
 try {
-    accessCreds = JSON.parse(fs.readFileSync('./access.json').toString())
+    let userName = process.argv[2].split('/')
+    userName = userName[userName.length - 1]
+    accessCreds = JSON.parse(fs.readFileSync(`./${userName}-access.json`).toString())
 } catch (err) {
     console.log('Could not read Access tokens.')
     process.exit()
@@ -100,10 +107,6 @@ const save = async (url, api, fileStoredIn) => {
 }
 
 const run = async () => {
-    if (process.argv.length <= 2) {
-        console.log('Please provide the path to save files in the arguments.')
-        process.exit()
-    }
     let fileStoredIn = process.argv[2]
     let errs = false
     for (let i = 0; i < urlsToSave.length; i++) {

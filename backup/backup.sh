@@ -94,7 +94,7 @@ case $choice in
 11)
   echo "==============================="
   echo "Discord"
-  echo "This is not automated. Export the desired channels manually using DiscordChatExporter."
+  "$HERE"/scripts/Discord.sh
   ;;
 
 12)

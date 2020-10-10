@@ -19,4 +19,4 @@ echo "Enter a new token from the Discord web client:"
 read token
 
 COMMAND=$(node "$HERE"/DCEA.js "$DISCORDCHATEXPORTERCLI" "$PCBACKUPS/Discord" "$token")
-echo "$COMMAND"
+eval "$COMMAND"

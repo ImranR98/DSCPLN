@@ -21,7 +21,8 @@ echo "7 - Medium"
 echo "8 - Google Takeout"
 echo "9 - WhatsApp"
 echo "10 - School Emails"
-echo "11 - PS4 Saves & Media"
+echo "11 - Discord"
+echo "12 - PS4 Saves & Media"
 echo ""
 echo "Anything else - exit"
 echo ""
@@ -91,6 +92,12 @@ case $choice in
   ;;
 
 11)
+  echo "==============================="
+  echo "Discord"
+  echo "This is not automated. Export the desired channels manually using DiscordChatExporter."
+  ;;
+
+12)
   echo "==============================="
   echo "PS4 Saves & Media"
   "$HERE"/scripts/PS4.sh

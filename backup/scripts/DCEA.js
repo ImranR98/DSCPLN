@@ -50,6 +50,7 @@ module.exports.getExistingDiscordBackupDates = (path) => {
             } catch (err) {
                 d = null
             }
+            return d
         })
         if (dates.length != 2 || dates.findIndex(d => d == null) >= 0) dates = null // Empty the date object if it contains nulls or more/less than 2 dates
 
@@ -66,7 +67,7 @@ module.exports.generateBackupCommand = (DCECLIPath, DCEBackupPath, DCEToken) => 
     const command = this.returnDiscordChatExporterCLICommand(DCECLIPath)
     const backups = this.getExistingDiscordBackupDates(DCEBackupPath)
     let startDate = null
-    if (backups.length > 0) startDate = backups[backups.length][1]
+    if (backups.length > 0) startDate = backups[backups.length - 1][1]
     return `${command} exportall -t "${DCEToken}"${startDate ? ` --dateformat "u" --after "${this.dateToDateString(startDate)}" ` : ' '}-o "${DCEBackupPath}/${startDate ? this.dateToDateString(startDate).split(':').join('.') : 'start'} to ${this.dateToDateString(new Date()).split(':').join('.')}"`
 }
 

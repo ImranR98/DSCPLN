@@ -18,5 +18,11 @@ fi
 echo "Enter a new token from the Discord web client:"
 read token
 
-COMMAND=$(node "$HERE"/DCEA.js "$DISCORDCHATEXPORTERCLI" "$PCBACKUPS/Discord" "$token")
+echo "Here are your accessible servers:"
+COMMAND=$(node "$HERE"/DCEA/serverListCommand.js "$DISCORDCHATEXPORTERCLI" "$token")
 eval "$COMMAND"
+
+echo "Enter the server ID to backup:"
+read SERVER
+
+COMMAND=$(node "$HERE"/DCEA/backupCommand.js "$DISCORDCHATEXPORTERCLI" "$PCBACKUPS/Discord" "$token" "$SERVER")

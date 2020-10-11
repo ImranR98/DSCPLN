@@ -34,8 +34,14 @@ module.exports.returnDiscordChatExporterCLICommand = (path) => {
 
 // Checks the provided path for existing Discord Chat Exports and returns their start and end dates
 // Only considers directories that follow the naming convention 'YYYY-MM-DD hh.mm.ssZ (or start) to YYYY-MM-DD hh.mm.ssZ' for the start and end dates
-module.exports.getExistingDiscordBackupDates = (path) => {
+module.exports.getExistingDiscordBackupDatesForServerForServer = (path, serverID) => {
     this.ensureDirectory(path)
+    try {
+        this.ensureDirectory(`${path}/${serverID}`)
+    } catch (err) {
+        return []
+    }
+    path = `${path}/${serverID}`
     return fs.readdirSync(path).map(d => {
         // Should be a directory
         const isDir = fs.statSync(`${path}/${d}`).isDirectory()
@@ -63,17 +69,17 @@ module.exports.dateToDateString = (date) => {
     return `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()} ${date.getUTCHours()}:${date.getUTCMinutes()}:${date.getUTCSeconds()}Z`
 }
 
-module.exports.generateBackupCommand = (DCECLIPath, DCEBackupPath, DCEToken) => {
+module.exports.generateBackupCommandForServer = (DCECLIPath, DCEBackupPath, DCEToken, serverID) => {
     const command = this.returnDiscordChatExporterCLICommand(DCECLIPath)
-    const backups = this.getExistingDiscordBackupDates(DCEBackupPath)
+    const backups = this.getExistingDiscordBackupDatesForServer(DCEBackupPath)
     let startDate = null
     if (backups.length > 0) startDate = backups[backups.length - 1][1]
-    return `${command} exportall -t "${DCEToken}"${startDate ? ` --dateformat "u" --after "${this.dateToDateString(startDate)}" ` : ' '}-o "${DCEBackupPath}/${startDate ? this.dateToDateString(startDate).split(':').join('.') : 'start'} to ${this.dateToDateString(new Date()).split(':').join('.')}"`
+    let dirPath = `${DCEBackupPath}/${serverID}/${startDate ? this.dateToDateString(startDate).split(':').join('.') : 'start'} to ${this.dateToDateString(new Date()).split(':').join('.')}`
+    fs.mkdirSync(dirPath, { recursive: true })
+    return `${command} exportguild -g "${serverID}" -t "${DCEToken}"${startDate ? ` --dateformat "u" --after "${this.dateToDateString(startDate)}" ` : ' '}-o "${dirPath}"`
 }
 
-try {
-    console.log(this.generateBackupCommand(process.argv[2], process.argv[3], process.argv[4]))
-} catch (err) {
-    console.error(err)
-    process.exit(-1)
+module.exports.generateServerListCommand = (DCECLIPath, DCEToken) => {
+    const command = this.returnDiscordChatExporterCLICommand(DCECLIPath)
+    return `${command} guilds -t "${DCEToken}"`
 }

@@ -12,6 +12,7 @@ module.exports.ensureDirectory = (path) => {
 }
 
 // Takes the path to the Discord Chat Exporter CLI directory and returns the command to use
+// Throws an error if the command cannot be run
 module.exports.returnDiscordChatExporterCLICommand = (path) => {
     this.ensureDirectory(path)
     const files = fs.readdirSync(path)
@@ -33,18 +34,12 @@ module.exports.returnDiscordChatExporterCLICommand = (path) => {
 }
 
 // Checks the provided path for existing Discord Chat Exports and returns their start and end dates
-// Only considers directories that follow the naming convention 'YYYY-MM-DD hh.mm.ssZ (or start) to YYYY-MM-DD hh.mm.ssZ' for the start and end dates
-module.exports.getExistingDiscordBackupDatesForServerForServer = (path, serverID) => {
-    this.ensureDirectory(path)
-    try {
-        this.ensureDirectory(`${path}/${serverID}`)
-    } catch (err) {
-        return []
-    }
-    path = `${path}/${serverID}`
-    return fs.readdirSync(path).map(d => {
+// Only considers directories that follow the naming convention 'YYYY-MM-DD hh.mm.ssZ (or 'start') to YYYY-MM-DD hh.mm.ssZ' for the start and end dates
+module.exports.getExistingDiscordBackupDatesForServer = (backupDir) => {
+    this.ensureDirectory(backupDir)
+    return fs.readdirSync(backupDir).map(d => {
         // Should be a directory
-        const isDir = fs.statSync(`${path}/${d}`).isDirectory()
+        const isDir = fs.statSync(`${backupDir}/${d}`).isDirectory()
 
         // Directory name should be two dates (or 'start' and a date, date should be UTC Format /w colon replaced by dot: YYYY-MM-DD hh.mm.ssZ) separated by a 'to'
         let dates = d.split('to').map(d => d.trim().split('.').join(':')) // Grab the two strings separated by 'to' and replace dots with colons
@@ -65,20 +60,47 @@ module.exports.getExistingDiscordBackupDatesForServerForServer = (path, serverID
     }).filter(b => !!b)
 }
 
+// Turns a date into a UTC string of the form accepted by DiscordChatExporter.CLI
 module.exports.dateToDateString = (date) => {
     return `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()} ${date.getUTCHours()}:${date.getUTCMinutes()}:${date.getUTCSeconds()}Z`
 }
 
-module.exports.generateBackupCommandForServer = (DCECLIPath, DCEBackupPath, DCEToken, serverID) => {
+// Generate a command to backup the latest messages from a server (also creates a new backup directory if it doesn't exist)
+module.exports.generateBackupCommandForServer = (DCECLIPath, DCEToken, DCEBackupPath, serverNum) => {
+    // Get the correct command to use
     const command = this.returnDiscordChatExporterCLICommand(DCECLIPath)
-    const backups = this.getExistingDiscordBackupDatesForServer(DCEBackupPath)
+
+    // Get the list of servers and make sure the user's number is within the valid range
+    let options = execSync(`${this.generateServerListCommand(DCECLIPath, DCEToken)}`).toString().split('\n').map(opt => {
+        let opts = opt.split('|').map(o => o.trim())
+        if (opts.length != 2) throw 'Could not get list of servers.'
+        return opts
+    })
+    if (serverNum <= 0) throw 'Please enter a valid number.'
+    if (serverNum > options.length) throw `There are only ${options.length} servers.`
+
+    // Create the folder for the server if it does not exist
+    let backupDir = `${DCEBackupPath}/${options[serverNum - 1][1]} | ${options[serverNum - 1][0]}`
+    try {
+        this.ensureDirectory(backupDir)
+    } catch (err) {
+        fs.mkdirSync(backupDir)
+    }
+
+    // Get any existing backups for this server and firgure out the start date for the new backup (if no backups previous exist, start date is undefined)
+    const backups = this.getExistingDiscordBackupDatesForServer(backupDir)
     let startDate = null
     if (backups.length > 0) startDate = backups[backups.length - 1][1]
-    let dirPath = `${DCEBackupPath}/${serverID}/${startDate ? this.dateToDateString(startDate).split(':').join('.') : 'start'} to ${this.dateToDateString(new Date()).split(':').join('.')}`
-    fs.mkdirSync(dirPath, { recursive: true })
-    return `${command} exportguild -g "${serverID}" -t "${DCEToken}"${startDate ? ` --dateformat "u" --after "${this.dateToDateString(startDate)}" ` : ' '}-o "${dirPath}"`
+
+    // Create a directory for the new backup
+    let dirPath = `${backupDir}/${startDate ? this.dateToDateString(startDate).split(':').join('.') : 'start'} to ${this.dateToDateString(new Date()).split(':').join('.')}`
+    fs.mkdirSync(dirPath)
+
+    // Generate and return the backup command to run
+    return `${command} exportguild -g "${options[serverNum - 1][0]}" -t "${DCEToken}"${startDate ? ` --dateformat "u" --after "${this.dateToDateString(startDate)}" ` : ' '}-o "${dirPath}"`
 }
 
+// Generate a command to return a list of accessible servers
 module.exports.generateServerListCommand = (DCECLIPath, DCEToken) => {
     const command = this.returnDiscordChatExporterCLICommand(DCECLIPath)
     return `${command} guilds -t "${DCEToken}"`

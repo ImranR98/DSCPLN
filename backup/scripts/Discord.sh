@@ -20,9 +20,10 @@ read token
 
 echo "Here are your accessible servers:"
 COMMAND=$(node "$HERE"/DCEA/serverListCommand.js "$DISCORDCHATEXPORTERCLI" "$token")
-eval "$COMMAND"
+RES="$(eval "$COMMAND")"
+echo "$RES" | awk '{print NR, $3}'
 
-echo "Enter the server ID to backup:"
-read SERVER
+echo "Enter the server number to backup:"
+read SERVERNUM
 
-COMMAND=$(node "$HERE"/DCEA/backupCommand.js "$DISCORDCHATEXPORTERCLI" "$PCBACKUPS/Discord" "$token" "$SERVER")
+COMMAND=$(node "$HERE"/DCEA/backupCommand.js "$DISCORDCHATEXPORTERCLI" "$token" "$PCBACKUPS/Discord" "$SERVERNUM")

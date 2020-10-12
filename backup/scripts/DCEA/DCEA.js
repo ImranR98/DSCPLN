@@ -60,9 +60,16 @@ module.exports.getExistingDiscordBackupDatesForServer = (backupDir) => {
     }).filter(b => !!b)
 }
 
+// Turns a single digit number into a string with two digits
+module.exports.doubleDigitNumber = (num) => {
+    num = num.toString().trim()
+    if (num.length < 2) num = '0' + num
+    return num
+}
+
 // Turns a date into a UTC string of the form accepted by DiscordChatExporter.CLI
 module.exports.dateToDateString = (date) => {
-    return `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()} ${date.getUTCHours()}:${date.getUTCMinutes()}:${date.getUTCSeconds()}Z`
+    return `${date.getUTCFullYear()}-${this.doubleDigitNumber(date.getUTCMonth() + 1)}-${this.doubleDigitNumber(date.getUTCDate())} ${this.doubleDigitNumber(date.getUTCHours())}:${this.doubleDigitNumber(date.getUTCMinutes())}:${this.doubleDigitNumber(date.getUTCSeconds())}Z`
 }
 
 // Generate a command to backup the latest messages from a server (also creates a new backup directory if it doesn't exist)

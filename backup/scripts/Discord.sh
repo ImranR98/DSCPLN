@@ -37,6 +37,6 @@ done
 SERVERID="$(echo "$SERVERS" | head -$SERVERNUM | tail -1 | awk '{print $1}')"
 SERVERNAME="$(echo "$SERVERS" | head -$SERVERNUM | tail -1 | awk '{ s = ""; for (i = 3; i <= NF; i++) s = s $i " "; print s }')"
 
-COMMAND=$(node "$HERE"/DCEA/backupCommand.js "$DISCORDCHATEXPORTERCLI" "$token" "$PCBACKUPS/Discord" "$SERVERID" "$SERVERNAME")
+COMMAND="$(node "$HERE"/DCEA/backupCommand.js "$DISCORDCHATEXPORTERCLI" "$token" "$PCBACKUPS/Discord" "$SERVERID" "$SERVERNAME")"
 echo "Running command: $COMMAND"
 eval "$COMMAND"

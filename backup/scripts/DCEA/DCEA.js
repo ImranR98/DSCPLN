@@ -66,21 +66,15 @@ module.exports.dateToDateString = (date) => {
 }
 
 // Generate a command to backup the latest messages from a server (also creates a new backup directory if it doesn't exist)
-module.exports.generateBackupCommandForServer = (DCECLIPath, DCEToken, DCEBackupPath, serverNum) => {
+module.exports.generateBackupCommandForServer = (DCECLIPath, DCEToken, DCEBackupPath, serverID, serverName) => {
+    // Trim some args
+    if (serverName) serverName = serverName.trim()
+
     // Get the correct command to use
     const command = this.returnDiscordChatExporterCLICommand(DCECLIPath)
 
-    // Get the list of servers and make sure the user's number is within the valid range
-    let options = execSync(`${this.generateServerListCommand(DCECLIPath, DCEToken)}`).toString().split('\n').map(opt => {
-        let opts = opt.split('|').map(o => o.trim())
-        if (opts.length != 2) throw 'Could not get list of servers.'
-        return opts
-    })
-    if (serverNum <= 0) throw 'Please enter a valid number.'
-    if (serverNum > options.length) throw `There are only ${options.length} servers.`
-
     // Create the folder for the server if it does not exist
-    let backupDir = `${DCEBackupPath}/${options[serverNum - 1][1]} | ${options[serverNum - 1][0]}`
+    let backupDir = `${DCEBackupPath}/${serverName} - ${serverID}`
     try {
         this.ensureDirectory(backupDir)
     } catch (err) {
@@ -97,7 +91,7 @@ module.exports.generateBackupCommandForServer = (DCECLIPath, DCEToken, DCEBackup
     fs.mkdirSync(dirPath)
 
     // Generate and return the backup command to run
-    return `${command} exportguild -g "${options[serverNum - 1][0]}" -t "${DCEToken}"${startDate ? ` --dateformat "u" --after "${this.dateToDateString(startDate)}" ` : ' '}-o "${dirPath}"`
+    return `${command} exportguild -g "${serverID}" -t "${DCEToken}"${startDate ? ` --dateformat "u" --after "${this.dateToDateString(startDate)}" ` : ' '}-o "${dirPath}" --media`
 }
 
 // Generate a command to return a list of accessible servers

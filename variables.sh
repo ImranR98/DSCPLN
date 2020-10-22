@@ -3,6 +3,7 @@
 HERE1="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 export WINDOWSHOME='/mnt/c/Users/ImranR'
+export WINDOWSMANUALAPPS='/mnt/c/ManualApps'
 export PCMAIN="$WINDOWSHOME/Main"
 export PCBACKUPS="$PCMAIN/Backups"
 export PCPICTURES="$PCMAIN/Media"

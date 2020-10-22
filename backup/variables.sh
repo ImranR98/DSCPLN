@@ -1,6 +1,4 @@
-# Variables used in other scripts
-
-HERE1="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+# Variables used in backup scripts
 
 export WINDOWSHOME='/mnt/c/Users/ImranR'
 export WINDOWSMANUALAPPS='/mnt/c/ManualApps'

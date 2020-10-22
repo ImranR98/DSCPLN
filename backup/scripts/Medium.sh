@@ -2,7 +2,7 @@
 # Prompts for confirmation unless --nowait is provided as an argument
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-source "$HERE"/../../variables.sh
+source "$HERE"/../variables.sh
 if [ -z "$PCBACKUPS" ]; then
     echo "Some environment variables are missing!"
     exit

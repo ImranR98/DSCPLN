@@ -16,4 +16,4 @@ export NUCBACKUPS="$NUCHDDMOUNT/Main/Backups"
 export NUCPICTURES="$NUCHDDMOUNT/Main/Media"
 export CLOUDSSH='root@example.com'
 export CLOUDSSHPORT='22'
-export DISCORDCHATEXPORTERCLI='/mnt/c/DiscordChatExporter.CLI'
+export DISCORDCHATEXPORTERCLI='/mnt/c/ManualApps/DiscordChatExporter.CLI'

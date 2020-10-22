@@ -12,18 +12,19 @@ echo "============="
 echo "Pick an option:"
 echo ""
 echo "1 - Various File Copying"
-echo "2 - Ryerson Moon"
-echo "3 - Cloud Systemctl Service Files"
-echo "4 - Reddit - Webninja98"
-echo "5 - Reddit - ImranR98"
-echo "6 - Notion"
-echo "7 - Balance.xlsx"
-echo "8 - Medium"
-echo "9 - Google Takeout"
-echo "10 - WhatsApp"
-echo "11 - School Emails"
-echo "12 - Discord"
-echo "13 - PS4 Saves & Media"
+echo "2 - NUC - Various File Copying"
+echo "3 - Ryerson Moon"
+echo "4 - Cloud Systemctl Service Files"
+echo "5 - Reddit - Webninja98"
+echo "6 - Reddit - ImranR98"
+echo "7 - Notion"
+echo "8 - Balance.xlsx"
+echo "9 - Medium"
+echo "10 - Google Takeout"
+echo "11 - WhatsApp"
+echo "12 - School Emails"
+echo "13 - Discord"
+echo "14 - PS4 Saves & Media"
 echo ""
 echo "Anything else - exit"
 echo ""
@@ -40,71 +41,77 @@ case $choice in
 
 2)
   echo "==============================="
+  echo "NUC - Various File Copying"
+  "$HERE"/scripts/NUCFiles.sh
+  ;;
+
+3)
+  echo "==============================="
   echo "Ryerson Moon"
   "$HERE"/scripts/RyersonMoon.sh
   ;;
 
-3)
+4)
   echo "==============================="
   echo "Cloud Systemctl Service Files"
   "$HERE"/scripts/imranrdevsystemctl.sh
   ;;
 
-4) 
+5) 
   echo "==============================="
   echo "Reddit - Webninja98"
   "$HERE"/scripts/redditBackup.sh Webninja98
   ;;
 
-5) 
+6) 
   echo "==============================="
   echo "Reddit - ImranR98"
   "$HERE"/scripts/redditBackup.sh ImranR98
   ;;
 
-6)
+7)
   echo "==============================="
   echo "Notion"
   "$HERE"/scripts/Notion.sh
   ;;
 
-7)
+8)
   echo "==============================="
   echo "Balance.xlsx"
   "$HERE"/scripts/balanceXLSX.sh
   ;;
 
-8)
+9)
   echo "==============================="
   echo "Medium"
   "$HERE"/scripts/Medium.sh
   ;;
 
-9)
+10)
   echo "==============================="
   echo "Google Takeout"
   "$HERE"/scripts/googleTakeout.sh
   ;;
 
-10)
+11)
   echo "==============================="
   echo "WhatsApp"
   "$HERE"/scripts/WhatsApp.sh
   ;;
 
-11)
+12)
   echo "==============================="
   echo "School Emails"
   echo "This is not automated. Export the .pst files manually using Outlook."
   ;;
 
-12)
+13)
   echo "==============================="
   echo "Discord"
   "$HERE"/scripts/Discord.sh
   ;;
 
-13)
+14)
   echo "==============================="
   echo "PS4 Saves & Media"
   "$HERE"/scripts/PS4.sh

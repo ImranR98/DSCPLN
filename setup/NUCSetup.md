@@ -11,8 +11,9 @@ sudo apt install ufw -y
 sudo ufw allow OpenSSH
 sudo ufw enable
 ```
-2. Copy public keys from .ssh backup into authorized_keys file in NUC .ssh folder.
-3. Edit `/etc/ssh/sshd_config` and set `PasswordAuthentication` to `no`.
+2. To make sure Fail2Ban never bans anyone on the local network (this is useful as a lot of SSH testing happens locally and you don't want to ban yourself), edit `/etc/fail2ban/jail.conf` and add `192.0.2.1/24` to the space-separated `ignoreip` list. You may need to edit that address depending on your LAN settings. Then, run `service fail2ban restart`.
+3. Copy public keys from .ssh backup into authorized_keys file in NUC .ssh folder.
+4. Edit `/etc/ssh/sshd_config` and set `PasswordAuthentication` to `no`.
 
 ## STEP 3 - Install Apps
 Run the following commands to install various apps and configure Git:

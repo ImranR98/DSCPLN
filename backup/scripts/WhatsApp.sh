@@ -2,11 +2,11 @@
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../variables.sh
-if [ -z "$PCBACKUPS" ] || [ -z "$PCOTHER" ]; then
+if [ -z "$PCBACKUPS" ] || [ -z "$PCMAIN" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$PCBACKUPS" ] || [ ! -d "$PCOTHER" ]; then
+if [ ! -d "$PCBACKUPS" ] || [ ! -d "$PCMAIN" ]; then
     echo "Some directories from ../variables.sh are missing!"
     exit
 fi
@@ -29,7 +29,7 @@ if [ ! -z "$mountpoint" ]; then
   if [ ! -d "$PCMAIN"/Museum/WhatsApp-AllMedia ]; then
 	  echo "WhatsApp-AllMedia not found!"
   else
-    rsync -av "$PCBACKUPS"/WhatsApp/ "$PCOTHER"/Museum/WhatsApp-AllMedia
+    rsync -av "$PCBACKUPS"/WhatsApp/ "$PCMAIN"/Museum/WhatsApp-AllMedia
   fi
   
 fi

@@ -26,7 +26,7 @@ if [ ! -z "$mountpoint" ]; then
   echo "$(date)" > "$PCBACKUPS"/WhatsApp/lastBackedUp.txt
   rm -rf ~/.tmp/WhatsApp
   echo "WhatsApp backup done, running rsync to WhatsApp-AllMedia"
-  if [ ! -d "$PCOTHER"/Museum/WhatsApp-AllMedia ]; then
+  if [ ! -d "$PCMAIN"/Museum/WhatsApp-AllMedia ]; then
 	  echo "WhatsApp-AllMedia not found!"
   else
     rsync -av "$PCBACKUPS"/WhatsApp/ "$PCOTHER"/Museum/WhatsApp-AllMedia

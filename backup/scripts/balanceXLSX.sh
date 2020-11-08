@@ -15,12 +15,15 @@ if [ ! -f "${PCACCMDPATH}" ] || [ ! -d "$PCDOCUMENTS" ]; then
 fi
 
 echo "New entries for Balance.xlsx will now be generated from $PCACCMDPATH"
-node "$HERE"/accMDToXLSX/accMDToXLSX.js "$PCACCMDPATH" "$PCDOCUMENTS"/Balance.xlsx
+node "$HERE"/accMDToXLSX/accMDToXLSX.js "$PCACCMDPATH" "$PCDOCUMENTS"/Balance/Balance.xlsx
 echo "Results are shown above."
 
 if [ ! "$1" = '--nowait' ]; then
     echo "Copy these results into a text editor and replace every '\t' with a tab character. This is needed because shitty OSes like Windows ignore tab characters in the terminal, even in WSL."
 	echo "Paste the results into Balance.xlsx, then press enter. Waiting..."
 	read choice
-	echo "$(date)" > "$PCDOCUMENTS"/balanceLastUpdated.txt
+    cd "$PCDOCUMENTS"/Balance
+    git add .
+    git commit . -m "$(date)"
+    cd "$HERE"
 fi

@@ -9,7 +9,7 @@ if [ -z "$PCBACKUPS" ] || [ -z "$PCDOCUMENTS" ]; then
 fi
 PCACCMDPATH="$(echo "$PCBACKUPS"/Notion/Personal*/Acc*)"
 
-if [ ! -f "${PCACCMDPATH}" ] || [ ! -d "$PCDOCUMENTS" ]; then
+if [ ! -f "${PCACCMDPATH}" ] || [ ! -d "$PCDOCUMENTS/Balance" ]; then
     echo "Some paths from ../variables.sh are missing!"
     exit
 fi

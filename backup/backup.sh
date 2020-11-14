@@ -21,7 +21,7 @@ echo "7 - Notion"
 echo "8 - Balance.xlsx"
 echo "9 - Medium"
 echo "10 - Google Takeout"
-echo "11 - WhatsApp"
+echo "11 - Apple Folder"
 echo "12 - School Emails"
 echo "13 - Discord"
 echo "14 - Virtual Machines"
@@ -96,8 +96,8 @@ case $choice in
 
 11)
   echo "==============================="
-  echo "WhatsApp"
-  "$HERE"/scripts/WhatsApp.sh
+  echo "Apple Folder"
+  "$HERE"/scripts/Apple.sh
   ;;
 
 12)

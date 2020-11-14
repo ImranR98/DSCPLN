@@ -24,7 +24,8 @@ echo "10 - Google Takeout"
 echo "11 - WhatsApp"
 echo "12 - School Emails"
 echo "13 - Discord"
-echo "14 - PS4 Saves & Media"
+echo "14 - Virtual Machines"
+echo "15 - PS4 Saves & Media"
 echo ""
 echo "Anything else - exit"
 echo ""
@@ -112,6 +113,12 @@ case $choice in
   ;;
 
 14)
+  echo "==============================="
+  echo "Virtual Machines"
+  "$HERE"/scripts/VMs.sh
+  ;;
+
+15)
   echo "==============================="
   echo "PS4 Saves & Media"
   "$HERE"/scripts/PS4.sh

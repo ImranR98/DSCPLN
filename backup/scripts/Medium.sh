@@ -23,19 +23,19 @@ fi
 if [ "$choice" = 0 ]; then
 	exit
 fi
-exportfile=$(find '/mnt/c/Users/ImranR/Downloads' | grep medium-export.zip$)
+exportfile=$(find "$PCHOME/Downloads/" | grep medium-export.zip$)
 if [ ! -z "$exportfile" ]; then
 	echo "$exportfile" | while read -r line ; do
-    	unzip -o "$line" -d '/mnt/c/Users/ImranR/Downloads/Medium'
+    	unzip -o "$line" -d "$PCHOME/Downloads/Medium"
 		rm "$line"
 	done
-	node "$HERE"/renameFilesEndingWithDot.js '/mnt/c/Users/ImranR/Downloads/Medium'
+	node "$HERE"/renameFilesEndingWithDot.js "$PCHOME/Downloads/Medium"
 	if [ ! -d "$PCBACKUPS"/'Medium' ]; then
 		mkdir "$PCBACKUPS"/'Medium'
 	fi
-	rsync -av '/mnt/c/Users/ImranR/Downloads/Medium/' "$PCBACKUPS"/'Medium' --delete
+	rsync -av "$PCHOME/Downloads/Medium/" "$PCBACKUPS"/'Medium' --delete
 	echo "$(date)" >"$PCBACKUPS"/'Medium'/lastBackedUp.txt
-	rm -rf '/mnt/c/Users/ImranR/Downloads/Medium'
+	rm -rf "$PCHOME/Downloads/Medium"
 else
 	echo "No export zip found."
 	exit

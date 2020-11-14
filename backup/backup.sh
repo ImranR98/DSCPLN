@@ -97,7 +97,7 @@ case $choice in
 11)
   echo "==============================="
   echo "Apple Folder"
-  "$HERE"/scripts/Apple.sh
+  echo "No manual backup for this. Copy the folder manually from Windows."
   ;;
 
 12)

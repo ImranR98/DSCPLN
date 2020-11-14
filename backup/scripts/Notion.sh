@@ -23,19 +23,19 @@ fi
 if [ "$choice" = 0 ]; then
 	exit
 fi
-exportfile=$(find '/mnt/c/Users/ImranR/Downloads' | grep Export-.*.zip$)
+exportfile=$(find "$PCHOME/Downloads/" | grep Export-.*.zip$)
 if [ ! -z "$exportfile" ]; then
 	echo "$exportfile" | while read -r line ; do
-    	unzip -o "$line" -d '/mnt/c/Users/ImranR/Downloads/Notion'
+    	unzip -o "$line" -d "$PCHOME/Downloads/Notion"
 		rm "$line"
 	done
-	node "$HERE"/renameFilesEndingWithDot.js '/mnt/c/Users/ImranR/Downloads/Notion'
+	node "$HERE"/renameFilesEndingWithDot.js "$PCHOME/Downloads/Notion"
 	if [ ! -d "$PCBACKUPS"/'Notion' ]; then
 		mkdir "$PCBACKUPS"/'Notion'
 	fi
-	rsync -av '/mnt/c/Users/ImranR/Downloads/Notion/' "$PCBACKUPS"/'Notion' --delete
+	rsync -av "$PCHOME/Downloads/Notion/" "$PCBACKUPS"/'Notion' --delete
 	echo "$(date)" >"$PCBACKUPS"/'Notion'/lastBackedUp.txt
-	rm -rf '/mnt/c/Users/ImranR/Downloads/Notion'
+	rm -rf "$PCHOME/Downloads/Notion"
 else
 	echo "No export zip found."
 	exit

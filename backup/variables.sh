@@ -1,9 +1,8 @@
 # Variables used in backup scripts
 
-export WINDOWSHOME='/mnt/c/Users/ImranR'
-export WINDOWSMANUALAPPS='/mnt/c/ManualApps'
+export PCHOME=~
 
-export PCMAIN="$WINDOWSHOME/Main"
+export PCMAIN="$PCHOME/Main"
 export PCBACKUPS="$PCMAIN/Backups"
 export PCPICTURES="$PCMAIN/Media"
 export PCVMS="$PCMAIN/VMs"
@@ -20,4 +19,4 @@ export NUCSSHPORT="9999";
 export CLOUDSSH='root@example.com'
 export CLOUDSSHPORT='22'
 
-export DISCORDCHATEXPORTERCLI='/mnt/c/ManualApps/DiscordChatExporter.CLI'
+export DISCORDCHATEXPORTERCLI='/DiscordChatExporter.CLI'

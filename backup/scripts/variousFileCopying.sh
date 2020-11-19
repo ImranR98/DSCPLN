@@ -43,3 +43,7 @@ if [ -d "$PCHOME/.config/autostart/" ]; then
 else
     echo "Windows Startup folder not found!"
 fi
+
+echo "Libinput Gestures Configuration..."
+cp -v ~/.config/libinput-gestures.conf "$PCBACKUPS"
+echo '# Backed up on '"$(date)" >> "$PCBACKUPS"/libinput-gestures.conf

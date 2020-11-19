@@ -19,4 +19,4 @@ export NUCSSHPORT="9999";
 export CLOUDSSH='root@example.com'
 export CLOUDSSHPORT='22'
 
-export DISCORDCHATEXPORTERCLI='/DiscordChatExporter.CLI'
+export DISCORDCHATEXPORTERCLI=~/DiscordChatExporter.CLI

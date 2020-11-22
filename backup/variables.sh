@@ -11,7 +11,6 @@ MAINDIR="$HOMEDIR/Main"
 export BACKUPSDIR="$MAINDIR/Backups"
 PICTURESDIR="$MAINDIR/Media"
 export RYERSONDIR="$MAINDIR/Ryerson"
-OTHERDIR="$MAINDIR/Other"
 DOCUMENTSDIR="$MAINDIR/Documents"
 
 # Downloads Directory

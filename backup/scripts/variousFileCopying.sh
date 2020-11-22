@@ -1,11 +1,11 @@
 #!/bin/bash
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../variables.sh
-if [ -z "$BACKUPSDIR" ] || [ -z "$HOMEDIR" ] || [ -z "$SSHDIR" ] || [ -z "$FIREFOXCONFIGDIR" ] || [ -z "$SSHBACKUPDIR" ] || [ -z "$STARTUPBACKUPDIR" ]; then
+if [ -z "$BACKUPSDIR" ] || [ -z "$SSHDIR" ] || [ -z "$FIREFOXCONFIGDIR" ] || [ -z "$SSHBACKUPDIR" ] || [ -z "$STARTUPBACKUPDIR" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$BACKUPSDIR" ] || [ ! -d "$HOMEDIR" ] || [ ! -d "$SSHDIR" ] || [ ! -d "$FIREFOXCONFIGDIR" ] || [ ! -d "$SSHBACKUPDIR" ] || [ ! -d "$STARTUPBACKUPDIR" ]; then
+if [ ! -d "$BACKUPSDIR" ] || [ ! -d "$SSHDIR" ] || [ ! -d "$FIREFOXCONFIGDIR" ] || [ ! -d "$SSHBACKUPDIR" ] || [ ! -d "$STARTUPBACKUPDIR" ]; then
     echo "Some directories from ../variables.sh are missing!"
     exit
 fi

@@ -3,11 +3,11 @@
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../variables.sh
-if [ -z "$NOTIONBACKUPDIR" ] || [ -z "$DOCUMENTSDIR" ] || [ -z "$DOWNLOADSDIR" ]; then
+if [ -z "$NOTIONBACKUPDIR" ] || [ -z "$DOWNLOADSDIR" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$NOTIONBACKUPDIR" ] || [ ! -d "$DOCUMENTSDIR" ] || [ ! -d "$DOWNLOADSDIR" ]; then
+if [ ! -d "$NOTIONBACKUPDIR" ] || [ ! -d "$DOWNLOADSDIR" ]; then
     echo "Some directories from ../variables.sh are missing!"
     exit
 fi

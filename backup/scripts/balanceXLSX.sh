@@ -3,26 +3,26 @@
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../variables.sh
-if [ -z "$PCBACKUPS" ] || [ -z "$PCDOCUMENTS" ]; then
+if [ -z "$NOTIONBACKUPDIR" ] || [ -z "$BALANCEDIR" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-PCACCMDPATH="$(echo "$PCBACKUPS"/Notion/Acc*)"
+ACCMDPATH="$(echo "$NOTIONBACKUPDIR"/Acc*)"
 
-if [ ! -f "${PCACCMDPATH}" ] || [ ! -d "$PCDOCUMENTS/Balance" ]; then
+if [ ! -f "$ACCMDPATH" ] || [ ! -d "$BALANCEDIR" ]; then
     echo "Some paths from ../variables.sh are missing!"
     exit
 fi
 
-echo "New entries for Balance.xlsx will now be generated from $PCACCMDPATH"
-node "$HERE"/accMDToXLSX/accMDToXLSX.js "$PCACCMDPATH" "$PCDOCUMENTS"/Balance/Balance.xlsx
+echo "New entries for Balance.xlsx will now be generated from $ACCMDPATH"
+node "$HERE"/accMDToXLSX/accMDToXLSX.js "$ACCMDPATH" "$BALANCEDIR"/Balance.xlsx
 echo "Results are shown above."
 
 if [ ! "$1" = '--nowait' ]; then
     echo "Copy these results into a text editor and replace every '\t' with a tab character. This is needed because shitty OSes like Windows ignore tab characters in the terminal, even in WSL."
 	echo "Paste the results into Balance.xlsx, then press enter. Waiting..."
 	read choice
-    cd "$PCDOCUMENTS"/Balance
+    cd "$BALANCEDIR"
     git add .
     git commit . -m "$(date)"
     cd "$HERE"

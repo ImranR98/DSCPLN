@@ -3,11 +3,11 @@
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../variables.sh
-if [ -z "$PCBACKUPS" ]; then
+if [ -z "$MEDIUMBACKUPDIR" ] || [ -z "$DOWNLOADSDIR" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$PCBACKUPS" ]; then
+if [ ! -d "$MEDIUMBACKUPDIR" ] || [ ! -d "$DOWNLOADSDIR" ]; then
     echo "Some directories from ../variables.sh are missing!"
     exit
 fi
@@ -23,19 +23,19 @@ fi
 if [ "$choice" = 0 ]; then
 	exit
 fi
-exportfile=$(find "$PCHOME/Downloads/" | grep medium-export.zip$)
+exportfile=$(find "$DOWNLOADSDIR/" | grep medium-export.zip$)
 if [ ! -z "$exportfile" ]; then
 	echo "$exportfile" | while read -r line ; do
-    	unzip -o "$line" -d "$PCHOME/Downloads/Medium"
+    	unzip -o "$line" -d "$DOWNLOADSDIR/Medium"
 		rm "$line"
 	done
-	node "$HERE"/renameFilesEndingWithDot.js "$PCHOME/Downloads/Medium"
-	if [ ! -d "$PCBACKUPS"/'Medium' ]; then
-		mkdir "$PCBACKUPS"/'Medium'
+	node "$HERE"/renameFilesEndingWithDot.js "$DOWNLOADSDIR/Medium"
+	if [ ! -d "$MEDIUMBACKUPDIR" ]; then
+		mkdir "$MEDIUMBACKUPDIR"
 	fi
-	rsync -av "$PCHOME/Downloads/Medium/" "$PCBACKUPS"/'Medium' --delete
-	echo "$(date)" >"$PCBACKUPS"/'Medium'/lastBackedUp.txt
-	rm -rf "$PCHOME/Downloads/Medium"
+	rsync -av "$DOWNLOADSDIR/Medium/" "$MEDIUMBACKUPDIR" --delete
+	echo "$(date)" > "$MEDIUMBACKUPDIR"/lastBackedUp.txt
+	rm -rf "$DOWNLOADSDIR/Medium"
 else
 	echo "No export zip found."
 	exit

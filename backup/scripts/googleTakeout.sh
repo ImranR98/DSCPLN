@@ -3,11 +3,11 @@
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../variables.sh
-if [ -z "$PCBACKUPS" ] || [ -z "$PCHOME" ]; then
+if [ -z "$GOOGLETAKEOOUTBACKUPDIR" ] || [ -z "$DOWNLOADSDIR" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$PCBACKUPS" ] || [ ! -d "$PCBACKUPS" ]; then
+if [ ! -d "$GOOGLETAKEOOUTBACKUPDIR" ] || [ ! -d "$DOWNLOADSDIR" ]; then
     echo "Some directories from ../variables.sh are missing!"
     exit
 fi
@@ -23,19 +23,19 @@ fi
 if [ "$choice" = 0 ]; then
 	exit
 fi
-takeoutfile=$(find "$PCHOME" | grep takeout-.*.zip$)
+takeoutfile=$(ls "$DOWNLOADSDIR" | grep takeout-.*.zip$)
 if [ ! -z "$takeoutfile" ]; then
-	echo "$takeoutfile" | while read -r line ; do
-    	unzip -o "$line" -d "$PCHOME/Downloads/"
+	echo "$DOWNLOADSDIR/$takeoutfile" | while read -r line ; do
+    	unzip -o "$line" -d "$DOWNLOADSDIR"
 		rm "$line"
 	done
-	node "$HERE"/renameFilesEndingWithDot.js "$PCHOME/Downloads/Takeout"
-	if [ ! -d "$PCBACKUPS"/'Google Takeout' ]; then
-		mkdir "$PCBACKUPS"/'Google Takeout'
+	node "$HERE"/renameFilesEndingWithDot.js "$DOWNLOADSDIR/Takeout"
+	if [ ! -d "$GOOGLETAKEOOUTBACKUPDIR" ]; then
+		mkdir "$GOOGLETAKEOOUTBACKUPDIR"
 	fi
-	rsync -av "$PCHOME/Downloads/Takeout/" "$PCBACKUPS"/'Google Takeout' --delete
-	echo "$(date)" >"$PCBACKUPS"/'Google Takeout'/lastBackedUp.txt
-	rm -rf "$PCHOME/Downloads/Takeout"
+	rsync -av "$DOWNLOADSDIR/Takeout/" "$GOOGLETAKEOOUTBACKUPDIR" --delete
+	echo "$(date)" > "$GOOGLETAKEOOUTBACKUPDIR"/lastBackedUp.txt
+	rm -rf "$DOWNLOADSDIR/Takeout"
 else
 	echo "No takeout zip found."
 	exit

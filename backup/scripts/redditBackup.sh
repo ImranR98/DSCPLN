@@ -2,11 +2,11 @@
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../variables.sh
-if [ -z "$PCBACKUPS" ]; then
+if [ -z "$REDDITBACKUPDIR" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$PCBACKUPS" ]; then
+if [ ! -d "$REDDITBACKUPDIR" ]; then
     echo "Some directories from ../variables.sh are missing!"
     exit
 fi
@@ -16,20 +16,20 @@ if [ -z "$1" ]; then
     exit
 fi
 
-if [ ! -d "$PCBACKUPS"/Reddit ]; then
-    mkdir "$PCBACKUPS"/Reddit
+if [ ! -d "$REDDITBACKUPDIR" ]; then
+    mkdir "$REDDITBACKUPDIR"
 fi
-if [ ! -d "$PCBACKUPS"/Reddit/"$1" ]; then
-    mkdir "$PCBACKUPS"/Reddit/"$1"
+if [ ! -d "$REDDITBACKUPDIR"/"$1" ]; then
+    mkdir "$REDDITBACKUPDIR"/"$1"
 fi
-if [ ! -d "$PCBACKUPS"/Reddit/"$1"/Oldest ]; then
-    mkdir "$PCBACKUPS"/Reddit/"$1"/Oldest
+if [ ! -d "$REDDITBACKUPDIR"/"$1"/Oldest ]; then
+    mkdir "$REDDITBACKUPDIR"/"$1"/Oldest
 fi
-if [ ! -d "$PCBACKUPS"/Reddit/"$1"/Latest ]; then
-    mkdir "$PCBACKUPS"/Reddit/"$1"/Latest
+if [ ! -d "$REDDITBACKUPDIR"/"$1"/Latest ]; then
+    mkdir "$REDDITBACKUPDIR"/"$1"/Latest
 fi
 cd "$HERE"/dydr
-node access.js "$PCBACKUPS"/Reddit/"$1" # Making sure access is available
-node backup.js "$PCBACKUPS"/Reddit/"$1" # Running backup
+node access.js "$REDDITBACKUPDIR"/"$1" # Making sure access is available
+node backup.js "$REDDITBACKUPDIR"/"$1" # Running backup
 cd ..
-echo "$(date)" >"$PCBACKUPS"/Reddit/"$1"/lastBackedUp.txt
+echo "$(date)" > "$REDDITBACKUPDIR"/"$1"/lastBackedUp.txt

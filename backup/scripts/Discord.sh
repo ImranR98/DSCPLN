@@ -2,23 +2,23 @@
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../variables.sh
 
-if [ -z "$PCBACKUPS" ] || [ -z "$DISCORDCHATEXPORTERCLI" ]; then
+if [ -z "$DISCORDBACKUPDIR" ] || [ -z "$DISCORDCHATEXPORTERCLIDIR" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$PCBACKUPS" ] || [ ! -d "$DISCORDCHATEXPORTERCLI" ]; then
+if [ ! -d "$DISCORDBACKUPDIR" ] || [ ! -d "$DISCORDCHATEXPORTERCLIDIR" ]; then
     echo "Some directories from ../variables.sh are missing!"
     exit
 fi
 
-if [ ! -d "$PCBACKUPS"/Discord ]; then
-	mkdir "$PCBACKUPS"/Discord
+if [ ! -d "$DISCORDBACKUPDIR" ]; then
+	mkdir "$DISCORDBACKUPDIR"
 fi
 
 echo "Enter a new token from the Discord web client:"
 read token
 
-COMMAND=$(node "$HERE"/DCEA/serverListCommand.js "$DISCORDCHATEXPORTERCLI" "$token")
+COMMAND=$(node "$HERE"/DCEA/serverListCommand.js "$DISCORDCHATEXPORTERCLIDIR" "$token")
 SERVERS="$(eval "$COMMAND")"
 echo "Here are your accessible servers:"
 echo "$SERVERS" | awk '{ s = ""; for (i = 3; i <= NF; i++) s = s $i " "; print NR,s }'
@@ -37,6 +37,6 @@ done
 SERVERID="$(echo "$SERVERS" | head -$SERVERNUM | tail -1 | awk '{print $1}')"
 SERVERNAME="$(echo "$SERVERS" | head -$SERVERNUM | tail -1 | awk '{ s = ""; for (i = 3; i <= NF; i++) s = s $i " "; print s }')"
 
-COMMAND="$(node "$HERE"/DCEA/backupCommand.js "$DISCORDCHATEXPORTERCLI" "$token" "$PCBACKUPS/Discord" "$SERVERID" "$SERVERNAME")"
+COMMAND="$(node "$HERE"/DCEA/backupCommand.js "$DISCORDCHATEXPORTERCLIDIR" "$token" "$DISCORDBACKUPDIR" "$SERVERID" "$SERVERNAME")"
 echo "Running command: $COMMAND"
 eval "$COMMAND"

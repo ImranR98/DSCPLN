@@ -3,11 +3,11 @@
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$HERE"/../variables.sh
-if [ -z "$PCBACKUPS" ] || [ -z "$PCDOCUMENTS" ]; then
+if [ -z "$NOTIONBACKUPDIR" ] || [ -z "$DOCUMENTSDIR" ] || [ -z "$DOWNLOADSDIR" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$PCBACKUPS" ] || [ ! -d "$PCDOCUMENTS" ]; then
+if [ ! -d "$NOTIONBACKUPDIR" ] || [ ! -d "$DOCUMENTSDIR" ] || [ ! -d "$DOWNLOADSDIR" ]; then
     echo "Some directories from ../variables.sh are missing!"
     exit
 fi
@@ -23,19 +23,19 @@ fi
 if [ "$choice" = 0 ]; then
 	exit
 fi
-exportfile=$(find "$PCHOME/Downloads/" | grep Export-.*.zip$)
+exportfile=$(find "$DOWNLOADSDIR/" | grep Export-.*.zip$)
 if [ ! -z "$exportfile" ]; then
 	echo "$exportfile" | while read -r line ; do
-    	unzip -o "$line" -d "$PCHOME/Downloads/Notion"
+    	unzip -o "$line" -d "$DOWNLOADSDIR/Notion"
 		rm "$line"
 	done
-	node "$HERE"/renameFilesEndingWithDot.js "$PCHOME/Downloads/Notion"
-	if [ ! -d "$PCBACKUPS"/'Notion' ]; then
-		mkdir "$PCBACKUPS"/'Notion'
+	node "$HERE"/renameFilesEndingWithDot.js "$DOWNLOADSDIR/Notion"
+	if [ ! -d "$NOTIONBACKUPDIR" ]; then
+		mkdir "$NOTIONBACKUPDIR"
 	fi
-	rsync -av "$PCHOME/Downloads/Notion/" "$PCBACKUPS"/'Notion' --delete
-	echo "$(date)" >"$PCBACKUPS"/'Notion'/lastBackedUp.txt
-	rm -rf "$PCHOME/Downloads/Notion"
+	rsync -av "$DOWNLOADSDIR/Notion/" "$NOTIONBACKUPDIR" --delete
+	echo "$(date)" > "$NOTIONBACKUPDIR"/lastBackedUp.txt
+	rm -rf "$DOWNLOADSDIR/Notion"
 else
 	echo "No export zip found."
 	exit

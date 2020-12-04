@@ -5,7 +5,7 @@ if [ -z "$BACKUPSDIR" ] || [ -z "$SSHDIR" ] || [ -z "$FIREFOXCONFIGDIR" ] || [ -
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$BACKUPSDIR" ] || [ ! -d "$SSHDIR" ] || [ ! -d "$FIREFOXCONFIGDIR" ] || [ ! -d "$SSHBACKUPDIR" ] || [ ! -d "$STARTUPBACKUPDIR" ]; then
+if [ ! -d "$BACKUPSDIR" ] || [ ! -d "$SSHDIR" ] || [ ! -d "$FIREFOXCONFIGDIR" ]; then
     echo "Some directories from ../variables.sh are missing!"
     exit
 fi
@@ -24,10 +24,16 @@ else
 fi
 
 echo "SSH Folder..."
+if [ ! -d "$SSHBACKUPDIR" ]; then
+    mkdir "$SSHBACKUPDIR"
+fi;
 rsync -av "$SSHDIR/" "$SSHBACKUPDIR" --delete
 echo "$(date)" > "$SSHBACKUPDIR"/lastBackedUp.txt
 
 echo "Startup Folder..."
+if [ ! -d "$STARTUPBACKUPDIR" ]; then
+    mkdir "$STARTUPBACKUPDIR"
+fi;
 rsync -av "$STARTUPDIR/" "$STARTUPBACKUPDIR" --delete
 echo "$(date)" > "$STARTUPBACKUPDIR"/lastBackedUp.txt
 

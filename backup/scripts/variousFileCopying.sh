@@ -40,7 +40,3 @@ echo "$(date)" > "$STARTUPBACKUPDIR"/lastBackedUp.txt
 echo "Bashrc..."
 cp -v ~/.bashrc "$BACKUPSDIR"
 echo '# Backed up on '"$(date)" >> "$BACKUPSDIR"/.bashrc
-
-echo "Libinput Gestures Configuration..."
-cp -v ~/.config/libinput-gestures.conf "$BACKUPSDIR"
-echo '# Backed up on '"$(date)" >> "$BACKUPSDIR"/libinput-gestures.conf

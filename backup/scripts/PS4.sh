@@ -6,7 +6,7 @@ if [ -z "$PS4SAVESBACKUPDIR" ] || [ -z "$PS4UNSORTEDMEDIADIR" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$PS4SAVESBACKUPDIR" ] || [ ! -d "$PS4UNSORTEDMEDIADIR" ]; then
+if [ ! -d "$PS4SAVESBACKUPDIR" ]; then
     echo "Some directories from ../variables.sh are missing!"
     exit
 fi

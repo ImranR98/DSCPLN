@@ -7,7 +7,7 @@ if [ -z "$MEDIUMBACKUPDIR" ] || [ -z "$DOWNLOADSDIR" ]; then
     echo "Some environment variables are missing!"
     exit
 fi
-if [ ! -d "$MEDIUMBACKUPDIR" ] || [ ! -d "$DOWNLOADSDIR" ]; then
+if [ ! -d "$DOWNLOADSDIR" ]; then
     echo "Some directories from ../variables.sh are missing!"
     exit
 fi

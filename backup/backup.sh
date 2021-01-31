@@ -20,11 +20,12 @@ echo "6 - Reddit - ImranR98"
 echo "7 - Notion"
 echo "8 - Balance.xlsx"
 echo "9 - Medium"
-echo "10 - Google Takeout"
-echo "11 - Apple Folder"
-echo "12 - School Emails"
-echo "13 - Discord"
-echo "14 - PS4 Saves & Media"
+echo "10 - Twitter"
+echo "11 - Google Takeout"
+echo "12 - Apple Folder"
+echo "13 - School Emails"
+echo "14 - Discord"
+echo "15 - PS4 Saves & Media"
 echo ""
 echo "Anything else - exit"
 echo ""
@@ -89,29 +90,35 @@ case $choice in
 
 10)
   echo "==============================="
+  echo "Twitter"
+  "$HERE"/scripts/Twitter.sh
+  ;;
+
+11)
+  echo "==============================="
   echo "Google Takeout"
   "$HERE"/scripts/googleTakeout.sh
   ;;
 
-11)
+12)
   echo "==============================="
   echo "Apple Folder"
   echo "No manual backup for this. Copy the folder manually from Windows."
   ;;
 
-12)
+13)
   echo "==============================="
   echo "School Emails"
   echo "This is not automated. Export the .pst files manually using Outlook."
   ;;
 
-13)
+14)
   echo "==============================="
   echo "Discord"
   "$HERE"/scripts/Discord.sh
   ;;
 
-14)
+15)
   echo "==============================="
   echo "PS4 Saves & Media"
   "$HERE"/scripts/PS4.sh

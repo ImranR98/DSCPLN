@@ -18,9 +18,9 @@ fi
 LOCALNUCACCESSIBLE="$(nmap $LOCALNUCDOMAIN -PN -p $LOCALNUCSSHPORT | grep open)"
 NUCACCESSIBLE="$(nmap $NUCDOMAIN -PN -p $NUCSSHPORT | grep open)"
 if [ ! -z "$LOCALNUCACCESSIBLE" ]; then
-    rsync -av -e "ssh -p $LOCALNUCSSHPORT" $NUCUSERNAME@$LOCALNUCDOMAIN:~/{*.sh,.bashrc} "$NUCFILESBACKUPDIR"
+    rsync -av -e "ssh -p $LOCALNUCSSHPORT" $NUCUSERNAME@$LOCALNUCDOMAIN:~/{*.sh,.bashrc,*.yml} "$NUCFILESBACKUPDIR"
 elif [ ! -z "$NUCACCESSIBLE" ]; then
-    rsync -av -e "ssh -p $NUCSSHPORT" $NUCUSERNAME@$NUCDOMAIN:~/{*.sh,.bashrc} "$NUCFILESBACKUPDIR"
+    rsync -av -e "ssh -p $NUCSSHPORT" $NUCUSERNAME@$NUCDOMAIN:~/{*.sh,.bashrc,*.yml} "$NUCFILESBACKUPDIR"
 else 
     echo "NUC is not accessible!"
     exit

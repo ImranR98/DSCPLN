@@ -1,5 +1,4 @@
 #!/bin/bash
-# Prompts for confirmation unless --nowait is provided as an argument
 
 # Store script location
 SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
@@ -32,8 +31,11 @@ shift $((OPTIND - 1))
 if [ ! "$#" -eq 2 ]; then
     usage
 fi
-if [ ! -d "$1" ]; then
-    echo >&2 ""
+if [ ! -f "$1" ]; then
+    echo >&2 "The specified accounts file does not exist: $1."
+fi
+if [ ! -d "$2" ]; then
+    echo >&2 "The specified balance directory does not exist: $2."
 fi
 
 # Run

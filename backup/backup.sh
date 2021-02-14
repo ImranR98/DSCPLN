@@ -1,132 +1,82 @@
 #!/bin/bash
-# Backup files from various sources manually
-# Run from within WSL
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
-while [ true ]; do
+MAINDIR=~/"Main"
+ZIPSDIR=~/"Downloads"
 
-echo "============="
 echo "ImranR Backup"
-echo "============="
-echo "Pick an option:"
-echo ""
-echo "1 - Various File Copying"
-echo "2 - NUC - Various File Copying"
-echo "3 - Ryerson Moon"
-echo "4 - Cloud Systemctl Service Files"
-echo "5 - Reddit - Webninja98"
-echo "6 - Reddit - ImranR98"
-echo "7 - Notion"
-echo "8 - Balance.xlsx"
-echo "9 - Medium"
-echo "10 - Twitter"
-echo "11 - Google Takeout"
-echo "12 - Apple Folder"
-echo "13 - School Emails"
-echo "14 - Discord"
-echo "15 - PS4 Saves & Media"
-echo ""
-echo "Anything else - exit"
-echo ""
-echo "Enter an option number now:"
-read choice
 
-case $choice in
-
-1)
-  echo "==============================="
-  echo "Various File Copying"
-  "$HERE"/scripts/variousFileCopying.sh
-  ;;
-
-2)
-  echo "==============================="
-  echo "NUC - Various File Copying"
-  "$HERE"/scripts/NUCFiles.sh
-  ;;
-
-3)
-  echo "==============================="
-  echo "Ryerson Moon"
-  "$HERE"/scripts/RyersonMoon.sh
-  ;;
-
-4)
-  echo "==============================="
-  echo "Cloud Systemctl Service Files"
-  "$HERE"/scripts/imranrdevsystemctl.sh
-  ;;
-
-5) 
-  echo "==============================="
-  echo "Reddit - Webninja98"
-  "$HERE"/scripts/redditBackup.sh Webninja98
-  ;;
-
-6) 
-  echo "==============================="
-  echo "Reddit - ImranR98"
-  "$HERE"/scripts/redditBackup.sh ImranR98
-  ;;
-
-7)
-  echo "==============================="
-  echo "Notion"
-  "$HERE"/scripts/Notion.sh
-  ;;
-
-8)
-  echo "==============================="
-  echo "Balance.xlsx"
-  "$HERE"/scripts/balanceXLSX.sh
-  ;;
-
-9)
-  echo "==============================="
-  echo "Medium"
-  "$HERE"/scripts/Medium.sh
-  ;;
-
-10)
-  echo "==============================="
-  echo "Twitter"
-  "$HERE"/scripts/Twitter.sh
-  ;;
-
-11)
-  echo "==============================="
-  echo "Google Takeout"
-  "$HERE"/scripts/googleTakeout.sh
-  ;;
-
-12)
-  echo "==============================="
-  echo "Apple Folder"
-  echo "No manual backup for this. Copy the folder manually from Windows."
-  ;;
-
-13)
-  echo "==============================="
-  echo "School Emails"
-  echo "This is not automated. Export the .pst files manually using Outlook."
-  ;;
-
-14)
-  echo "==============================="
-  echo "Discord"
-  "$HERE"/scripts/Discord.sh
-  ;;
-
-15)
-  echo "==============================="
-  echo "PS4 Saves & Media"
-  "$HERE"/scripts/PS4.sh
-  ;;
-
-*)
-  exit
-  ;;
-esac
-echo ""
+PS3="
+Pick an option: "
+options=(
+  "Local Files"
+  "NUC Files"
+  "Cloud Files"
+  "Ryerson Moon"
+  "Reddit - WebNinja98"
+  "Reddit - ImranR98"
+  "Notion"
+  "Balance"
+  "Medium"
+  "Twitter"
+  "Google"
+  "iPhone"
+  "School Emails"
+  "Discord"
+  "PS4"
+)
+select option in "${options[@]}"; do
+  case "$option" in
+  "Local Files")
+    "$HERE"/VariousFileCopying/VariousFileCopying.sh "$MAINDIR/Backups"
+    ;;
+  "NUC Files")
+    "$HERE"/SFTPBackup/SFTPBackup.sh -d "user@home.example.com" "9999" ~/"{*.sh,.bashrc,*.yml}" "$MAINDIR/Backups/NUCFiles"
+    ;;
+  "Cloud Files")
+    "$HERE"/SFTPBackup/SFTPBackup.sh -d "root@example.com" "22" ":/lib/systemd/system/imranr_*" "$MAINDIR/Backups/CloudFiles"
+    ;;
+  "Ryerson Moon")
+    "$HERE"/SFTPBackup/SFTPBackup.sh -d "iremtull@moon.cs.ryerson.ca" "22" "." "$MAINDIR/Ryerson/Moon"
+    ;;
+  "Reddit - WebNinja98")
+    "$HERE"/Reddit/Reddit.sh "Webninja98" "$MAINDIR/Backups/Reddit"
+    ;;
+  "Reddit - ImranR98")
+    "$HERE"/Reddit/Reddit.sh "ImranR98" "$MAINDIR/Backups/Reddit"
+    ;;
+  "Notion")
+    "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR/" | grep Export-.*.zip$)" "$MAINDIR/Backups/Notion"
+    ;;
+  "Balance")
+    "$HERE"/Balance/Balance.sh "$(echo "$MAINDIR/Backups/Notion"/Acc*)" "$MAINDIR/Documents/Balance"
+    ;;
+  "Medium")
+    "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR/" | grep medium-export.zip$)" "$MAINDIR/Backups/Medium"
+    ;;
+  "Twitter")
+    "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR/" | grep twitter.*.zip$)" "$MAINDIR/Backups/Twitter"
+    ;;
+  "Google")
+    "$HERE"/ExtractZips/ExtractZips.sh -d "$(ls "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout"
+    ;;
+  "iPhone")
+    echo "This is not automated. Copy the folder manually from Windows."
+    ;;
+  "School Emails")
+    echo "This is not automated. Export the .pst files manually using Outlook."
+    ;;
+  "Discord")
+    "$HERE"/Discord/Discord.sh "$MAINDIR/Backups/Discord" ~/"DiscordChatExporter.CLI"
+    ;;
+  "PS4")
+    "$HERE"/PS4/PS4.sh "$ps4" "$MAINDIR/Backups/PS4Saves" "$MAINDIR/Media/Unsorted-PS4Media"
+    ;;
+  *)
+    echo "
+$REPLY is not an option. Bye!"
+    break
+    ;;
+  esac
 done

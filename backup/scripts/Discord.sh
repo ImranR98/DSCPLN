@@ -5,7 +5,7 @@ SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 # Usage function
 function usage() {
-    echo >&2 "Usage: $(basename $0) [path to DiscordChatExporter CLI binary] [Discord backup directory]"
+    echo >&2 "Usage: $(basename $0) [path to DiscordChatExporter CLI binary] [path to Discord backup directory]"
     echo >&2 "Backup Discord chats using DiscordChatExporter (https://github.com/Tyrrrz/DiscordChatExporter)."
     echo >&2 "   -v          Increase verbosity."
     exit 1

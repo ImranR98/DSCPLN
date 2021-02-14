@@ -15,7 +15,7 @@ echo ""
 echo "1 - Various File Copying"
 echo "2 - NUC - Various File Copying"
 echo "3 - Ryerson Moon"
-echo "4 - Cloud Systemctl Service Files"
+echo "4 - Cloud - Various File Copying"
 echo "5 - Reddit - Webninja98"
 echo "6 - Reddit - ImranR98"
 echo "7 - Notion"
@@ -55,8 +55,8 @@ case $choice in
 
 4)
   echo "==============================="
-  echo "Cloud Systemctl Service Files"
-  "$HERE"/scripts/imranrdevsystemctl.sh
+  echo "Cloud - Various File Copying"
+  "$HERE"/scripts/CloudFiles.sh "$CLOUDSSH" "$CLOUDSSHPORT" "$CLOUDFILESBACKUPDIR"
   ;;
 
 5) 

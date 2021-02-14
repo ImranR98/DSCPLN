@@ -5,7 +5,7 @@ SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 # Usage function
 function usage() {
-	echo >&2 "Usage: $(basename $0) [-nv] [Directory containing Takeout .zip file(s)] [Backup directory]"
+	echo >&2 "Usage: $(basename $0) [-nv] [path to Directory containing Takeout .zip file(s)] [path to Backup directory]"
 	echo >&2 "Extract a downloaded Google Takeout to a specified directory (then delete the compressed download)."
 	echo >&2 "   -v          Increase verbosity."
 	exit 1

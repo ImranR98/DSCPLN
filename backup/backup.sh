@@ -44,19 +44,19 @@ while [ true ]; do
   2)
     echo "==============================="
     echo "NUC - Various File Copying"
-    "$HERE"/scripts/SFTPBackup.sh "$NUCUSERNAME"@"$NUCDOMAIN" "$NUCSSHPORT" "~/{*.sh,.bashrc,*.yml}" "$NUCFILESBACKUPDIR"
+    "$HERE"/scripts/SFTPBackup.sh -d "$NUCUSERNAME"@"$NUCDOMAIN" "$NUCSSHPORT" "~/{*.sh,.bashrc,*.yml}" "$NUCFILESBACKUPDIR"
     ;;
 
   3)
     echo "==============================="
     echo "Ryerson Moon"
-    "$HERE"/scripts/RyersonMoon.sh
+    "$HERE"/scripts/SFTPBackup.sh -d "iremtull@moon.cs.ryerson.ca" "22" "." "$RYERSONDIR"/Moon
     ;;
 
   4)
     echo "==============================="
     echo "Cloud - Various File Copying"
-    "$HERE"/scripts/SFTPBackup.sh "$CLOUDSSH" "$CLOUDSSHPORT" ":/lib/systemd/system/imranr_*" "$CLOUDFILESBACKUPDIR"
+    "$HERE"/scripts/SFTPBackup.sh -d "$CLOUDSSH" "$CLOUDSSHPORT" ":/lib/systemd/system/imranr_*" "$CLOUDFILESBACKUPDIR"
     ;;
 
   5)
@@ -74,7 +74,7 @@ while [ true ]; do
   7)
     echo "==============================="
     echo "Notion"
-    "$HERE"/scripts/Notion.sh -d "$(find "$DOWNLOADSDIR/" | grep Export-.*.zip$)" "$NOTIONBACKUPDIR"
+    "$HERE"/scripts/extractZips.sh -d "$(find "$DOWNLOADSDIR/" | grep Export-.*.zip$)" "$NOTIONBACKUPDIR"
     ;;
 
   8)

@@ -35,6 +35,7 @@ if [ ! -d "$2" ]; then
 fi
 if [ ! -f "$1" ]; then
     echo >&2 "The specified DiscordChatExporter CLI binary does not exist: $1."
+    exit 2
 fi
 
 # Run

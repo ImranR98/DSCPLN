@@ -33,9 +33,11 @@ if [ ! "$#" -eq 2 ]; then
 fi
 if [ ! -f "$1" ]; then
     echo >&2 "The specified accounts file does not exist: $1."
+    exit 2
 fi
 if [ ! -d "$2" ]; then
     echo >&2 "The specified balance directory does not exist: $2."
+    exit 3
 fi
 
 # Run

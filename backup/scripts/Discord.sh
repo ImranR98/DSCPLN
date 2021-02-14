@@ -7,18 +7,8 @@ SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 function usage() {
     echo >&2 "Usage: $(basename $0) [path to DiscordChatExporter CLI binary] [path to Discord backup directory]"
     echo >&2 "Backup Discord chats using DiscordChatExporter (https://github.com/Tyrrrz/DiscordChatExporter)."
-    echo >&2 "   -v          Increase verbosity."
     exit 1
 }
-
-# Parse options
-while getopts v opt; do
-    case $opt in
-    v) verbose=1 ;;
-    \?) usage ;;
-    esac
-done
-shift $((OPTIND - 1))
 
 # Validate arguments
 if [ ! "$#" -eq 2 ]; then

@@ -5,12 +5,20 @@ SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 # Usage function
 function usage() {
-	echo >&2 "Usage: $(basename $0) [-v] [path(s) to .zip file(s)] [path to directory]"
+	echo >&2 "Usage: $(basename $0) [-d] [path(s) to .zip file(s)] [path to directory]"
 	echo >&2 "Extract a one or more .zip files into a directory."
-	echo >&2 "   -v          Increase verbosity."
 	echo >&2 "   -d          Delete .zip files after extraction."
 	exit 1
 }
+
+# Parse options
+while getopts vd opt; do
+	case $opt in
+	d) delete=1 ;;
+	\?) usage ;;
+	esac
+done
+shift $((OPTIND - 1))
 
 # Validate arguments
 if [ ! "$#" -eq 2 ]; then

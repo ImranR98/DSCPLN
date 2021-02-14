@@ -50,7 +50,7 @@ while [ true ]; do
   3)
     echo "==============================="
     echo "Ryerson Moon"
-    "$HERE"/scripts/SFTPBackup.sh -d "iremtull@moon.cs.ryerson.ca" "22" "." "$RYERSONDIR"/Moon
+    "$HERE"/scripts/SFTPBackup.sh -d "iremtull@moon.cs.ryerson.ca" "22" "." "$RYERSONDIR/Moon"
     ;;
 
   4)
@@ -62,13 +62,13 @@ while [ true ]; do
   5)
     echo "==============================="
     echo "Reddit - Webninja98"
-    "$HERE"/scripts/redditBackup.sh Webninja98
+    "$HERE"/scripts/redditBackup.sh "Webninja98" "$REDDITBACKUPDIR"
     ;;
 
   6)
     echo "==============================="
     echo "Reddit - ImranR98"
-    "$HERE"/scripts/redditBackup.sh ImranR98
+    "$HERE"/scripts/redditBackup.sh "ImranR98" "$REDDITBACKUPDIR"
     ;;
 
   7)

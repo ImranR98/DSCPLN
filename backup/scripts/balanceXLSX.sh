@@ -5,12 +5,20 @@ SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 # Usage function
 function usage() {
-    echo >&2 "Usage: $(basename $0) [-nv] [path to accounts file] [path to balance directory]"
+    echo >&2 "Usage: $(basename $0) [-n] [path to accounts file] [path to balance directory]"
     echo >&2 "Convert my accounts text file into something that can be pasted into my Balance.xlsx file, and commit the change to git."
     echo >&2 "   -n          Don't wait for user action (also skips git commit)."
-    echo >&2 "   -v          Increase verbosity."
     exit 1
 }
+
+# Parse options
+while getopts n opt; do
+    case $opt in
+    n) nowait=1 ;;
+    \?) usage ;;
+    esac
+done
+shift $((OPTIND - 1))
 
 # Validate arguments
 if [ ! "$#" -eq 2 ]; then

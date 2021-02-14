@@ -1,35 +1,37 @@
 #!/bin/bash
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-source "$HERE"/../variables.sh
-if [ -z "$REDDITBACKUPDIR" ]; then
-    echo "Some environment variables are missing!"
-    exit
+# Store script location
+SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+# Usage function
+function usage() {
+    echo >&2 "Usage: $(basename $0) [Reddit username] [path to Reddit backup directory]"
+    echo >&2 "Backup Reddit data."
+    exit 1
+}
+
+# Validate arguments
+if [ ! "$#" -eq 2 ]; then
+    usage
 fi
-if [ ! -d "$REDDITBACKUPDIR" ]; then
-    echo "Some directories from ../variables.sh are missing!"
-    exit
+if [ ! -d "$2" ]; then
+    echo "Created backup directory at $2."
+    mkdir "$2"
 fi
 
-if [ -z "$1" ]; then
-    echo "Please provide a username"
-    exit
+# Run
+if [ ! -d "$2"/"$1" ]; then
+    mkdir "$2"/"$1"
 fi
-
-if [ ! -d "$REDDITBACKUPDIR" ]; then
-    mkdir "$REDDITBACKUPDIR"
+if [ ! -d "$2"/"$1"/Oldest ]; then
+    mkdir "$2"/"$1"/Oldest
 fi
-if [ ! -d "$REDDITBACKUPDIR"/"$1" ]; then
-    mkdir "$REDDITBACKUPDIR"/"$1"
+if [ ! -d "$2"/"$1"/Latest ]; then
+    mkdir "$2"/"$1"/Latest
 fi
-if [ ! -d "$REDDITBACKUPDIR"/"$1"/Oldest ]; then
-    mkdir "$REDDITBACKUPDIR"/"$1"/Oldest
-fi
-if [ ! -d "$REDDITBACKUPDIR"/"$1"/Latest ]; then
-    mkdir "$REDDITBACKUPDIR"/"$1"/Latest
-fi
-cd "$HERE"/dydr
-node access.js "$REDDITBACKUPDIR"/"$1" # Making sure access is available
-node backup.js "$REDDITBACKUPDIR"/"$1" # Running backup
-cd ..
-echo "$(date)" > "$REDDITBACKUPDIR"/"$1"/lastBackedUp.txt
+here="$(pwd)"
+cd "$SCRIPTDIR"/dydr
+node access.js "$2"/"$1" # Making sure access is available
+node backup.js "$2"/"$1" # Running backup
+cd "$here"
+echo "$(date)" >"$2"/"$1"/lastBackedUp.txt

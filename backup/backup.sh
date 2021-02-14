@@ -44,7 +44,7 @@ while [ true ]; do
   2)
     echo "==============================="
     echo "NUC - Various File Copying"
-    "$HERE"/scripts/NUCFiles.sh "$NUCUSERNAME"@"$NUCDOMAIN" "$NUCSSHPORT" "$NUCFILESBACKUPDIR"
+    "$HERE"/scripts/SFTPBackup.sh "$NUCUSERNAME"@"$NUCDOMAIN" "$NUCSSHPORT" "~/{*.sh,.bashrc,*.yml}" "$NUCFILESBACKUPDIR"
     ;;
 
   3)
@@ -56,7 +56,7 @@ while [ true ]; do
   4)
     echo "==============================="
     echo "Cloud - Various File Copying"
-    "$HERE"/scripts/CloudFiles.sh "$CLOUDSSH" "$CLOUDSSHPORT" "$CLOUDFILESBACKUPDIR"
+    "$HERE"/scripts/SFTPBackup.sh "$CLOUDSSH" "$CLOUDSSHPORT" ":/lib/systemd/system/imranr_*" "$CLOUDFILESBACKUPDIR"
     ;;
 
   5)

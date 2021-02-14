@@ -30,6 +30,8 @@ curl -s https://syncthing.net/release-key.txt | sudo apt-key add -
 echo "deb https://apt.syncthing.net/ syncthing stable" | sudo tee /etc/apt/sources.list.d/syncthing.list
 sudo apt-get update
 sudo apt-get install syncthing -y
+# Restic
+sudo apt install restic -y
 # Node.js
 curl -sL https://deb.nodesource.com/setup_15.x | sudo -E bash -
 sudo apt-get install nodejs -y

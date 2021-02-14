@@ -1,5 +1,5 @@
 # NUC Setup
-## STEP 1 - Restore backups
+## Step 1 - Restore backups
 Copy files from the `NUCFiles` backup into the NUC home directory.
 
 ## Step 2 - Setup SSH 
@@ -15,7 +15,7 @@ sudo ufw enable
 3. Copy your public SSH keys into the authorized_keys file in the NUC .ssh folder.
 4. Edit `/etc/ssh/sshd_config` and set `PasswordAuthentication` to `no`.
 
-## STEP 3 - Install Apps
+## Step 3 - Install Apps
 Run the following commands to install various apps and configure Git:
 ```bash
 sudo apt install htop -y

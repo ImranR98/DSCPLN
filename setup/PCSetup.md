@@ -1,4 +1,5 @@
 # PC Setup
+> TODO: Update
 ## STEP 1 - Enable Chocolatey
 Run in CMD as ADMIN:
 ```powershell

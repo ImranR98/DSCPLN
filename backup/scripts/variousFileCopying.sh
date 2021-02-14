@@ -1,42 +1,36 @@
 #!/bin/bash
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-source "$HERE"/../variables.sh
-if [ -z "$BACKUPSDIR" ] || [ -z "$SSHDIR" ] || [ -z "$FIREFOXCONFIGDIR" ] || [ -z "$SSHBACKUPDIR" ] || [ -z "$STARTUPBACKUPDIR" ]; then
-    echo "Some environment variables are missing!"
-    exit
-fi
-if [ ! -d "$BACKUPSDIR" ] || [ ! -d "$SSHDIR" ] || [ ! -d "$FIREFOXCONFIGDIR" ]; then
-    echo "Some directories from ../variables.sh are missing!"
-    exit
-fi
 
-echo "Firefox Bookmarks..."
-FFFOLDER=$(ls "$FIREFOXCONFIGDIR" | grep ".default-release$")
-if [ ! -z "$FFFOLDER" ]; then
-	if [ -f "$FIREFOXCONFIGDIR"/"$FFFOLDER"/bookmarks.html ]; then
-        cp -v "$FIREFOXCONFIGDIR"/"$FFFOLDER"/bookmarks.html "$BACKUPSDIR"
-        echo '<!-- Backed up on '"$(date)"' -->' >> "$BACKUPSDIR"/bookmarks.html
-    else
-        echo "No bookmarks.html found."
-    fi
-else
-    echo "Firefox folder not found!"
+# Store script location
+SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+# Usage function
+function usage() {
+    echo >&2 "Usage: $(basename $0) [path to backup directory]"
+    echo >&2 "Backup various local files."
+    exit 1
+}
+
+# Validate arguments
+if [ ! "$#" -eq 1 ]; then
+    usage
+fi
+if [ ! -d "$1" ]; then
+    echo >&2 "The specified backup directory does not exist: $1."
+    exit 2
 fi
 
-echo "SSH Folder..."
-if [ ! -d "$SSHBACKUPDIR" ]; then
-    mkdir "$SSHBACKUPDIR"
-fi;
-rsync -av "$SSHDIR/" "$SSHBACKUPDIR" --delete
-echo "$(date)" > "$SSHBACKUPDIR"/lastBackedUp.txt
+# Run
+if [ ! -d "$1/Other" ]; then mkdir "$1/Other"; fi
 
-echo "Startup Folder..."
-if [ ! -d "$STARTUPBACKUPDIR" ]; then
-    mkdir "$STARTUPBACKUPDIR"
-fi;
-rsync -av "$STARTUPDIR/" "$STARTUPBACKUPDIR" --delete
-echo "$(date)" > "$STARTUPBACKUPDIR"/lastBackedUp.txt
+FFFOLDER=$(ls "~/.mozilla/firefox" | grep ".default-release$")
+cp -v "~/.mozilla/firefox/$FFFOLDER/bookmarks.html" "$1/Other" && echo '<!-- Backed up on '"$(date)"' -->' >>"$1/Other/bookmarks.html"
 
-echo "Bashrc..."
-cp -v ~/.bashrc "$BACKUPSDIR"
-echo '# Backed up on '"$(date)" >> "$BACKUPSDIR"/.bashrc
+cp -v ~/.bashrc "$1/Other" && echo '# Backed up on '"$(date)" >>"$1/Other/.bashrc"
+
+if [ ! -d "$1/ssh" ]; then mkdir "$1/ssh"; fi
+rsync -av "~/.ssh" "$1/Other" --delete
+echo "$(date)" >"$1/Other"/lastBackedUp.txt
+
+if [ ! -d "$1/Startup" ]; then mkdir "$1/Startup"; fi
+rsync -av "~/.config/autostart/" "$1/Startup" --delete
+echo "$(date)" >"$1/Startup"/lastBackedUp.txt

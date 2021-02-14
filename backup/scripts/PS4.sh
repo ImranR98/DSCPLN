@@ -11,7 +11,7 @@ function usage() {
 if [ ! "$#" -eq 2 ]; then
     usage
 fi
-if [ ! -f "$1" ]; then
+if [ ! -d "$1" ]; then
     echo >&2 "The PS4 directory does not exist: $1."
     exit 2
 fi

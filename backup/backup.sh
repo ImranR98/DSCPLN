@@ -38,7 +38,7 @@ while [ true ]; do
   1)
     echo "==============================="
     echo "Various File Copying"
-    "$HERE"/scripts/variousFileCopying.sh
+    "$HERE"/scripts/variousFileCopying.sh "$BACKUPSDIR"
     ;;
 
   2)

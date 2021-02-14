@@ -3,6 +3,7 @@
 # Run from within WSL
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+source "$HERE"/variables.sh
 
 while [ true ]; do
 
@@ -79,7 +80,7 @@ case $choice in
 8)
   echo "==============================="
   echo "Balance.xlsx"
-  "$HERE"/scripts/balanceXLSX.sh
+  "$HERE"/scripts/balanceXLSX.sh "$(echo "$NOTIONBACKUPDIR"/Acc*)" "$BALANCEDIR"
   ;;
 
 9)

@@ -27,7 +27,7 @@ fi
 echo "Enter a new token from the Discord web client:"
 read token
 
-command=$(node "$SCRIPTDIR"/DCEA/serverListCommand.js "$1" "$token")
+command=$(node "$SCRIPTDIR"/serverListCommand.js "$1" "$token")
 servers="$(eval "$command")"
 echo "Here are your accessible servers:"
 echo "$servers" | awk '{ s = ""; for (i = 3; i <= NF; i++) s = s $i " "; print NR,s }'
@@ -46,6 +46,6 @@ done
 serverid="$(echo "$servers" | head -$servernum | tail -1 | awk '{print $2}')"
 servername="$(echo "$servers" | head -$servernum | tail -1 | awk '{ s = ""; for (i = 3; i <= NF; i++) s = s $i " "; print s }')"
 
-command="$(node "$SCRIPTDIR"/DCEA/backupCommand.js "$1" "$token" "$2" "$serverid" "$servername")"
+command="$(node "$SCRIPTDIR"/backupCommand.js "$1" "$token" "$2" "$serverid" "$servername")"
 echo "Running command: $command"
 eval "$command"

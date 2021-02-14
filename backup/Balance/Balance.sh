@@ -34,7 +34,7 @@ if [ ! -d "$2" ]; then
 fi
 
 # Run
-node "$SCRIPTDIR"/accMDToXLSX/accMDToXLSX.js "$1" "$2"/Balance.xlsx
+node "$SCRIPTDIR"/accMDToXLSX.js "$1" "$2"/Balance.xlsx
 
 if [ "$nowait" != "1" ]; then
     echo "Paste the results into Balance.xlsx. When ready, press [ENTER]."

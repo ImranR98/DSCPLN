@@ -30,7 +30,7 @@ if [ ! -d "$2"/"$1"/Latest ]; then
     mkdir "$2"/"$1"/Latest
 fi
 here="$(pwd)"
-cd "$SCRIPTDIR"/dydr
+cd "$SCRIPTDIR"
 node access.js "$2"/"$1" # Making sure access is available
 node backup.js "$2"/"$1" # Running backup
 cd "$here"

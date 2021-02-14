@@ -116,7 +116,7 @@ case $choice in
 14)
   echo "==============================="
   echo "Discord"
-  "$HERE"/scripts/Discord.sh
+  "$HERE"/scripts/Discord.sh "$DISCORDBACKUPDIR" "$DISCORDCHATEXPORTERCLIDIR"
   ;;
 
 15)

@@ -1,29 +1,32 @@
 #!/bin/bash
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-source "$HERE"/../variables.sh
 
-if [ -z "$NUCFILESBACKUPDIR" ] || [ -z "$NUCUSERNAME" ] || [ -z "$LOCALNUCDOMAIN" ] || [ -z "$LOCALNUCSSHPORT" ] || [ -z "$NUCDOMAIN" ] || [ -z "$NUCSSHPORT" ]; then
-    echo "Some environment variables are missing!"
-    exit
+# Store script location
+SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+# Usage function
+function usage() {
+    echo >&2 "Usage: $(basename $0) [Username@NUC SSH hostname/IP] [NUC SSH port] [path to NUC backup directory]"
+    echo >&2 "Backup various important files from my NUC server via SSH."
+    exit 1
+}
+
+# Verbose-only echo
+function echoVerbose() {
+    if [ "$verbose" == "1" ]; then echo "${1}"; fi
+}
+
+# Validate arguments
+if [ ! "$#" -eq 3 ]; then
+    usage
 fi
-if [ ! -d "$NUCFILESBACKUPDIR" ]; then
-    echo "Some directories from ../variables.sh are missing!"
-    exit
+if [[ "$2" =~ ^[0-9]+$ ]]; then
+    echo >&2 "The specified SSH port is not a number."
+fi
+if [ ! -d "$3" ]; then
+    echoVerbose "Created backup directory at $3."
+    mkdir "$3"
 fi
 
-if [ ! -d "$NUCFILESBACKUPDIR" ]; then
-	mkdir "$NUCFILESBACKUPDIR"
-fi
-
-LOCALNUCACCESSIBLE="$(nmap $LOCALNUCDOMAIN -PN -p $LOCALNUCSSHPORT | grep open)"
-NUCACCESSIBLE="$(nmap $NUCDOMAIN -PN -p $NUCSSHPORT | grep open)"
-if [ ! -z "$LOCALNUCACCESSIBLE" ]; then
-    rsync -av -e "ssh -p $LOCALNUCSSHPORT" $NUCUSERNAME@$LOCALNUCDOMAIN:~/{*.sh,.bashrc,*.yml} "$NUCFILESBACKUPDIR"
-elif [ ! -z "$NUCACCESSIBLE" ]; then
-    rsync -av -e "ssh -p $NUCSSHPORT" $NUCUSERNAME@$NUCDOMAIN:~/{*.sh,.bashrc,*.yml} "$NUCFILESBACKUPDIR"
-else 
-    echo "NUC is not accessible!"
-    exit
-fi; 
-
-echo "$(date)" > "$NUCFILESBACKUPDIR"/lastBackedUp.txt
+# Run
+rsync -av -e "ssh -p $2" $1:~/{*.sh,.bashrc,*.yml} "$3" --delete
+echo "$(date)" >"$3"/lastBackedUp.txt

@@ -44,7 +44,7 @@ case $choice in
 2)
   echo "==============================="
   echo "NUC - Various File Copying"
-  "$HERE"/scripts/NUCFiles.sh
+  "$HERE"/scripts/NUCFiles.sh "$NUCUSERNAME"@"$NUCDOMAIN" "$NUCSSHPORT" "$NUCFILESBACKUPDIR"
   ;;
 
 3)

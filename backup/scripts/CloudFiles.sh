@@ -5,7 +5,7 @@ SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 # Usage function
 function usage() {
-    echo >&2 "Usage: $(basename $0) [Cloud SSH hostname/IP] [Cloud SSH port] [path to Cloud backup directory]"
+    echo >&2 "Usage: $(basename $0) [Username@Cloud SSH hostname/IP] [Cloud SSH port] [path to Cloud backup directory]"
     echo >&2 "Backup various important files from my Cloud server via SSH."
     exit 1
 }

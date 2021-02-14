@@ -98,7 +98,7 @@ case $choice in
 11)
   echo "==============================="
   echo "Google Takeout"
-  "$HERE"/scripts/googleTakeout.sh
+  "$HERE"/scripts/googleTakeout.sh "$DOWNLOADSDIR" "$GOOGLETAKEOOUTBACKUPDIR"
   ;;
 
 12)

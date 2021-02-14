@@ -5,7 +5,7 @@ SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 # Usage function
 function usage() {
-    echo >&2 "Usage: $(basename $0) [Discord backup directory] [path to DiscordChatExporter CLI binary]"
+    echo >&2 "Usage: $(basename $0) [path to DiscordChatExporter CLI binary] [Discord backup directory]"
     echo >&2 "Backup Discord chats using DiscordChatExporter (https://github.com/Tyrrrz/DiscordChatExporter)."
     echo >&2 "   -v          Increase verbosity."
     exit 1
@@ -29,18 +29,19 @@ shift $((OPTIND - 1))
 if [ ! "$#" -eq 2 ]; then
     usage
 fi
-if [ ! -f "$2" ]; then
-    echo >&2 "The specified DiscordChatExporter CLI binary does not exist: $2."
+if [ ! -d "$2" ]; then
+    echoVerbose "Created backup directory at $2."
+    mkdir "$2"
+fi
+if [ ! -f "$1" ]; then
+    echo >&2 "The specified DiscordChatExporter CLI binary does not exist: $1."
 fi
 
-if [ ! -d "$1" ]; then
-    mkdir "$1"
-fi
-
+# Run
 echo "Enter a new token from the Discord web client:"
 read token
 
-command=$(node "$SCRIPTDIR"/DCEA/serverListCommand.js "$2" "$token")
+command=$(node "$SCRIPTDIR"/DCEA/serverListCommand.js "$1" "$token")
 servers="$(eval "$command")"
 echo "Here are your accessible servers:"
 echo "$servers" | awk '{ s = ""; for (i = 3; i <= NF; i++) s = s $i " "; print NR,s }'
@@ -56,9 +57,9 @@ while [ $choosing == 1 ]; do
         choosing=0
     fi
 done
-serverid="$(echo "$servers" | head -$servernum | tail -1 | awk '{print $1}')"
+serverid="$(echo "$servers" | head -$servernum | tail -1 | awk '{print $2}')"
 servername="$(echo "$servers" | head -$servernum | tail -1 | awk '{ s = ""; for (i = 3; i <= NF; i++) s = s $i " "; print s }')"
 
-command="$(node "$SCRIPTDIR"/DCEA/backupCommand.js "$2" "$token" "$1" "$serverid" "$servername")"
+command="$(node "$SCRIPTDIR"/DCEA/backupCommand.js "$1" "$token" "$2" "$serverid" "$servername")"
 echoVerbose "Running command: $command"
 eval "$command"

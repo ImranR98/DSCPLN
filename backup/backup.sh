@@ -122,7 +122,9 @@ while [ true ]; do
   15)
     echo "==============================="
     echo "PS4 Saves & Media"
-    "$HERE"/scripts/PS4.sh
+    echo "Enter the path to the 'PS4' directory:"
+    read ps4
+    "$HERE"/scripts/PS4.sh "$ps4" "$PS4SAVESBACKUPDIR" "$PS4UNSORTEDMEDIADIR"
     ;;
 
   *)

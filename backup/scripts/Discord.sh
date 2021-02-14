@@ -11,11 +11,6 @@ function usage() {
     exit 1
 }
 
-# Verbose-only echo
-function echoVerbose() {
-    if [ "$verbose" == "1" ]; then echo "${1}"; fi
-}
-
 # Parse options
 while getopts v opt; do
     case $opt in
@@ -30,7 +25,7 @@ if [ ! "$#" -eq 2 ]; then
     usage
 fi
 if [ ! -d "$2" ]; then
-    echoVerbose "Created backup directory at $2."
+    echo "Created backup directory at $2."
     mkdir "$2"
 fi
 if [ ! -f "$1" ]; then
@@ -62,5 +57,5 @@ serverid="$(echo "$servers" | head -$servernum | tail -1 | awk '{print $2}')"
 servername="$(echo "$servers" | head -$servernum | tail -1 | awk '{ s = ""; for (i = 3; i <= NF; i++) s = s $i " "; print s }')"
 
 command="$(node "$SCRIPTDIR"/DCEA/backupCommand.js "$1" "$token" "$2" "$serverid" "$servername")"
-echoVerbose "Running command: $command"
+echo "Running command: $command"
 eval "$command"

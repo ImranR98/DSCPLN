@@ -1,32 +1,35 @@
 #!/bin/bash
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-source "$HERE"/../variables.sh
-if [ -z "$PS4SAVESBACKUPDIR" ] || [ -z "$PS4UNSORTEDMEDIADIR" ]; then
-    echo "Some environment variables are missing!"
-    exit
+# Usage function
+function usage() {
+    echo >&2 "Usage: $(basename $0) [-nv] [path to the 'PS4' directory] [path to PS4 save backup directory] [path to unsorted PS4 media directory]"
+    echo >&2 "Convert my accounts text file into something that can be pasted into my Balance.xlsx file, and commit the change to git."
+    exit 1
+}
+
+# Validate arguments
+if [ ! "$#" -eq 2 ]; then
+    usage
 fi
-if [ ! -d "$PS4SAVESBACKUPDIR" ]; then
-    echo "Some directories from ../variables.sh are missing!"
-    exit
+if [ ! -f "$1" ]; then
+    echo >&2 "The PS4 directory does not exist: $1."
+    exit 2
+fi
+if [ ! -d "$2" ]; then
+    echo "Created PS4 save backup directory at $2."
+    mkdir "$2"
+fi
+if [ ! -d "$3" ]; then
+    echo "Created unsorted PS4 media directory at $3."
+    mkdir "$3"
 fi
 
-echo "Insert the USB drive containing PS4 data (A 'PS4' directory containing 'SAVEDATA' and/or 'SHARE' directories)."
-echo "Enter the mount point below (example /media/imranr/D6D9-9E3A) or leave empty to cancel:"
-read mountpoint
-if [ ! -z "$mountpoint" ]
-then
-    if [ -d "$mountpoint"/PS4/SAVEDATA ]; then
-        if [ ! -d PS4SAVESBACKUPDIR ]; then
-	        mkdir PS4SAVESBACKUPDIR
-        fi
-	    rsync -av "$mountpoint"/PS4/SAVEDATA PS4SAVESBACKUPDIR --delete
-        echo "$(date)" > PS4SAVESBACKUPDIR/lastBackedUp.txt
-    fi
-    if [ -d "$mountpoint"/PS4/SHARE ]; then
-        if [ ! -d "$PS4UNSORTEDMEDIADIR" ]; then
-	        mkdir "$PS4UNSORTEDMEDIADIR"
-        fi
-	    rsync -av "$mountpoint"/PS4/SHARE "$PS4UNSORTEDMEDIADIR"
-    fi
+# Run
+if [ -d "$1"/SAVEDATA ]; then
+    rsync -av "$1"/SAVEDATA "$2" --delete
+    echo "$(date)" >"$2"/lastBackedUp.txt
+fi
+if [ -d "$1"/SHARE ]; then
+    rsync -av "$1"/SHARE "$3"
+    echo "$(date)" >"$3"/lastBackedUp.txt
 fi

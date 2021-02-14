@@ -12,21 +12,6 @@ function usage() {
 	exit 1
 }
 
-# Verbose-only echo
-function echoVerbose() {
-	if [ "$verbose" == "1" ]; then echo "${1}"; fi
-}
-
-# Parse options
-while getopts vd opt; do
-	case $opt in
-	v) verbose=1 ;;
-	d) delete=1 ;;
-	\?) usage ;;
-	esac
-done
-shift $((OPTIND - 1))
-
 # Validate arguments
 if [ ! "$#" -eq 2 ]; then
 	usage
@@ -39,7 +24,7 @@ for i in "${files[@]}"; do
 	fi
 done
 if [ ! -d "$2" ]; then
-	echoVerbose "Created backup directory at $2."
+	echo "Created backup directory at $2."
 	mkdir "$2"
 fi
 

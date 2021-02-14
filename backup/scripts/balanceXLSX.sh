@@ -12,21 +12,6 @@ function usage() {
     exit 1
 }
 
-# Verbose-only echo
-function echoVerbose() {
-    if [ "$verbose" == "1" ]; then echo "${1}"; fi
-}
-
-# Parse options
-while getopts vn opt; do
-    case $opt in
-    n) nowait=1 ;;
-    v) verbose=1 ;;
-    \?) usage ;;
-    esac
-done
-shift $((OPTIND - 1))
-
 # Validate arguments
 if [ ! "$#" -eq 2 ]; then
     usage
@@ -41,8 +26,6 @@ if [ ! -d "$2" ]; then
 fi
 
 # Run
-echoVerbose "New entries for Balance.xlsx will now be generated from $1:"
-
 node "$SCRIPTDIR"/accMDToXLSX/accMDToXLSX.js "$1" "$2"/Balance.xlsx
 
 if [ "$nowait" != "1" ]; then
@@ -53,6 +36,4 @@ if [ "$nowait" != "1" ]; then
     git add .
     git commit . -m "$(date)"
     cd "$here"
-else
-    echoVerbose "-n option used; will not perform git commit."
 fi

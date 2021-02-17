@@ -20,6 +20,7 @@ options=(
   "Balance"
   "Medium"
   "Twitter"
+  "Spotify"
   "Google"
   "iPhone"
   "School Emails"
@@ -57,6 +58,9 @@ select option in "${options[@]}"; do
     ;;
   "Twitter")
     "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR/" | grep twitter.*.zip$)" "$MAINDIR/Backups/Twitter"
+    ;;
+  "Spotify")
+    "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR/" | grep my_spotify_data.zip$)" "$MAINDIR/Backups/Spotify"
     ;;
   "Google")
     "$HERE"/ExtractZips/ExtractZips.sh -d "$(ls "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout"

@@ -22,15 +22,15 @@ fi
 # Run
 if [ ! -d "$1/Other" ]; then mkdir "$1/Other"; fi
 
-FFFOLDER=$(ls ~"/.mozilla/firefox" | grep ".default-release$")
-cp -v ~"/.mozilla/firefox/$FFFOLDER/bookmarks.html" "$1/Other" && echo '<!-- Backed up on '"$(date)"' -->' >>"$1/Other/bookmarks.html"
+FFFOLDER=$(ls ~/".mozilla/firefox" | grep ".default-release$")
+cp -v ~/".mozilla/firefox/$FFFOLDER/bookmarks.html" "$1/Other" && echo '<!-- Backed up on '"$(date)"' -->' >>"$1/Other/bookmarks.html"
 
-cp -v ~"/.bashrc" "$1/Other" && echo '# Backed up on '"$(date)" >>"$1/Other/.bashrc"
+cp -v ~/".bashrc" "$1/Other" && echo '# Backed up on '"$(date)" >>"$1/Other/.bashrc"
 
 if [ ! -d "$1/ssh" ]; then mkdir "$1/ssh"; fi
-rsync -av ~"/.ssh" "$1/Other" --delete
+rsync -av ~/".ssh" "$1/Other" --delete
 echo "$(date)" >"$1/Other"/lastBackedUp.txt
 
 if [ ! -d "$1/Startup" ]; then mkdir "$1/Startup"; fi
-rsync -av ~"/.config/autostart/" "$1/Startup" --delete
+rsync -av ~/".config/autostart/" "$1/Startup" --delete
 echo "$(date)" >"$1/Startup"/lastBackedUp.txt

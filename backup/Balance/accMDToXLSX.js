@@ -172,7 +172,7 @@ convertItemsToExcelReadyText = (items) => {
     let text = ''
     items.forEach((item) => {
         text += `${formatDate(item.date)}   ${item.details} `
-        if (item.amount >= 0) text += ' '
+        if (item.amount >= 0) text += "\t"
         text += `${item.amount < 0 ? item.amount * -1 : item.amount}\n`
     })
     return text

@@ -24,7 +24,6 @@ shift $((OPTIND - 1))
 if [ ! "$#" -eq 4 ]; then
     usage
 fi
-echo "$2"
 if [[ ! "$2" =~ ^[0-9]+$ ]]; then
     echo >&2 "The specified SSH port is not a number."
     exit 2

@@ -36,7 +36,7 @@ select option in "${options[@]}"; do
     "$HERE"/SFTPBackup/SFTPBackup.sh -d "user@home.example.com" "9999" ~/"{*.sh,.bashrc,*.yml}" "$MAINDIR/Backups/NUCFiles"
     ;;
   "Cloud Files")
-    "$HERE"/SFTPBackup/SFTPBackup.sh -d "root@example.com" "22" ":/lib/systemd/system/imranr_*" "$MAINDIR/Backups/CloudFiles"
+    "$HERE"/SFTPBackup/SFTPBackup.sh -d "root@example.com" "22" "/lib/systemd/system/imranr_*" "$MAINDIR/Backups/CloudFiles"
     ;;
   "Ryerson Moon")
     "$HERE"/SFTPBackup/SFTPBackup.sh -d "iremtull@moon.cs.ryerson.ca" "22" "." "$MAINDIR/Ryerson/Moon"

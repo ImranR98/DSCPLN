@@ -45,3 +45,6 @@ if [ "$nowait" != "1" ]; then
     git commit . -m "$(date)"
     cd "$here"
 fi
+
+echo "
+NOTE: You still need to manually add Transaction Types and any Investment changes."

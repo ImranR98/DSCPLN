@@ -243,6 +243,6 @@ console.log(convertItemsToExcelReadyText(
         processLines(
             getLinesFromMD(MDFilePath)
         ),
-        XLSX.readFile(balanceXLSXLocation).Sheets['Balance']
+        XLSX.readFile(balanceXLSXLocation).Sheets['Transactions']
     )
 ))

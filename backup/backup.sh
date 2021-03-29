@@ -22,6 +22,7 @@ options=(
   "Twitter"
   "Spotify"
   "Google"
+  "Podcasts"
   "iPhone"
   "School Emails"
   "Discord"
@@ -76,6 +77,10 @@ while [ true ]; do
       ;;
     "Google")
       "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout"
+      break
+      ;;
+    "Podcasts")
+      echo "This is not automated. Export the .opml file manually."
       break
       ;;
     "iPhone")

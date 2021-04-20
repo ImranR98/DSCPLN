@@ -44,7 +44,7 @@ while [ true ]; do
       break
       ;;
     "Ryerson Moon")
-      "$HERE"/SFTPBackup/SFTPBackup.sh -d "iremtull@moon.cs.ryerson.ca" "22" "." "$MAINDIR/Ryerson/Moon"
+      "$HERE"/SFTPBackup/SFTPBackup.sh -d "iremtull@moon.cs.ryerson.ca" "22" "." "$MAINDIR/Career/Ryerson/Moon"
       break
       ;;
     "Reddit - WebNinja98")

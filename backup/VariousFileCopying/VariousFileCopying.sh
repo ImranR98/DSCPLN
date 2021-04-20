@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Ensure dependencies
+for dep in rsync; do
+	if [ -z "$(which $dep)" ]; then
+		echo >&2 "The following dependency is missing: $dep"
+		exit 5
+	fi
+done
+
 # Store script location
 SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 

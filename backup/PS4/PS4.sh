@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Ensure dependencies
+for dep in rsync; do
+	if [ -z "$(which $dep)" ]; then
+		echo >&2 "The following dependency is missing: $dep"
+		exit 5
+	fi
+done
+
 # Usage function
 function usage() {
     echo >&2 "Usage: $(basename $0) [-nv] [path to the 'PS4' directory] [path to PS4 save backup directory] [path to unsorted PS4 media directory]"

@@ -76,7 +76,7 @@ while [ true ]; do
       break
       ;;
     "Google")
-      "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout"
+      "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout"
       break
       ;;
     "Podcasts")

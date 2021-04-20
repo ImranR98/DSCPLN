@@ -56,7 +56,7 @@ while [ true ]; do
       break
       ;;
     "Notion")
-      "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR/" | grep Export-.*.zip$)" "$MAINDIR/Backups/Notion"
+      "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep Export-.*.zip$)" "$MAINDIR/Backups/Notion"
       break
       ;;
     "Balance")
@@ -64,19 +64,19 @@ while [ true ]; do
       break
       ;;
     "Medium")
-      "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR/" | grep medium-export.zip$)" "$MAINDIR/Backups/Medium"
+      "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep medium-export.zip$)" "$MAINDIR/Backups/Medium"
       break
       ;;
     "Twitter")
-      "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR/" | grep twitter.*.zip$)" "$MAINDIR/Backups/Twitter"
+      "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep twitter.*.zip$)" "$MAINDIR/Backups/Twitter"
       break
       ;;
     "Spotify")
-      "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR/" | grep my_spotify_data.zip$)" "$MAINDIR/Backups/Spotify"
+      "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep my_spotify_data.zip$)" "$MAINDIR/Backups/Spotify"
       break
       ;;
     "Google")
-      "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout"
+      "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout"
       break
       ;;
     "Podcasts")

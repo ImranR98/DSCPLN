@@ -98,9 +98,7 @@ fi
 echo "$(date)" >"$2"/lastBackedUp.txt
 
 # Commit to git if required and save the date of extraction in the commit message as well
-if [ ! "$git" == "1" ]; then
-
-else
+if [ "$git" == "1" ]; then
 	cd "$2"
 	git add .
 	git commit . -m "$(date)"

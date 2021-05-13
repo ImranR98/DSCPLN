@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Ensure dependencies
-for dep in node git; do
+for dep in node npm git; do
 	if [ -z "$(which $dep)" ]; then
 		echo >&2 "The following dependency is missing: $dep"
 		exit 5
@@ -42,6 +42,7 @@ if [ ! -d "$2" ]; then
 fi
 
 # Run
+npm i # Make sure dependencies are installed
 node "$SCRIPTDIR"/accMDToXLSX.js "$1" "$2"/Balance.xlsx
 
 if [ "$nowait" != "1" ]; then

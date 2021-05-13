@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Ensure dependencies
-for dep in node; do
+for dep in node npm; do
 	if [ -z "$(which $dep)" ]; then
 		echo >&2 "The following dependency is missing: $dep"
 		exit 5
@@ -39,6 +39,7 @@ if [ ! -d "$2"/"$1"/Latest ]; then
 fi
 here="$(pwd)"
 cd "$SCRIPTDIR"
+npm i # Make sure dependencies are installed
 node access.js "$2"/"$1" # Making sure access is available
 node backup.js "$2"/"$1" # Running backup
 cd "$here"

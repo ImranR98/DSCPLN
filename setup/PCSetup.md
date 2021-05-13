@@ -35,10 +35,10 @@ flatpak install flathub com.getpostman.Postman -y
 7. Firefox Config changes:
 ```bash
 FFFOLDER=$(ls ~/".mozilla/firefox" | grep ".default-release$")
-touch ~/".mozilla/firefox"$FFFOLDER"/user.js"
-echo 'user_pref("extensions.formautofill.available", "on");' >> ~/".mozilla/firefox"$FFFOLDER"/user.js"
-echo 'user_pref("extensions.formautofill.creditCards.available", true);' >> ~/".mozilla/firefox"$FFFOLDER"/user.js"
-echo 'user_pref("extensions.formautofill.supportedCountries", "US,CA");' >> ~/".mozilla/firefox"$FFFOLDER"/user.js"
-echo 'user_pref("browser.bookmarks.autoExportHTML", true);' >> ~/".mozilla/firefox"$FFFOLDER"/user.js"
+touch ~/".mozilla/firefox/"$FFFOLDER"/user.js"
+echo 'user_pref("extensions.formautofill.available", "on");' >> ~/".mozilla/firefox/"$FFFOLDER"/user.js"
+echo 'user_pref("extensions.formautofill.creditCards.available", true);' >> ~/".mozilla/firefox/"$FFFOLDER"/user.js"
+echo 'user_pref("extensions.formautofill.supportedCountries", "US,CA");' >> ~/".mozilla/firefox/"$FFFOLDER"/user.js"
+echo 'user_pref("browser.bookmarks.autoExportHTML", true);' >> ~/".mozilla/firefox/"$FFFOLDER"/user.js"
 ```
 8. Tweak settings

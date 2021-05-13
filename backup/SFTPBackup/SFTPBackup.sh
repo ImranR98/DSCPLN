@@ -42,5 +42,5 @@ if [ ! -d "$4" ]; then
 fi
 
 # Run
-rsync -av -e "ssh -p $2" $1:"$3" "$4" "$(if [ "$delete" == "1" ]; then echo '--delete'; fi)"
+rsync -r -e "ssh -p $2" $1:"$3" "$4" "$(if [ "$delete" == "1" ]; then echo '--delete'; fi)"
 echo "$(date)" >"$4"/lastBackedUp.txt

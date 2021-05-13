@@ -77,13 +77,13 @@ node "$SCRIPTDIR"/renameFilesEndingWithDot.js "$tempfolder"
 
 # Sync the temp. folder with the backup folder while maintaining the .git folder if required
 if [ ! "$git" == "1" ]; then
-	rsync -av "$tempfolder/" "$2" --delete
+	rsync -r "$tempfolder/" "$2" --delete
 else
 	if [ -d "$tempfolder/.git" ]; then
 		echo >&2 "The unzipped directory contains a .git directory at its root, which cannot be copied over while the -g option is in use as it would overwrite the existing .git folder."
 		exit 4
 	else
-		rsync -av "$tempfolder/" "$2" --delete --exclude '/.git/'
+		rsync -r "$tempfolder/" "$2" --delete --exclude '/.git/'
 	fi
 fi
 

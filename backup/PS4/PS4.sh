@@ -34,10 +34,10 @@ fi
 
 # Run
 if [ -d "$1"/SAVEDATA ]; then
-    rsync -av "$1"/SAVEDATA "$2" --delete
+    rsync -r "$1"/SAVEDATA "$2" --delete
     echo "$(date)" >"$2"/lastBackedUp.txt
 fi
 if [ -d "$1"/SHARE ]; then
-    rsync -av "$1"/SHARE "$3"
+    rsync -r "$1"/SHARE "$3"
     echo "$(date)" >"$3"/lastBackedUp.txt
 fi

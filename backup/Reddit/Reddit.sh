@@ -22,25 +22,25 @@ function usage() {
 if [ ! "$#" -eq 2 ]; then
     usage
 fi
-if [ ! -d "$2" ]; then
-    echo "Created backup directory at $2."
-    mkdir "$2"
+if [ ! -d "${2}" ]; then
+    echo "Created backup directory at ${2}."
+    mkdir "${2}"
 fi
 
 # Run
-if [ ! -d "$2"/"$1" ]; then
-    mkdir "$2"/"$1"
+if [ ! -d "${2}"/"${1}" ]; then
+    mkdir "${2}"/"${1}"
 fi
-if [ ! -d "$2"/"$1"/Oldest ]; then
-    mkdir "$2"/"$1"/Oldest
+if [ ! -d "${2}"/"${1}"/Oldest ]; then
+    mkdir "${2}"/"${1}"/Oldest
 fi
-if [ ! -d "$2"/"$1"/Latest ]; then
-    mkdir "$2"/"$1"/Latest
+if [ ! -d "${2}"/"${1}"/Latest ]; then
+    mkdir "${2}"/"${1}"/Latest
 fi
 here="$(pwd)"
 cd "$SCRIPTDIR"
 npm i # Make sure dependencies are installed
-node access.js "$2"/"$1" # Making sure access is available
-node backup.js "$2"/"$1" # Running backup
+node access.js "${2}"/"${1}" # Making sure access is available
+node backup.js "${2}"/"${1}" # Running backup
 cd "$here"
-echo "$(date)" >"$2"/"$1"/lastBackedUp.txt
+echo "$(date)" >"${2}"/"${1}"/lastBackedUp.txt

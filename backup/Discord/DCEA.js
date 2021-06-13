@@ -13,14 +13,14 @@ module.exports.ensureDirectory = (path) => {
 
 // Takes the path to the Discord Chat Exporter CLI directory and returns the command to use
 // Throws an error if the command cannot be run
-module.exports.returnDiscordChatExporterCLICommand = (path) => {
-    this.ensureDirectory(path)
-    const files = fs.readdirSync(path)
+module.exports.returnDiscordChatExporterCLICommand = (dir) => {
+    this.ensureDirectory(dir)
+    const files = fs.readdirSync(dir)
     if (!files.find(f => f == 'DiscordChatExporter.Cli.exe') || !files.find(f => f == 'DiscordChatExporter.Cli.dll')) {
         throw 'This directory does not contain the Discord Chat Exporter CLI.'
     }
 
-    var command = `dotnet ${path}/DiscordChatExporter.Cli.dll`
+    var command = `dotnet ${dir}/DiscordChatExporter.Cli.dll`
     if (os.platform() != 'win32') {
         let hasDotnet = false
         try {
@@ -102,7 +102,7 @@ module.exports.generateBackupCommandForServer = (DCECLIPath, DCEToken, DCEBackup
 }
 
 // Generate a command to return a list of accessible servers
-module.exports.generateServerListCommand = (DCECLIPath, DCEToken) => {
-    const command = this.returnDiscordChatExporterCLICommand(DCECLIPath)
+module.exports.generateServerListCommand = (DCECLIDir, DCEToken) => {
+    const command = this.returnDiscordChatExporterCLICommand(DCECLIDir)
     return `${command} guilds -t "${DCEToken}"`
 }

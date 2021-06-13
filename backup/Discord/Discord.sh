@@ -26,8 +26,8 @@ if [ ! -d "$2" ]; then
     echo "Created backup directory at $2."
     mkdir "$2"
 fi
-if [ ! -f "$1" ]; then
-    echo >&2 "The specified DiscordChatExporter CLI binary does not exist: $1."
+if [ ! -d "$1" ]; then
+    echo >&2 "The specified DiscordChatExporter CLI directory does not exist: $1."
     exit 2
 fi
 
@@ -51,8 +51,11 @@ while [ $choosing == 1 ]; do
         choosing=0
     fi
 done
-serverid="$(echo "$servers" | head -$servernum | tail -1 | awk '{print $2}')"
+serverid="$(echo "$servers" | head -$servernum | tail -1 | awk '{print $1}')"
 servername="$(echo "$servers" | head -$servernum | tail -1 | awk '{ s = ""; for (i = 3; i <= NF; i++) s = s $i " "; print s }')"
+
+echo "$serverid and $servername"
+echo "$servers"
 
 command="$(node "$SCRIPTDIR"/backupCommand.js "$1" "$token" "$2" "$serverid" "$servername")"
 echo "Running command: $command"

@@ -92,7 +92,7 @@ while [ true ]; do
       break
       ;;
     "Discord")
-      "$HERE"/Discord/Discord.sh "$MAINDIR/Backups/Discord" ~/"DiscordChatExporter.CLI"
+      "$HERE"/Discord/Discord.sh ~/"DiscordChatExporter.CLI" "$MAINDIR/Backups/Discord"
       break
       ;;
     "PS4")

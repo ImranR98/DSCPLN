@@ -18,6 +18,7 @@ options=(
   "Reddit - ImranR98"
   "Notion"
   "Balance"
+  "Feedly"
   "Medium"
   "Twitter"
   "Spotify"
@@ -61,6 +62,10 @@ while [ true ]; do
       ;;
     "Balance")
       "$HERE"/Balance/Balance.sh "$(echo "$MAINDIR/Backups/Notion"/Acc*)" "$MAINDIR/Documents/Balance"
+      break
+      ;;
+    "Feedly")
+      "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep feedly-.*-archive.zip$)" "$MAINDIR/Backups/Feedly"
       break
       ;;
     "Medium")

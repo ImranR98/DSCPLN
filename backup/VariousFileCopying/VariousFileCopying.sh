@@ -29,9 +29,8 @@ fi
 
 # Run
 if [ ! -d "$1/Other" ]; then mkdir "$1/Other"; fi
-
-FFFOLDER=$(ls ~/".mozilla/firefox" | grep ".default-release$")
-cp -v ~/".mozilla/firefox/$FFFOLDER/bookmarks.html" "$1/Other" && echo '<!-- Backed up on '"$(date)"' -->' >>"$1/Other/bookmarks.html"
+FFFOLDER=$(ls ~/".var/app/org.mozilla.firefox/.mozilla/firefox" | grep ".default-release$")
+cp -v ~/".var/app/org.mozilla.firefox/.mozilla/firefox/$FFFOLDER/bookmarks.html" "$1/Other" && echo '<!-- Backed up on '"$(date)"' -->' >>"$1/Other/bookmarks.html"
 
 cp -v ~/".bashrc" "$1/Other" && echo '# Backed up on '"$(date)" >>"$1/Other/.bashrc"
 

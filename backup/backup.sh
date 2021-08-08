@@ -16,7 +16,6 @@ options=(
   "Ryerson Moon"
   "Reddit - WebNinja98"
   "Reddit - ImranR98"
-  "Notion"
   "Balance"
   "Feedly"
   "Medium"
@@ -54,10 +53,6 @@ while [ true ]; do
       ;;
     "Reddit - ImranR98")
       "$HERE"/Reddit/Reddit.sh "ImranR98" "$MAINDIR/Backups/Reddit"
-      break
-      ;;
-    "Notion")
-      "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep Export-.*.zip$)" "$MAINDIR/Backups/Notion"
       break
       ;;
     "Balance")

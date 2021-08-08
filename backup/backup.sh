@@ -12,7 +12,6 @@ Pick an option: "
 options=(
   "Local Files"
   "NUC Files"
-  "VPS Files"
   "Ryerson Moon"
   "Reddit - WebNinja98"
   "Reddit - ImranR98"
@@ -39,10 +38,6 @@ while [ true ]; do
       "$HERE"/SFTPBackup/SFTPBackup.sh -d "user@home.example.com" "9999" ~/"{*.sh,.bashrc,*.yml}" "$MAINDIR/Backups/NUCFiles"
       break
       ;;
-    "VPS Files")
-      "$HERE"/SFTPBackup/SFTPBackup.sh -d "user@vps.example.com" "22" "/lib/systemd/system/imranr_*" "$MAINDIR/Backups/VPSFiles"
-      break
-      ;;
     "Ryerson Moon")
       "$HERE"/SFTPBackup/SFTPBackup.sh -d "iremtull@moon.cs.ryerson.ca" "22" "." "$MAINDIR/Career/Ryerson/Moon"
       break
@@ -56,7 +51,7 @@ while [ true ]; do
       break
       ;;
     "Balance")
-      "$HERE"/Balance/Balance.sh "$(echo "$MAINDIR/Backups/Notion"/Acc*)" "$MAINDIR/Documents/Balance"
+      "$HERE"/Balance/Balance.sh "$MAINDIR/Notes/Acc.md" "$MAINDIR/Documents/Balance"
       break
       ;;
     "Feedly")

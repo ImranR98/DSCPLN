@@ -2,7 +2,7 @@
 
 
 
-## Step 1 - Automated Command Line Package Installs
+## Step 1 - Automated App Installs
 
 ```
 sudo apt install software-properties-common curl -y
@@ -21,6 +21,25 @@ sudo apt install restic -y &&
 sudo restic self-update # Version from the distro's official repo is normally out of date
 
 sudo apt install libimage-exiftool-perl -y
+
+flatpak install -y appcenter com.github.bluesabre.darkbar.Locale
+flatpak install -y appcenter com.github.davidmhewitt.torrential
+flatpak install -y appcenter com.github.donadigo.eddy
+flatpak install -y appcenter com.github.manexim.insomnia
+
+flatpak install -y flathub   com.getpostman.Postman
+flatpak install -y flathub   com.github.xournalpp.xournalpp
+flatpak install -y flathub   com.obsproject.Studio
+flatpak install -y flathub   com.valvesoftware.Steam
+flatpak install -y flathub   io.typora.Typora
+flatpak install -y flathub   md.obsidian.Obsidian
+flatpak install -y flathub   org.chromium.Chromium
+flatpak install -y flathub   org.gnome.baobab
+flatpak install -y flathub   org.gnome.eog
+flatpak install -y flathub   org.libreoffice.LibreOffice
+flatpak install -y flathub   org.mozilla.firefox
+flatpak install -y flathub   org.shotcut.Shotcut
+flatpak install -y flathub   org.videolan.VLC
 ```
 
 
@@ -45,37 +64,9 @@ rsync -rL --inplace /media/veracrypt1/vmware/ ~/vmware/ --delete
 
 
 
-## Step 4 - Install Apps
+## Step 4 - Manual App Installs
 
 Haven't gotten around to automating these (or in some cases, I don't know how - read below).
-
-
-
-### Flatpak
-
-Some of these are from Elementary AppCenter, the rest are from Flathub. In general, always go for Flatpak if the version is provided (or at least recommended) by the developer (so not things like Steam or Visual Studio Code).
-
-Not sure if doing the Flathub installs via command line would mess with the Elementary OS AppCenter (as in updates showing up). Also, don't know how to do AppCenter installs through the terminal.
-
-- Firefox
-- Chromium
-- Disk Usage Analyzer
-- Xournal++
-- LibreOffice
-- VLC
-- Torrential
-- Postman
-- Insomnia
-- Obsidian
-- OBS Studio
-- Typora
-
-These are no longer provided on Elementary OS 6.0 Odin as of August 11 2021, but this may change in the future; Some (specified) can be built manually:
-
-- ~~Clipped~~
-- ~~Inspektor~~
-- ~~Monitor~~
-- ~~Insomnia~~ - can be built manually.
 
 
 
@@ -86,6 +77,14 @@ These are no longer provided on Elementary OS 6.0 Odin as of August 11 2021, but
 - MailSpring
 - Steam
 - Sublime Text
+
+
+
+### Manual Build From Source
+
+As of August 2021, these are not available as as flatpaks, and need to be built from source:
+- Clipped - This does not build, error needs to be debugged.
+- Inspektor - This only builds if you uncomment the code in `Application.vala` that creates the `.desktop` shortcut.
 
 
 

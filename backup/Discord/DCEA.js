@@ -75,13 +75,18 @@ module.exports.dateToDateString = (date) => {
 // Generate a command to backup the latest messages from a server (also creates a new backup directory if it doesn't exist)
 module.exports.generateBackupCommandForServer = (DCECLIPath, DCEToken, DCEBackupPath, serverID, serverName) => {
     // Trim some args
-    if (serverName) serverName = serverName.trim()
+    if (serverName) serverName = serverName.trim().split('/').join('-')
 
     // Get the correct command to use
     const command = this.returnDiscordChatExporterCLICommand(DCECLIPath)
 
-    // Create the folder for the server if it does not exist
+    // Generate a folder for the server or find the existing one
     let backupDir = `${DCEBackupPath}/${serverName} - ${serverID}`
+    const existingBackupDir = fs.readdirSync(DCEBackupPath).filter(file => file.endsWith(` - ${serverID}`))[0]
+    if (existingBackupDir && fs.statSync(`${DCEBackupPath}/${existingBackupDir}`).isDirectory())
+        backupDir = existingBackupDir
+
+    // Generate the server folder if it does not exist
     try {
         this.ensureDirectory(backupDir)
     } catch (err) {

@@ -21,6 +21,7 @@ options=(
   "Twitter"
   "Spotify"
   "Google"
+  "EteSync"
   "Podcasts"
   "iPhone"
   "School Emails"
@@ -72,6 +73,10 @@ while [ true ]; do
       ;;
     "Google")
       "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout"
+      break
+      ;;
+    "EteSync")
+      echo "No Automation. Export data from http://localhost:37358/.web/"
       break
       ;;
     "Podcasts")

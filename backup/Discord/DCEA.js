@@ -84,7 +84,7 @@ module.exports.generateBackupCommandForServer = (DCECLIPath, DCEToken, DCEBackup
     let backupDir = `${DCEBackupPath}/${serverName} - ${serverID}`
     const existingBackupDir = fs.readdirSync(DCEBackupPath).filter(file => file.endsWith(` - ${serverID}`))[0]
     if (existingBackupDir && fs.statSync(`${DCEBackupPath}/${existingBackupDir}`).isDirectory())
-        backupDir = existingBackupDir
+        backupDir = `${DCEBackupPath}/${existingBackupDir}`
 
     // Generate the server folder if it does not exist
     try {

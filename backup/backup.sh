@@ -23,7 +23,8 @@ options=(
   "Google"
   "EteSync"
   "Podcasts"
-  "iPhone"
+  "Bitwarden"
+  "xBrowserSync"
   "School Emails"
   "Discord"
   "PS4"
@@ -83,8 +84,12 @@ while [ true ]; do
       echo "This is not automated. Export the .opml file manually."
       break
       ;;
-    "iPhone")
-      echo "This is not automated. Copy the folder manually from Windows."
+    "Bitwarden")
+      echo "This is not automated. Export manually."
+      break
+      ;;
+    "xBrowserSync")
+      echo "This is not automated. Export manually."
       break
       ;;
     "School Emails")

@@ -19,7 +19,7 @@ function usage() {
 }
 
 # Validate arguments
-if [ ! "$#" -eq 3 ]; then
+if [ ! "$#" -eq 2 ]; then
     usage
 fi
 if [ ! -d "$1" ]; then

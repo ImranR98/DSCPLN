@@ -36,6 +36,10 @@ if [ ! "$#" -eq 2 ]; then
 	usage
 fi
 files=($1)
+if [ "${#files[@]}" == 0 ]; then
+	echo >&2 "There are no files!"
+	exit 5
+fi
 for i in "${files[@]}"; do
 	if [ ! -f "$i" ]; then
 		echo >&2 "The specified file does not exist: $i."

@@ -22,12 +22,12 @@ options=(
   "Spotify"
   "Google"
   "WhatsApp"
-  "Phone"
+  "Phone (SeedVault)"
   "EteSync"
-  "Podcasts"
   "Bitwarden"
   "xBrowserSync"
   "School Emails"
+  "Podcasts"
   "Discord"
   "PS4"
 )
@@ -82,28 +82,28 @@ while [ true ]; do
       "$HERE"/WhatsApp/WhatsApp.sh /run/user/1000/gvfs/*/Internal\ shared\ storage/Android/media/com.whatsapp/WhatsApp "$MAINDIR/Backups/WhatsApp" "$MAINDIR/Museum/WhatsApp-AllMedia"
       break
       ;;
-    "Phone")
-      echo "TODO"
+    "Phone (SeedVault)")
+      "$HERE"/WhatsApp/WhatsApp.sh /run/user/1000/gvfs/*/Internal\ shared\ storage/ "$MAINDIR/Backups/Phone-SeedVault"
       break
       ;;
     "EteSync")
       echo "No Automation. Export data from http://localhost:37358/.web/"
       break
       ;;
-    "Podcasts")
-      echo "This is not automated. Export the .opml file manually."
-      break
-      ;;
     "Bitwarden")
-      echo "This is not automated. Export manually."
+      echo "This is not automated. Export manually via the app or extension (USE THE ENCRYPTED OPTION)."
       break
       ;;
     "xBrowserSync")
-      echo "This is not automated. Export manually."
+      echo "This is not automated. Export manually via the extension."
       break
       ;;
     "School Emails")
       echo "This is not automated. Export the .pst files manually using Outlook."
+      break
+      ;;
+    "Podcasts")
+      echo "This is not automated. Export the .opml file manually."
       break
       ;;
     "Discord")

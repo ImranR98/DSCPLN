@@ -21,6 +21,8 @@ options=(
   "Twitter"
   "Spotify"
   "Google"
+  "WhatsApp"
+  "Phone"
   "EteSync"
   "Podcasts"
   "Bitwarden"
@@ -74,6 +76,14 @@ while [ true ]; do
       ;;
     "Google")
       "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout"
+      break
+      ;;
+    "WhatsApp")
+      "$HERE"/WhatsApp/WhatsApp.sh /run/user/1000/gvfs/*/Internal\ shared\ storage/Android/media/com.whatsapp/WhatsApp "$MAINDIR/Backups/WhatsApp" "$MAINDIR/Museum/WhatsApp-AllMedia"
+      break
+      ;;
+    "Phone")
+      echo "TODO"
       break
       ;;
     "EteSync")

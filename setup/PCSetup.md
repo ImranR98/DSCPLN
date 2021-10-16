@@ -2,6 +2,18 @@
 
 
 
+## Step 0 - Setup Flatpak & Change Hostname
+```
+sudo apt install flatpak -y
+sudo apt install gnome-software-plugin-flatpak
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+sudo hostnamectl set-hostname ImranR-PC && # Will take effect after restart
+sudo nano /etc/hosts # Replace all instances of previous hostname with new hostname
+sudo reboot
+```
+
+
+
 ## Step 1 - Automated App Installs
 
 ```
@@ -22,33 +34,23 @@ sudo restic self-update # Version from the distro's official repo is normally ou
 
 sudo apt install libimage-exiftool-perl -y
 
-flatpak install -y appcenter com.github.bluesabre.darkbar.Locale
-flatpak install -y appcenter com.github.davidmhewitt.torrential
-flatpak install -y appcenter com.github.donadigo.eddy
-flatpak install -y appcenter com.github.manexim.insomnia
-
 flatpak install -y flathub   com.getpostman.Postman
 flatpak install -y flathub   com.github.xournalpp.xournalpp
 flatpak install -y flathub   com.obsproject.Studio
 flatpak install -y flathub   com.valvesoftware.Steam
 flatpak install -y flathub   io.typora.Typora
 flatpak install -y flathub   md.obsidian.Obsidian
-flatpak install -y flathub   org.chromium.Chromium
 flatpak install -y flathub   org.gnome.baobab
 flatpak install -y flathub   org.gnome.eog
 flatpak install -y flathub   org.libreoffice.LibreOffice
+sudo apt remove firefox -y
 flatpak install -y flathub   org.mozilla.firefox
 flatpak install -y flathub   org.shotcut.Shotcut
 flatpak install -y flathub   org.videolan.VLC
-```
-
-
-
-## Step 2 - Change Hostname
-
-```
-sudo hostnamectl set-hostname ImranR-PC && # Will take effect after restart
-sudo nano /etc/hosts # Replace all instances of previous hostname with new hostname
+flatpak install -y flathub   com.valvesoftware.Steam
+flatpak install -y flathub   com.sublimetext.three
+flatpak install -y flathub   com.visualstudio.code
+flatpak install -y flathub   org.qbittorrent.qBittorrent
 ```
 
 
@@ -58,8 +60,8 @@ sudo nano /etc/hosts # Replace all instances of previous hostname with new hostn
 ```
 mkdir ~/Main &&
 mkdir ~/vmware &&
-rsync -rL --inplace /media/veracrypt1/Main/ ~/Main/ --exclude node_modules/ --delete &&
-rsync -rL --inplace /media/veracrypt1/vmware/ ~/vmware/ --delete
+rsync -rL /media/veracrypt1/Main/ ~/Main/ --exclude node_modules/ &&
+rsync -rL /media/veracrypt1/vmware/ ~/vmware/ --delete
 ```
 
 
@@ -68,46 +70,19 @@ rsync -rL --inplace /media/veracrypt1/vmware/ ~/vmware/ --delete
 
 Haven't gotten around to automating these (or in some cases, I don't know how - read below).
 
-
-
-### Debian (No PPA Available, Only `.deb` Files)
-
+- Mullvad VPN
 - PDFSam
-- VSCode
 - MailSpring
-- Steam
-- Sublime Text
-
-
-
-### Manual Build From Source
-
-As of August 2021, these are not available as as flatpaks, and need to be built from source:
-- Clipped - This does not build, error needs to be debugged.
-- Inspektor - This only builds if you uncomment the code in `Application.vala` that creates the `.desktop` shortcut.
-
-
-
-### More
-
-Exact method is specified.
-
-- VMWare Player - install script
+- VMWare Player
+- EteSync DAV Bridge (https://github.com/etesync/etesync-dav/releases and https://github.com/etesync/etesync-dav/blob/master/README.md#installation)
 
 
 
 ## Step 5 - Configuration
 
 1. Restore `.ssh` folder and any other backed up system files.
-2. Sign in to and configure Firefox, Mailspring, and OS (calendar).
-3. Git configuration: `git config --global user.name 'Imran Remtulla'; git config --global user.email 'iremtulla15@gmail.com'`
-4. Firefox config changes:
-    ```bash
-    FFFOLDER=$(ls ~/".mozilla/firefox" | grep ".default-release$")
-    touch ~/".mozilla/firefox/"$FFFOLDER"/user.js"
-    echo 'user_pref("extensions.formautofill.available", "on");' >> ~/".mozilla/firefox/"$FFFOLDER"/user.js"
-    echo 'user_pref("extensions.formautofill.creditCards.available", true);' >> ~/".mozilla/firefox/"$FFFOLDER"/user.js"
-    echo 'user_pref("extensions.formautofill.supportedCountries", "US,CA");' >> ~/".mozilla/firefox/"$FFFOLDER"/user.js"
-    echo 'user_pref("browser.bookmarks.autoExportHTML", true);' >> ~/".mozilla/firefox/"$FFFOLDER"/user.js"
-    ```
-5. Tweak system settings as needed.
+2. Sign in to Mailspring and Ryerson Account (on OS).
+3. Install Dark Reader, Bitwarden, xBrowserSync, and uBlock Origin on Firefox.
+4. Setup EteSync.
+5. Git configuration: `git config --global user.name 'Imran Remtulla'; git config --global user.email 'iremtulla15@gmail.com'`
+6. Install and setup GSConnect, Clipboard Manager, and other shell extensions.

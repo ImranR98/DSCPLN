@@ -42,13 +42,14 @@ if [ ! -d "$2" ]; then
 fi
 
 # Run
+here="$(pwd)"
+cd "$SCRIPTDIR"
 npm i # Make sure dependencies are installed
 node "$SCRIPTDIR"/accMDToXLSX.js "$1" "$2"/Balance.xlsx
 
 if [ "$nowait" != "1" ]; then
     echo "Paste the results into Balance.xlsx. When ready, press [ENTER]."
     read choice
-    here="$(pwd)"
     cd "$2"
     git add .
     git commit . -m "$(date)"

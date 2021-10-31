@@ -29,7 +29,6 @@ fi
 
 cp -v ~/".bashrc" "$1/Other" && echo '# Backed up on '"$(date)" >>"$1/Other/.bashrc"
 
-if [ ! -d "$1/ssh" ]; then mkdir "$1/ssh"; fi
 rsync -rL ~/".ssh" "$1/Other" --delete
 echo "$(date)" >"$1/Other"/lastBackedUp.txt
 

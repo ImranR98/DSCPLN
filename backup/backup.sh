@@ -166,7 +166,6 @@ chooseScript() {
     "Spotify"
     "Google"
     "WhatsApp"
-    "Phone (SeedVault)"
     "EteSync"
     "Bitwarden"
     "xBrowserSync"
@@ -224,10 +223,6 @@ chooseScript() {
         ;;
       "WhatsApp")
         WhatsApp
-        break
-        ;;
-      "Phone (SeedVault)")
-        SeedVault
         break
         ;;
       "EteSync")

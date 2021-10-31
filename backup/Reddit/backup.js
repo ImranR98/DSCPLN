@@ -10,8 +10,10 @@ if (process.argv.length <= 2) {
     process.exit()
 }
 
+let userName = ''
+
 try {
-    let userName = process.argv[2].split('/')
+    userName = process.argv[2].split('/')
     userName = userName[userName.length - 1]
     accessCreds = JSON.parse(fs.readFileSync(`./${userName}-access.json`).toString())
 } catch (err) {
@@ -26,14 +28,14 @@ let headers = {
 
 const urlsToSave = [
     { url: 'me', api: apiUrl1 },
-    { url: 'Webninja98/overview', api: apiUrl2 },
-    { url: 'Webninja98/submitted', api: apiUrl2 },
-    { url: 'Webninja98/comments', api: apiUrl2 },
-    { url: 'Webninja98/upvoted', api: apiUrl2 },
-    { url: 'Webninja98/downvoted', api: apiUrl2 },
-    { url: 'Webninja98/hidden', api: apiUrl2 },
-    { url: 'Webninja98/saved', api: apiUrl2 },
-    { url: 'Webninja98/gilded', api: apiUrl2 }
+    { url: userName + '/overview', api: apiUrl2 },
+    { url: userName + '/submitted', api: apiUrl2 },
+    { url: userName + '/comments', api: apiUrl2 },
+    { url: userName + '/upvoted', api: apiUrl2 },
+    { url: userName + '/downvoted', api: apiUrl2 },
+    { url: userName + '/hidden', api: apiUrl2 },
+    { url: userName + '/saved', api: apiUrl2 },
+    { url: userName + '/gilded', api: apiUrl2 }
 ]
 
 const mergeListings = (listing1, listing2) => {

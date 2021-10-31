@@ -31,7 +31,3 @@ cp -v ~/".bashrc" "$1/Other" && echo '# Backed up on '"$(date)" >>"$1/Other/.bas
 
 rsync -rL ~/".ssh" "$1/Other" --delete
 echo "$(date)" >"$1/Other"/lastBackedUp.txt
-
-if [ ! -d "$1/Startup" ]; then mkdir "$1/Startup"; fi
-rsync -rL ~/".config/autostart/" "$1/Startup" --delete
-echo "$(date)" >"$1/Startup"/lastBackedUp.txt

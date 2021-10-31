@@ -41,10 +41,6 @@ balance() {
   "$HERE"/Balance/Balance.sh "$MAINDIR/Notes/Acc.md" "$MAINDIR/Documents/Balance"
 }
 
-Feedly() {
-  "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep feedly-.*-archive.zip$)" "$MAINDIR/Backups/Feedly"
-}
-
 Medium() {
   "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep medium-export.zip$)" "$MAINDIR/Backups/Medium"
 }
@@ -86,6 +82,10 @@ schoolEmails() {
 }
 
 podcasts() {
+  echo "This is not automated. Export the .opml file manually."
+}
+
+RSS() {
   echo "This is not automated. Export the .opml file manually."
 }
 
@@ -160,7 +160,6 @@ chooseScript() {
     "Reddit - WebNinja98"
     "Reddit - ImranR98"
     "Balance"
-    "Feedly"
     "Medium"
     "Twitter"
     "Spotify"
@@ -171,6 +170,7 @@ chooseScript() {
     "xBrowserSync"
     "School Emails"
     "Podcasts"
+    "RSS Feeds"
     "Discord"
     "PS4"
   )
@@ -199,10 +199,6 @@ chooseScript() {
         ;;
       "Balance")
         balance
-        break
-        ;;
-      "Feedly")
-        Feedly
         break
         ;;
       "Medium")
@@ -243,6 +239,10 @@ chooseScript() {
         ;;
       "Podcasts")
         podcasts
+        break
+        ;;
+      "RSS Feeds")
+        RSS
         break
         ;;
       "Discord")

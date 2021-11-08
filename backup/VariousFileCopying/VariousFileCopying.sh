@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Ensure dependencies
-for dep in rsync; do
+for dep in rsync git; do
 	if [ -z "$(which $dep)" ]; then
 		echo >&2 "The following dependency is missing: $dep"
 		exit 5
@@ -30,4 +30,9 @@ fi
 cp -v ~/".bashrc" "$1/Other" && echo '# Backed up on '"$(date)" >>"$1/Other/.bashrc"
 
 rsync -rL ~/".ssh" "$1/Other" --delete
-echo "$(date)" >"$1/Other"/lastBackedUp.txt
+
+here="$(pwd)"
+cd "$1/Other"
+git add .
+git commit . -m "$(date)"
+cd "$here"

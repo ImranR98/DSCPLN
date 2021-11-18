@@ -42,7 +42,7 @@ balance() {
 }
 
 Medium() {
-  "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep medium-export.zip$)" "$MAINDIR/Backups/Medium"
+  "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep medium-export-.*.zip$)" "$MAINDIR/Backups/Medium"
 }
 
 Twitter() {

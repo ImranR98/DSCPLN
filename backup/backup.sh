@@ -21,10 +21,6 @@ localFiles() {
   "$HERE"/VariousFileCopying/VariousFileCopying.sh "$MAINDIR/Backups"
 }
 
-NUCFiles() {
-  "$HERE"/SFTPBackup/SFTPBackup.sh -d "user@home.example.com" "9999" ~/"{*.sh,.bashrc,*.yml}" "$MAINDIR/Backups/NUCFiles"
-}
-
 RyersonMoon() {
   "$HERE"/SFTPBackup/SFTPBackup.sh -d "iremtull@moon.cs.ryerson.ca" "22" "." "$MAINDIR/Career/Ryerson/Moon"
 }
@@ -100,8 +96,6 @@ PS4() {
 automatedScripts() {
   echo "Local Files:"
   localFiles
-  echo "NUCFiles:"
-  NUCFiles
   echo "Ryerson Moon:"
   RyersonMoon
   echo "Reddit - WebNinja98:"
@@ -128,8 +122,6 @@ dataScripts() {
 phoneScripts() {
  echo "WhatsApp":
  WhatsApp
- echo "Phone (SeedVault):"
- SeedVault
 }
 
 manualPrompts() {
@@ -155,7 +147,6 @@ chooseScript() {
   Pick an option: "
   options=(
     "Local Files"
-    "NUC Files"
     "Ryerson Moon"
     "Reddit - WebNinja98"
     "Reddit - ImranR98"
@@ -179,10 +170,6 @@ chooseScript() {
       case "$option" in
       "Local Files")
         localFiles
-        break
-        ;;
-      "NUC Files")
-        NUCFiles
         break
         ;;
       "Ryerson Moon")

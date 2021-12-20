@@ -97,6 +97,7 @@ module.exports.generateBackupCommandForServer = (DCECLIPath, DCEToken, DCEBackup
     const backups = this.getExistingDiscordBackupDatesForServer(backupDir)
     let startDate = null
     if (backups.length > 0) startDate = backups[backups.length - 1][1]
+    if (backups.length > 1) startDate = backups[backups.length - 2][1]
 
     // Create a directory for the new backup
     let dirPath = `${backupDir}/${startDate ? this.dateToDateString(startDate).split(':').join('.') : 'start'} to ${this.dateToDateString(new Date()).split(':').join('.')}`

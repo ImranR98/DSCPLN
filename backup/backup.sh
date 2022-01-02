@@ -73,8 +73,8 @@ xBrowserSync() {
   echo "This is not automated. Export manually via the extension."
 }
 
-schoolEmails() {
-  echo "This is not automated. Export the .pst files manually using Outlook."
+emails() {
+  echo "This is not automated. Use the Protonmail tool to export that, then use Outlook to expose the others."
 }
 
 podcasts() {
@@ -131,8 +131,8 @@ manualPrompts() {
   Bitwarden
   echo "xBrowserSync:"
   xBrowserSync
-  echo "School Emails:"
-  schoolEmails
+  echo "Emails:"
+  emails
   echo "Podcasts:"
   podcasts
 }
@@ -159,7 +159,7 @@ chooseScript() {
     "EteSync"
     "Bitwarden"
     "xBrowserSync"
-    "School Emails"
+    "Emails"
     "Podcasts"
     "RSS Feeds"
     "Discord"
@@ -220,8 +220,8 @@ chooseScript() {
         xBrowserSync
         break
         ;;
-      "School Emails")
-        schoolEmails
+      "Emails")
+        emails
         break
         ;;
       "Podcasts")

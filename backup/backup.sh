@@ -25,10 +25,6 @@ RyersonMoon() {
   "$HERE"/SFTPBackup/SFTPBackup.sh -d "iremtull@moon.cs.ryerson.ca" "22" "." "$MAINDIR/Career/Ryerson/Moon"
 }
 
-RedditWebNinja98() {
-  "$HERE"/Reddit/Reddit.sh "Webninja98" "$MAINDIR/Backups/Reddit"
-}
-
 RedditImranR98() {
   "$HERE"/Reddit/Reddit.sh "ImranR98" "$MAINDIR/Backups/Reddit"
 }
@@ -98,8 +94,6 @@ automatedScripts() {
   localFiles
   echo "Ryerson Moon:"
   RyersonMoon
-  echo "Reddit - WebNinja98:"
-  RedditWebNinja98
   echo "Reddit - ImranR98:"
   RedditImranR98
   echo "Balance:"
@@ -148,7 +142,6 @@ chooseScript() {
   options=(
     "Local Files"
     "Ryerson Moon"
-    "Reddit - WebNinja98"
     "Reddit - ImranR98"
     "Balance"
     "Medium"
@@ -174,10 +167,6 @@ chooseScript() {
         ;;
       "Ryerson Moon")
         RyersonMoon
-        break
-        ;;
-      "Reddit - WebNinja98")
-        RedditWebNinja98
         break
         ;;
       "Reddit - ImranR98")

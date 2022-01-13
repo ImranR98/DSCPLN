@@ -60,3 +60,20 @@ echo "$servers"
 command="$(node "$SCRIPTDIR"/backupCommand.js "$1" "$token" "$2" "$serverid" "$servername")"
 echo "Running command: $command"
 eval "$command"
+
+# Script to remove files w/o me in them - moves "good" dirs to ~/Downloads/new and what's left in current dir can be deleted
+<<COMMENT
+mkdir ~/Downloads/new/
+for folder in *; do
+    mkdir ~/Downloads/new/"$folder"
+    for subfolder in "$folder"/*; do
+    	mkdir ~/Downloads/new/"$subfolder"
+    	for file in "$subfolder"/*.html; do
+    		if [ ! -z "$(cat "$file" | grep -E '(ImranR|inb4SHTF)')" ]; then
+    			cp "$file" ~/Downloads/new/"$subfolder"/
+    			cp -r "$file"_Files ~/Downloads/new/"$subfolder"/
+    		fi
+    	done
+    done
+done
+COMMENT

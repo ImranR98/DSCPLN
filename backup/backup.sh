@@ -50,7 +50,13 @@ Google() {
 }
 
 WhatsApp() {
-  "$HERE"/WhatsApp/WhatsApp.sh /run/user/1000/gvfs/*/Internal\ shared\ storage/Android/media/com.whatsapp/WhatsApp "$MAINDIR/Backups/WhatsApp" "$MAINDIR/Museum/WhatsApp-AllMedia"
+  DIRA=/run/user/1000/gvfs/*/Internal\ shared\ storage/Android/media/com.whatsapp/WhatsApp
+  DIRB=~/Downloads/com.whatsapp/WhatsApp
+  DIRC=~/Downloads/WhatsApp
+  DIR="$DIRA"
+  if [ ! -d "$DIR" ]; then DIR="$DIRB"; fi
+  if [ ! -d "$DIR" ]; then DIR="$DIRC"; fi
+  "$HERE"/WhatsApp/WhatsApp.sh "$DIR" "$MAINDIR/Backups/WhatsApp" "$MAINDIR/Museum/WhatsApp-AllMedia"
 }
 
 SeedVault() {

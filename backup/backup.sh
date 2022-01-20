@@ -22,7 +22,7 @@ localFiles() {
 }
 
 RyersonMoon() {
-  "$HERE"/SFTPBackup/SFTPBackup.sh -d "iremtull@moon.cs.ryerson.ca" "22" "." "$MAINDIR/Career/Ryerson/Moon"
+  "$HERE"/SFTPBackup/SFTPBackup.sh -d "iremtull@moon.cs.ryerson.ca" "22" "." "$MAINDIR/Postsecondary/Ryerson/Moon"
 }
 
 RedditImranR98() {

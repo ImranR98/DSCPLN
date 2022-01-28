@@ -92,7 +92,13 @@ Discord() {
 }
 
 PS4() {
-  "$HERE"/PS4/PS4.sh "$ps4" "$MAINDIR/Backups/PS4Saves" "$MAINDIR/Media/Unsorted-PS4Media"
+  DIR=~/Downloads/PS4
+  USBS=/run/media/"$(whoami)"
+  USB="$(ls "$USBS"/ | head -1)"
+  if [ ! -z "$USB" ] && [ -d "$USBS"/"$USB"/PS4 ]; then
+    DIR="$USBS"/"$USB"/PS4
+  fi
+  "$HERE"/PS4/PS4.sh "$DIR" "$MAINDIR/Backups/PS4Saves" "$MAINDIR/Media/Unsorted-PS4Media"
 }
 
 automatedScripts() {

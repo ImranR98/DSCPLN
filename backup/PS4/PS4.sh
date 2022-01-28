@@ -10,13 +10,12 @@ done
 
 # Usage function
 function usage() {
-    echo >&2 "Usage: $(basename $0) [-nv] [path to the 'PS4' directory] [path to PS4 save backup directory] [path to unsorted PS4 media directory]"
-    echo >&2 "Convert my accounts text file into something that can be pasted into my Balance.xlsx file, and commit the change to git."
+    echo >&2 "Usage: $(basename $0) [path to the 'PS4' directory] [path to PS4 save backup directory] [path to unsorted PS4 media directory]"
     exit 1
 }
 
 # Validate arguments
-if [ ! "$#" -eq 2 ]; then
+if [ ! "$#" -eq 3 ]; then
     usage
 fi
 if [ ! -d "$1" ]; then

@@ -26,7 +26,7 @@ RyersonMoon() {
 }
 
 RedditImranR98() {
-  "$HERE"/Reddit/Reddit.sh "ImranR98" "$MAINDIR/Backups/Reddit"
+  "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep export_.*.zip$)" "$MAINDIR/Backups/Reddit - ImranR98"
 }
 
 balance() {
@@ -47,6 +47,10 @@ Spotify() {
 
 Google() {
   "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout"
+}
+
+GoogleBrand() {
+  "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout - Brand"
 }
 
 WhatsApp() {
@@ -101,53 +105,6 @@ PS4() {
   "$HERE"/PS4/PS4.sh "$DIR" "$MAINDIR/Backups/PS4Saves" "$MAINDIR/Media/Unsorted-PS4Media"
 }
 
-automatedScripts() {
-  echo "Local Files:"
-  localFiles
-  echo "Ryerson Moon:"
-  RyersonMoon
-  echo "Reddit - ImranR98:"
-  RedditImranR98
-  echo "Balance:"
-  balance
-}
-
-dataScripts() {
-  echo "Feedly:"
-  Feedly
-  echo "Medium:"
-  Medium
-  echo "Twitter:"
-  Twitter
-  echo "Spotify:"
-  Spotify
-  echo "Google:"
-  Google
-}
-
-phoneScripts() {
- echo "WhatsApp":
- WhatsApp
-}
-
-manualPrompts() {
-  echo "EteSync:"
-  EteSync
-  echo "Bitwarden:"
-  Bitwarden
-  echo "xBrowserSync:"
-  xBrowserSync
-  echo "Emails:"
-  emails
-  echo "Podcasts:"
-  podcasts
-}
-
-listOtherScripts() {
-  echo "Discord."
-  echo "PS4."
-}
-
 chooseScript() {
   PS3="
   Pick an option: "
@@ -160,6 +117,7 @@ chooseScript() {
     "Twitter"
     "Spotify"
     "Google"
+    "Google Brand"
     "WhatsApp"
     "EteSync"
     "Bitwarden"
@@ -203,6 +161,10 @@ chooseScript() {
         ;;
       "Google")
         Google
+        break
+        ;;
+      "Google Brand")
+        GoogleBrand
         break
         ;;
       "WhatsApp")

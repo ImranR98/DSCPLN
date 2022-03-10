@@ -69,7 +69,7 @@ for folder in *; do
     for subfolder in "$folder"/*; do
     	mkdir ~/Downloads/new/"$subfolder"
     	for file in "$subfolder"/*.html; do
-    		if [ ! -z "$(cat "$file" | grep -E '(ImranR|inb4SHTF)')" ]; then
+    		if [ ! -z "$(cat "$file" | grep -E '(ImranR|inb4SHTF|Imran)')" ]; then
     			cp "$file" ~/Downloads/new/"$subfolder"/
     			cp -r "$file"_Files ~/Downloads/new/"$subfolder"/
     		fi

@@ -16,16 +16,18 @@ HERE="$(pwd)"
 function usage() {
 	echo >&2 "Usage: $(basename $0) [-d] [-g] [path(s) to .zip file(s)] [path to directory]"
 	echo >&2 "Extract a one or more .zip files into a directory."
-	echo >&2 "   -d          Delete .zip files after extraction."
-	echo >&2 "   -g          Use git to save changes (initializes an empty repo or uses an existing one)."
+	echo >&2 "   -d              Delete .zip files after extraction."
+	echo >&2 "   -g              Use git to save changes (initializes an empty repo or uses an existing one)."
+	echo >&2 "   -n [command]    Bash command whose output is appended to the extracted directory name"
 	exit 1
 }
 
 # Parse options
-while getopts dg opt; do
+while getopts "dgn:" opt; do
 	case $opt in
 	d) delete=1 ;;
 	g) git=1 ;;
+	n) nameCommand="$OPTARG" ;;
 	\?) usage ;;
 	esac
 done
@@ -47,19 +49,6 @@ for i in "${files[@]}"; do
 	fi
 done
 
-# Prepare the directory and git repo if required
-if [ ! -d "$2" ]; then
-	echo "Created backup directory at $2."
-	mkdir "$2"
-fi
-if [ "$git" == "1" ] && [ ! -d "$2/.git" ]; then
-	cd "$2"
-	git init
-	git add .
-	git commit . -m "INIT - $(date)"
-	cd "$HERE"
-fi
-
 # Create a temp. folder to unzip into (and register a trap to cleanup the temp. folder)
 tempfolder=$(mktemp -d 2>/dev/null || mktemp -d -t 'tempfolder')
 if [ -z "$tempfolder" ] || [ ! -d "$tempfolder" ]; then
@@ -76,18 +65,41 @@ for i in "${files[@]}"; do
 	unzip -o "$i" -d "$tempfolder"
 done
 
+# Run the name command (if any) the temp dir to obtain a string, then append that string to the final dir name (else, use the original name)
+cd "$tempfolder"
+toAppend="$(eval "$nameCommand")"
+if [ ! -z "$toAppend" ]; then
+	finalDir=""$2" - "$toAppend""
+else
+	finalDir="$2"
+fi
+cd "$HERE"
+
 # Run a node script to rename and files ending with dots (these may cause issues in some situations)
 node "$SCRIPTDIR"/renameFilesEndingWithDot.js "$tempfolder"
 
+# Prepare the directory and git repo if required
+if [ ! -d "$finalDir" ]; then
+	echo "Created backup directory at $finalDir."
+	mkdir "$finalDir"
+fi
+if [ "$git" == "1" ] && [ ! -d "$finalDir/.git" ]; then
+	cd "$finalDir"
+	git init
+	git add .
+	git commit . -m "INIT - $(date)"
+	cd "$HERE"
+fi
+
 # Sync the temp. folder with the backup folder while maintaining the .git folder if required
 if [ ! "$git" == "1" ]; then
-	rsync -rL "$tempfolder/" "$2" --delete
+	rsync -rL "$tempfolder/" "$finalDir" --delete
 else
 	if [ -d "$tempfolder/.git" ]; then
 		echo >&2 "The unzipped directory contains a .git directory at its root, which cannot be copied over while the -g option is in use as it would overwrite the existing .git folder."
 		exit 4
 	else
-		rsync -rL "$tempfolder/" "$2" --delete --exclude '/.git/'
+		rsync -rL "$tempfolder/" "$finalDir" --delete --exclude '/.git/'
 	fi
 fi
 
@@ -99,11 +111,11 @@ if [ "$delete" == "1" ]; then
 fi
 
 # Save the extraction date in a file
-echo "$(date)" >"$2"/lastBackedUp.txt
+echo "$(date)" > "$finalDir"/lastBackedUp.txt
 
 # Commit to git if required and save the date of extraction in the commit message as well
 if [ "$git" == "1" ]; then
-	cd "$2"
+	cd "$finalDir"
 	git add .
 	git commit . -m "$(date)"
 	cd "$HERE"

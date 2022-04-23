@@ -34,7 +34,7 @@ balance() {
 }
 
 Medium() {
-  "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep medium-export-.*.zip$)" "$MAINDIR/Backups/Medium"
+  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'awk -F '"'"'<'"'"' '"'"'{ print $15 }'"'"' profile/profile.html | awk -F '"'"'>'"'"' '"'"'{ print $2 }'"'"' | awk NF | tail -c +2' "$(find "$ZIPSDIR/" | grep medium-export-.*.zip$)" "$MAINDIR/Backups/Medium"
 }
 
 Twitter() {
@@ -46,11 +46,7 @@ Spotify() {
 }
 
 Google() {
-  "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout"
-}
-
-GoogleBrand() {
-  "$HERE"/ExtractZips/ExtractZips.sh -d "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout - Brand"
+  "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout"
 }
 
 WhatsApp() {
@@ -117,7 +113,6 @@ chooseScript() {
     "Twitter"
     "Spotify"
     "Google"
-    "Google Brand"
     "WhatsApp"
     "EteSync"
     "Bitwarden"
@@ -161,10 +156,6 @@ chooseScript() {
         ;;
       "Google")
         Google
-        break
-        ;;
-      "Google Brand")
-        GoogleBrand
         break
         ;;
       "WhatsApp")

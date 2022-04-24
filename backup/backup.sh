@@ -25,8 +25,8 @@ RyersonMoon() {
   "$HERE"/SFTPBackup/SFTPBackup.sh -d "iremtull@moon.cs.ryerson.ca" "22" "." "$MAINDIR/Postsecondary/Ryerson/Moon"
 }
 
-RedditImranR98() {
-  "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep export_.*.zip$)" "$MAINDIR/Backups/Reddit - ImranR98"
+Reddit() {
+  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep "account name," statistics.csv | tail -c +14 | head -c -2' "$(find "$ZIPSDIR/" | grep export_.*.zip$)" "$MAINDIR/Backups/Reddit"
 }
 
 balance() {
@@ -38,7 +38,7 @@ Medium() {
 }
 
 Twitter() {
-  "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep twitter.*.zip$)" "$MAINDIR/Backups/Twitter"
+  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "accountId\" : \".*\"" data/account.js | tail -c +15 | head -c -2' "$(find "$ZIPSDIR/" | grep twitter.*.zip$)" "$MAINDIR/Backups/Twitter"
 }
 
 Spotify() {
@@ -46,7 +46,7 @@ Spotify() {
 }
 
 Google() {
-  "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google Takeout"
+  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo '"'"': ".*@'"'"' Takeout/Profile/Profile.json | head -1 | tail -c +4 | head -c -2' "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google"
 }
 
 WhatsApp() {
@@ -107,7 +107,7 @@ chooseScript() {
   options=(
     "Local Files"
     "Ryerson Moon"
-    "Reddit - ImranR98"
+    "Reddit"
     "Balance"
     "Medium"
     "Twitter"
@@ -134,8 +134,8 @@ chooseScript() {
         RyersonMoon
         break
         ;;
-      "Reddit - ImranR98")
-        RedditImranR98
+      "Reddit")
+        Reddit
         break
         ;;
       "Balance")

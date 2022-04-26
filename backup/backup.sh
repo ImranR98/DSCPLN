@@ -42,7 +42,7 @@ Twitter() {
 }
 
 Spotify() {
-  "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$ZIPSDIR/" | grep my_spotify_data.zip$)" "$MAINDIR/Backups/Spotify"
+  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "username\": \".*\"" MyData/Userdata.json | tail -c +13 | head -c -2' "$(find "$ZIPSDIR/" | grep my_spotify_data.zip$)" "$MAINDIR/Backups/Spotify"
 }
 
 Google() {

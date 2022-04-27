@@ -27,12 +27,12 @@ if [ ! -d "$1" ]; then
     exit 2
 fi
 
-cp -v ~/".bashrc" "$1/Other" && echo '# Backed up on '"$(date)" >>"$1/Other/.bashrc"
+cp -v ~/".bashrc" "$1/Local Files" && echo '# Backed up on '"$(date)" >>"$1/Local Files/.bashrc"
 
-rsync -rL ~/".ssh" "$1/Other" --delete
+rsync -rL ~/".ssh" "$1/Local Files" --delete
 
 here="$(pwd)"
-cd "$1/Other"
+cd "$1/Local Files"
 git add .
 git commit . -m "$(date)"
 cd "$here"

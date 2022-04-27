@@ -56,7 +56,7 @@ WhatsApp() {
   DIR="$DIRA"
   if [ ! -d "$DIR" ]; then DIR="$DIRB"; fi
   if [ ! -d "$DIR" ]; then DIR="$DIRC"; fi
-  "$HERE"/WhatsApp/WhatsApp.sh "$DIR" "$MAINDIR/Backups/WhatsApp" "$MAINDIR/Museum/WhatsApp-AllMedia"
+  "$HERE"/WhatsApp/WhatsApp.sh "$DIR" "$MAINDIR/Backups/WhatsApp" "$MAINDIR/Backups/Archive/WhatsApp-AllMedia"
 }
 
 SeedVault() {

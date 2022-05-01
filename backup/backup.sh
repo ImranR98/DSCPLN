@@ -21,10 +21,6 @@ localFiles() {
   "$HERE"/VariousFileCopying/VariousFileCopying.sh "$MAINDIR/Backups"
 }
 
-RyersonMoon() {
-  "$HERE"/SFTPBackup/SFTPBackup.sh -d "iremtull@moon.cs.ryerson.ca" "22" "." "$MAINDIR/Postsecondary/Ryerson/Moon"
-}
-
 Reddit() {
   "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep "account name," statistics.csv | tail -c +14 | head -c -2' "$(find "$ZIPSDIR/" | grep export_.*.zip$)" "$MAINDIR/Backups/Reddit"
 }
@@ -106,7 +102,6 @@ chooseScript() {
   Pick an option: "
   options=(
     "Local Files"
-    "Ryerson Moon"
     "Reddit"
     "Balance"
     "Medium"
@@ -128,10 +123,6 @@ chooseScript() {
       case "$option" in
       "Local Files")
         localFiles
-        break
-        ;;
-      "Ryerson Moon")
-        RyersonMoon
         break
         ;;
       "Reddit")

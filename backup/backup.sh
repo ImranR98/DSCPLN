@@ -26,7 +26,7 @@ Reddit() {
 }
 
 balance() {
-  "$HERE"/Balance/Balance.sh "$MAINDIR/Notes/Acc.md" "$MAINDIR/Documents/Balance"
+  "$HERE"/Balance/Balance.sh "$MAINDIR/Documents/Balance"
 }
 
 Medium() {

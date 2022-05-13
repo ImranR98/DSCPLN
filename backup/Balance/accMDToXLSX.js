@@ -46,8 +46,6 @@ convertGoogleKeepHTMLtoLines = (googleKeepHTMLFilePath) => {
     return line.split('<br>')
 }
 
-getLinesFromMD = (MDFilePath) => fs.readFileSync(MDFilePath).toString().split('\n').filter((line, index) => !!line.trim() && index > 0)
-
 // Takes a single line of text and outputs an item
 processLine = (line) => {
     try {
@@ -121,6 +119,8 @@ processLine = (line) => {
     }
 
 }
+
+preProcessLines = (lines) => lines.split('\n').filter((line, index) => !!line.trim() && index > 0)
 
 // Takes an array of strings and outputs an array of items - if an item does not have a date, the last item's date is used
 processLines = (lines) => {
@@ -232,16 +232,16 @@ filterItemsByLastXLSXEntry = (items, worksheet) => {
 
 // Actual run
 if (process.argv.length <= 3) {
-    console.log('Please provide the path of the Acc.md and Balance.xlsx files as arguments, in that order.')
+    console.log('Please provide the Acc text and Balance.xlsx files as arguments, in that order.')
     process.exit()
 }
-let MDFilePath = process.argv[2]
+let accText = process.argv[2]
 let balanceXLSXLocation = process.argv[3]
-console.log('Using Acc.md to generate text to paste into Balance.xlsx...')
+console.log('Using provided Acc text to generate text to paste into Balance.xlsx...')
 console.log(convertItemsToExcelReadyText(
     filterItemsByLastXLSXEntry(
         processLines(
-            getLinesFromMD(MDFilePath)
+            preProcessLines(accText)
         ),
         XLSX.readFile(balanceXLSXLocation).Sheets['Transactions']
     )

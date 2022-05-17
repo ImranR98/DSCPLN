@@ -10,7 +10,7 @@ localFiles() {
   SOURCES=(~/".bashrc" ~/".ssh")
   for SOURCE in "${SOURCES[@]}"; do
     echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
-    "$HERE"/gitCopy/gitCopy.sh "$SOURCE" "$TARGET"
+    "$HERE"/GitCopy/GitCopy.sh "$SOURCE" "$TARGET"
   done
   echo "Done."
 }

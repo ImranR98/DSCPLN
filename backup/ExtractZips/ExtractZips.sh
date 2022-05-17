@@ -87,7 +87,7 @@ if [ "$git" == "1" ] && [ ! -d "$finalDir/.git" ]; then
 	cd "$finalDir"
 	git init
 	git add .
-	git commit . -m "INIT - $(date)"
+	git commit . -q -m "INIT - $(date)"
 	cd "$HERE"
 fi
 
@@ -117,6 +117,6 @@ echo "$(date)" > "$finalDir"/lastBackedUp.txt
 if [ "$git" == "1" ]; then
 	cd "$finalDir"
 	git add .
-	git commit . -m "$(date)"
+	git commit . -q -m "$(date)"
 	cd "$HERE"
 fi

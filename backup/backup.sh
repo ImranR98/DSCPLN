@@ -3,57 +3,71 @@
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 MAINDIR=~/"Main"
-ZIPSDIR=~/"Downloads"
-
-usage() {
-    echo >&2 "Usage: $(basename $0) [-adpmoh]"
-    echo >&2 "Run scripts to backup various things (with varying degrees of automation)."
-    echo >&2 "   -a          Run all fully or mostly automated scripts."
-    echo >&2 "   -d          Run all scripts that require some data to have been prepared in "$ZIPSDIR"."
-    echo >&2 "   -p          Run all scripts that require a phone to be connected via USB."
-    echo >&2 "   -m          Show prompts for all backup processes that must be done manually."
-    echo >&2 "   -o          List all scripts not covered by other options."
-    echo >&2 "After any options are executed, the user is asked to pick an individual script in a continuous loop."
-    exit 1
-}
+EXPTDIR=~/"Downloads"
 
 localFiles() {
-  "$HERE"/gitCopy/gitCopy.sh ~/".bashrc" "$MAINDIR/Backups/Local Files"
-  "$HERE"/gitCopy/gitCopy.sh ~/".ssh" "$MAINDIR/Backups/Local Files"
+  TARGET="$MAINDIR/Backups/Local Files"
+  SOURCES=(~/".bashrc" ~/".ssh")
+  for SOURCE in "${SOURCES[@]}"; do
+    echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
+    "$HERE"/gitCopy/gitCopy.sh "$SOURCE" "$TARGET"
+  done
+  echo "Done."
 }
 
 Reddit() {
-  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep "account name," statistics.csv | tail -c +14 | head -c -2' "$(find "$ZIPSDIR/" | grep export_.*.zip$)" "$MAINDIR/Backups/Reddit"
+  BACKUPSDIR="$MAINDIR/Backups"
+  echo "Attempting to find a Reddit export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep "account name," statistics.csv | tail -c +14 | head -c -2' "$(find "$EXPTDIR/" | grep export_.*.zip$)" "$BACKUPSDIR/Reddit"
+  echo "Done."
 }
 
 balance() {
-  "$HERE"/Balance/Balance.sh "$MAINDIR/Documents/Balance"
+  BALANCEDIR="$MAINDIR/Documents/Balance"
+  echo "Attempting to parse user input into a format used by Balance.xlsx, then commiting any changes in '"$BALANCEDIR"' to Git upon user confirmation..."
+  "$HERE"/Balance/Balance.sh "$BALANCEDIR"
+  echo "Done."
 }
 
 Medium() {
-  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'awk -F '"'"'<'"'"' '"'"'{ print $15 }'"'"' profile/profile.html | awk -F '"'"'>'"'"' '"'"'{ print $2 }'"'"' | awk NF | tail -c +2' "$(find "$ZIPSDIR/" | grep medium-export-.*.zip$)" "$MAINDIR/Backups/Medium"
+  BACKUPSDIR="$MAINDIR/Backups"
+  echo "Attempting to find a Medium export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'awk -F '"'"'<'"'"' '"'"'{ print $15 }'"'"' profile/profile.html | awk -F '"'"'>'"'"' '"'"'{ print $2 }'"'"' | awk NF | tail -c +2' "$(find "$EXPTDIR/" | grep medium-export-.*.zip$)" "$BACKUPSDIR/Medium"
+  echo "Done."
 }
 
 Twitter() {
-  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "accountId\" : \".*\"" data/account.js | tail -c +15 | head -c -2' "$(find "$ZIPSDIR/" | grep twitter.*.zip$)" "$MAINDIR/Backups/Twitter"
+  BACKUPSDIR="$MAINDIR/Backups"
+  echo "Attempting to find a Twitter export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "accountId\" : \".*\"" data/account.js | tail -c +15 | head -c -2' "$(find "$EXPTDIR/" | grep twitter.*.zip$)" "$BACKUPSDIR/Twitter"
+  echo "Done."
 }
 
 Spotify() {
-  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "username\": \".*\"" MyData/Userdata.json | tail -c +13 | head -c -2' "$(find "$ZIPSDIR/" | grep my_spotify_data.zip$)" "$MAINDIR/Backups/Spotify"
+  BACKUPSDIR="$MAINDIR/Backups"
+  echo "Attempting to find a Spotify export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "username\": \".*\"" MyData/Userdata.json | tail -c +13 | head -c -2' "$(find "$EXPTDIR/" | grep my_spotify_data.zip$)" "$BACKUPSDIR/Spotify"
+  echo "Done."
 }
 
 Google() {
-  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo '"'"': ".*@'"'"' Takeout/Profile/Profile.json | head -1 | tail -c +4 | head -c -2' "$(find "$ZIPSDIR" | grep takeout-.*.zip$)" "$MAINDIR/Backups/Google"
+  BACKUPSDIR="$MAINDIR/Backups"
+  echo "Attempting to find a Google takeout in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+  "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo '"'"': ".*@'"'"' Takeout/Profile/Profile.json | head -1 | tail -c +4 | head -c -2' "$(find "$EXPTDIR" | grep takeout-.*.zip$)" "$BACKUPSDIR/Google"
+  echo "Done."
 }
 
 WhatsApp() {
-  DIRA=/run/user/1000/gvfs/*/Internal\ shared\ storage/Android/media/com.whatsapp/WhatsApp
-  DIRB=~/Downloads/com.whatsapp/WhatsApp
-  DIRC=~/Downloads/WhatsApp
+  WSDIR="$MAINDIR/Backups/WhatsApp"
+  WSAMDIR="$MAINDIR/Backups/Archive/WhatsApp-AllMedia"
+  echo "Attempting to find a WhatsApp directory in '"$EXPTDIR"' and copy it to '"$WSDIR"' and '"$WSAMDIR"' (if either already exists, the former is replaced and the latter is merged)... "
+  DIRB="$EXPTDIR"/com.whatsapp/WhatsApp
+  DIRC="$EXPTDIR"/WhatsApp
   DIR="$DIRA"
   if [ ! -d "$DIR" ]; then DIR="$DIRB"; fi
   if [ ! -d "$DIR" ]; then DIR="$DIRC"; fi
-  "$HERE"/WhatsApp/WhatsApp.sh "$DIR" "$MAINDIR/Backups/WhatsApp" "$MAINDIR/Backups/Archive/WhatsApp-AllMedia"
+  "$HERE"/WhatsApp/WhatsApp.sh "$DIR" "$WSDIR" "$WSAMDIR"
+  echo "Done."
 }
 
 EteSync() {
@@ -81,17 +95,24 @@ RSS() {
 }
 
 Discord() {
-  "$HERE"/Discord/Discord.sh ~/"DiscordChatExporter.CLI" "$MAINDIR/Backups/Discord"
+  CLI=~/"DiscordChatExporter.CLI"
+  DIR="$MAINDIR/Backups/Discord"
+  echo "Attempting to find the DiscordChatExporter CLI app in '"$CLI"' and use it to allow the user to export chats to '"$DIR"'..."
+  "$HERE"/Discord/Discord.sh "$CLI" "$DIR"
 }
 
 PS4() {
-  DIR=~/Downloads/PS4
   USBS=/run/media/"$(whoami)"
+  SAVESDIR="$MAINDIR/Backups/PS4Saves"
+  MEDIADIR="$MAINDIR/Media/Unsorted-PS4Media"
+  echo "Attempting to find a PS4 directory in '"$EXPTDIR"' or a subdirectory of '"$USBS"' and copy save files to '"$SAVESDIR"' and media files to '"$MEDIADIR"'... "
+  DIR="$EXPTDIR"/PS4
   USB="$(ls "$USBS"/ | head -1)"
   if [ ! -z "$USB" ] && [ -d "$USBS"/"$USB"/PS4 ]; then
     DIR="$USBS"/"$USB"/PS4
   fi
-  "$HERE"/PS4/PS4.sh "$DIR" "$MAINDIR/Backups/PS4Saves" "$MAINDIR/Media/Unsorted-PS4Media"
+  "$HERE"/PS4/PS4.sh "$DIR" "$SAVESDIR" "$MEDIADIR"
+  echo "Done."
 }
 
 chooseScript() {
@@ -193,17 +214,6 @@ chooseScript() {
 }
 
 echo "ImranR Backup"
-
-while getopts adpmo opt; do
-    case $opt in
-    a) automatedScripts ;;
-    d) dataScripts ;;
-    p) phoneScripts ;;
-    m) manualPrompts ;;
-    o) listOtherScripts ;;
-    \?) usage ;;
-    esac
-done
-shift $((OPTIND - 1))
-
+echo "Run scripts to backup various things (with varying degrees of automation)"
+echo ""
 chooseScript

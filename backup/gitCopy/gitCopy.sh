@@ -48,5 +48,5 @@ here="$(pwd)"
 cd "$TARGET"
 git add .
 MESSAGE="$(date)"' - Updated: '"$SOURCE_NAME"
-git commit . -m "$MESSAGE"
+git commit . -q -m "$MESSAGE"
 cd "$here"

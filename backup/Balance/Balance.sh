@@ -41,7 +41,7 @@ echo "Paste the above results into Balance.xlsx. When ready, press [ENTER]."
 read choice
 cd "$1"
 git add .
-git commit . -m "$(date)"
+git commit . -q -m "$(date)"
 cd "$here"
 
 echo "

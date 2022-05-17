@@ -37,12 +37,9 @@ fi
 TEMPDIR="$(mktemp -d)"
 TEMPWAD="$TEMPDIR/"$(basename "$1")""
 
-echo "Copying WhatsApp data to a temporary directory..."
 cp -r "$1" "$TEMPWAD"
-echo "Saving to backup directory.."
-rsync -a "$TEMPWAD"/ "$2" --delete
+rsync -aq "$TEMPWAD"/ "$2" --delete
 echo "$(date)" > "$2"/lastBackedUp.txt
-echo "Saving to all-media backup directory..."
 rm -r "$TEMPWAD"
-rsync -a "$2"/ "$3"
+rsync -aq "$2"/ "$3"
 echo "$(date)" > "$3"/lastBackedUp.txt

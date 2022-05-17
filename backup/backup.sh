@@ -18,7 +18,8 @@ usage() {
 }
 
 localFiles() {
-  "$HERE"/VariousFileCopying/VariousFileCopying.sh "$MAINDIR/Backups"
+  "$HERE"/gitCopy/gitCopy.sh ~/".bashrc" "$MAINDIR/Backups/Local Files"
+  "$HERE"/gitCopy/gitCopy.sh ~/".ssh" "$MAINDIR/Backups/Local Files"
 }
 
 Reddit() {
@@ -53,10 +54,6 @@ WhatsApp() {
   if [ ! -d "$DIR" ]; then DIR="$DIRB"; fi
   if [ ! -d "$DIR" ]; then DIR="$DIRC"; fi
   "$HERE"/WhatsApp/WhatsApp.sh "$DIR" "$MAINDIR/Backups/WhatsApp" "$MAINDIR/Backups/Archive/WhatsApp-AllMedia"
-}
-
-SeedVault() {
-  "$HERE"/SeedVault/SeedVault.sh /run/user/1000/gvfs/*/Internal\ shared\ storage/ "$MAINDIR/Backups/Phone-SeedVault"
 }
 
 EteSync() {

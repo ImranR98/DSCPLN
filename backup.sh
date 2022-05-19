@@ -1,29 +1,15 @@
 #!/bin/bash
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-
+# Define these as needed (MAINDIR should also have various subdirectories as required by the relevant scripts)
 MAINDIR=~/"Main"
 EXPTDIR=~/"Downloads"
 
-EteSync() {
-  echo "No Automation. Export data from http://localhost:37358/.web/"
-}
-
-xBrowserSync() {
-  echo "This is not automated. Export manually via the extension."
-}
-
-podcasts() {
-  echo "This is not automated. Export the .opml file manually."
-}
-
-RSS() {
-  echo "This is not automated. Export the .opml file manually."
-}
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 chooseScript() {
+  # Ensure the script choice list below is in sync with the case clause further below where scripts are defined.
   PS3="
-  Pick an option: "
+  Pick an backup script to run: "
   options=(
     "Local Files"
     "Balance"
@@ -45,6 +31,9 @@ chooseScript() {
       case "$option" in
 
       "Local Files")
+        # Some local files (like ~/.ssh and ~/.bashrc) must exist in specific locations to be usable, so cannot live directly in MAINDIR.
+        # Thus they need to be periodically backed up to MAINDIR.
+        # This is fully automated.
         TARGET="$MAINDIR/Backups/Local Files"
         SOURCES=(~/".bashrc" ~/".ssh")
         for SOURCE in "${SOURCES[@]}"; do
@@ -55,6 +44,10 @@ chooseScript() {
         ;;
 
       "Balance")
+        # All finances are tracked in a Balance.xlsx file.
+        # When a transaction occurs, details are immediately noted down in a notes app (as Excel editing on a phone is inconvenient and would require file syncing).
+        # Thus the notes need to be periodically converted into a format that can be pasted in to Balance.xlsx.
+        # This is not fully automated; the user must input transaction text, then copy/paste the script's output into Balance.xlsx.
         BALANCEDIR="$MAINDIR/Documents/Balance"
         echo "Attempting to parse user input into a format used by Balance.xlsx, then commiting any changes in '"$BALANCEDIR"' to Git upon user confirmation..."
         "$HERE"/Balance/Balance.sh "$BALANCEDIR"
@@ -62,11 +55,19 @@ chooseScript() {
         ;;
 
       "Bitwarden")
-        echo "This is not automated. Export manually via the app or extension (USE THE ENCRYPTED OPTION)."
+        # Bitwarden is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # Due to the sensitive nature of this service's data, this needs to be saved into an encrypted container.
+        # This is not automated.
+        echo "Export manually via the app or extension and place in an encrypted container."
         break
         ;;
 
       "Other Manual Exports")
+        # Various cloud services are used for management of contacts, calendar events, tasks, podcast and RSS feeds, and notes.
+        # Thus, data from these services must be periodically exported and backed up.
+        # These have been lumped into one (file extension based) script for convenience as exporting them only takes a few minutes.
+        # But this script is error-prone; breaking it up into service-specific scripts may be a good idea.
+        # This is not fully automated; files must be manually placed in EXPTDIR and renamed for consistency.
         TARGET="$MAINDIR/Backups/Manual"
         EXTS=(ics vcf opml json jex)
         echo "Will attempt to copy all files in '"$EXPTDIR"' with specific extensions ("${EXTS[@]}") to '"$TARGET"', then commit changes to Git."
@@ -84,6 +85,11 @@ chooseScript() {
         ;;
 
       "WhatsApp")
+        # WhatsApp data is used on a phone and so cannot live directly in MAINDIR. Thus the data needs to be periodically backed up.
+        # Due to the long-term accumulation of media files in WhatsApp, two backup copies are maintained:
+        # - One with all accumulated media files.
+        # - One containing only those from the latest backup.
+        # This is not fully automated. The WhatsApp directory must be manually copied to EXPTDIR.
         WSDIR="$MAINDIR/Backups/WhatsApp"
         WSAMDIR="$MAINDIR/Backups/Archive/WhatsApp-AllMedia"
         echo "Attempting to find a WhatsApp directory in '"$EXPTDIR"' and copy it to '"$WSDIR"' and '"$WSAMDIR"' (if either already exists, the former is replaced and the latter is merged)... "
@@ -97,11 +103,15 @@ chooseScript() {
         ;;
 
       "Emails")
-        echo "This is not automated. Use the Protonmail tool to export that, then use Outlook to expose the others."
+        # Emails are used on email servers and so cannot live directly in MAINDIR. Thus emails must be periodically exported and backed up.
+        # This is not automated.
+        echo "This is not automated. Use the Protonmail export tool and/or Microsoft Outlook to export emails."
         break
         ;;
 
       "Discord")
+        # Discord is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is not fully automated; the user must manually obtain a Discord access token, then manually select the chats to back up.
         CLI=~/"DiscordChatExporter.CLI"
         DIR="$MAINDIR/Backups/Discord"
         echo "Attempting to find the DiscordChatExporter CLI app in '"$CLI"' and use it to allow the user to export chats to '"$DIR"'..."
@@ -110,6 +120,8 @@ chooseScript() {
         ;;
 
       "Medium")
+        # Medium is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Medium export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'awk -F '"'"'<'"'"' '"'"'{ print $15 }'"'"' profile/profile.html | awk -F '"'"'>'"'"' '"'"'{ print $2 }'"'"' | awk NF | tail -c +2' "$(find "$EXPTDIR/" | grep medium-export-.*.zip$)" "$BACKUPSDIR/Medium"
@@ -117,6 +129,8 @@ chooseScript() {
         ;;
 
       "Google")
+        # Google is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Google takeout in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo '"'"': ".*@'"'"' Takeout/Profile/Profile.json | head -1 | tail -c +4 | head -c -2' "$(find "$EXPTDIR" | grep takeout-.*.zip$)" "$BACKUPSDIR/Google"
@@ -124,6 +138,8 @@ chooseScript() {
         ;;
 
       "Twitter")
+        # Twitter is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Twitter export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "accountId\" : \".*\"" data/account.js | tail -c +15 | head -c -2' "$(find "$EXPTDIR/" | grep twitter.*.zip$)" "$BACKUPSDIR/Twitter"
@@ -131,6 +147,8 @@ chooseScript() {
         ;;
 
       "Spotify")
+        # Spotify is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Spotify export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "username\": \".*\"" MyData/Userdata.json | tail -c +13 | head -c -2' "$(find "$EXPTDIR/" | grep my_spotify_data.zip$)" "$BACKUPSDIR/Spotify"
@@ -138,6 +156,8 @@ chooseScript() {
         ;;
 
       "Netflix")
+        # Netflix is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Spotify export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'cat ACCOUNT/AccountDetails.csv | head -2 | tail -1 | awk -F , "{print \$3}" | head -c -2 | tail -c +2' "$(find "$EXPTDIR/" | grep netflix-report.zip$)" "$BACKUPSDIR/Netflix"
@@ -145,6 +165,8 @@ chooseScript() {
         ;;
 
       "Reddit")
+        # Reddit is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Netflix export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep "account name," statistics.csv | tail -c +14 | head -c -2' "$(find "$EXPTDIR/" | grep export_.*.zip$)" "$BACKUPSDIR/Reddit"
@@ -152,6 +174,8 @@ chooseScript() {
         ;;
 
       "PS4")
+        # PS4 save data and media is used on a PS4 and so cannot live directly in MAINDIR. Thus the data needs to be periodically backed up.
+        # This is not fully automated. The PS4 data must be manually exported and the resulting directory must be manually copied to EXPTDIR.
         USBS=/run/media/"$(whoami)"
         SAVESDIR="$MAINDIR/Backups/PS4Saves"
         MEDIADIR="$MAINDIR/Media/Unsorted-PS4Media"
@@ -177,6 +201,6 @@ chooseScript() {
 }
 
 echo "ImranR Backup"
-echo "Run scripts to backup various things (with varying degrees of automation)"
+echo "My CLI tool to help automate the backup process for various local and cloud-based files. Some manual steps involved."
 echo ""
 chooseScript

@@ -62,7 +62,7 @@ trap cleanup EXIT
 
 # Unzip into the temp. folder
 for i in "${files[@]}"; do
-	unzip -o "$i" -d "$tempfolder"
+	unzip -q -o "$i" -d "$tempfolder"
 done
 
 # Run the name command (if any) the temp dir to obtain a string, then append that string to the final dir name (else, use the original name)
@@ -93,13 +93,13 @@ fi
 
 # Sync the temp. folder with the backup folder while maintaining the .git folder if required
 if [ ! "$git" == "1" ]; then
-	rsync -rL "$tempfolder/" "$finalDir" --delete
+	rsync -rLq "$tempfolder/" "$finalDir" --delete
 else
 	if [ -d "$tempfolder/.git" ]; then
 		echo >&2 "The unzipped directory contains a .git directory at its root, which cannot be copied over while the -g option is in use as it would overwrite the existing .git folder."
 		exit 4
 	else
-		rsync -rL "$tempfolder/" "$finalDir" --delete --exclude '/.git/'
+		rsync -rLq "$tempfolder/" "$finalDir" --delete --exclude '/.git/'
 	fi
 fi
 

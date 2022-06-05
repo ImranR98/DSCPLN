@@ -2,10 +2,10 @@
 
 # Ensure dependencies
 for dep in node; do
-	if [ -z "$(which $dep)" ]; then
-		echo >&2 "The following dependency is missing: $dep"
-		exit 5
-	fi
+    if [ -z "$(which $dep)" ]; then
+        echo >&2 "The following dependency is missing: $dep"
+        exit 5
+    fi
 done
 
 # Store script location
@@ -57,7 +57,10 @@ servername="$(echo "$servers" | head -$servernum | tail -1 | awk '{ s = ""; for 
 echo "$serverid and $servername"
 echo "$servers"
 
-command="$(node "$SCRIPTDIR"/backupCommand.js "$1" "$token" "$2" "$serverid" "$servername")"
+echo "Enter the default start date (or leave empty):"
+read startDate
+
+command="$(node "$SCRIPTDIR"/backupCommand.js "$1" "$token" "$2" "$serverid" "$servername" "$startDate")"
 echo "Running command: $command"
 eval "$command"
 

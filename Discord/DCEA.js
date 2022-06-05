@@ -73,7 +73,7 @@ module.exports.dateToDateString = (date) => {
 }
 
 // Generate a command to backup the latest messages from a server (also creates a new backup directory if it doesn't exist)
-module.exports.generateBackupCommandForServer = (DCECLIPath, DCEToken, DCEBackupPath, serverID, serverName) => {
+module.exports.generateBackupCommandForServer = (DCECLIPath, DCEToken, DCEBackupPath, serverID, serverName, defaultStartDate = null) => {
     // Trim some args
     if (serverName) serverName = serverName.trim().split('/').join('-')
 
@@ -98,6 +98,14 @@ module.exports.generateBackupCommandForServer = (DCECLIPath, DCEToken, DCEBackup
     let startDate = null
     if (backups.length > 0) startDate = backups[backups.length - 1][1]
     if (backups.length > 1) startDate = backups[backups.length - 2][1]
+
+    if (!startDate && !!defaultStartDate) {
+        try {
+            startDate = new Date(defaultStartDate)
+        } catch {
+
+        }
+    }
 
     // Create a directory for the new backup
     let dirPath = `${backupDir}/${startDate ? this.dateToDateString(startDate).split(':').join('.') : 'start'} to ${this.dateToDateString(new Date()).split(':').join('.')}`

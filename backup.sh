@@ -72,7 +72,7 @@ chooseScript() {
         TARGET="$MAINDIR/Backups/Manual"
         EXTS=(ics vcf opml json jex)
         echo "Will attempt to copy all files in '"$EXPTDIR"' with specific extensions ("${EXTS[@]}") to '"$TARGET"', then commit changes to Git."
-        echo "Note: This is meant for Contacts, Calendar (EteSync exports from http://localhost:37358/.web/), Bookmarks, Podcasts, RSS, and Joplin. Since this is done by file extension, 'missing' files are not errors."
+        echo "Note: This is meant for Contacts, Calendar (EteSync exports from http://localhost:37358/.web/), Bookmarks, Podcasts, RSS, Joplin, and Aegis. Since this is done by file extension, 'missing' files are not errors."
         echo "Ensure files are named appropriately for effecient Git tracking, then press [ENTER] to continue..."
         read choice
         for EXT in "${EXTS[@]}"; do

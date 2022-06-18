@@ -107,7 +107,7 @@ chooseScript() {
         # - One containing only those from the latest backup.
         # This is not fully automated. The WhatsApp directory must be manually copied to EXPTDIR.
         WSAMDIR="$MAINDIR/Backups/Archive/WhatsApp-AllMedia"
-        echo "Attempting to find a WhatsApp directory in '"$EXPTDIR"' and copy it to '"$WSAMDIR"' (if either already exists, the former is replaced and the latter is merged)... "
+        echo "Attempting to find a WhatsApp directory in '"$EXPTDIR"' and copy it to '"$WSAMDIR"' (merging with existing, if any)... "
         DIRB="$EXPTDIR"/com.whatsapp/WhatsApp
         DIRC="$EXPTDIR"/WhatsApp
         DIR="$DIRA"

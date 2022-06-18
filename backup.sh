@@ -15,7 +15,7 @@ chooseScript() {
     "Local Files"
     "Balance"
     "Bitwarden"
-    "Other Manual Exports"
+    "Other File Exports (Group)"
     "WhatsApp"
     "Emails"
     "Discord"
@@ -63,25 +63,40 @@ chooseScript() {
         break
         ;;
 
-      "Other Manual Exports")
-        # Various cloud services are used for management of contacts, calendar events, tasks, podcast and RSS feeds, and notes.
+      "Other File Exports (Group)")
+        # Various cloud services are used for management of contacts, calendar events, tasks, podcast and RSS feeds, bookmarks, and notes.
         # Thus, data from these services must be periodically exported and backed up.
-        # These have been lumped into one (file extension based) script for convenience as exporting them only takes a few minutes.
+        # These have been lumped into one script for convenience as exporting them only takes a few minutes and is usually done as a group.
         # But this script is error-prone; breaking it up into service-specific scripts may be a good idea.
-        # This is not fully automated; files must be manually placed in EXPTDIR and renamed for consistency.
+        # This is not fully automated; files must be manually placed in EXPTDIR.
         TARGET="$MAINDIR/Backups/Manual"
         EXTS=(ics vcf opml json jex)
-        echo "Will attempt to copy all files in '"$EXPTDIR"' with specific extensions ("${EXTS[@]}") to '"$TARGET"', then commit changes to Git."
-        echo "Note: This is meant for Contacts, Calendar (EteSync exports from http://localhost:37358/.web/), Bookmarks, Podcasts, RSS, Joplin, and Aegis. Since this is done by file extension, 'missing' files are not errors."
-        echo "Ensure files are named appropriately for effecient Git tracking, then press [ENTER] to continue..."
+        echo "Will attempt to copy and rename all relevant files in '"$EXPTDIR"' to '"$TARGET"', then commit changes to Git."
+        echo "This is meant for the following backups: Contacts+Tasks (VCF+ICS EteSync exports from http://localhost:37358/.web/), Calendar (ICS from https://account.proton.me/u/0/calendar/calendars) Bookmarks (xBrowserSync JSON), Notes (Joplin JEX), Podcasts (AntennaPod OPML), RSS (Read You OPML), and 2FA Codes (Aegis)."
+        echo "Press [ENTER] to continue..."
         read choice
-        for EXT in "${EXTS[@]}"; do
-          SOURCES=("$EXPTDIR"/*."$EXT")
-          for SOURCE in "${SOURCES[@]}"; do
-            echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
-            "$HERE"/GitCopy/GitCopy.sh "$SOURCE" "$TARGET"
-          done
-        done
+
+        gitCopyHelper() {
+          FILE="$1"
+          TARGET="$2"
+          FNAME="$3"
+          if [ -f "$FILE" ]; then
+            echo "Attempting to copy '"$FILE"' into '"$TARGET"/"$FNAME"' and commit changes to Git..."
+            "$HERE"/GitCopy/GitCopy.sh "$FILE" "$TARGET" "$FNAME"
+          else
+            echo "No file matching the pattern: "$FILE""
+          fi
+        }
+
+        gitCopyHelper "$EXPTDIR"/"My Contacts.vcf" "$TARGET" 'My Contacts.vcf'
+        gitCopyHelper "$EXPTDIR"/"My Tasks.ics" "$TARGET" 'My Tasks.ics'
+        gitCopyHelper "$EXPTDIR"/My\ calendar-*.ics "$TARGET" 'My Calendar.ics'
+        gitCopyHelper "$EXPTDIR"/xbs_backup_*.json "$TARGET" 'XBS.json'
+        gitCopyHelper "$EXPTDIR"/*.jex "$TARGET" 'Joplin.jex'
+        gitCopyHelper "$EXPTDIR"/antennapod-feeds-*.opml "$TARGET" 'Podcasts.opml'
+        gitCopyHelper "$EXPTDIR"/ReadYou.opml "$TARGET" 'RSS.opml'
+        gitCopyHelper "$EXPTDIR"/aegis-export-*.json "$TARGET" 'aegis-export.json'
+
         break
         ;;
 

@@ -13,13 +13,13 @@ SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 # Usage function
 function usage() {
-    echo >&2 "Usage: $(basename $0) [path to file/directory to copy] [path to target directory]"
+    echo >&2 "Usage: $(basename $0) [path to file/directory to copy] [path to target directory] [optional - filename to rename to (if copying a file)]"
     echo >&2 "Copy a file/directory to a target directory with a git history"
     exit 1
 }
 
 # Validate arguments
-if [ ! "$#" -eq 2 ]; then
+if [ ! "$#" -eq 2 ] && [ ! "$#" -eq 3 ]; then
     usage
 fi
 if [ ! -f "$1" ] && [ ! -d "$1" ]; then
@@ -38,7 +38,11 @@ TARGET="$(echo "$2" | sed 's:/*$::')"
 SOURCE_NAME="$(basename "$SOURCE")"
 
 if [ -f "$SOURCE" ]; then
-    cp "$SOURCE" "$TARGET"
+    if [ -z "$3" ]; then
+        cp "$SOURCE" "$TARGET"
+    else
+        cp "$SOURCE" "$TARGET"/"$3"
+    fi
 else
     rsync -rLq "$SOURCE" "$TARGET" --delete
     SOURCE_NAME="$SOURCE_NAME"'/'

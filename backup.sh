@@ -174,7 +174,7 @@ chooseScript() {
         # Netflix is a cloud service. Thus, data from the service must be periodically exported and backed up.
         # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
-        echo "Attempting to find a Spotify export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+        echo "Attempting to find a Netflix export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'cat ACCOUNT/AccountDetails.csv | head -2 | tail -1 | awk -F , "{print \$3}" | head -c -2 | tail -c +2' "$(find "$EXPTDIR/" | grep netflix-report.zip$)" "$BACKUPSDIR/Netflix"
         break
         ;;
@@ -183,7 +183,7 @@ chooseScript() {
         # Reddit is a cloud service. Thus, data from the service must be periodically exported and backed up.
         # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
-        echo "Attempting to find a Netflix export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+        echo "Attempting to find a Reddit export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep "account name," statistics.csv | tail -c +14 | head -c -2' "$(find "$EXPTDIR/" | grep export_.*.zip$)" "$BACKUPSDIR/Reddit"
         break
         ;;

@@ -20,6 +20,8 @@ chooseScript() {
     "Emails"
     "Discord"
     "Medium"
+    "Instagram"
+    "Snapchat"
     "Google"
     "Twitter"
     "Spotify"
@@ -140,6 +142,24 @@ chooseScript() {
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Medium export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'awk -F '"'"'<'"'"' '"'"'{ print $15 }'"'"' profile/profile.html | awk -F '"'"'>'"'"' '"'"'{ print $2 }'"'"' | awk NF | tail -c +2' "$(find "$EXPTDIR/" | grep medium-export-.*.zip$)" "$BACKUPSDIR/Medium"
+        break
+        ;;
+
+      "Instagram")
+        # Instagram is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
+        BACKUPSDIR="$MAINDIR/Backups"
+        echo "Attempting to find a Instagram export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'head -25 account_information/personal_information.json | tail -1 | awk -F \" '"'"'{print $4}'"'"'' "$(find "$EXPTDIR/" | grep -E '.+_[0-9]{8}\.zip$')" "$BACKUPSDIR/Instagram"
+        break
+        ;;
+
+      "Snapchat")
+        # Snapchat is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
+        BACKUPSDIR="$MAINDIR/Backups"
+        echo "Attempting to find a Medium export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'awk -F , '"'"'{print $1}'"'"' json/account.json | head -c -2 | tail -c +37' "$(find "$EXPTDIR/" | grep -E '.*/mydata~.*\.zip$')" "$BACKUPSDIR/Snapchat"
         break
         ;;
 

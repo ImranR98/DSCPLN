@@ -22,6 +22,7 @@ chooseScript() {
     "Medium"
     "Instagram"
     "Snapchat"
+    "Presto Transit Usage Report"
     "Google"
     "Twitter"
     "Spotify"
@@ -160,6 +161,23 @@ chooseScript() {
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Medium export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'awk -F , '"'"'{print $1}'"'"' json/account.json | head -c -2 | tail -c +37' "$(find "$EXPTDIR/" | grep -E '.*/mydata~.*\.zip$')" "$BACKUPSDIR/Snapchat"
+        break
+        ;;
+
+      "Presto Transit Usage Report")
+        # Presto TUR data is generated on the Presto website servers. Thus, reports from the website must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
+        BACKUPSDIR="$MAINDIR/Backups/Archive/Presto Transit Usage Reports"
+        echo "Attempting to find Presto TUR export(s) in '"$EXPTDIR"', copy them into "$BACKUPSDIR"', and commit changes to Git..."
+        IFS=$'\n' read -r -d '' -a SOURCES < <(find "$EXPTDIR" | grep -E '.*/TUR_20[0-9]{2}_.*\.pdf$' && printf '\0')
+        for SOURCE in "${SOURCES[@]}"; do
+          "$HERE"/GitCopy/GitCopy.sh "$SOURCE" "$BACKUPSDIR"
+        done
+        if [ "${#SOURCES[@]}" -eq 0 ]; then
+          echo "No Presto TUR PDFs found in "$EXPTDIR""
+        else
+          echo "Copied "${#SOURCES[@]}" files"
+        fi
         break
         ;;
 

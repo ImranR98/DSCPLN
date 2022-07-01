@@ -2,10 +2,10 @@
 
 # Ensure dependencies
 for dep in rsync git; do
-	if [ -z "$(which $dep)" ]; then
-		echo >&2 "The following dependency is missing: $dep"
-		exit 5
-	fi
+    if [ -z "$(which $dep)" ]; then
+        echo >&2 "The following dependency is missing: $dep"
+        exit 5
+    fi
 done
 
 # Store script location
@@ -50,6 +50,9 @@ fi
 
 here="$(pwd)"
 cd "$TARGET"
+if [ ! -d ./.git ]; then
+    git init
+fi
 git add .
 MESSAGE="$(date)"' - Updated: '"$SOURCE_NAME"
 git commit -q -m "$MESSAGE"

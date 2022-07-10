@@ -162,7 +162,7 @@ chooseScript() {
         # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Instagram export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
-        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'head -25 account_information/personal_information.json | tail -1 | awk -F \" '"'"'{print $4}'"'"'' "$(find "$EXPTDIR/" | grep -E '.+_[0-9]{8}\.zip$')" "$BACKUPSDIR/Instagram"
+        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'head -25 personal_information/personal_information.json | tail -1 | awk -F \" '"'"'{print $4}'"'"'' "$(find "$EXPTDIR/" | grep -E '.+_[0-9]{8}\.zip$')" "$BACKUPSDIR/Instagram"
         break
         ;;
 

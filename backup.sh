@@ -17,6 +17,7 @@ chooseScript() {
     "Bitwarden"
     "Other File Exports (Group)"
     "WhatsApp"
+    "WhatsApp TXT"
     "Emails"
     "Discord"
     "Medium"
@@ -117,6 +118,16 @@ chooseScript() {
         if [ ! -d "$DIR" ]; then DIR="$DIRB"; fi
         if [ ! -d "$DIR" ]; then DIR="$DIRC"; fi
         "$HERE"/WhatsApp/WhatsApp.sh "$DIR" "$WSAMDIR"
+        break
+        ;;
+
+      "WhatsApp TXT")
+        # WhatsApp data is used on a phone and so cannot live directly in MAINDIR. Thus the data needs to be periodically backed up.
+        # This version backs up only text files exported from the app.
+        # This is not fully automated. The text files must be manually copied to a WhatsAppTXT directory in EXPTDIR.
+        WSTXTDIR="$MAINDIR/Backups/WhatsApp TXT"
+        echo "Attempting to find a WhatsAppTXT directory in '"$EXPTDIR"' and merge it into '"$WSTXTDIR"'... "
+        node "$HERE"/WhatsAppTXT/WhatsAppTXT.js "$WSTXTDIR"
         break
         ;;
 

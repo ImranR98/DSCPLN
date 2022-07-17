@@ -134,8 +134,15 @@ chooseScript() {
 
       "Emails")
         # Emails are used on email servers and so cannot live directly in MAINDIR. Thus emails must be periodically exported and backed up.
-        # This is not automated.
-        echo "This is not automated. Use the Protonmail export tool and/or Microsoft Outlook to export emails."
+        # This is not fully automated; the .mbox files must be manually exported and placed in EXPTDIR.
+        DIR="$MAINDIR/Backups/Email"
+        echo "Attempting to find MBOX files in '"$EXPTDIR"' and copy them into '"$DIR"', replacing existing files..."
+        if [ "$(ls "$EXPTDIR"/*.mbox 2>/dev/null | wc -l)" -gt 0 ]; then
+          rm "$DIR"/*
+          mv "$EXPTDIR"/*.mbox "$DIR"
+        else
+          echo "No MBOX files found in "$EXPTDIR""
+        fi
         break
         ;;
 

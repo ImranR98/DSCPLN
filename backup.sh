@@ -85,8 +85,8 @@ chooseScript() {
           TARGET="$2"
           FNAME="$3"
           if [ -f "$FILE" ]; then
-            echo "Attempting to copy '"$FILE"' into '"$TARGET"/"$FNAME"' and commit changes to Git..."
-            "$HERE"/GitCopy/GitCopy.sh "$FILE" "$TARGET" "$FNAME"
+            echo "Attempting to move '"$FILE"' into '"$TARGET"/"$FNAME"' and commit changes to Git..."
+            "$HERE"/GitCopy/GitCopy.sh -d "$FILE" "$TARGET" "$FNAME"
           else
             echo "No file matching the pattern: "$FILE""
           fi
@@ -128,6 +128,7 @@ chooseScript() {
         WSTXTDIR="$MAINDIR/Backups/WhatsApp TXT"
         echo "Attempting to find a WhatsAppTXT directory in '"$EXPTDIR"' and merge it into '"$WSTXTDIR"'... "
         node "$HERE"/WhatsAppTXT/WhatsAppTXT.js "$WSTXTDIR" "$EXPTDIR"/WhatsAppTXT
+        rm -r "$WSTXTDIR"
         break
         ;;
 
@@ -179,15 +180,15 @@ chooseScript() {
         # Presto TUR data is generated on the Presto website servers. Thus, reports from the website must be periodically exported and backed up.
         # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups/Archive/Presto Transit Usage Reports"
-        echo "Attempting to find Presto TUR export(s) in '"$EXPTDIR"', copy them into "$BACKUPSDIR"', and commit changes to Git..."
+        echo "Attempting to find Presto TUR export(s) in '"$EXPTDIR"', move them into "$BACKUPSDIR"', and commit changes to Git..."
         IFS=$'\n' read -r -d '' -a SOURCES < <(find "$EXPTDIR" | grep -E '.*/TUR_20[0-9]{2}_.*\.pdf$' && printf '\0')
         for SOURCE in "${SOURCES[@]}"; do
-          "$HERE"/GitCopy/GitCopy.sh "$SOURCE" "$BACKUPSDIR"
+          "$HERE"/GitCopy/GitCopy.sh -d "$SOURCE" "$BACKUPSDIR"
         done
         if [ "${#SOURCES[@]}" -eq 0 ]; then
           echo "No Presto TUR PDFs found in "$EXPTDIR""
         else
-          echo "Copied "${#SOURCES[@]}" files"
+          echo "Moved "${#SOURCES[@]}" files"
         fi
         break
         ;;

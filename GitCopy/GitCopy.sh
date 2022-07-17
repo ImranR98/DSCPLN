@@ -13,10 +13,20 @@ SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 # Usage function
 function usage() {
-    echo >&2 "Usage: $(basename $0) [path to file/directory to copy] [path to target directory] [optional - filename to rename to (if copying a file)]"
+    echo >&2 "Usage: $(basename $0) [-d] [path to file/directory to copy] [path to target directory] [optional - filename to rename to (if copying a file)]"
     echo >&2 "Copy a file/directory to a target directory with a git history"
+    echo >&2 "   -d              Delete original file/directory after copying."
     exit 1
 }
+
+# Parse options
+while getopts "dgn:" opt; do
+	case $opt in
+	d) delete=1 ;;
+	\?) usage ;;
+	esac
+done
+shift $((OPTIND - 1))
 
 # Validate arguments
 if [ ! "$#" -eq 2 ] && [ ! "$#" -eq 3 ]; then
@@ -48,6 +58,12 @@ else
     SOURCE_NAME="$SOURCE_NAME"'/'
 fi
 
+# Delete the original file/directory if required
+if [ "$delete" == "1" ]; then
+	rm -r "$SOURCE"
+fi
+
+# Commit to Git
 here="$(pwd)"
 cd "$TARGET"
 if [ ! -d ./.git ]; then

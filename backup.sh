@@ -128,7 +128,7 @@ chooseScript() {
         WSTXTDIR="$MAINDIR/Backups/WhatsApp TXT"
         echo "Attempting to find a WhatsAppTXT directory in '"$EXPTDIR"' and merge it into '"$WSTXTDIR"'... "
         node "$HERE"/WhatsAppTXT/WhatsAppTXT.js "$WSTXTDIR" "$EXPTDIR"/WhatsAppTXT
-        rm -r "$WSTXTDIR"
+        rm -r "$EXPTDIR"/WhatsAppTXT
         break
         ;;
 

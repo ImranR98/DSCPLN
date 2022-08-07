@@ -19,7 +19,7 @@ chooseScript() {
     "WhatsApp"
     "WhatsApp TXT"
     "Emails"
-    "Discord"
+    # "Discord"
     "Medium"
     "Instagram"
     "Snapchat"

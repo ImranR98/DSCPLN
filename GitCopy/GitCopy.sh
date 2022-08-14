@@ -20,7 +20,7 @@ function usage() {
 }
 
 # Parse options
-while getopts "dgn:" opt; do
+while getopts d opt; do
 	case $opt in
 	d) delete=1 ;;
 	\?) usage ;;

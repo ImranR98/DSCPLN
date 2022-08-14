@@ -13,6 +13,7 @@ chooseScript() {
   Pick an backup script to run: "
   options=(
     "Local Files"
+    "Media Import"
     "Balance"
     "Bitwarden"
     "Other File Exports (Group)"
@@ -45,6 +46,24 @@ chooseScript() {
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
           "$HERE"/GitCopy/GitCopy.sh "$SOURCE" "$TARGET"
         done
+        break
+        ;;
+
+      "Media Import")
+        # Some local media files must exist in holding locations to be processed or synced from other devices (or both) before being moved to MAINDIR.
+        # Thus they need to be periodically processed (date/time EXIF and filename standardization) and moved to MAINDIR.
+        # This is fully automated.
+        PROCESS_SCRIPT=~/Main/Code/Automation/random-utils-ir/ExifStandardize.sh
+        echo "Importing Camera Files..."
+        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" ~/Pictures/"Synced Phone DCIM"/Camera ~/Main/Media/Camera
+        echo "Importing Snaps..."
+        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" ~/Pictures/"Synced Phone DCIM"/Snapchat ~/Main/Media/Camera
+        echo "Importing Phone Screenshots..."
+        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" ~/Pictures/"Synced Phone Screenshots" ~/Main/Media/Screenshots
+        echo "Importing PC Screenshots..."
+        "$HERE"/ProcessAndMove/ProcessAndMove.sh -c "$PROCESS_SCRIPT" ~/Pictures/Screenshots ~/Main/Media/Screenshots
+        echo "Moving Call Recordings..."
+        mv ~/Pictures/"Synced Phone Call Recordings"/CubeCallRecorder/All/* ~/Main/Media/Audio/Recordings/"Call Recorder"
         break
         ;;
 

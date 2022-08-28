@@ -95,7 +95,7 @@ chooseScript() {
         TARGET="$MAINDIR/Backups/Manual"
         EXTS=(ics vcf opml json jex)
         echo "Will attempt to copy and rename all relevant files in '"$EXPTDIR"' to '"$TARGET"', then commit changes to Git."
-        echo "This is meant for the following backups: Contacts+Tasks (VCF+ICS EteSync exports from http://localhost:37358/.web/), Calendar (ICS from https://account.proton.me/u/0/calendar/calendars) Bookmarks (xBrowserSync JSON), Notes (Joplin JEX), Podcasts (AntennaPod OPML), RSS (Read You OPML), and 2FA Codes (Aegis)."
+        echo "This is meant for the following backups: Contacts+Tasks (VCF+ICS EteSync exports from http://localhost:37358/.web/), Calendar (ICS from https://account.proton.me/u/0/calendar/calendars) Bookmarks (xBrowserSync JSON), Notes (Joplin JEX), Obtainium Apps (JSON), Podcasts (AntennaPod OPML), RSS (Read You OPML), and 2FA Codes (Aegis)."
         echo "Press [ENTER] to continue..."
         read choice
 
@@ -116,6 +116,7 @@ chooseScript() {
         gitCopyHelper "$EXPTDIR"/My\ calendar-*.ics "$TARGET" 'My Calendar.ics'
         gitCopyHelper "$EXPTDIR"/xbs_backup_*.json "$TARGET" 'XBS.json'
         gitCopyHelper "$EXPTDIR"/*.jex "$TARGET" 'Joplin.jex'
+        gitCopyHelper "$EXPTDIR"/obtainium-export-*.json "$TARGET" 'Obtainium.json'
         gitCopyHelper "$EXPTDIR"/antennapod-feeds-*.opml "$TARGET" 'Podcasts.opml'
         gitCopyHelper "$EXPTDIR"/ReadYou.opml "$TARGET" 'RSS.opml'
         gitCopyHelper "$EXPTDIR"/aegis-export-*.json "$TARGET" 'aegis-export.json'

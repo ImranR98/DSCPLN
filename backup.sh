@@ -63,7 +63,7 @@ chooseScript() {
         echo "Importing PC Screenshots..."
         "$HERE"/ProcessAndMove/ProcessAndMove.sh -c "$PROCESS_SCRIPT" ~/Pictures/Screenshots ~/Main/Media/Screenshots
         echo "Moving Call Recordings..."
-        mv ~/Pictures/"Synced Phone Call Recordings"/CubeCallRecorder/All/* ~/Main/Media/Audio/Recordings/"Call Recorder"
+        mv ~/Pictures/"Synced Phone Call Recordings"/CubeCallRecorder/All/{.?*,*} ~/Main/Media/Audio/Recordings/"Call Recorder"
         break
         ;;
 

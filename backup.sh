@@ -115,7 +115,7 @@ chooseScript() {
         gitCopyHelper "$EXPTDIR"/"My Tasks.ics" "$TARGET" 'My Tasks.ics'
         gitCopyHelper "$EXPTDIR"/My\ calendar-*.ics "$TARGET" 'My Calendar.ics'
         gitCopyHelper "$EXPTDIR"/xbs_backup_*.json "$TARGET" 'XBS.json'
-        gitCopyHelper "$EXPTDIR"/*.jex "$TARGET" 'Joplin.jex'
+        gitCopyHelper "$EXPTDIR"/*.nnbackup "$TARGET" 'Notesnook.nnbackup'
         gitCopyHelper "$EXPTDIR"/obtainium-export-*.json "$TARGET" 'Obtainium.json'
         gitCopyHelper "$EXPTDIR"/antennapod-feeds-*.opml "$TARGET" 'Podcasts.opml'
         gitCopyHelper "$EXPTDIR"/ReadYou.opml "$TARGET" 'RSS.opml'

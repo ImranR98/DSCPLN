@@ -50,7 +50,7 @@ else
     if [ "$confirm" == "1" ]; then
 	    echo "About to move all files from '"$2"' to '"$3"' after processing with '"$1"'. Continue? Y/N"
         read CHOICE
-        if [ "$CHOICE" == 'Y' ] || [ "$CHOICE" == 'y' ]; then
+        if [ "$CHOICE" != 'Y' ] && [ "$CHOICE" != 'y' ]; then
             RUN=0
         fi
     fi

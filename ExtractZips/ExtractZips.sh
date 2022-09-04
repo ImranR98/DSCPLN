@@ -62,7 +62,12 @@ trap cleanup EXIT
 
 # Unzip into the temp. folder
 for i in "${files[@]}"; do
-	unzip -q -o "$i" -d "$tempfolder"
+	ext="$(echo "${i#"${i%.*}".}" | tr '[:upper:]' '[:lower:]')"
+	if [ "$ext" == 'zip' ]; then
+		unzip -q -o "$i" -d "$tempfolder"
+	else
+		tar -xf "$i" -C "$tempfolder"
+	fi
 done
 
 # Run the name command (if any) the temp dir to obtain a string, then append that string to the final dir name (else, use the original name)

@@ -21,6 +21,7 @@ chooseScript() {
     "WhatsApp TXT"
     "Emails"
     # "Discord"
+    "GitHub (no repos/releases)"
     "Medium"
     "Instagram"
     "Snapchat"
@@ -173,6 +174,16 @@ chooseScript() {
         DIR="$MAINDIR/Backups/Discord"
         echo "Attempting to find the DiscordChatExporter CLI app in '"$CLI"' and use it to allow the user to export chats to '"$DIR"'..."
         "$HERE"/Discord/Discord.sh "$CLI" "$DIR"
+        break
+        ;;
+
+      "GitHub (no repos/releases)")
+        # GitHub is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
+        # The repositories and releases directories are deleted
+        BACKUPSDIR="$MAINDIR/Backups"
+        echo "Attempting to find a GitHub export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"' (removing repositories and releases), and commit changes to Git..."
+        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'rm -rf repositories && rm -rf releases && cat users_000001.json | jq "(.[] | select(.billing_plan != null)).login" | head -c -2 | tail -c +2' "$(find "$EXPTDIR/" | grep -E '[a-z0-9]+-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+\.tar.gz$')" "$BACKUPSDIR/GitHub"
         break
         ;;
 

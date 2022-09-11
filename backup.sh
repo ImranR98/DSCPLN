@@ -13,6 +13,7 @@ chooseScript() {
   Pick an backup script to run: "
   options=(
     "Local Files"
+    "NUC Files"
     "Media Import"
     "Balance"
     "Bitwarden"
@@ -47,6 +48,19 @@ chooseScript() {
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
           "$HERE"/GitCopy/GitCopy.sh "$SOURCE" "$TARGET"
         done
+        break
+        ;;
+
+      "NUC Files")
+        # NUC files must exist on the NUC to be usable, so cannot live directly in MAINDIR.
+        # Thus they need to be periodically backed up to MAINDIR.
+        # This is fully automated.
+        TARGET="$MAINDIR/Backups/NUC"
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 54973 "~/.ssh/" "$TARGET"/.ssh/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 54973 "/etc/systemd/system/filebrowser.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 54973 "/etc/systemd/system/noip2.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 54973 "/etc/systemd/system/photoprism.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 54973 "~/photoprism/docker-compose.yml" "$TARGET"/photoprism/
         break
         ;;
 

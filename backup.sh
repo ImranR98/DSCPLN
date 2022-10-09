@@ -56,11 +56,11 @@ chooseScript() {
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
         TARGET="$MAINDIR/Backups/NUC"
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 58685 "~/.ssh/" "$TARGET"/.ssh/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 58685 "/etc/systemd/system/filebrowser.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 58685 "/etc/systemd/system/noip2.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 58685 "/etc/systemd/system/photoprism.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 58685 "~/photoprism/docker-compose.yml" "$TARGET"/photoprism/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 55228 "~/.ssh/" "$TARGET"/.ssh/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 55228 "/etc/systemd/system/filebrowser.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 55228 "/etc/systemd/system/noip2.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 55228 "/etc/systemd/system/photoprism.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 55228 "~/photoprism/docker-compose.yml" "$TARGET"/photoprism/
         break
         ;;
 

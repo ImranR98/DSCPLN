@@ -17,8 +17,9 @@ const cleanFileNames = (dir, txts) => txts.map(txt => {
 // Returns a numerical value for the given line if it is a "date line", else return null
 const returnDateLineIfValid = (line) => {
     const androidRegex = /^[0-9]{4}-[0-9]{2}-[0-9]{2}, [0-9]{1,2}:[0-9]{1,2} [a-p]\.[a-p]\. /.exec(line)
+    const newAndroidRegex = /^[0-9]{1,2}\/[0-9]{1,2}\/[0-9]{2}, [0-9]{1,2}:[0-9]{1,2} [A-P]{2}/.exec(line)
     const iphoneRegex = /^\[[0-9]{4}-[0-9]{2}-[0-9]{2}, [0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2} [A-P]{2}\] /.exec(line)
-    const resultString = androidRegex ? androidRegex[0].slice(0, -1).replace('.m', 'm') : iphoneRegex ? iphoneRegex[0].slice(1, -2) : null
+    const resultString = androidRegex ? androidRegex[0].slice(0, -1).replace('.m', 'm') : iphoneRegex ? iphoneRegex[0].slice(1, -2) : newAndroidRegex ? newAndroidRegex[0] : null
     return resultString ? new Date(resultString).valueOf() : null
 }
 
@@ -47,7 +48,7 @@ const returnFirstLastDates = (lines) => {
 const mergeContents = (cont1, cont2) => {
     const [lines1, lines2] = [cont1.split('\n'), cont2.split('\n')]
     const [dates1, dates2] = [returnFirstLastDates(lines1), returnFirstLastDates(lines2)]
-    if (!dates1 && !dates2) throw null
+    if (!dates1 && !dates2) throw 'Date 1 and Date 2 both null!'
     if (dates1 == null) return [cont2, dates2[1]]
     if (dates2 == null) return [cont1, dates1[1]]
     if (dates1[0] <= dates2[0] && dates1[1] >= dates2[1]) return [cont1, dates1[1]]
@@ -91,6 +92,7 @@ const main = (dirs) => {
         ds.forEach(folder => {
             [content, timestamp] = mergeContents(content, fs.readFileSync(`${folder}/${txt}`).toString())
         })
+        if (timestamp == null) throw 'Timestamp is null!'
         if (fs.existsSync(`${dirs[0]}/${txt}`)) {
             fs.unlinkSync(`${dirs[0]}/${txt}`)
         }

@@ -43,7 +43,7 @@ chooseScript() {
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
         TARGET="$MAINDIR/Backups/Local Files"
-        SOURCES=(~/".bashrc" ~/".ssh" ~/".config/autostart" ~/".local/share/applications")
+        SOURCES=(~/".bashrc" ~/".ssh" ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks")
         for SOURCE in "${SOURCES[@]}"; do
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
           "$HERE"/GitCopy/GitCopy.sh "$SOURCE" "$TARGET"

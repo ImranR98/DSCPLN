@@ -70,16 +70,16 @@ chooseScript() {
         # This is fully automated.
         PROCESS_SCRIPT=~/Main/Code/Automation/random-utils-ir/ExifStandardize.sh
         echo "Importing Camera Files..."
-        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" ~/Pictures/"Synced Phone DCIM"/Camera ~/Main/Media/Camera
+        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" ~/Documents/"Phone Sync Folders"/DCIM/Camera ~/Main/Media/Camera
         echo "Importing Snaps..."
-        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" ~/Pictures/"Synced Phone DCIM"/Snapchat ~/Main/Media/Camera
+        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" ~/Documents/"Phone Sync Folders"/DCIM/Snapchat ~/Main/Media/Camera
         echo "Importing Phone Screenshots..."
-        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" ~/Pictures/"Synced Phone Screenshots" ~/Main/Media/Screenshots
+        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" ~/Documents/"Phone Sync Folders"/Screenshots ~/Main/Media/Screenshots
         echo "Importing PC Screenshots..."
         "$HERE"/ProcessAndMove/ProcessAndMove.sh -c "$PROCESS_SCRIPT" ~/Pictures/Screenshots ~/Main/Media/Screenshots
         echo "Moving Call Recordings..."
-        mv ~/Pictures/"Synced Phone Call Recordings"/All/{.?*,*} ~/Main/Media/Audio/Recordings/"Call Recorder"
-        mv ~/Pictures/"Synced Phone Call Recordings"/All/.props/{.?*,*} ~/Main/Media/Audio/Recordings/"Call Recorder"/.props
+        mv ~/Documents/"Phone Sync Folders"/Calls/All/{.?*,*} ~/Main/Media/Audio/Recordings/"Call Recorder"
+        mv ~/Documents/"Phone Sync Folders"/Calls/All/.props/{.?*,*} ~/Main/Media/Audio/Recordings/"Call Recorder"/.props
         break
         ;;
 

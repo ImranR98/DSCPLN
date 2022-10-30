@@ -130,7 +130,7 @@ chooseScript() {
         gitCopyHelper "$EXPTDIR"/"My Contacts.vcf" "$TARGET" 'My Contacts.vcf'
         gitCopyHelper "$EXPTDIR"/"My Tasks.ics" "$TARGET" 'My Tasks.ics'
         gitCopyHelper "$EXPTDIR"/My\ calendar-*.ics "$TARGET" 'My Calendar.ics'
-        gitCopyHelper "$EXPTDIR"/xbs_backup_*.json "$TARGET" 'XBS.json'
+        gitCopyHelper "$EXPTDIR"/bookmarks-*.json "$TARGET" 'bookmarks.json'
         gitCopyHelper "$EXPTDIR"/*.nnbackup "$TARGET" 'Notesnook.nnbackup'
         gitCopyHelper "$EXPTDIR"/obtainium-export-*.json "$TARGET" 'Obtainium.json'
         gitCopyHelper "$EXPTDIR"/antennapod-feeds-*.opml "$TARGET" 'Podcasts.opml'

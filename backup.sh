@@ -29,7 +29,9 @@ chooseScript() {
     "Presto Transit Usage Report"
     "Google"
     "Twitter"
-    "Spotify"
+    "Spotify Account Data"
+    "Spotify Extended Streaming History"
+    "Spotify Technical Logs"
     "Netflix"
     "Reddit"
     "PS4"
@@ -264,12 +266,30 @@ chooseScript() {
         break
         ;;
 
-      "Spotify")
-        # Spotify is a cloud service. Thus, data from the service must be periodically exported and backed up.
+      "Spotify Account Data")
+        # Spotify is a cloud service. Thus, data from the service (1 of 3 export types) must be periodically exported and backed up.
         # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Spotify export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
-        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "username\": \".*\"" MyData/Userdata.json | tail -c +13 | head -c -2' "$(find "$EXPTDIR/" | grep my_spotify_data.zip$)" "$BACKUPSDIR/Spotify"
+        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "username\": \".*\"" MyData/Userdata.json | tail -c +13 | head -c -2' "$(find "$EXPTDIR/" | grep my_spotify_data.zip$)" "$BACKUPSDIR/Spotify_account"
+        break
+        ;;
+
+      "Spotify Extended Streaming History")
+        # Spotify is a cloud service. Thus, data from the service (1 of 3 export types) must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
+        BACKUPSDIR="$MAINDIR/Backups"
+        echo "Attempting to find a Spotify export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+        "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$EXPTDIR/" | grep my_spotify_data.zip$)" "$BACKUPSDIR/Spotify_history"
+        break
+        ;;
+
+      "Spotify Technical Logs")
+        # Spotify is a cloud service. Thus, data from the service (1 of 3 export types) must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
+        BACKUPSDIR="$MAINDIR/Backups"
+        echo "Attempting to find a Spotify export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+        "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$EXPTDIR/" | grep my_spotify_data.zip$)" "$BACKUPSDIR/Spotify_techlogs"
         break
         ;;
 

@@ -16,7 +16,7 @@ chooseScript() {
     "NUC Files"
     "Media Import"
     "Balance"
-    "Bitwarden"
+    "Veracrypted Bitwarden"
     "Other File Exports (Group)"
     "WhatsApp"
     "WhatsApp TXT"
@@ -96,11 +96,13 @@ chooseScript() {
         break
         ;;
 
-      "Bitwarden")
+      "Veracrypted Bitwarden")
         # Bitwarden is a cloud service. Thus, data from the service must be periodically exported and backed up.
         # Due to the sensitive nature of this service's data, this needs to be saved into an encrypted container.
-        # This is not automated.
-        echo "Export manually via the app or extension and place in an encrypted container."
+        # This is not fully automated; files must be manually placed in EXPTDIR, and the Veracrypt container must already exist.
+        BITWARDENCONTAINER="$MAINDIR/Backups/Auth.hc"
+        echo "Attempting to find a Bitwarden JSON export in '"$EXPTDIR"', move it into the '"$BITWARDENCONTAINER"' Veracrypt container, and commit changes to Git..."
+        "$HERE"/BitwardenVeracrypted/BitwardenVeracrypted.sh "$BITWARDENCONTAINER" "$EXPTDIR"/bitwarden_export_*.json
         break
         ;;
 

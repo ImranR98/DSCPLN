@@ -2,7 +2,14 @@
 
 # Define these as needed (MAINDIR should also have various subdirectories as required by the relevant scripts)
 MAINDIR=~/"Main"
+PHONESYNCDIR=~/Documents/"Phone Sync Folders"
 EXPTDIR=~/"Downloads"
+# NUC-Specific variables
+if [ "$(hostname)" = "PC" ]; then
+  ISPC=1
+  MAINDIR="/HDD/Main"
+  PHONESYNCDIR="$MAINDIR"/"Phone Sync Folders"
+fi
 
 # Save script location
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
@@ -10,7 +17,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 chooseScript() {
   # Ensure the script choice list below is in sync with the case clause further below where scripts are defined.
   PS3="
-  Pick an backup script to run: "
+Pick a backup script to run: "
   options=(
     "Local Files"
     "NUC Files"
@@ -46,6 +53,12 @@ chooseScript() {
         # This is fully automated.
         TARGET="$MAINDIR/Backups/Local Files"
         SOURCES=(~/".bashrc" ~/".ssh" ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks")
+        # === ONLY ON PC ===
+        if [ "$ISPC" != 1 ]; then
+          echo "Only available on PC"
+          break
+        fi
+        # ==================
         for SOURCE in "${SOURCES[@]}"; do
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
           "$HERE"/GitCopy/GitCopy.sh "$SOURCE" "$TARGET"
@@ -58,6 +71,12 @@ chooseScript() {
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
         TARGET="$MAINDIR/Backups/NUC"
+        # === ONLY ON PC ===
+        if [ "$ISPC" != 1 ]; then
+          echo "Only available on PC"
+          break
+        fi
+        # ==================
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 55228 "~/.ssh/" "$TARGET"/.ssh/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 55228 "/etc/systemd/system/filebrowser.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 55228 "/etc/systemd/system/noip2.service" "$TARGET"/systemd/
@@ -72,16 +91,23 @@ chooseScript() {
         # This is fully automated.
         PROCESS_SCRIPT="$MAINDIR"/Code/Automation/random-utils-ir/ExifStandardize.sh
         echo "Importing Camera Files..."
-        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" ~/Documents/"Phone Sync Folders"/DCIM/Camera ~/Main/Media/Camera
+        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/DCIM/Camera "$MAINDIR"/Media/Camera
         echo "Importing Snaps..."
-        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" ~/Documents/"Phone Sync Folders"/DCIM/Snapchat ~/Main/Media/Camera
+        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/DCIM/Snapchat "$MAINDIR"/Media/Camera
         echo "Importing Phone Screenshots..."
-        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" ~/Documents/"Phone Sync Folders"/Screenshots ~/Main/Media/Screenshots
-        echo "Importing PC Screenshots..."
-        "$HERE"/ProcessAndMove/ProcessAndMove.sh -c "$PROCESS_SCRIPT" ~/Pictures/Screenshots ~/Main/Media/Screenshots
+        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/Screenshots "$MAINDIR"/Media/Screenshots
+        # === ONLY ON PC ===
+        if [ "$ISPC" != 1 ]; then
+          echo "Not on PC - Will skip screenshot import"
+        else
+          echo "Importing PC Screenshots..."
+          "$HERE"/ProcessAndMove/ProcessAndMove.sh -c "$PROCESS_SCRIPT" ~/Pictures/Screenshots "$MAINDIR"/Media/Screenshots
+        fi
+        # ==================
+        
         echo "Moving Call Recordings..."
-        mv ~/Documents/"Phone Sync Folders"/Calls/All/{.?*,*} ~/Main/Media/Audio/Recordings/"Call Recorder"
-        mv ~/Documents/"Phone Sync Folders"/Calls/All/.props/{.?*,*} ~/Main/Media/Audio/Recordings/"Call Recorder"/.props
+        mv "$PHONESYNCDIR"/Calls/All/{.?*,*} "$MAINDIR"/Media/Audio/Recordings/"Call Recorder"
+        mv "$PHONESYNCDIR"/Calls/All/.props/{.?*,*} "$MAINDIR"/Media/Audio/Recordings/"Call Recorder"/.props
         break
         ;;
 

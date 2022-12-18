@@ -114,7 +114,6 @@ chooseScript() {
         # But this script is error-prone; breaking it up into service-specific scripts may be a good idea.
         # This is not fully automated; files must be manually placed in EXPTDIR.
         TARGET="$MAINDIR/Backups/Manual"
-        EXTS=(ics vcf opml json jex)
         echo "Will attempt to copy and rename all relevant files in '"$EXPTDIR"' to '"$TARGET"', then commit changes to Git."
         echo "This is meant for the following backups: Contacts+Tasks (VCF+ICS EteSync exports from http://localhost:37358/.web/), Calendar (ICS from https://account.proton.me/u/0/calendar/import-export) Bookmarks (JSON), Obtainium Apps (JSON), Podcasts (AntennaPod OPML), RSS (Read You OPML), and 2FA Codes (Aegis)."
         echo "Press [ENTER] to continue..."
@@ -140,6 +139,7 @@ chooseScript() {
         gitCopyHelper "$EXPTDIR"/antennapod-feeds-*.opml "$TARGET" 'Podcasts.opml'
         gitCopyHelper "$EXPTDIR"/ReadYou.opml "$TARGET" 'RSS.opml'
         gitCopyHelper "$EXPTDIR"/aegis-export-*.json "$TARGET" 'aegis-export.json'
+        gitCopyHelper "$EXPTDIR"/backup-+([0-9]).json "$TARGET" 'SMS.json'
 
         break
         ;;

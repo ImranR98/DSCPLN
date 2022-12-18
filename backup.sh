@@ -4,9 +4,12 @@
 MAINDIR=~/"Main"
 PHONESYNCDIR=~/Documents/"Phone Sync Folders"
 EXPTDIR=~/"Downloads"
-# NUC-Specific variables
+# Check if on PC
 if [ "$(hostname)" = "PC" ]; then
   ISPC=1
+fi
+# Set NUC-Specific variables
+if [ "$ISPC" != 1 ]; then
   MAINDIR="/HDD/Main"
   PHONESYNCDIR="$MAINDIR"/"Phone Sync Folders"
 fi
@@ -104,7 +107,7 @@ Pick a backup script to run: "
           "$HERE"/ProcessAndMove/ProcessAndMove.sh -c "$PROCESS_SCRIPT" ~/Pictures/Screenshots "$MAINDIR"/Media/Screenshots
         fi
         # ==================
-        
+
         echo "Moving Call Recordings..."
         mv "$PHONESYNCDIR"/Calls/All/{.?*,*} "$MAINDIR"/Media/Audio/Recordings/"Call Recorder"
         mv "$PHONESYNCDIR"/Calls/All/.props/{.?*,*} "$MAINDIR"/Media/Audio/Recordings/"Call Recorder"/.props

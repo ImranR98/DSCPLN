@@ -139,7 +139,7 @@ chooseScript() {
         gitCopyHelper "$EXPTDIR"/antennapod-feeds-*.opml "$TARGET" 'Podcasts.opml'
         gitCopyHelper "$EXPTDIR"/ReadYou.opml "$TARGET" 'RSS.opml'
         gitCopyHelper "$EXPTDIR"/aegis-export-*.json "$TARGET" 'aegis-export.json'
-        gitCopyHelper "$EXPTDIR"/backup-+([0-9]).json "$TARGET" 'SMS.json'
+        gitCopyHelper "$EXPTDIR"/backup-*.json "$TARGET" 'SMS.json'
 
         break
         ;;

@@ -19,11 +19,15 @@ function usage() {
 }
 
 # Validate arguments
-if [ ! "$#" -eq 1 ]; then
+if [ ! "$#" -eq 2 ]; then
     usage
 fi
 if [ ! -d "$1" ]; then
     echo >&2 "The specified balance directory does not exist: $1."
+    exit 2
+fi
+if [ ! -f "$2" ]; then
+    echo >&2 "The specified Acc.md file does not exist: $2."
     exit 2
 fi
 
@@ -32,8 +36,9 @@ here="$(pwd)"
 cd "$SCRIPTDIR"
 npm i # Make sure dependencies are installed
 
-echo "Paste the Acc text, then press Ctrl+D:"
-ACC_TEXT=$(cat)
+# echo "Paste the Acc text, then press Ctrl+D:"
+# ACC_TEXT=$(cat)
+ACC_TEXT="$(cat "$2")"
 
 node "$SCRIPTDIR"/accMDToXLSX.js "$ACC_TEXT" "$1"/Balance.xlsx
 

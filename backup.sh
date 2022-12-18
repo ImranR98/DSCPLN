@@ -70,7 +70,7 @@ chooseScript() {
         # Some local media files must exist in holding locations to be processed or synced from other devices (or both) before being moved to MAINDIR.
         # Thus they need to be periodically processed (date/time EXIF and filename standardization) and moved to MAINDIR.
         # This is fully automated.
-        PROCESS_SCRIPT=~/Main/Code/Automation/random-utils-ir/ExifStandardize.sh
+        PROCESS_SCRIPT="$MAINDIR"/Code/Automation/random-utils-ir/ExifStandardize.sh
         echo "Importing Camera Files..."
         "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" ~/Documents/"Phone Sync Folders"/DCIM/Camera ~/Main/Media/Camera
         echo "Importing Snaps..."
@@ -89,10 +89,11 @@ chooseScript() {
         # All finances are tracked in a Balance.xlsx file.
         # When a transaction occurs, details are immediately noted down in a notes app (as Excel editing on a phone is inconvenient and would require file syncing).
         # Thus the notes need to be periodically converted into a format that can be pasted in to Balance.xlsx.
-        # This is not fully automated; the user must input transaction text, then copy/paste the script's output into Balance.xlsx.
+        # This is not fully automated; the user must copy/paste the script's output into Balance.xlsx.
         BALANCEDIR="$MAINDIR/Documents/Balance"
+        ACCFILE="$(ls "$MAINDIR"/Notes/Transactions/Acc*.md)"
         echo "Attempting to parse user input into a format used by Balance.xlsx, then commiting any changes in '"$BALANCEDIR"' to Git upon user confirmation..."
-        "$HERE"/Balance/Balance.sh "$BALANCEDIR"
+        "$HERE"/Balance/Balance.sh "$BALANCEDIR" "$ACCFILE"
         break
         ;;
 

@@ -80,11 +80,13 @@ Pick a backup script to run: "
           break
         fi
         # ==================
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 55228 "~/.ssh/" "$TARGET"/.ssh/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 55228 "/etc/systemd/system/filebrowser.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 55228 "/etc/systemd/system/noip2.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 55228 "/etc/systemd/system/photoprism.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 55228 "~/photoprism/docker-compose.yml" "$TARGET"/photoprism/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 8888 "~/.ssh/" "$TARGET"/.ssh/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/filebrowser.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/rathole.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/photoprism/docker-compose.yml" "$TARGET"/photoprism/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/nginx/conf.d/" "$TARGET"/nginx-conf.d/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/rathole.toml" "$TARGET"/rathole.toml
         break
         ;;
 

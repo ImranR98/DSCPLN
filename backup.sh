@@ -11,7 +11,7 @@ fi
 # Set NUC-Specific variables
 if [ "$ISPC" != 1 ]; then
   MAINDIR="/HDD/Main"
-  PHONESYNCDIR="$MAINDIR"/"Phone Sync Folders"
+  PHONESYNCDIR="/HDD/Phone Sync Folders"
 fi
 
 # Save script location

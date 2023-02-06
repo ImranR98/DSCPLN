@@ -98,6 +98,7 @@ Pick a backup script to run: "
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/photoprism/docker-compose.yml" "$TARGET"/photoprism/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/nginx/conf.d/" "$TARGET"/nginx-conf.d/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/frpc.ini" "$TARGET"/frpc.ini
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/fail2ban/jail.local" "$TARGET"/fail2ban/
 
         break
         ;;

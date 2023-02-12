@@ -16,6 +16,7 @@ const cleanFileNames = (dir, txts) => txts.map(txt => {
 
 // Returns a numerical value for the given line if it is a "date line", else return null
 const returnDateLineIfValid = (line) => {
+    line = line.normalize('NFKD') // Some versions use weird nbsp
     const androidRegex = /^[0-9]{4}-[0-9]{2}-[0-9]{2}, [0-9]{1,2}:[0-9]{1,2} [a-p]\.[a-p]\. /.exec(line)
     const newAndroidRegex = /^[0-9]{1,2}\/[0-9]{1,2}\/[0-9]{2}, [0-9]{1,2}:[0-9]{1,2} [A-P]{2}/.exec(line)
     const iphoneRegex = /^\[[0-9]{4}-[0-9]{2}-[0-9]{2}, [0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2} [A-P]{2}\] /.exec(line)
@@ -85,12 +86,16 @@ const main = (dirs) => {
             }
         })
     })
-
+    
     // For each file in the map, merge all versions of it from all folders that contain it and save as a new timestamped file, deleting any old ones
     files.forEach((ds, txt) => {
         let content = ''
         ds.forEach(folder => {
-            [content, timestamp] = mergeContents(content, fs.readFileSync(`${folder}/${txt}`).toString())
+            try {
+                [content, timestamp] = mergeContents(content, fs.readFileSync(`${folder}/${txt}`).toString())
+            } catch (e) {
+                throw { txt, e }
+            }
         })
         if (timestamp == null) throw 'Timestamp is null!'
         if (fs.existsSync(`${dirs[0]}/${txt}`)) {

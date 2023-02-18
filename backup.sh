@@ -55,7 +55,7 @@ Pick a backup script to run: "
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
         TARGET="$MAINDIR/Backups/Local Files"
-        SOURCES=(~/".bashrc" ~/".ssh" ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks")
+        SOURCES=(~/".bashrc" ~/".ssh" ~/".mozilla/firefox" ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks")
         # === ONLY ON PC ===
         if [ "$ISPC" != 1 ]; then
           echo "Only available on PC"
@@ -96,6 +96,7 @@ Pick a backup script to run: "
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/nuc-nginx-log-notify.service" "$TARGET"/systemd/
         
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/.mozilla/firefox" "$TARGET"/firefox/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/photoprism/docker-compose.yml" "$TARGET"/photoprism/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/nginx/conf.d/" "$TARGET"/nginx-conf.d/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/frpc.ini" "$TARGET"/frpc.ini

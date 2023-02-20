@@ -203,7 +203,7 @@ Pick a backup script to run: "
         DIR="$DIRA"
         if [ ! -d "$DIR" ]; then DIR="$DIRB"; fi
         if [ ! -d "$DIR" ]; then DIR="$DIRC"; fi
-        "$HERE"/WhatsApp/WhatsApp.sh "$DIR" "$WSAMDIR"
+        "$HERE"/WhatsApp/WhatsApp.sh "$DIR" "$WSAMDIR" && rm -r "$DIR"
         break
         ;;
 
@@ -213,7 +213,7 @@ Pick a backup script to run: "
         # This is not fully automated. The text files must be manually copied to a WhatsAppTXT directory in EXPTDIR.
         WSTXTDIR="$MAINDIR/Backups/WhatsApp TXT"
         echo "Attempting to find a WhatsAppTXT directory in '"$EXPTDIR"' and merge it into '"$WSTXTDIR"'... "
-        node "$HERE"/WhatsAppTXT/WhatsAppTXT.js "$WSTXTDIR" "$EXPTDIR"/WhatsAppTXT &&  rm -r "$EXPTDIR"/WhatsAppTXT
+        node "$HERE"/WhatsAppTXT/WhatsAppTXT.js "$WSTXTDIR" "$EXPTDIR"/WhatsAppTXT && rm -r "$EXPTDIR"/WhatsAppTXT
         break
         ;;
 

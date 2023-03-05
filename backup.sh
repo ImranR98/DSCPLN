@@ -82,27 +82,16 @@ Pick a backup script to run: "
         # ==================
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 8888 "~/.ssh/" "$TARGET"/.ssh/
         
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/filebrowser.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/syncthing.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/frpc.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/update-frpc.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/dservices.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/mmproxy.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/mmproxy-rules.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/certbot-fix.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/filebrowser-update.timer" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/filebrowser-update.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-index.timer" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-index.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.timer" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/nuc-nginx-log-notify.service" "$TARGET"/systemd/
         
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/.mozilla/firefox" "$TARGET"/firefox/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/photoprism/docker-compose.yml" "$TARGET"/photoprism/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/nginx/conf.d/" "$TARGET"/nginx-conf.d/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/frpc.ini" "$TARGET"/frpc.ini
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/fail2ban/jail.local" "$TARGET"/fail2ban/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/services/" "$TARGET"/services/
 
         break
         ;;

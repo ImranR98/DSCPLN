@@ -80,16 +80,16 @@ Pick a backup script to run: "
           break
         fi
         # ==================
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.local 8888 "~/.ssh/" "$TARGET"/.ssh/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 8888 "~/.ssh/" "$TARGET"/.ssh/
         
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.local 8888 "/etc/systemd/system/dservices.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.local 8888 "/etc/systemd/system/photoprism-index.timer" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.local 8888 "/etc/systemd/system/photoprism-index.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.local 8888 "/etc/systemd/system/photoprism-convert.timer" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.local 8888 "/etc/systemd/system/photoprism-convert.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/dservices.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-index.timer" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-index.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.timer" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.service" "$TARGET"/systemd/
         
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.local 8888 "~/.mozilla/firefox" "$TARGET"/firefox/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.local 8888 "~/services/" "$TARGET"/services/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/.mozilla/firefox" "$TARGET"/firefox/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/services/" "$TARGET"/services/
 
         break
         ;;

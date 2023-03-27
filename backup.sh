@@ -88,8 +88,8 @@ Pick a backup script to run: "
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.timer" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.service" "$TARGET"/systemd/
         
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/.var/app/org.mozilla.firefox/.mozilla/firefox" "$TARGET"/firefox/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/services/" "$TARGET"/services/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -gd user@nuc.example.com 8888 "~/.var/app/org.mozilla.firefox/.mozilla/firefox/" "$TARGET"/firefox/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -gd user@nuc.example.com 8888 "~/services/" "$TARGET"/services/
 
         break
         ;;

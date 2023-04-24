@@ -33,10 +33,10 @@ fi
 
 # Run
 if [ -d "$1"/EXPORT ]; then
-    rsync -rLq "$1"/EXPORT "$2" --delete
+    rsync -rLq "$1"/EXPORT/ "$2" --delete
     echo "$(date)" >"$2"/lastBackedUp.txt
 fi
 if [ -d "$1"/CREATE ]; then
-    rsync -rLq "$1"/CREATE "$3"
+    rsync -rLq "$1"/CREATE/ "$3"
     echo "$(date)" >"$3"/lastBackedUp.txt
 fi

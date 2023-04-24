@@ -81,13 +81,13 @@ Pick a backup script to run: "
         fi
         # ==================
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 8888 "~/.ssh/" "$TARGET"/.ssh/
-        
+
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/dservices.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-index.timer" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-index.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.timer" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.service" "$TARGET"/systemd/
-        
+
         "$HERE"/SFTPBackup/SFTPBackup.sh -gd user@nuc.example.com 8888 "~/.var/app/org.mozilla.firefox/.mozilla/firefox/" "$TARGET"/firefox/
         "$HERE"/SFTPBackup/SFTPBackup.sh -gd user@nuc.example.com 8888 "~/services/" "$TARGET"/services/
 
@@ -352,14 +352,17 @@ Pick a backup script to run: "
         # This is not fully automated. The PS5 data must be manually exported and the resulting directory must be manually copied to EXPTDIR.
         USBS=/run/media/"$(whoami)"
         SAVESDIR="$MAINDIR/Backups/PS5Backup"
-        MEDIADIR="$MAINDIR/Media/Unsorted-PS5Media"
-        echo "Attempting to find a PS5 directory in '"$EXPTDIR"' or a subdirectory of '"$USBS"' and copy save files to '"$SAVESDIR"' and media files to '"$MEDIADIR"'... "
+        UNSORTEDMEDIADIR="$MAINDIR/Media/Unsorted-PS5Media"
+        MEDIADIR="$MAINDIR/Media/Game Media"
+        echo "Attempting to find a PS5 directory in '"$EXPTDIR"' or a subdirectory of '"$USBS"' and copy save files to '"$SAVESDIR"' and media files to '"$UNSORTEDMEDIADIR"'... "
         DIR="$EXPTDIR"/PS5
         USB="$(ls "$USBS"/ | head -1)"
         if [ ! -z "$USB" ] && [ -d "$USBS"/"$USB"/PS5 ]; then
           DIR="$USBS"/"$USB"/PS5
         fi
-        "$HERE"/PS5/PS5.sh "$DIR" "$SAVESDIR" "$MEDIADIR"
+        "$HERE"/PS5/PS5.sh "$DIR" "$SAVESDIR" "$UNSORTEDMEDIADIR"
+        echo "Attempting to sort and move PS5 media files from '"$UNSORTEDMEDIADIR"' to '"$MEDIADIR"'... "
+        "$HERE"/PS5/cleanUpUnsortedPS5Media.sh "$UNSORTEDMEDIADIR" "$MEDIADIR"
         break
         ;;
 

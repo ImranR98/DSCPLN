@@ -44,7 +44,7 @@ Pick a backup script to run: "
     "Spotify Technical Logs"
     "Netflix"
     "Reddit"
-    "PS4"
+    "PS5"
   )
   while [ true ]; do
     select option in "${options[@]}"; do
@@ -347,19 +347,19 @@ Pick a backup script to run: "
         break
         ;;
 
-      "PS4")
-        # PS4 save data and media is used on a PS4 and so cannot live directly in MAINDIR. Thus the data needs to be periodically backed up.
-        # This is not fully automated. The PS4 data must be manually exported and the resulting directory must be manually copied to EXPTDIR.
+      "PS5")
+        # PS5 data and media is used on a PS5 and so cannot live directly in MAINDIR. Thus the data needs to be periodically backed up.
+        # This is not fully automated. The PS5 data must be manually exported and the resulting directory must be manually copied to EXPTDIR.
         USBS=/run/media/"$(whoami)"
-        SAVESDIR="$MAINDIR/Backups/PS4Saves"
-        MEDIADIR="$MAINDIR/Media/Unsorted-PS4Media"
-        echo "Attempting to find a PS4 directory in '"$EXPTDIR"' or a subdirectory of '"$USBS"' and copy save files to '"$SAVESDIR"' and media files to '"$MEDIADIR"'... "
-        DIR="$EXPTDIR"/PS4
+        SAVESDIR="$MAINDIR/Backups/PS5Backup"
+        MEDIADIR="$MAINDIR/Media/Unsorted-PS5Media"
+        echo "Attempting to find a PS5 directory in '"$EXPTDIR"' or a subdirectory of '"$USBS"' and copy save files to '"$SAVESDIR"' and media files to '"$MEDIADIR"'... "
+        DIR="$EXPTDIR"/PS5
         USB="$(ls "$USBS"/ | head -1)"
-        if [ ! -z "$USB" ] && [ -d "$USBS"/"$USB"/PS4 ]; then
-          DIR="$USBS"/"$USB"/PS4
+        if [ ! -z "$USB" ] && [ -d "$USBS"/"$USB"/PS5 ]; then
+          DIR="$USBS"/"$USB"/PS5
         fi
-        "$HERE"/PS4/PS4.sh "$DIR" "$SAVESDIR" "$MEDIADIR"
+        "$HERE"/PS5/PS5.sh "$DIR" "$SAVESDIR" "$MEDIADIR"
         break
         ;;
 

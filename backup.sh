@@ -33,6 +33,7 @@ Pick a backup script to run: "
     "Emails"
     # "Discord"
     "GitHub (no repos/releases)"
+    "ChatGPT"
     "Medium"
     "Instagram"
     "Snapchat"
@@ -237,6 +238,15 @@ Pick a backup script to run: "
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a GitHub export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"' (removing repositories and releases), and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'rm -rf repositories && rm -rf releases && cat users_000001.json | jq "(.[] | select(.billing_plan != null)).login" | head -c -2 | tail -c +2' "$(find "$EXPTDIR/" | grep -E '[a-z0-9]+-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+\.tar.gz$')" "$BACKUPSDIR/GitHub"
+        break
+        ;;
+
+      "ChatGPT")
+        # ChatGPT is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
+        BACKUPSDIR="$MAINDIR/Backups"
+        echo "Attempting to find a ChatGPT export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'cat user.json | jq ".email" | head -c -2 | tail -c +2' "$(find "$EXPTDIR/" | grep -E [a-z0-9]+-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}.zip$)" "$BACKUPSDIR/ChatGPT"
         break
         ;;
 

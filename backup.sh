@@ -55,7 +55,7 @@ Pick a backup script to run: "
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
         TARGET="$MAINDIR/Backups/Local Files"
-        SOURCES=(~/".bashrc" ~/".ssh" ~/".var/app/org.mozilla.firefox/.mozilla/firefox" ~/.vscode-oss ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks")
+        SOURCES=(~/".bashrc" ~/".ssh" ~/".var/app/org.mozilla.firefox/.mozilla/firefox" ~/.vscode-oss ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks" ~/".local/share/gnome-shell/extensions")
         # === ONLY ON PC ===
         if [ "$ISPC" != 1 ]; then
           echo "Only available on PC"

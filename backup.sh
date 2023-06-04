@@ -61,15 +61,15 @@ Pick a backup script to run: "
           break
         fi
         # ==================
-        SOURCES_GIT=(~/".bashrc" ~/".ssh" ~/".var/app/org.mozilla.firefox/.mozilla/firefox" ~/.vscode-oss ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks" ~/".local/share/gnome-shell/extensions")
+        SOURCES_GIT=(~/".bashrc" ~/".ssh" ~/.vscode-oss ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks" ~/".local/share/gnome-shell/extensions")
         for SOURCE in "${SOURCES_GIT[@]}"; do
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
-          "$HERE"/Copy/Copy.sh -g "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"
+          "$HERE"/DirCopy/DirCopy.sh -g "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"
         done
         SOURCES_NO_GIT=(~/".var/app/org.mozilla.firefox/.mozilla/firefox")
         for SOURCE in "${SOURCES_NO_GIT[@]}"; do
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"'..."
-          "$HERE"/Copy/Copy.sh -g "$SOURCE" "$TARGET"
+          "$HERE"/DirCopy/DirCopy.sh "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"
         done
         break
         ;;
@@ -165,7 +165,7 @@ Pick a backup script to run: "
           FNAME="$3"
           if [ -f "$FILE" ]; then
             echo "Attempting to move '"$FILE"' into '"$TARGET"/"$FNAME"' and commit changes to Git..."
-            "$HERE"/Copy/Copy.sh -g -d "$FILE" "$TARGET" "$FNAME"
+            "$HERE"/DirCopy/DirCopy.sh -g -d "$FILE" "$TARGET" "$FNAME"
           else
             echo "No file matching the pattern: "$FILE""
           fi
@@ -289,7 +289,7 @@ Pick a backup script to run: "
         echo "Attempting to find Presto TUR export(s) in '"$EXPTDIR"', move them into "$BACKUPSDIR"', and commit changes to Git..."
         IFS=$'\n' read -r -d '' -a SOURCES < <(find "$EXPTDIR" | grep -E '.*/TUR_20[0-9]{2}_.*\.pdf$' && printf '\0')
         for SOURCE in "${SOURCES[@]}"; do
-          "$HERE"/Copy/Copy.sh -g -d "$SOURCE" "$BACKUPSDIR"
+          "$HERE"/DirCopy/DirCopy.sh -g -d "$SOURCE" "$BACKUPSDIR"
         done
         if [ "${#SOURCES[@]}" -eq 0 ]; then
           echo "No Presto TUR PDFs found in "$EXPTDIR""

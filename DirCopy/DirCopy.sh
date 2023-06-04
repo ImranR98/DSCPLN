@@ -13,7 +13,7 @@ SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 # Usage function
 function usage() {
-    echo >&2 "Usage: $(basename $0) [-d] [path to file/directory to copy] [path to target directory] [optional - filename to rename to (if copying a file)]"
+    echo >&2 "Usage: $(basename $0) [-d] [path to file/directory to copy] [path to target directory]"
     echo >&2 "Copy a file/directory to a target directory with a git history"
     echo >&2 "   -d              Delete original file/directory after copying."
     echo >&2 "   -g              Use git to save changes (initializes an empty repo or uses an existing one)."
@@ -38,26 +38,23 @@ if [ ! -f "$1" ] && [ ! -d "$1" ]; then
     echo >&2 "The specified file/directory to copy does not exist: $1."
     exit 2
 fi
-if [ ! -d "$2" ]; then
-    echo >&2 "The specified target directory does not exist: $2."
-    exit 2
-fi
 
 # Remove trailing slashes (important for rsync on directories)
 SOURCE="$(echo "$1" | sed 's:/*$::')"
 TARGET="$(echo "$2" | sed 's:/*$::')"
 
-SOURCE_NAME="$(basename "$SOURCE")"
+if [ ! -d "$TARGET" ]; then
+    mkdir "$TARGET"
+fi
 
 if [ -f "$SOURCE" ]; then
-    if [ -z "$3" ]; then
-        cp "$SOURCE" "$TARGET"
-    else
-        cp "$SOURCE" "$TARGET"/"$3"
-    fi
+    cp "$SOURCE" "$TARGET"
 else
-    rsync -rLq "$SOURCE" "$TARGET" --delete
-    SOURCE_NAME="$SOURCE_NAME"'/'
+    if [ "$git" == "1" ]; then
+        rsync -rLq "$SOURCE" "$TARGET" --delete --exclude '/.git/'
+    else
+        rsync -rLq "$SOURCE" "$TARGET" --delete
+    fi
 fi
 
 # Delete the original file/directory if required
@@ -73,7 +70,7 @@ if [ "$git" == "1" ]; then
         git init
     fi
     git add .
-    MESSAGE="$(date)"' - Updated: '"$SOURCE_NAME"
+    MESSAGE="$(date)"' - Updated: '"$(basename "$TARGET")"
     git commit -q -m "$MESSAGE"
     cd "$here"
 fi

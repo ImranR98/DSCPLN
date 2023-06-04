@@ -16,15 +16,17 @@ function usage() {
     echo >&2 "Usage: $(basename $0) [-d] [path to file/directory to copy] [path to target directory] [optional - filename to rename to (if copying a file)]"
     echo >&2 "Copy a file/directory to a target directory with a git history"
     echo >&2 "   -d              Delete original file/directory after copying."
+    echo >&2 "   -g              Use git to save changes (initializes an empty repo or uses an existing one)."
     exit 1
 }
 
 # Parse options
-while getopts d opt; do
-	case $opt in
-	d) delete=1 ;;
-	\?) usage ;;
-	esac
+while getopts dg opt; do
+    case $opt in
+    d) delete=1 ;;
+    g) git=1 ;;
+    \?) usage ;;
+    esac
 done
 shift $((OPTIND - 1))
 
@@ -60,16 +62,18 @@ fi
 
 # Delete the original file/directory if required
 if [ "$delete" == "1" ]; then
-	rm -r "$SOURCE"
+    rm -r "$SOURCE"
 fi
 
 # Commit to Git
-here="$(pwd)"
-cd "$TARGET"
-if [ ! -d ./.git ]; then
-    git init
+if [ "$git" == "1" ]; then
+    here="$(pwd)"
+    cd "$TARGET"
+    if [ ! -d ./.git ]; then
+        git init
+    fi
+    git add .
+    MESSAGE="$(date)"' - Updated: '"$SOURCE_NAME"
+    git commit -q -m "$MESSAGE"
+    cd "$here"
 fi
-git add .
-MESSAGE="$(date)"' - Updated: '"$SOURCE_NAME"
-git commit -q -m "$MESSAGE"
-cd "$here"

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # Define these as needed (MAINDIR should also have various subdirectories as required by the relevant scripts)
 MAINDIR=~/"Main"
 PHONESYNCDIR=~/Documents/"Phone Sync Folders"
@@ -10,8 +12,7 @@ if [ "$(hostname)" = "PC" ]; then
 fi
 # Set NUC-Specific variables
 if [ "$ISPC" != 1 ]; then
-  MAINDIR="/HDD/Main"
-  PHONESYNCDIR="/HDD/Phone Sync Folders"
+  PHONESYNCDIR=~"/Phone Sync Folders"
 fi
 
 # Save script location

@@ -30,7 +30,7 @@ if [ ! -d "$2" ]; then
     echo >&2 "The specified directory does not exist: $2."
     exit 3
 fi
-TEMPDIR="$(mktemp -d)"
+TEMPDIR="$(mktemp -d -p ~/Documents/)"
 TEMPWAD="$TEMPDIR/"$(basename "$1")""
 
 cp -r "$1" "$TEMPWAD"

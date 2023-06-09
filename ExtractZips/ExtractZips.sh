@@ -50,7 +50,7 @@ for i in "${files[@]}"; do
 done
 
 # Create a temp. folder to unzip into (and register a trap to cleanup the temp. folder)
-tempfolder=$(mktemp -d 2>/dev/null || mktemp -d -t 'tempfolder')
+tempfolder=$(mktemp -d -p ~/Documents/ 2>/dev/null || mktemp -d -t 'tempfolder' -p ~/Documents/)
 if [ -z "$tempfolder" ] || [ ! -d "$tempfolder" ]; then
 	echo >&2 "Could not create temporary directory."
 	exit 3

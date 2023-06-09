@@ -55,7 +55,7 @@ else
         fi
     fi
     if [ "$RUN" == "1" ]; then
-	    TEMPDIR="$(mktemp -d)" || exit 6
+	    TEMPDIR="$(mktemp -d -p ~/Documents/)" || exit 6
 	    cp "$2"/* "$TEMPDIR"
 	    "$1" "$TEMPDIR" || exit 7
 	    mv "$TEMPDIR"/* "$3" || exit 8

@@ -51,9 +51,9 @@ if [ -f "$SOURCE" ]; then
     cp "$SOURCE" "$TARGET"
 else
     if [ "$git" == "1" ]; then
-        rsync -rLq "$SOURCE" "$TARGET" --delete --exclude '/.git/'
+        rsync -rLq "$SOURCE"/ "$TARGET"/ --delete --exclude '/.git/'
     else
-        rsync -rLq "$SOURCE" "$TARGET" --delete
+        rsync -rLq "$SOURCE"/ "$TARGET"/ --delete
     fi
 fi
 

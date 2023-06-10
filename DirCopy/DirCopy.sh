@@ -48,7 +48,11 @@ if [ ! -d "$TARGET" ]; then
 fi
 
 if [ -f "$SOURCE" ]; then
-    cp "$SOURCE" "$TARGET"
+    FINALTARGET="$TARGET"
+    if [ -n "$3" ]; then
+        FINALTARGET="$TARGET"/"$3"
+    fi
+    cp "$SOURCE" "$FINALTARGET"
 else
     if [ "$git" == "1" ]; then
         rsync -rLq "$SOURCE"/ "$TARGET"/ --delete --exclude '/.git/'

@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e
-
 # Define these as needed (MAINDIR should also have various subdirectories as required by the relevant scripts)
 MAINDIR=~/"Main"
 PHONESYNCDIR=~/Documents/"Phone Sync Folders"

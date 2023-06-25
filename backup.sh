@@ -91,7 +91,7 @@ Pick a backup script to run: "
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-index.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.timer" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.service" "$TARGET"/systemd/
-        
+
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 8888 "~/services/" "$TARGET"/services/
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 8888 "~/.local/share/gnome-shell/extensions/" "$TARGET"/extensions/
 
@@ -186,19 +186,31 @@ Pick a backup script to run: "
         ;;
 
       "WhatsApp")
-        # WhatsApp data is used on a phone and so cannot live directly in MAINDIR. Thus the data needs to be periodically backed up.
-        # Due to the long-term accumulation of media files in WhatsApp, two backup copies are maintained:
-        # - One with all accumulated media files.
-        # - One containing only those from the latest backup.
-        # This is not fully automated. The WhatsApp directory must be manually copied to EXPTDIR.
+        # WhatsApp data is used on a phone and so cannot live directly in MAINDIR. Thus the data needs to be periodically backed up
+        # This assumes the live WhatsApp folder is being continuously synced from the phone (local synced copy is backed up)
+        # The backed up version is cumulative, so files deleted from the live version are not deleted from the backup
+        # After the backup, media files are copied and standardized to a temporary location for review, and the live media folder is deleted
         WSAMDIR="$MAINDIR/Backups/Archive/WhatsApp-AllMedia"
-        echo "Attempting to find a WhatsApp directory in '"$EXPTDIR"' and copy it to '"$WSAMDIR"' (merging with existing, if any)... "
-        DIRB="$EXPTDIR"/com.whatsapp/WhatsApp
-        DIRC="$EXPTDIR"/WhatsApp
-        DIR="$DIRA"
-        if [ ! -d "$DIR" ]; then DIR="$DIRB"; fi
-        if [ ! -d "$DIR" ]; then DIR="$DIRC"; fi
-        "$HERE"/WhatsApp/WhatsApp.sh "$DIR" "$WSAMDIR" && rm -r "$DIR"
+        DIR=~/"Main/WhatsApp"
+        echo "Attempting to copy the WhatsApp directory in '"$DIR"' to '"$WSAMDIR"' (merging with existing, if any)... "
+        "$HERE"/WhatsApp/WhatsApp.sh "$DIR" "$WSAMDIR"
+        DIR2=~/Downloads/WAMedia
+        PROCESS_SCRIPT="$MAINDIR"/Code/Automation/random-utils-ir/ExifStandardize.sh
+        echo "Attempting to copy WhatsApp media in '"$DIR"' to '"$DIR2"', standardize them, and delete the original media..."
+        mkdir "$DIR2"
+        mkdir "$DIR2"/"WhatsApp Images"
+        mkdir "$DIR2"/"WhatsApp Video"
+        rsync -aq "$DIR"/Media/"WhatsApp Images"/ "$DIR2"/"WhatsApp Images"/
+        rsync -aq "$DIR"/Media/"WhatsApp Video"/ "$DIR2"/"WhatsApp Video"/
+        HAD_ERROR=""
+        for dir in ""$DIR2"/WhatsApp Images/" ""$DIR2"/WhatsApp Video/"; do
+          for subdir in Private Sent .; do
+            "$PROCESS_SCRIPT" "$dir"/"$subdir" || HAD_ERROR="true"
+          done
+        done
+        if [ -z "$HAD_ERROR" ]; then
+          rm -r "$DIR"/Media
+        fi
         break
         ;;
 

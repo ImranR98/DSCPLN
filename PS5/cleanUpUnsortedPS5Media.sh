@@ -67,6 +67,7 @@ for GAME_DIR in "$1"/"Video Clips"/*; do
         if [ -f "$POTENTIAL_JPG" ]; then
             rm "$POTENTIAL_JPG"
             mv "$FILE" "$2"/Archive/"$GAME"/"$FILENAME"
+            echo Archived: "$FILENAME"
         else
             mv "$FILE" "$2"/"$FILENAME"
             echo "$FILENAME"
@@ -88,6 +89,7 @@ for GAME_DIR in "$1"/"Screenshots"/*; do
         DIFF="$(isTrophyScreenshot "$FILE")"
         if [ $DIFF -le 10 ]; then
             mv "$FILE" "$2"/Archive/"$GAME"/"$FILENAME"
+            echo Archived: "$FILENAME"
         else
             mv "$FILE" "$2"/"$FILENAME"
             echo "$FILENAME"

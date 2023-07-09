@@ -55,9 +55,6 @@ echo "Non-trophy media:"
 
 for GAME_DIR in "$1"/"Video Clips"/*; do
     GAME="$(basename "$GAME_DIR")"
-    if [ ! -d "$2"/"$GAME" ]; then
-        mkdir "$2"/"$GAME"
-    fi
     if [ ! -d "$2"/Archive/"$GAME" ]; then
         mkdir "$2"/Archive/"$GAME"
     fi
@@ -77,9 +74,6 @@ for GAME_DIR in "$1"/"Video Clips"/*; do
 done
 
 for GAME_DIR in "$1"/"Screenshots"/*; do
-    if [ ! -d "$2"/"$GAME" ]; then
-        mkdir "$2"/"$GAME"
-    fi
     GAME="$(basename "$GAME_DIR")"
     if [ ! -d "$2"/Archive/"$GAME" ]; then
         mkdir "$2"/Archive/"$GAME"

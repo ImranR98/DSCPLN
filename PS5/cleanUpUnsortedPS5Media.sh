@@ -61,7 +61,7 @@ for GAME_DIR in "$1"/"Video Clips"/*; do
     if [ ! -d "$2"/Archive/"$GAME" ]; then
         mkdir "$2"/Archive/"$GAME"
     fi
-    for FILE in "$GAME_DIR"/*.mp4; do
+    for FILE in "$GAME_DIR"/*.mp4 "$GAME_DIR"/*.webm; do
         FILENAME="$(basename "$FILE")"
         POTENTIAL_JPG="${FILE%.*}".jpg # Same-name JPEG implies it is a trophy video/image pair
         if [ -f "$POTENTIAL_JPG" ]; then

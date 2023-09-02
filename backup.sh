@@ -39,6 +39,7 @@ Pick a backup script to run: "
     "Presto Transit Usage Report"
     "Google"
     "Twitter"
+    "Music (Spotify Sync)"
     "Spotify Account Data"
     "Spotify Extended Streaming History"
     "Spotify Technical Logs"
@@ -326,6 +327,15 @@ Pick a backup script to run: "
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Twitter export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "accountId\" : \".*\"" data/account.js | tail -c +15 | head -c -2' "$(find "$EXPTDIR/" | grep twitter.*.zip$)" "$BACKUPSDIR/Twitter"
+        break
+        ;;
+
+      "Music (Spotify Sync)")
+        # Spotify is a cloud service. Thus, content from the service must be periodically sourced from YouTube and backed up.
+        MUSICDIR="$MAINDIR/External Media/Music"
+        MUSIC_SCRIPT="$MAINDIR"/Code/Automation/SpotifARRR/SpotifARRR.sh
+        echo "Attempting to find use SpotDL to sync Spotify playlists to '"$MUSICDIR"'..."
+        "$MUSIC_SCRIPT" "$MUSICDIR"
         break
         ;;
 

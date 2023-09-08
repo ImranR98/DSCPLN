@@ -23,6 +23,7 @@ Pick a backup script to run: "
   options=(
     "Local Files"
     "NUC Files"
+    "SRV Files"
     "Media Import"
     "Balance"
     "Veracrypted Bitwarden"
@@ -97,6 +98,17 @@ Pick a backup script to run: "
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 8888 "~/.local/share/gnome-shell/extensions/" "$TARGET"/extensions/
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -d user@nuc.example.com 8888 "~/.var/app/org.mozilla.firefox/.mozilla/firefox/" "$TARGET"/firefox/
+
+        break
+        ;;
+
+      "SRV Files")
+        # SRV files must exist on the SRV to be usable, so cannot live directly in MAINDIR.
+        # Thus they need to be periodically backed up to MAINDIR.
+        # This is fully automated.
+        TARGET="$MAINDIR/Backups/SRV"
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg ubuntu@nuc.example.com 22 "~/" "$TARGET"/homeDir/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@nuc.example.com 22 "/etc/systemd/system/frps.service" "$TARGET"/systemd/
 
         break
         ;;

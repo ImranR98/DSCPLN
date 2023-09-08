@@ -198,19 +198,25 @@ Pick a backup script to run: "
         DIR2=~/Downloads/WAMedia
         PROCESS_SCRIPT="$MAINDIR"/Code/Automation/random-utils-ir/ExifStandardize.sh
         echo "Attempting to copy WhatsApp media in '"$DIR"' to '"$DIR2"', standardize them, and delete the original media..."
-        mkdir "$DIR2"
-        mkdir "$DIR2"/"WhatsApp Images"
-        mkdir "$DIR2"/"WhatsApp Video"
+        mkdir -p "$DIR2"/"WhatsApp Images"
+        mkdir -p "$DIR2"/"WhatsApp Video"
+        mkdir -p "$DIR2"/"WhatsApp Video Notes"
         rsync -aq "$DIR"/Media/"WhatsApp Images"/ "$DIR2"/"WhatsApp Images"/
         rsync -aq "$DIR"/Media/"WhatsApp Video"/ "$DIR2"/"WhatsApp Video"/
+        rsync -aq "$DIR"/Media/"WhatsApp Video Notes"/ "$DIR2"/"WhatsApp Video Notes"/
         HAD_ERROR=""
-        for dir in ""$DIR2"/WhatsApp Images/" ""$DIR2"/WhatsApp Video/"; do
-          for subdir in Private Sent .; do
-            "$PROCESS_SCRIPT" "$dir"/"$subdir" || HAD_ERROR="true"
+        for dir in ""$DIR2"/WhatsApp Images/" ""$DIR2"/WhatsApp Video/" ""$DIR2"/WhatsApp Video Notes/"; do
+          for entry in "$dir"/* .; do
+            entryPath="$dir"/"$(basename "$entry")"
+            if [ -d "$entryPath" ]; then
+              "$PROCESS_SCRIPT" "$entryPath" || HAD_ERROR="true"
+            fi
           done
         done
         if [ -z "$HAD_ERROR" ]; then
           rm -r "$DIR"/Media
+        else
+          echo 'THERE WERE MEDIA PROCESSING ERRORS - THE ORIGINALS IN '"$DIR"' WILL NOT BE DELETED.' >&2
         fi
         break
         ;;

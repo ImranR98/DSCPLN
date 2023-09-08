@@ -300,12 +300,12 @@ Pick a backup script to run: "
         # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups/Archive/Presto Transit Usage Reports"
         echo "Attempting to find Presto TUR export(s) in '"$EXPTDIR"', move them into "$BACKUPSDIR"', and commit changes to Git..."
-        IFS=$'\n' read -r -d '' -a SOURCES < <(find "$EXPTDIR" | grep -E '.*/TUR_20[0-9]{2}_.*\.pdf$' && printf '\0')
+        IFS=$'\n' read -r -d '' -a SOURCES < <(find "$EXPTDIR" | grep -E '.*/TUR_20[0-9]{2}_.*\.csv$' && printf '\0')
         for SOURCE in "${SOURCES[@]}"; do
           "$HERE"/DirCopy/DirCopy.sh -g -d "$SOURCE" "$BACKUPSDIR"
         done
         if [ "${#SOURCES[@]}" -eq 0 ]; then
-          echo "No Presto TUR PDFs found in "$EXPTDIR""
+          echo "No Presto TUR CSVs found in "$EXPTDIR""
         else
           echo "Moved "${#SOURCES[@]}" files"
         fi

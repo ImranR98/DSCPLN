@@ -192,7 +192,7 @@ Pick a backup script to run: "
         gitCopyHelper "$EXPTDIR"/obtainium-export-*.json "$TARGET" 'Obtainium.json'
         gitCopyHelper "$EXPTDIR"/antennapod-feeds-*.opml "$TARGET" 'Podcasts.opml'
         gitCopyHelper "$EXPTDIR"/ReadYou.opml "$TARGET" 'RSS.opml'
-        gitCopyHelper "$EXPTDIR"/aegis-export-*.json "$TARGET" 'aegis-export.json'
+        gitCopyHelper "$EXPTDIR"/aegis-*-*.json "$TARGET" 'aegis-export.json'
         gitCopyHelper "$EXPTDIR"/*.ceb "$TARGET" 'Cheogram.ceb'
 
         break

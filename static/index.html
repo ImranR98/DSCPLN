@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D$CPLN</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.2/css/bulma.min.css">
+    <style>
+        /* Initially hide the form */
+        .hidden {
+            display: none;
+        }
+
+        /* Style the "Modify" link */
+        #modifyBudgetsVisibilityButton {
+            color: inherit;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+
+        /* Add space between the top field and button */
+        .form-spacer {
+            margin-bottom: 10px;
+            /* Adjust the spacing as needed */
+        }
+    </style>
+</head>
+
+<body>
+    <section class="section">
+        <div class="container">
+
+            <h1 class="title">D$CPLN</h1>
+            <p class="subtitle">Monthly/Weekly Budget</p>
+
+            <div class="columns">
+                <div class="column">
+                    <div class="box">
+
+                        <p class="is-size-5 has-text-weight-bold" id="monthsMessage">Month: <span
+                                id="monthsSpendText"></span> of <span id="monthlyBudgetText"></span></p>
+                        <p class="is-size-5 has-text-weight-bold" id="weeksMessage">Week: <span
+                                id="weeksSpendText"></span> of <span id="weeklyBudgetText"></span></p>
+
+                        <form id="modifyBudgetsForm" class="mt-6">
+                            <label class="label">Update Monthly Budget</label>
+                            <div class="field is-grouped">
+                                <div class="control">
+                                    <input id="modifyBudgetsFormInput" class="input" type="text"
+                                        aria-label="Modify Monthly Budget" placeholder="Monthly Budget">
+                                </div>
+                                <div class="control">
+                                    <button class="button is-primary">Save</button>
+                                </div>
+                            </div>
+                        </form>
+
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </section>
+
+    <script>
+        const monthsSpendText = document.getElementById('monthsSpendText')
+        const monthlyBudgetText = document.getElementById('monthlyBudgetText')
+        const weeksSpendText = document.getElementById('weeksSpendText')
+        const weeklyBudgetText = document.getElementById('weeklyBudgetText')
+        const modifyBudgetsForm = document.getElementById('modifyBudgetsForm')
+        const modifyBudgetsFormInput = document.getElementById('modifyBudgetsFormInput')
+
+        const updateBudget = async (monthlyBudget) => {
+            const response = await fetch('/budget', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ monthlyBudget }),
+            })
+            if (!response.ok) {
+                throw response
+            }
+        }
+
+        const fetchData = async () => {
+            monthsSpendText.textContent = monthlyBudgetText.textContent = weeksSpendText.textContent = weeklyBudgetText.textContent = '...'
+            monthsSpendText.style.color = '#B00'
+            weeksSpendText.style.color = '#B00'
+            modifyBudgetsForm.hidden = true
+            modifyBudgetsFormInput.value = 0
+
+            const response = await fetch('/data')
+            if (!response.ok) {
+                throw response
+            }
+            const data = await response.json()
+
+            const monthlyBudget = Number.parseFloat(data.monthlyBudget)
+            const weeklyBudget = monthlyBudget / 4
+            const monthsSpend = Number.parseFloat(data.monthsSpend)
+            const weeksSpend = Number.parseFloat(data.weeksSpend)
+            monthsSpendText.textContent = `$${monthsSpend}`
+            monthlyBudgetText.textContent = `$${monthlyBudget}`
+            weeksSpendText.textContent = `$${weeksSpend}`
+            weeklyBudgetText.textContent = `$${weeklyBudget}`
+            monthsSpendText.style.color = monthsSpend > monthlyBudget ? '#B00' : '#0B0'
+            weeksSpendText.style.color = weeksSpend > weeklyBudget ? '#B00' : '#0B0'
+            modifyBudgetsForm.hidden = false
+            modifyBudgetsFormInput.value = monthlyBudget
+        }
+
+        modifyBudgetsForm.addEventListener('submit', async (event) => {
+            event.preventDefault()
+            let val = Number.parseFloat(modifyBudgetsFormInput.value)
+            if (val > 0) {
+                await updateBudget(val)
+                await fetchData()
+            }
+        })
+
+        fetchData()
+    </script>
+</body>
+
+</html>

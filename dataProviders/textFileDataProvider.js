@@ -27,7 +27,7 @@ const checkFile = (file, createIfIsThis, contentIfCreated = '') => {
 }
 
 checkFile(dataFile, defaultDataFile, '')
-checkFile(budgetFile, defaultBudgetFile, '1000')
+checkFile(budgetFile, defaultBudgetFile, (process.env['TEXTFILE_BUDGET_INIT_AMT'] || '1000'))
 
 const getCurrentMonthNumber = () => new Date().getMonth() + 1
 const getFirstDayOfCurrentWeek = () => {

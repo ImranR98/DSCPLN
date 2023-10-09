@@ -24,7 +24,6 @@ Pick a backup script to run: "
     "Local Files"
     "NUC Files"
     "SRV Files"
-    "RPI Files"
     "Media Import"
     "Balance"
     "Veracrypted Bitwarden"
@@ -110,23 +109,6 @@ Pick a backup script to run: "
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg ubuntu@nuc.example.com 22 "~/" "$TARGET"/homeDir/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@nuc.example.com 22 "/etc/systemd/system/frps.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@nuc.example.com 22 "/etc/systemd/system/nuc-healthcheck.service" "$TARGET"/systemd/
-
-        break
-        ;;
-
-      "RPI Files")
-        # RPI files must exist on the RPI to be usable, so cannot live directly in MAINDIR.
-        # Thus they need to be periodically backed up to MAINDIR.
-        # This is fully automated.
-        TARGET="$MAINDIR/Backups/RPI"
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8887 "~/docker-compose.yml" "$TARGET"/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8887 "~/nuc-ips.sh" "$TARGET"/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8887 "~/nuc-unlock.sh" "$TARGET"/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8887 "~/docker-compose-imranr.service" "$TARGET"/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8887 "~/frpc.ini" "$TARGET"/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8887 "~/nuc-ips.service" "$TARGET"/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8887 "~/nuc-ips.txt" "$TARGET"/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 8887 "~/.ssh/" "$TARGET"/.ssh/
 
         break
         ;;

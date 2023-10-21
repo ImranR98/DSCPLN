@@ -93,6 +93,8 @@ Pick a backup script to run: "
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-index.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.timer" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/mdscl-camera.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/mdscl-screenshots.service" "$TARGET"/systemd/
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 8888 "~/.local/share/gnome-shell/extensions/" "$TARGET"/extensions/
 
@@ -118,7 +120,7 @@ Pick a backup script to run: "
         # Some local media files must exist in holding locations to be processed or synced from other devices (or both) before being moved to MAINDIR.
         # Thus they need to be periodically processed (date/time EXIF and filename standardization) and moved to MAINDIR.
         # This is fully automated.
-        PROCESS_SCRIPT="$MAINDIR"/Code/Automation/random-utils-ir/ExifStandardize.sh
+        PROCESS_SCRIPT="$MAINDIR"/Code/Automation/MediaDateStandardize/mediaDateStandardize.sh
         echo "Importing Camera Files..."
         "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/DCIM/Camera "$MAINDIR"/Media/Camera
         echo "Importing Snaps..."
@@ -210,7 +212,7 @@ Pick a backup script to run: "
         echo "Attempting to copy the WhatsApp directory in '"$DIR"' to '"$WSAMDIR"' (merging with existing, if any)... "
         "$HERE"/WhatsApp/WhatsApp.sh "$DIR" "$WSAMDIR"
         DIR2=~/Downloads/WAMedia
-        PROCESS_SCRIPT="$MAINDIR"/Code/Automation/random-utils-ir/ExifStandardize.sh
+        PROCESS_SCRIPT="$MAINDIR"/Code/Automation/MediaDateStandardize/mediaDateStandardize.sh
         echo "Attempting to copy WhatsApp media in '"$DIR"' to '"$DIR2"', standardize them, and delete the original media..."
         mkdir -p "$DIR2"/"WhatsApp Images"
         mkdir -p "$DIR2"/"WhatsApp Video"

@@ -119,14 +119,16 @@ Pick a backup script to run: "
       "Media Import")
         # Some local media files must exist in holding locations to be processed or synced from other devices (or both) before being moved to MAINDIR.
         # Thus they need to be periodically processed (date/time EXIF and filename standardization) and moved to MAINDIR.
+        # Other local media files are automatically processed and moved to MAINDIR in real time, but the originals still need to be periodically deleted.
         # This is fully automated.
         PROCESS_SCRIPT="$MAINDIR"/Code/Automation/MediaDateStandardize/mediaDateStandardize.sh
-        echo "Importing Camera Files..."
-        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/DCIM/Camera "$MAINDIR"/Media/Camera
+        RM_SCRIPT="$MAINDIR"/Code/Automation/MediaDateStandardize/deleteSynced.sh
+        echo "Deleting Synced Camera Files..."
+        "$RM_SCRIPT" "$PHONESYNCDIR"/DCIM/Camera "$MAINDIR"/Media/Camera
+        echo "Deleting Synced Phone Screenshots..."
+        "$RM_SCRIPT" "$PHONESYNCDIR"/Screenshots "$MAINDIR"/Media/Screenshots
         echo "Importing Snaps..."
         "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/DCIM/Snapchat "$MAINDIR"/Media/Camera
-        echo "Importing Phone Screenshots..."
-        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/Screenshots "$MAINDIR"/Media/Screenshots
         # === ONLY ON PC ===
         if [ "$ISPC" != 1 ]; then
           echo "Not on PC - Will skip screenshot import"

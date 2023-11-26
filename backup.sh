@@ -23,7 +23,7 @@ Pick a backup script to run: "
   options=(
     "Local Files"
     "NUC Files"
-    "SRV Files"
+    "FRPS Files"
     "Media Import"
     "Balance"
     "Veracrypted Bitwarden"
@@ -101,11 +101,11 @@ Pick a backup script to run: "
         break
         ;;
 
-      "SRV Files")
-        # SRV files must exist on the SRV to be usable, so cannot live directly in MAINDIR.
+      "FRPS Files")
+        # FRPS files must exist on the FRPS to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
-        TARGET="$MAINDIR/Backups/SRV"
+        TARGET="$MAINDIR/Backups/FRPS"
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg ubuntu@nuc.example.com 22 "~/" "$TARGET"/homeDir/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@nuc.example.com 22 "/etc/systemd/system/frps.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@nuc.example.com 22 "/etc/systemd/system/frps-multiuser.service" "$TARGET"/systemd/

@@ -3,6 +3,7 @@
 
 // Reads expenses from a text file where each line is of the form '<amount> <description> <optional 'M D' date (if none, take from previous line)>'
 // Stores the monthly budget as a single number in a text file
+// Stores a "first week bias" as a single number on the second line of the monthly budget file
 
 const fs = require('fs')
 const path = require('path')
@@ -27,12 +28,69 @@ const checkFile = (file, createIfIsThis, contentIfCreated = '') => {
 }
 
 checkFile(dataFile, defaultDataFile, '')
-checkFile(budgetFile, defaultBudgetFile, (process.env['TEXTFILE_BUDGET_INIT_AMT'] || '1000'))
+checkFile(budgetFile, defaultBudgetFile,
+    `${(process.env['TEXTFILE_BUDGET_INIT_AMT'] || '2400')}\n${(process.env['TEXTFILE_FIRST_WEEK_BIAS_INIT_AMT'] || '1400')}`
+)
 
 const getCurrentMonthNumber = () => new Date().getMonth() + 1
-const getFirstDayOfCurrentWeek = () => {
-    var curr = new Date()
-    return new Date(curr.setDate(curr.getDate() - curr.getDay())).getDate()
+
+const getFirstDateOfCalWeek = (date, includePartial = false) => {
+    const givenDate = new Date(date)
+    let tempDate = new Date(givenDate)
+    const thisSatDay = new Date(tempDate.setDate(tempDate.getDate() - tempDate.getDay()))
+    const dayOne = new Date(thisSatDay)
+    dayOne.setDate(1)
+    if (includePartial) {
+        if (isPartialStartWeek(givenDate)) {
+            return {
+                date: dayOne,
+                code: "partialStart"
+            }
+        } else if (isPartialEndWeek(givenDate)) {
+            let d = new Date(thisSatDay)
+            d.setDate(d.getDate() - 7)
+            return {
+                date: d,
+                code: "partialEnd"
+            }
+        } else if (isNextWeekPartialEnd(givenDate)) {
+            return {
+                date: thisSatDay,
+                code: "beforePartial"
+            }
+        } else if (wasLastWeekPartialStart(givenDate)) {
+            return {
+                date: dayOne,
+                code: "afterPartial"
+            }
+        }
+    }
+    return {
+        date: thisSatDay,
+        code: null
+    }
+}
+
+const isPartialStartWeek = (date) => {
+    const givenDate = new Date(date)
+    const lastSat = getFirstDateOfCalWeek(date, false).date
+    return lastSat.getMonth() < givenDate.getMonth() || lastSat.getFullYear() < givenDate.getFullYear()
+}
+const isPartialEndWeek = (date) => {
+    const givenDate = new Date(date)
+    const d = new Date(getFirstDateOfCalWeek(date, false).date)
+    d.setDate(d.getDate() + 6)
+    return d.getMonth() > givenDate.getMonth() || d.getFullYear() > givenDate.getFullYear()
+}
+const wasLastWeekPartialStart = (date) => {
+    const d = new Date(getFirstDateOfCalWeek(date, false).date)
+    d.setDate(d.getDate() - 1)
+    return isPartialStartWeek(d)
+}
+const isNextWeekPartialEnd = (date) => {
+    const d = new Date(getFirstDateOfCalWeek(date, false).date)
+    d.setDate(d.getDate() + 7)
+    return isPartialEndWeek(d)
 }
 
 const getTotalExpensesFromLines = (expenseLines) => expenseLines.reduce((prev, curr) => {
@@ -45,7 +103,9 @@ module.exports.getData = async () => {
         .map(l => l.trim())
         .filter(l => l.match('^[0-9]+(\.[0-9]+)? '))
     const monthNum = getCurrentMonthNumber()
-    const weekStartNum = getFirstDayOfCurrentWeek()
+    const weekStart = getFirstDateOfCalWeek(new Date(), true)
+    const weekStartNum = weekStart.date.getDate()
+    const weekSpecialCode = weekStart.code
     const firstMonthLineIndex = expenseLines.findIndex(l =>
         l.match(`${monthNum} [0-9]{1,2}$`)
     )
@@ -54,14 +114,23 @@ module.exports.getData = async () => {
         Number.parseInt(l.split(' ').reverse()[0]) >= weekStartNum
     )
     const thisMonthsExpenseLines = expenseLines.slice(firstMonthLineIndex)
+    const budgetData = fs.readFileSync(budgetFile).toString().trim().split('\n').map(l => Number.parseFloat(l || 0))
+    const monthlyBudget = budgetData[0] || 0
+    const firstWeekBias = budgetData[1] || 0
+    const normalWeeklyBudget = (monthlyBudget - firstWeekBias) / 4
+
     return {
-        monthlyBudget: Number.parseFloat(fs.readFileSync(budgetFile).toString().trim()),
+        monthlyBudget,
+        weeklyBudget: weekStartNum <= 7 ? firstWeekBias + normalWeeklyBudget : normalWeeklyBudget,
+        firstWeekBias,
         monthsSpend: getTotalExpensesFromLines(thisMonthsExpenseLines),
         weeksSpend: getTotalExpensesFromLines(expenseLines.slice(firstWeekLineIndex)),
         extraData: thisMonthsExpenseLines
     }
 }
 
-module.exports.updateMonthlyBudget = async (monthlyBudget) => {
-    fs.writeFileSync(budgetFile, Number.parseFloat(monthlyBudget).toString())
+module.exports.updateMonthlyBudget = async (monthlyBudget, firstWeekBias) => {
+    fs.writeFileSync(budgetFile,
+        `${Number.parseFloat(monthlyBudget || 0).toString()}\n${Number.parseFloat(firstWeekBias || 0).toString()}`
+    )
 }

@@ -51,6 +51,10 @@
                                         aria-label="Modify Monthly Budget" placeholder="Monthly Budget">
                                 </div>
                                 <div class="control">
+                                    <input id="modifyFirstWeekBiasFormInput" class="input" type="text"
+                                        aria-label="Modify First Week Bias" placeholder="First Week Bias">
+                                </div>
+                                <div class="control">
                                     <button class="button is-primary">Save</button>
                                 </div>
                             </div>
@@ -71,14 +75,15 @@
         const weeklyBudgetText = document.getElementById('weeklyBudgetText')
         const modifyBudgetsForm = document.getElementById('modifyBudgetsForm')
         const modifyBudgetsFormInput = document.getElementById('modifyBudgetsFormInput')
+        const modifyFirstWeekBiasFormInput = document.getElementById('modifyFirstWeekBiasFormInput')
 
-        const updateBudget = async (monthlyBudget) => {
+        const updateBudget = async (monthlyBudget, firstWeekBias) => {
             const response = await fetch('/budget', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ monthlyBudget }),
+                body: JSON.stringify({ monthlyBudget, firstWeekBias }),
             })
             if (!response.ok) {
                 throw response
@@ -91,6 +96,7 @@
             weeksSpendText.style.color = '#B00'
             modifyBudgetsForm.hidden = true
             modifyBudgetsFormInput.value = 0
+            modifyFirstWeekBiasFormInput.value = 0
 
             const response = await fetch('/data')
             if (!response.ok) {
@@ -99,7 +105,8 @@
             const data = await response.json()
 
             const monthlyBudget = Number.parseFloat(data.monthlyBudget)
-            const weeklyBudget = monthlyBudget / 4
+            const firstWeekBias = Number.parseFloat(data.firstWeekBias)
+            const weeklyBudget = Number.parseFloat(data.weeklyBudget)
             const monthsSpend = Number.parseFloat(data.monthsSpend)
             const weeksSpend = Number.parseFloat(data.weeksSpend)
             monthsSpendText.textContent = `$${monthsSpend}`
@@ -110,13 +117,15 @@
             weeksSpendText.style.color = weeksSpend > weeklyBudget ? '#B00' : '#0B0'
             modifyBudgetsForm.hidden = false
             modifyBudgetsFormInput.value = monthlyBudget
+            modifyFirstWeekBiasFormInput.value = firstWeekBias
         }
 
         modifyBudgetsForm.addEventListener('submit', async (event) => {
             event.preventDefault()
-            let val = Number.parseFloat(modifyBudgetsFormInput.value)
-            if (val > 0) {
-                await updateBudget(val)
+            let mb = Number.parseFloat(modifyBudgetsFormInput.value)
+            let fb = Number.parseFloat(modifyFirstWeekBiasFormInput.value)
+            if (mb > 0) {
+                await updateBudget(mb, fb)
                 await fetchData()
             }
         })

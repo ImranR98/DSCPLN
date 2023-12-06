@@ -28,7 +28,7 @@ app.get('/data', async (req, res) => {
 
 app.post('/budget', async (req, res) => {
     try {
-        await dataProvider.updateMonthlyBudget(req.body.monthlyBudget)
+        await dataProvider.updateMonthlyBudget(req.body.monthlyBudget, req.body.firstWeekBias)
         res.send()
     } catch (e) {
         console.error(e)
@@ -43,7 +43,6 @@ app.listen(port, async () => {
     if (monthlyLimitNtfyURL || weeklyLimitNtfyURL) {
         const checkLimit = async () => {
             const data = await dataProvider.getData()
-            data.weeklyBudget = (data.monthlyBudget / 4)
             if (data.monthlyBudget <= data.monthsSpend) {
                 if (monthlyLimitNtfyURL && !didWarnMonthly) {
                     await axios.post(monthlyLimitNtfyURL,

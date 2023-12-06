@@ -14,6 +14,8 @@ Environment variables needed (a `.env` file can be used for this - see `template
     - Lines in this file must adhere to the format: `'<amount> <description> <optional 'M D' date (if none, take from previous line)>'`
   - `TEXTFILE_DATA_PROVIDER_BUDGET_PATH`: The path to a text file where the budget limit should be stored (defaults to `budget.txt`).
   - `TEXTFILE_BUDGET_INIT_AMT`: The amount that the monthly limit should be initialized to if it does not already exist.
+  - `TEXTFILE_FIRST_WEEK_BIAS_INIT_AMT`: The extra amount that will be assigned to the first week.
+  - Note: Weekly budgets are given for "full weeks" (weeks with all 7 days), with any adjacent partial weeks lumped in to the current week's budget.
 - `MONTHLY_LIMIT_NTFY_URL`: The ntfy.sh URL to which to send "monthly budget limit reached" notifications.
 - `WEEKLY_LIMIT_NTFY_URL`: The ntfy.sh URL to which to send "weekly budget limit reached" notifications.
 - `NTFY_CHECK_INTERVAL_MINUTES`: How often, in minutes, to check for changes so that notifications can be sent out if needed.

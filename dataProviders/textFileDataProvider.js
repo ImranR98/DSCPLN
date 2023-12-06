@@ -93,17 +93,47 @@ const isNextWeekPartialEnd = (date) => {
     return isPartialEndWeek(d)
 }
 
+function countFullWeeksInMonth(date) {
+    const givenDate = new Date(date)
+    let firstSaturdayThisMonth = null
+    let d = new Date(givenDate)
+    d.setDate(1)
+    while (!firstSaturdayThisMonth) {
+        if (d.getDay() == 0) {
+            firstSaturdayThisMonth = new Date(d)
+        }
+        d.setDate(d.getDate() + 1)
+    }
+    if (firstSaturdayThisMonth.getDate() > givenDate.getDate()) {
+        const temp = new Date(givenDate)
+        temp.setDate(0)
+        return countFullWeeksInMonth(temp)
+    }
+    const allSaturdaysThisMonth = [firstSaturdayThisMonth]
+    while (true) {
+        const temp = new Date(allSaturdaysThisMonth[allSaturdaysThisMonth.length - 1])
+        temp.setDate(temp.getDate() + 7)
+        if (temp.getMonth() == firstSaturdayThisMonth.getMonth()) {
+            allSaturdaysThisMonth.push(temp)
+        } else {
+            break
+        }
+    }
+    return (allSaturdaysThisMonth.filter(d => !isPartialEndWeek(d) && !isPartialEndWeek(d))).length
+}
+
 const getTotalExpensesFromLines = (expenseLines) => expenseLines.reduce((prev, curr) => {
     return prev + Number.parseFloat(curr.split(' ')[0])
 }, 0)
 
 module.exports.getData = async () => {
+    const now = new Date()
     const expenseLines = fs.readFileSync(dataFile).toString()
         .split('\r\n').join('\n').split('\n')
         .map(l => l.trim())
         .filter(l => l.match('^[0-9]+(\.[0-9]+)? '))
     const monthNum = getCurrentMonthNumber()
-    const weekStart = getFirstDateOfCalWeek(new Date(), true)
+    const weekStart = getFirstDateOfCalWeek(now, true)
     const weekStartNum = weekStart.date.getDate()
     const weekSpecialCode = weekStart.code
     const firstMonthLineIndex = expenseLines.findIndex(l =>
@@ -117,7 +147,7 @@ module.exports.getData = async () => {
     const budgetData = fs.readFileSync(budgetFile).toString().trim().split('\n').map(l => Number.parseFloat(l || 0))
     const monthlyBudget = budgetData[0] || 0
     const firstWeekBias = budgetData[1] || 0
-    const normalWeeklyBudget = (monthlyBudget - firstWeekBias) / 4
+    const normalWeeklyBudget = (monthlyBudget - firstWeekBias) / countFullWeeksInMonth(now)
 
     return {
         monthlyBudget,

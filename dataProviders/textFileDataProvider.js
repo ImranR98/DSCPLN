@@ -121,8 +121,9 @@ module.exports.getData = async () => {
 
     return {
         monthlyBudget,
-        weeklyBudget: weekStartNum <= 7 ? firstWeekBias + normalWeeklyBudget : normalWeeklyBudget,
         firstWeekBias,
+        weeklyBudget: weekStartNum <= 7 ? firstWeekBias + normalWeeklyBudget : normalWeeklyBudget,
+        weekSpecialCode,
         monthsSpend: getTotalExpensesFromLines(thisMonthsExpenseLines),
         weeksSpend: getTotalExpensesFromLines(expenseLines.slice(firstWeekLineIndex)),
         extraData: thisMonthsExpenseLines

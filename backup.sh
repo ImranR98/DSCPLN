@@ -67,7 +67,9 @@ Pick a backup script to run: "
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
           "$HERE"/DirCopy/DirCopy.sh -g "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"
         done
-        SOURCES_NO_GIT=(~/".var/app/org.mozilla.firefox/.mozilla/firefox")
+        # Generate gnome-boxes XML files before copying
+        for name in $(virsh -c qemu:///session list --all | tail -n +3 | head -n -1 | awk '{print $2}'); do virsh dumpxml "$name" > ~/.local/share/gnome-boxes/"$name".xml; done
+        SOURCES_NO_GIT=(~/".var/app/org.mozilla.firefox/.mozilla/firefox" ~/".local/share/gnome-boxes")
         for SOURCE in "${SOURCES_NO_GIT[@]}"; do
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"'..."
           "$HERE"/DirCopy/DirCopy.sh "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"

@@ -44,7 +44,7 @@ SOURCE="$(echo "$1" | sed 's:/*$::')"
 TARGET="$(echo "$2" | sed 's:/*$::')"
 
 if [ ! -d "$TARGET" ]; then
-    mkdir "$TARGET"
+    mkdir -p "$TARGET"
 fi
 
 if [ -f "$SOURCE" ]; then

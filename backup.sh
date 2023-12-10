@@ -22,6 +22,7 @@ chooseScript() {
 Pick a backup script to run: "
   options=(
     "Local Files"
+    "GNOME Boxes"
     "NUC Files"
     "FRPS Files"
     "Media Import"
@@ -67,9 +68,28 @@ Pick a backup script to run: "
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
           "$HERE"/DirCopy/DirCopy.sh -g "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"
         done
+        SOURCES_NO_GIT=(~/".var/app/org.mozilla.firefox/.mozilla/firefox")
+        for SOURCE in "${SOURCES_NO_GIT[@]}"; do
+          echo "Attempting to copy '"$SOURCE"' into '"$TARGET"'..."
+          "$HERE"/DirCopy/DirCopy.sh "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"
+        done
+        break
+        ;;
+
+      "GNOME Boxes")
+        # GNOME Boxes VMs must exist in specific locations to be usable, so cannot live directly in MAINDIR.
+        # Thus they need to be periodically backed up to MAINDIR.
+        # This is fully automated.
+        TARGET="$MAINDIR/Backups/Local Files"
+        # === ONLY ON PC ===
+        if [ "$ISPC" != 1 ]; then
+          echo "Only available on PC"
+          break
+        fi
+        # ==================
         # Generate gnome-boxes XML files before copying
-        for name in $(virsh -c qemu:///session list --all | tail -n +3 | head -n -1 | awk '{print $2}'); do virsh dumpxml "$name" > ~/.local/share/gnome-boxes/"$name".xml; done
-        SOURCES_NO_GIT=(~/".var/app/org.mozilla.firefox/.mozilla/firefox" ~/".local/share/gnome-boxes")
+        for name in $(virsh -c qemu:///session list --all | tail -n +3 | head -n -1 | awk '{print $2}'); do virsh dumpxml "$name" >~/.local/share/gnome-boxes/"$name".xml; done
+        SOURCES_NO_GIT=(~/".local/share/gnome-boxes")
         for SOURCE in "${SOURCES_NO_GIT[@]}"; do
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"'..."
           "$HERE"/DirCopy/DirCopy.sh "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"

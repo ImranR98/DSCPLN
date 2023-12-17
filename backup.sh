@@ -201,7 +201,7 @@ Pick a backup script to run: "
         # This is not fully automated; files must be manually placed in EXPTDIR.
         TARGET="$MAINDIR/Backups/Manual"
         echo "Will attempt to copy and rename all relevant files in '"$EXPTDIR"' to '"$TARGET"', then commit changes to Git."
-        echo "This is meant for the following backups: Contacts+Tasks (VCF+ICS EteSync exports from http://localhost:37358/.web/), Calendar (ICS from https://account.proton.me/u/0/calendar/import-export) Bookmarks (JSON), Obtainium Apps (JSON), Podcasts (AntennaPod OPML), RSS (Read You OPML), 2FA Codes (Aegis), Cheogram (CEB), and NTFY Subscriptions (JSON)."
+        echo "This is meant for the following backups: Contacts+Tasks (VCF+ICS EteSync exports from http://localhost:37358/.web/), Calendar (ICS from https://account.proton.me/u/0/calendar/import-export) Bookmarks (JSON), Obtainium Apps (JSON), Podcasts (AntennaPod OPML), AntennaPod DB, RSS (Read You OPML), 2FA Codes (Aegis), Cheogram (CEB), and NTFY Subscriptions (JSON)."
         echo "Press [ENTER] to continue..."
         read choice
 
@@ -223,6 +223,7 @@ Pick a backup script to run: "
         gitCopyHelper "$EXPTDIR"/bookmarks-*.json "$TARGET" 'bookmarks.json'
         gitCopyHelper "$EXPTDIR"/obtainium-export-*.json "$TARGET" 'Obtainium.json'
         gitCopyHelper "$EXPTDIR"/antennapod-feeds-*.opml "$TARGET" 'Podcasts.opml'
+        gitCopyHelper "$EXPTDIR"/AntennaPodBackup-*.db "$TARGET" 'AntennaPod.opml'
         gitCopyHelper "$EXPTDIR"/ReadYou.opml "$TARGET" 'RSS.opml'
         gitCopyHelper "$EXPTDIR"/aegis-*-*.json "$TARGET" 'aegis-export.json'
         gitCopyHelper "$EXPTDIR"/*.ceb "$TARGET" 'Cheogram.ceb'

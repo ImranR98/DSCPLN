@@ -334,7 +334,7 @@ Pick a backup script to run: "
         # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Instagram export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
-        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'cat personal_information/personal_information.json | jq ".profile_user[0].string_map_data.Username.value" | head -c -2 | tail -c +2' "$(find "$EXPTDIR/" | grep -E 'instagram-.*\.zip$')" "$BACKUPSDIR/Instagram"
+        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'cat personal_information/personal_information/personal_information.json | jq ".profile_user[0].string_map_data.Username.value" | head -c -2 | tail -c +2' "$(find "$EXPTDIR/" | grep -E 'instagram-.*\.zip$')" "$BACKUPSDIR/Instagram"
         break
         ;;
 

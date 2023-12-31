@@ -177,7 +177,7 @@ Pick a backup script to run: "
         # Thus the notes need to be periodically converted into a format that can be pasted in to Balance.xlsx.
         # This is not fully automated; the user must copy/paste the script's output into Balance.xlsx.
         BALANCEDIR="$MAINDIR/Documents/Balance"
-        ACCFILE="$(ls "$MAINDIR"/Notes/Transactions/Acc*.md)"
+        ACCFILE="$(ls "$MAINDIR"/Notes/Transactions/Acc*.md | tail -1)"
         echo "Attempting to parse user input into a format used by Balance.xlsx, then commiting any changes in '"$BALANCEDIR"' to Git upon user confirmation..."
         "$HERE"/Balance/Balance.sh "$BALANCEDIR" "$ACCFILE"
         break

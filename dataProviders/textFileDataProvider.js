@@ -145,15 +145,18 @@ module.exports.getData = async (date = new Date()) => {
     var lastMonthLineIndex = expenseLines.findIndex((l, i) =>
         i > firstMonthLineIndex &&
         l.match(`[0-9]{1,2} [0-9]{1,2}$`) &&
-        !l.match(`${monthNum} [0-9]{1,2}$`)
+        (
+            !l.match(`${monthNum} [0-9]{1,2}$`) ||
+            Number.parseInt(l.split(' ').reverse()[0]) > date.getDate() + 1
+        )
     )
     if (lastMonthLineIndex < 0) {
         lastMonthLineIndex = undefined
     }
     var lastWeekLineIndex = expenseLines.findIndex((l, i) =>
         i > firstWeekLineIndex &&
-        l.match(`${monthNum} [0-9]{1,2}$`) &&
-        Number.parseInt(l.split(' ').reverse()[0]) >= weekStartNum + 7
+        l.match(`[0-9]{1,2} [0-9]{1,2}$`) &&
+        Number.parseInt(l.split(' ').reverse()[0]) > Math.min(date.getDate() + 1, weekStartNum + 7)
     )
     if (lastWeekLineIndex < 0) {
         lastWeekLineIndex = undefined

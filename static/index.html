@@ -128,10 +128,10 @@
             const weeklyBudget = Number.parseFloat(data.weeklyBudget)
             const monthsSpend = Number.parseFloat(data.monthsSpend)
             const weeksSpend = Number.parseFloat(data.weeksSpend)
-            monthsSpendText.textContent = `$${monthsSpend}`
-            monthlyBudgetText.textContent = `$${monthlyBudget}`
-            weeksSpendText.textContent = `$${weeksSpend}`
-            weeklyBudgetText.textContent = `$${weeklyBudget}`
+            monthsSpendText.textContent = `$${monthsSpend.toFixed(2)}`
+            monthlyBudgetText.textContent = `$${monthlyBudget.toFixed(2)}`
+            weeksSpendText.textContent = `$${weeksSpend.toFixed(2)}`
+            weeklyBudgetText.textContent = `$${weeklyBudget.toFixed(2)}`
             monthsSpendText.style.color = monthsSpend > monthlyBudget ? '#B00' : '#0B0'
             weeksSpendText.style.color = weeksSpend > weeklyBudget ? '#B00' : '#0B0'
             modifyBudgetsForm.hidden = false

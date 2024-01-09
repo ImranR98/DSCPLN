@@ -61,6 +61,19 @@
                             </div>
                         </form>
 
+                        <form id="pretendDateForm" class="mt-6">
+                            <label class="label">Pretend the Date is</label>
+                            <div class="field is-grouped">
+                                <div class="control">
+                                    <input id="pretendDateFormInput" class="input" type="date"
+                                        aria-label="Pretend the Date is">
+                                </div>
+                                <div class="control">
+                                    <button class="button is-primary">Reload</button>
+                                </div>
+                            </div>
+                        </form>
+
                     </div>
                 </div>
             </div>
@@ -76,6 +89,8 @@
         const weeklyBudgetText = document.getElementById('weeklyBudgetText')
         const modifyBudgetsForm = document.getElementById('modifyBudgetsForm')
         const modifyBudgetsFormInput = document.getElementById('modifyBudgetsFormInput')
+        const pretendDateForm = document.getElementById('pretendDateForm')
+        const pretendDateFormInput = document.getElementById('pretendDateFormInput')
         const modifyFirstWeekBiasFormInput = document.getElementById('modifyFirstWeekBiasFormInput')
         const weekMessageText = document.getElementById('weekMessageText')
 
@@ -92,15 +107,17 @@
             }
         }
 
-        const fetchData = async () => {
+        const fetchData = async (date) => {
             monthsSpendText.textContent = monthlyBudgetText.textContent = weeksSpendText.textContent = weeklyBudgetText.textContent = '...'
             monthsSpendText.style.color = '#B00'
             weeksSpendText.style.color = '#B00'
             modifyBudgetsForm.hidden = true
+            pretendDateForm.hidden = true
             modifyBudgetsFormInput.value = 0
+            pretendDateFormInput.value = ''
             modifyFirstWeekBiasFormInput.value = 0
 
-            const response = await fetch('/data')
+            const response = await fetch(!date ? '/data' : `/data?date=${date}`)
             if (!response.ok) {
                 throw response
             }
@@ -118,6 +135,7 @@
             monthsSpendText.style.color = monthsSpend > monthlyBudget ? '#B00' : '#0B0'
             weeksSpendText.style.color = weeksSpend > weeklyBudget ? '#B00' : '#0B0'
             modifyBudgetsForm.hidden = false
+            pretendDateForm.hidden = false
             modifyBudgetsFormInput.value = monthlyBudget
             modifyFirstWeekBiasFormInput.value = firstWeekBias
             switch (data.weekSpecialCode) {
@@ -147,6 +165,11 @@
                 await updateBudget(mb, fb)
                 await fetchData()
             }
+        })
+
+        pretendDateForm.addEventListener('submit', async (event) => {
+            event.preventDefault()
+            fetchData(pretendDateFormInput.value ? pretendDateFormInput.value : undefined)
         })
 
         fetchData()

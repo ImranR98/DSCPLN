@@ -32,7 +32,7 @@ checkFile(budgetFile, defaultBudgetFile,
     `${(process.env['TEXTFILE_BUDGET_INIT_AMT'] || '2400')}\n${(process.env['TEXTFILE_FIRST_WEEK_BIAS_INIT_AMT'] || '1400')}`
 )
 
-const getCurrentMonthNumber = () => new Date().getMonth() + 1
+const getMonthNumber = (date = new Date()) => (date.getMonth() + 1)
 
 const getFirstDateOfCalWeek = (date, includePartial = false) => {
     const givenDate = new Date(date)
@@ -126,14 +126,13 @@ const getTotalExpensesFromLines = (expenseLines) => expenseLines.reduce((prev, c
     return prev + Number.parseFloat(curr.split(' ')[0])
 }, 0)
 
-module.exports.getData = async () => {
-    const now = new Date()
+module.exports.getData = async (date = new Date()) => {
     const expenseLines = fs.readFileSync(dataFile).toString()
         .split('\r\n').join('\n').split('\n')
         .map(l => l.trim())
         .filter(l => l.match('^[0-9]+(\.[0-9]+)? '))
-    const monthNum = getCurrentMonthNumber()
-    const weekStart = getFirstDateOfCalWeek(now, true)
+    const monthNum = getMonthNumber(date)
+    const weekStart = getFirstDateOfCalWeek(date, true)
     const weekStartNum = weekStart.date.getDate()
     const weekSpecialCode = weekStart.code
     const firstMonthLineIndex = expenseLines.findIndex(l =>
@@ -143,11 +142,27 @@ module.exports.getData = async () => {
         l.match(`${monthNum} [0-9]{1,2}$`) &&
         Number.parseInt(l.split(' ').reverse()[0]) >= weekStartNum
     )
-    const thisMonthsExpenseLines = expenseLines.slice(firstMonthLineIndex)
+    var lastMonthLineIndex = expenseLines.findIndex((l, i) =>
+        i > firstMonthLineIndex &&
+        l.match(`[0-9]{1,2} [0-9]{1,2}$`) &&
+        !l.match(`${monthNum} [0-9]{1,2}$`)
+    )
+    if (lastMonthLineIndex < 0) {
+        lastMonthLineIndex = undefined
+    }
+    var lastWeekLineIndex = expenseLines.findIndex((l, i) =>
+        i > firstWeekLineIndex &&
+        l.match(`${monthNum} [0-9]{1,2}$`) &&
+        Number.parseInt(l.split(' ').reverse()[0]) >= weekStartNum + 7
+    )
+    if (lastWeekLineIndex < 0) {
+        lastWeekLineIndex = undefined
+    }
+    const thisMonthsExpenseLines = expenseLines.slice(firstMonthLineIndex, lastMonthLineIndex)
     const budgetData = fs.readFileSync(budgetFile).toString().trim().split('\n').map(l => Number.parseFloat(l || 0))
     const monthlyBudget = budgetData[0] || 0
     const firstWeekBias = budgetData[1] || 0
-    const normalWeeklyBudget = (monthlyBudget - firstWeekBias) / countFullWeeksInMonth(now)
+    const normalWeeklyBudget = (monthlyBudget - firstWeekBias) / countFullWeeksInMonth(date)
 
     return {
         monthlyBudget,
@@ -155,7 +170,7 @@ module.exports.getData = async () => {
         weeklyBudget: weekStartNum <= 7 ? firstWeekBias + normalWeeklyBudget : normalWeeklyBudget,
         weekSpecialCode,
         monthsSpend: getTotalExpensesFromLines(thisMonthsExpenseLines),
-        weeksSpend: getTotalExpensesFromLines(expenseLines.slice(firstWeekLineIndex)),
+        weeksSpend: getTotalExpensesFromLines(expenseLines.slice(firstWeekLineIndex, lastWeekLineIndex)),
         extraData: thisMonthsExpenseLines
     }
 }

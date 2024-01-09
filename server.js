@@ -19,7 +19,7 @@ app.use(express.json())
 
 app.get('/data', async (req, res) => {
     try {
-        res.send(await dataProvider.getData())
+        res.send(await dataProvider.getData(req.query['date'] ? new Date(req.query['date']) : new Date()))
     } catch (e) {
         console.error(e)
         res.status(500).send(e)

@@ -114,7 +114,6 @@
             modifyBudgetsForm.hidden = true
             pretendDateForm.hidden = true
             modifyBudgetsFormInput.value = 0
-            pretendDateFormInput.value = ''
             modifyFirstWeekBiasFormInput.value = 0
 
             const response = await fetch(!date ? '/data' : `/data?date=${date}`)

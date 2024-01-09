@@ -94,6 +94,8 @@
         const modifyFirstWeekBiasFormInput = document.getElementById('modifyFirstWeekBiasFormInput')
         const weekMessageText = document.getElementById('weekMessageText')
 
+        pretendDateFormInput.value = new Date().toLocaleDateString()
+
         const updateBudget = async (monthlyBudget, firstWeekBias) => {
             const response = await fetch('/budget', {
                 method: 'POST',

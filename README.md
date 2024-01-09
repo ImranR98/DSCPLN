@@ -20,3 +20,4 @@ Environment variables needed (a `.env` file can be used for this - see `template
 - `WEEKLY_LIMIT_NTFY_URL`: The ntfy.sh URL to which to send "weekly budget limit reached" notifications.
 - `NTFY_CHECK_INTERVAL_MINUTES`: How often, in minutes, to check for changes so that notifications can be sent out if needed.
 - `NTFY_TOKEN`: An authorization token to use when sending out notifications.
+- `ONLY_WARN_ONCE`: Monthly and Weekly notifications will only be sent the first time you go over budget and not for subsequent increases.

@@ -10,6 +10,7 @@ const monthlyLimitNtfyURL = process.env['MONTHLY_LIMIT_NTFY_URL']
 const weeklyLimitNtfyURL = process.env['WEEKLY_LIMIT_NTFY_URL']
 const ntfyCheckIntervalMinutes = process.env['NTFY_CHECK_INTERVAL_MINUTES'] || 30
 const ntfyAuthHeader = process.env['NTFY_TOKEN'] ? `Basic ${Buffer.from(`:${process.env['NTFY_TOKEN']}`).toString('base64')}` : null
+const onlyWarnOnce = process.env['ONLY_WARN_ONCE'] != 'false' && process.env['ONLY_WARN_ONCE'] != false
 
 const app = express()
 const port = process.env.PORT || 3300
@@ -44,7 +45,7 @@ app.listen(port, async () => {
         const checkLimit = async () => {
             const data = await dataProvider.getData()
             if (data.monthlyBudget <= data.monthsSpend) {
-                if (monthlyLimitNtfyURL && !didWarnMonthly) {
+                if (monthlyLimitNtfyURL && !(didWarnMonthly && onlyWarnOnce)) {
                     await axios.post(monthlyLimitNtfyURL,
                         `$${data.monthsSpend} of ${data.monthlyBudget}`,
                         {
@@ -60,7 +61,7 @@ app.listen(port, async () => {
                 didWarnMonthly = false
             }
             if (data.weeklyBudget <= data.weeksSpend) {
-                if (weeklyLimitNtfyURL && !didWarnWeekly) {
+                if (weeklyLimitNtfyURL && !(didWarnWeekly && onlyWarnOnce)) {
                     await axios.post(weeklyLimitNtfyURL,
                         `$${data.weeksSpend} of ${data.weeklyBudget}`,
                         {

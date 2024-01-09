@@ -41,11 +41,13 @@ app.listen(port, async () => {
     console.log(`Server is running on port ${port}`)
     let didWarnMonthly = false
     let didWarnWeekly = false
+    let prevMonthSpend = -1
+    let prevWeekSpend = -1
     if (monthlyLimitNtfyURL || weeklyLimitNtfyURL) {
         const checkLimit = async () => {
             const data = await dataProvider.getData()
             if (data.monthlyBudget <= data.monthsSpend) {
-                if (monthlyLimitNtfyURL && !(didWarnMonthly && onlyWarnOnce)) {
+                if (monthlyLimitNtfyURL && !(didWarnMonthly && onlyWarnOnce) && data.monthsSpend != prevMonthSpend) {
                     await axios.post(monthlyLimitNtfyURL,
                         `$${data.monthsSpend} of ${data.monthlyBudget}`,
                         {
@@ -61,7 +63,7 @@ app.listen(port, async () => {
                 didWarnMonthly = false
             }
             if (data.weeklyBudget <= data.weeksSpend) {
-                if (weeklyLimitNtfyURL && !(didWarnWeekly && onlyWarnOnce)) {
+                if (weeklyLimitNtfyURL && !(didWarnWeekly && onlyWarnOnce) && data.weeksSpend != prevWeekSpend) {
                     await axios.post(weeklyLimitNtfyURL,
                         `$${data.weeksSpend} of ${data.weeklyBudget}`,
                         {
@@ -76,6 +78,8 @@ app.listen(port, async () => {
             } else {
                 didWarnWeekly = false
             }
+            prevMonthSpend = data.monthsSpend
+            prevWeekSpend = data.weeksSpend
         }
         await checkLimit()
         setInterval(async () => {

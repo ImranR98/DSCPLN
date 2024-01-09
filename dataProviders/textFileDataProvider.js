@@ -93,39 +93,39 @@ const isNextWeekPartialEnd = (date) => {
     return isPartialEndWeek(d)
 }
 
-function countFullWeeksInMonth(date) {
-    const givenDate = new Date(date)
-    let firstSaturdayThisMonth = null
-    let d = new Date(givenDate)
-    d.setDate(1)
-    while (!firstSaturdayThisMonth) {
-        if (d.getDay() == 0) {
-            firstSaturdayThisMonth = new Date(d)
-        }
-        d.setDate(d.getDate() + 1)
+function countFullWeeksInMonth(inputDate) {
+    // Ensure the input is a valid Date object
+    if (!(inputDate instanceof Date) || isNaN(inputDate)) {
+        throw new Error('Invalid date input');
     }
-    if (firstSaturdayThisMonth.getDate() > givenDate.getDate()) {
-        const temp = new Date(givenDate)
-        temp.setDate(0)
-        return countFullWeeksInMonth(temp)
-    }
-    const allSaturdaysThisMonth = [firstSaturdayThisMonth]
-    while (true) {
-        const temp = new Date(allSaturdaysThisMonth[allSaturdaysThisMonth.length - 1])
-        temp.setDate(temp.getDate() + 7)
-        if (temp.getMonth() == firstSaturdayThisMonth.getMonth()) {
-            allSaturdaysThisMonth.push(temp)
-        } else {
-            break
-        }
-    }
-    return (allSaturdaysThisMonth.filter(d => !isPartialEndWeek(d) && !isPartialEndWeek(d))).length
+
+    // Get the first day of the month
+    const firstDayOfMonth = new Date(inputDate.getFullYear(), inputDate.getMonth(), 1);
+
+    // Find the Sunday on or after the first day of the month
+    const startOfWeek = new Date(firstDayOfMonth);
+    startOfWeek.setDate(firstDayOfMonth.getDate() + (7 - firstDayOfMonth.getDay()));
+
+    // Get the last day of the month
+    const lastDayOfMonth = new Date(inputDate.getFullYear(), inputDate.getMonth() + 1, 0);
+
+    // Find the Saturday on or before the last day of the month
+    const endOfWeek = new Date(lastDayOfMonth);
+    endOfWeek.setDate(lastDayOfMonth.getDate() - lastDayOfMonth.getDay() + 6);
+
+    // Calculate the number of full weeks
+    const millisecondsInWeek = 7 * 24 * 60 * 60 * 1000;
+    const numberOfWeeks = Math.floor((endOfWeek - startOfWeek) / millisecondsInWeek);
+    return numberOfWeeks;
 }
 
 const getTotalExpensesFromLines = (expenseLines) => expenseLines.reduce((prev, curr) => {
     return prev + Number.parseFloat(curr.split(' ')[0])
 }, 0)
 
+// NOTE: A 'week' below is not a block of 7 days. It is one of:
+// - A full week: A week starting on Sunday, ending on Saturday, where all days are in the same month
+// - A full week + a preceding or upcoming partial week (partial weeks are Sun-Sat weeks that start or end in another month)
 module.exports.getData = async (date = new Date()) => {
     const expenseLines = fs.readFileSync(dataFile).toString()
         .split('\r\n').join('\n').split('\n')
@@ -166,11 +166,12 @@ module.exports.getData = async (date = new Date()) => {
     const monthlyBudget = budgetData[0] || 0
     const firstWeekBias = budgetData[1] || 0
     const normalWeeklyBudget = (monthlyBudget - firstWeekBias) / countFullWeeksInMonth(date)
-
     return {
         monthlyBudget,
         firstWeekBias,
-        weeklyBudget: weekStartNum <= 7 ? firstWeekBias + normalWeeklyBudget : normalWeeklyBudget,
+        weeklyBudget: weekStartNum == 1 ?
+            firstWeekBias + normalWeeklyBudget :
+            normalWeeklyBudget,
         weekSpecialCode,
         monthsSpend: getTotalExpensesFromLines(thisMonthsExpenseLines),
         weeksSpend: getTotalExpensesFromLines(expenseLines.slice(firstWeekLineIndex, lastWeekLineIndex)),

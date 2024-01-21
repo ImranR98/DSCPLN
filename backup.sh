@@ -116,12 +116,12 @@ Pick a backup script to run: "
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.timer" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.service" "$TARGET"/systemd/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/.config/config.xml" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/.config/cert.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/.config/key.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/.config/https-key.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/.config/https-cert.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/.config/csrftokens.txt.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/config/config.xml" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/config/cert.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/config/key.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/config/https-key.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/config/https-cert.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/config/csrftokens.txt.pem" "$TARGET"/syncthing-config/
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 8888 "~/.local/share/gnome-shell/extensions/" "$TARGET"/extensions/
 

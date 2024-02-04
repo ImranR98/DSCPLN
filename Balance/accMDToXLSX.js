@@ -120,7 +120,7 @@ processLine = (line) => {
 
 }
 
-preProcessLines = (lines) => lines.split('\n').filter((line, index) => !!line.trim() && index > 0)
+preProcessLines = (lines) => lines.split('\n').filter((line, index) => !!line.trim())
 
 // Takes an array of strings and outputs an array of items - if an item does not have a date, the last item's date is used
 processLines = (lines) => {

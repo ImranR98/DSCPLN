@@ -41,6 +41,7 @@ Pick a backup script to run: "
     "Presto Transit Usage Report"
     "Google"
     "Twitter"
+    "Instacart Orders"
     "Music (Spotify Sync)"
     "Spotify Account Data"
     "Spotify Extended Streaming History"
@@ -379,6 +380,20 @@ Pick a backup script to run: "
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Twitter export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "accountId\" : \".*\"" data/account.js | tail -c +15 | head -c -2' "$(find "$EXPTDIR/" | grep twitter.*.zip$)" "$BACKUPSDIR/Twitter"
+        break
+        ;;
+
+      "Instacart Orders")
+        # Instacart is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is mostly automated but may require some manual steps.
+        BACKUPSDIR="$MAINDIR/Backups"
+        INSTACART_BACKUP_DIR="$BACKUPSDIR"/Instacart
+        BACKUP_SCRIPT="$MAINDIR"/Code/Automation/InstacartFlation/backup.sh
+        DELIVERY_IMAGES_TARGET_DIR="$MAINDIR"/Media/Camera
+        PROCESS_SCRIPT="$MAINDIR"/Code/Automation/MediaDateStandardize/mediaDateStandardize.sh
+        echo "Attempting to scrape Instacart order history and save the data to '"$INSTACART_BACKUP_DIR"'..."
+        mkdir -p "$INSTACART_BACKUP_DIR"
+        "$BACKUP_SCRIPT" "$INSTACART_BACKUP_DIR" "$DELIVERY_IMAGES_TARGET_DIR" "$PROCESS_SCRIPT -n"
         break
         ;;
 

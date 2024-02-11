@@ -53,7 +53,12 @@ processLine = (line) => {
             line = line.trim()
             if (line.length > 0) {
                 let sign = null
-                if (line[0] == '+' || line[0] == '=' || '0123456789'.indexOf(line[0]) >= 0) {
+                if (line[0] == '+' || line[0] == '=' || '0123456789'.indexOf(line[0]) >= 0 || line.search('^[a-zA-Z]{3} ') == 0) {
+                    let currency = 'CAD'
+                    if (line.search('^[a-zA-Z]{3} ') == 0) {
+                        currency = line.slice(0, 3)
+                        line = line.slice(4)
+                    }
                     if (line[0] == '+' || line[0] == '=') {
                         sign = line.slice(0, 1)
                         line = line.slice(1, line.length).trim()
@@ -98,7 +103,8 @@ processLine = (line) => {
                         details: titleCase(restOfString.trim()),
                         amount: amount,
                         date: date,
-                        sign: sign
+                        sign: sign,
+                        currency: currency
                     }
                     if (!item.amount || !item.details) return null
                     if (item.sign == '=') {
@@ -173,7 +179,7 @@ convertItemsToExcelReadyText = (items) => {
     items.forEach((item) => {
         text += `${formatDate(item.date)}\t${item.details}\t`
         if (item.amount >= 0) text += "\t"
-        text += `${item.amount < 0 ? item.amount * -1 : item.amount}\n`
+        text += `${item.amount < 0 ? item.amount * -1 : item.amount}\t${item.currency}\n`
     })
     return text
 }

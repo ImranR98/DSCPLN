@@ -179,7 +179,7 @@ convertItemsToExcelReadyText = (items) => {
     items.forEach((item) => {
         text += `${formatDate(item.date)}\t${item.details}\t`
         if (item.amount >= 0) text += "\t"
-        text += `${item.amount < 0 ? item.amount * -1 : item.amount}\t${item.currency}\n`
+        text += `${item.amount < 0 ? item.amount * -1 + '\t' : item.amount}\t${item.currency}\n`
     })
     return text
 }

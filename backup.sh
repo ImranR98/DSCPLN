@@ -27,6 +27,7 @@ Pick a backup script to run: "
     "FRPS Files"
     "Media Import"
     "Balance"
+    "Bank Statements + Balance Extras"
     "Veracrypted Bitwarden"
     "Other File Exports (Group)"
     "WhatsApp"
@@ -181,6 +182,13 @@ Pick a backup script to run: "
         ACCFILE="$(ls "$MAINDIR"/Notes/Transactions/Acc*.md | tail -1)"
         echo "Attempting to parse user input into a format used by Balance.xlsx, then commiting any changes in '"$BALANCEDIR"' to Git upon user confirmation..."
         "$HERE"/Balance/Balance.sh "$BALANCEDIR" "$ACCFILE"
+        break
+        ;;
+
+      "Bank Statements + Balance Extras")
+        STATEMENTS_DIR="$MAINDIR/Documents/Banking/eStatements"
+        PROCESS_SCRIPT="$MAINDIR"/Code/Automation/BrokeETL/resultHelpers/filterDirect.sh
+        "$PROCESS_SCRIPT" "$STATEMENTS_DIR" "$EXPTDIR"/*.pdf
         break
         ;;
 

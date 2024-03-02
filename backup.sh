@@ -402,7 +402,7 @@ Pick a backup script to run: "
         PROCESS_SCRIPT="$MAINDIR"/Code/Automation/MediaDateStandardize/mediaDateStandardize.sh
         echo "Attempting to scrape Instacart order history and save the data to '"$INSTACART_BACKUP_DIR"'..."
         mkdir -p "$INSTACART_BACKUP_DIR"
-        "$BACKUP_SCRIPT" "$INSTACART_BACKUP_DIR" "$DELIVERY_IMAGES_TARGET_DIR" "$PROCESS_SCRIPT -n" >/dev/null
+        "$BACKUP_SCRIPT" "$INSTACART_BACKUP_DIR" "$DELIVERY_IMAGES_TARGET_DIR" "$PROCESS_SCRIPT -n" --after "$(date -d "$(date +%Y-%m-%d) -4 months" +%Y-%m-%d) $(date +%H:%M)" >/dev/null
         break
         ;;
 

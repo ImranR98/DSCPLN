@@ -42,6 +42,7 @@ Pick a backup script to run: "
     "Presto Transit Usage Report"
     "Google"
     "Twitter"
+    "TikTok"
     "Instacart Orders"
     "Music (Spotify Sync)"
     "Spotify Account Data"
@@ -389,6 +390,15 @@ Pick a backup script to run: "
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Twitter export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "accountId\" : \".*\"" data/account.js | tail -c +15 | head -c -2' "$(find "$EXPTDIR/" | grep twitter.*.zip$)" "$BACKUPSDIR/Twitter"
+        break
+        ;;
+
+      "TikTok")
+        # TikTok is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
+        BACKUPSDIR="$MAINDIR/Backups"
+        echo "Attempting to find a TikTok export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "userName\": \".*\"" user_data.json | tail -c +13 | head -c -2' "$(find "$EXPTDIR/" | grep TikTok_Data.*.zip$)" "$BACKUPSDIR/TikTok"
         break
         ;;
 

@@ -421,7 +421,7 @@ Pick a backup script to run: "
         # Spotify is a cloud service. Thus, content from the service must be periodically sourced from YouTube and backed up.
         MUSICDIR="$MAINDIR/External Media/Music"
         MUSIC_SCRIPT="$MAINDIR"/Code/Automation/SpotifARRR/SpotifARRR.sh
-        echo "Attempting to find use SpotDL to sync Spotify playlists to '"$MUSICDIR"'..."
+        echo "Attempting to find use Zotify to sync Spotify playlists to '"$MUSICDIR"'..."
         "$MUSIC_SCRIPT" "$MUSICDIR"
         break
         ;;

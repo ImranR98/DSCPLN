@@ -27,6 +27,7 @@ Pick a backup script to run: "
     "FRPS Files"
     "Media Import"
     "Balance"
+    "Wealthsimple Recents to Balance"
     "Bank Statements + Balance Extras"
     "Veracrypted Bitwarden"
     "Other File Exports (Group)"
@@ -184,6 +185,17 @@ Pick a backup script to run: "
         ACCFILE="$(ls "$MAINDIR"/Notes/Transactions/Acc*.md | tail -1)"
         echo "Attempting to parse user input into a format used by Balance.xlsx, then commiting any changes in '"$BALANCEDIR"' to Git upon user confirmation..."
         "$HERE"/Balance/Balance.sh "$BALANCEDIR" "$ACCFILE"
+        break
+        ;;
+
+      "Wealthsimple Recents to Balance")
+        PROCESS_SCRIPT_A="$MAINDIR"/Code/Automation/Wealthsimpleton/main.py
+        PROCESS_SCRIPT_B="$MAINDIR"/Code/Automation/Wealthsimpleton/myResultParser.js
+        TEMP_FILE="$(mktemp)"
+        python "$MAINDIR"/Code/Automation/Wealthsimpleton/main.py > "$TEMP_FILE"
+        echo "Paste the following into Balance.xlsx, remembering to skip duplicates:"
+        node "$MAINDIR"/Code/Automation/Wealthsimpleton/myResultParser.js "$TEMP_FILE"
+        rm "$TEMP_FILE"
         break
         ;;
 

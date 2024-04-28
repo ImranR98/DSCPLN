@@ -299,7 +299,7 @@ Pick a backup script to run: "
         echo "Attempting to find an archive.zip or multiple WhatsApp chat zips in '"$EXPTDIR"' and merge it into '"$WSTXTDIR"'... "
         if [ -f "$EXPTDIR"/archive.zip ]; then
           unzip "$EXPTDIR"/archive.zip -d "$EXPTDIR"
-          # rm "$EXPTDIR"/archive.zip
+          rm "$EXPTDIR"/archive.zip
         fi
         FILES="$(ls "$EXPTDIR"/WhatsApp\ Chat\ with\ *.zip)"
         mkdir -p "$EXPTDIR"/WhatsAppTXT

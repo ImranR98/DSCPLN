@@ -445,6 +445,7 @@ Pick a backup script to run: "
         MUSICDIR="$MAINDIR/External Media/Music"
         MUSIC_SCRIPT="$MAINDIR"/Code/Automation/SpotifARRR/SpotifARRR.sh
         echo "Attempting to find use Zotify to sync Spotify playlists to '"$MUSICDIR"'..."
+        export NO_DELETE_UNLISTED=true
         "$MUSIC_SCRIPT" "$MUSICDIR"
         break
         ;;

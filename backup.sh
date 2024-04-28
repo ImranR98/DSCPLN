@@ -192,7 +192,7 @@ Pick a backup script to run: "
         PROCESS_SCRIPT_A="$MAINDIR"/Code/Automation/Wealthsimpleton/main.py
         PROCESS_SCRIPT_B="$MAINDIR"/Code/Automation/Wealthsimpleton/myResultParser.js
         TEMP_FILE="$(mktemp)"
-        python "$MAINDIR"/Code/Automation/Wealthsimpleton/main.py > "$TEMP_FILE"
+        python "$MAINDIR"/Code/Automation/Wealthsimpleton/main.py >"$TEMP_FILE"
         echo "Paste the following into Balance.xlsx, remembering to skip duplicates:"
         node "$MAINDIR"/Code/Automation/Wealthsimpleton/myResultParser.js "$TEMP_FILE"
         rm "$TEMP_FILE"
@@ -296,8 +296,19 @@ Pick a backup script to run: "
         # This version backs up only text files exported from the app.
         # This is not fully automated. The text files must be manually copied to a WhatsAppTXT directory in EXPTDIR.
         WSTXTDIR="$MAINDIR/Backups/WhatsApp TXT"
-        echo "Attempting to find a WhatsAppTXT directory in '"$EXPTDIR"' and merge it into '"$WSTXTDIR"'... "
-        node "$HERE"/WhatsAppTXT/WhatsAppTXT.js "$WSTXTDIR" "$EXPTDIR"/WhatsAppTXT && rm -r "$EXPTDIR"/WhatsAppTXT
+        echo "Attempting to find an archive.zip or multiple WhatsApp chat zips in '"$EXPTDIR"' and merge it into '"$WSTXTDIR"'... "
+        if [ -f "$EXPTDIR"/archive.zip ]; then
+          unzip "$EXPTDIR"/archive.zip -d "$EXPTDIR"
+          # rm "$EXPTDIR"/archive.zip
+        fi
+        FILES="$(ls "$EXPTDIR"/WhatsApp\ Chat\ with\ *.zip)"
+        mkdir -p "$EXPTDIR"/WhatsAppTXT
+        while IFS= read -r f; do
+          unzip -o "$f" -d "$EXPTDIR"/WhatsAppTXT
+          rm "$f"
+        done <<<"$FILES"
+        rm "$EXPTDIR"/WhatsAppTXT/*.vcf
+        node "$HERE"/WhatsAppTXT/WhatsAppTXT.js "$WSTXTDIR" "$EXPTDIR"/WhatsAppTXT
         break
         ;;
 

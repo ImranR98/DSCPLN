@@ -40,21 +40,20 @@ DOWNLOADED_FILE_NAME="$(echo "$DOWNLOAD_URL" | awk -F/ '{print $NF}')"
 CURRENT_DOWNLOAD_RECORD="$(cat "$TARGET_DIR"/dlrec.txt 2>/dev/null || :)"
 if [ "$CURRENT_DOWNLOAD_RECORD" = "$DOWNLOADED_FILE_NAME" ]; then
     echo "Already up to date! Found: "$DOWNLOADED_FILE_NAME""
-    exit
+else
+    # Download to the temporary directory, then extract to the target directory
+    cd "$TEMP_DIR"
+    DOWNLOADED_FILE="$TEMP_DIR"/"$DOWNLOADED_FILE_NAME"
+    wget "$DOWNLOAD_URL" -O "$DOWNLOADED_FILE"
+    tar -xf "$DOWNLOADED_FILE"
+    cd ./monero-*/
+    echo "$DOWNLOADED_FILE_NAME" >dlrec.txt
+    rsync -r ./ "$TARGET_DIR"/
+
+    # Print result
+    NEW_VERSION="$(pwd | awk -F/ '{print $NF}')"
+    echo "Done! Installed: $NEW_VERSION"
 fi
-
-# Download to the temporary directory, then extract to the target directory
-cd "$TEMP_DIR"
-DOWNLOADED_FILE="$TEMP_DIR"/"$DOWNLOADED_FILE_NAME"
-wget "$DOWNLOAD_URL" -O "$DOWNLOADED_FILE"
-tar -xf "$DOWNLOADED_FILE"
-cd ./monero-*/
-echo "$DOWNLOADED_FILE_NAME" > dlrec.txt
-rsync -r ./ "$TARGET_DIR"/
-
-# Print result
-NEW_VERSION="$(pwd | awk -F/ '{print $NF}')"
-echo "Done! Installed: $NEW_VERSION"
 
 # =======================================
 

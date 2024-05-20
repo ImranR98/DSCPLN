@@ -45,6 +45,7 @@ Pick a backup script to run: "
     "Twitter"
     "TikTok"
     "Instacart Orders"
+    "Monero Transactions"
     "Music (Spotify Sync)"
     "Spotify Account Data"
     "Spotify Extended Streaming History"
@@ -437,6 +438,25 @@ Pick a backup script to run: "
         echo "Attempting to scrape Instacart order history and save the data to '"$INSTACART_BACKUP_DIR"'..."
         mkdir -p "$INSTACART_BACKUP_DIR"
         "$BACKUP_SCRIPT" "$INSTACART_BACKUP_DIR" "$DELIVERY_IMAGES_TARGET_DIR" "$PROCESS_SCRIPT -n" --after "$(date -d "$(date +%Y-%m-%d) -4 months" +%Y-%m-%d) $(date +%H:%M)" >/dev/null
+        break
+        ;;
+
+      "Monero Transactions")
+        # Monero transactions need to be backed up and added to Balance.xlsx
+        TARGET_INTERMEDIATE=~/Downloads/monero-export.csv
+        TARGET_DIR="$MAINDIR/Backups/Manual"
+        echo "Attempting to export a Monero transactions CSV and commit changes to Git..."
+        "$HERE"/MoneroExport/monero-export.sh "/home/node/Main/Documents/Monero-wallets/imranr/imranr.keys" "nuc.example.com:18089" "$(cat ~/Main/Other/NUC-services/docker-compose.yml | grep '\--rpc-login' | awk -F '--rpc-login=' '{print $2}' | head -c -2)" "$TARGET_INTERMEDIATE"
+        "$HERE"/DirCopy/DirCopy.sh -g "$TARGET_INTERMEDIATE" "$TARGET_DIR"/"$(basename "$TARGET_INTERMEDIATE")"
+        echo "Attempting to convert the Monero transactions CSV into a format for Balance.xlsx...
+        
+        "
+        node "$HERE"/MoneroExport/parseCSV.js "$TARGET_DIR"/"$(basename "$TARGET_INTERMEDIATE")"
+        echo "
+
+
+        Paste the above data into Balance.xlsx (only for the missing date range), change any spend-related descriptions/types, then press Enter to continue..."
+        read anything
         break
         ;;
 

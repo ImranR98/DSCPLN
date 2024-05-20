@@ -160,6 +160,8 @@ Pick a backup script to run: "
         "$RM_SCRIPT" "$PHONESYNCDIR"/DCIM/Camera "$MAINDIR"/Media/Camera
         echo "Deleting Synced Phone Screenshots..."
         "$RM_SCRIPT" "$PHONESYNCDIR"/Screenshots "$MAINDIR"/Media/Screenshots
+        echo "Deleting Synced Phone Screenrecs..."
+        "$RM_SCRIPT" "$PHONESYNCDIR"/"Screen Recordings" "$MAINDIR"/Media/Screenshots
         echo "Importing Snaps..."
         "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/DCIM/Snapchat "$MAINDIR"/Media/Camera
         # === ONLY ON PC ===

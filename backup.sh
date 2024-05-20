@@ -261,7 +261,6 @@ Pick a backup script to run: "
         gitCopyHelper "$EXPTDIR"/"My Contacts.vcf" "$TARGET" 'My Contacts.vcf'
         gitCopyHelper "$EXPTDIR"/"My Tasks.ics" "$TARGET" 'My Tasks.ics'
         gitCopyHelper "$EXPTDIR"/Events-*.ics "$TARGET" 'Events.ics'
-        gitCopyHelper "$EXPTDIR"/Routine-*.ics "$TARGET" 'Routine.ics'
         gitCopyHelper "$EXPTDIR"/bookmarks-*.json "$TARGET" 'bookmarks.json'
         gitCopyHelper "$EXPTDIR"/obtainium-export-*.json "$TARGET" 'Obtainium.json'
         gitCopyHelper "$EXPTDIR"/antennapod-feeds-*.opml "$TARGET" 'Podcasts.opml'

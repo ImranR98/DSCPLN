@@ -117,10 +117,7 @@ Pick a backup script to run: "
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/dservices.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/sshmon.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-index.timer" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-index.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.timer" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/photoprism-convert.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/autheliamon.service" "$TARGET"/systemd/
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/config/config.xml" "$TARGET"/syncthing-config/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/config/cert.pem" "$TARGET"/syncthing-config/

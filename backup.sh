@@ -438,7 +438,7 @@ Pick a backup script to run: "
         # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a TikTok export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
-        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "userName\": \".*\"" user_data.json | tail -c +13 | head -c -2' "$(find "$EXPTDIR/" | grep TikTok_Data.*.zip$)" "$BACKUPSDIR/TikTok"
+        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "userName\": \".*\"" user_data*.json | tail -c +13 | head -c -2' "$(find "$EXPTDIR/" | grep TikTok_Data.*.zip$)" "$BACKUPSDIR/TikTok"
         break
         ;;
 

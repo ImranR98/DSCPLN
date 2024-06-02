@@ -50,4 +50,4 @@ git commit -q -m "$(date)"
 cd "$here"
 
 echo "
-NOTE: You still need to manually add Transaction Types and any Investment changes."
+NOTE: You still need to manually add Transaction Types, sort entries, and remove duplicates if any."

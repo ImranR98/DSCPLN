@@ -189,23 +189,6 @@ Pick a backup script to run: "
         break
         ;;
 
-      "Monero Dust to Balance")
-        # Monero transactions need to be added to Balance.xlsx
-        echo "Attempting to generate a Monero transactions CSV (dust only)..."
-        TARGET_INTERMEDIATE="$(mktemp)"
-        "$HERE"/MoneroExport/monero-export.sh "/home/node/Main/Documents/Monero-wallets/imranr/imranr.keys" "nuc.example.com:18089" "$(cat ~/Main/Other/NUC-services/docker-compose.yml | grep '\--rpc-login' | awk -F '--rpc-login=' '{print $2}' | head -c -2)" "$TARGET_INTERMEDIATE"
-        echo "Attempting to convert the Monero transactions CSV into a format for Balance.xlsx...
-        
-        "
-        node "$HERE"/MoneroExport/parseCSV.js "$TARGET_INTERMEDIATE" | grep 'Mining Dust'
-        echo "
-
-
-        Paste the above data into Balance.xlsx (only for the missing date range), change any spend-related descriptions/types, then press Enter to continue..."
-        read anything
-        break
-        ;;
-
       "Wealthsimple Recents to Balance")
         PROCESS_SCRIPT_A="$MAINDIR"/Code/Automation/Wealthsimpleton/main.py
         PROCESS_SCRIPT_B="$MAINDIR"/Code/Automation/Wealthsimpleton/myResultParser.js

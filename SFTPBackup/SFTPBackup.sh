@@ -52,11 +52,11 @@ if [ "$git" == "1" ] && [ ! -d "$4/.git" ]; then
 fi
 
 # Run
+SSH_STRING="ssh -p $2"
+if [ -n "$proxy" ]; then
+    SSH_STRING="$SSH_STRING -o 'ProxyCommand ssh -A $proxy -W %h:%p'"
+fi
 if [ "$delete" == "1" ]; then
-    SSH_STRING="ssh -p $2"
-    if [ -n "$proxy" ]; then
-        SSH_STRING="$SSH_STRING -o 'ProxyCommand ssh -A $proxy -W %h:%p'"
-    fi
     if [ "$git" == "1" ]; then
         rsync -rLq -e "$SSH_STRING" $1:"$3" "$4" --delete --exclude '/.git/'
     else

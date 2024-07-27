@@ -138,8 +138,6 @@ Pick a backup script to run: "
         # This is fully automated.
         TARGET="$MAINDIR/Backups/SRV"
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg ubuntu@nuc.example.com 22 "~/" "$TARGET"/homeDir/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@nuc.example.com 22 "/etc/systemd/system/frps.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@nuc.example.com 22 "/etc/systemd/system/frps-multiuser.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@nuc.example.com 22 "/etc/systemd/system/nuc-healthcheck.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@nuc.example.com 22 "/etc/systemd/system/docker-compose.service" "$TARGET"/systemd/
 

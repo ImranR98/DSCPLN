@@ -18,14 +18,16 @@ function usage() {
     echo >&2 "Backup files from a server using Rsync via SSH."
     echo >&2 "   -d          Use the Rsync --delete option."
     echo >&2 "   -g              Use git to save changes (initializes an empty repo or uses an existing one)."
+    echo >&2 "   -p              Specify a jump host to proxy through (hardcoded to port 22)."
     exit 1
 }
 
 # Parse options
-while getopts dg opt; do
+while getopts dgp: opt; do
     case $opt in
     d) delete=1 ;;
     g) git=1 ;;
+    p) proxy=$OPTARG ;;
     \?) usage ;;
     esac
 done
@@ -51,10 +53,14 @@ fi
 
 # Run
 if [ "$delete" == "1" ]; then
+    SSH_STRING="ssh -p $2"
+    if [ -n "$proxy" ]; then
+        SSH_STRING="$SSH_STRING -o 'ProxyCommand ssh -A $proxy -W %h:%p'"
+    fi
     if [ "$git" == "1" ]; then
-        rsync -rLq -e "ssh -p $2" $1:"$3" "$4" --delete --exclude '/.git/'
+        rsync -rLq -e "$SSH_STRING" $1:"$3" "$4" --delete --exclude '/.git/'
     else
-        rsync -rLq -e "ssh -p $2" $1:"$3" "$4" --delete
+        rsync -rLq -e "$SSH_STRING" $1:"$3" "$4" --delete
     fi
 else
     rsync -rLq -e "ssh -p $2" $1:"$3" "$4"

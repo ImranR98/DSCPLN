@@ -112,21 +112,21 @@ Pick a backup script to run: "
           break
         fi
         # ==================
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 8888 "~/.ssh/" "$TARGET"/.ssh/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@nuc.example.com user@localhost 8888 "~/.ssh/" "$TARGET"/.ssh/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/dservices.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "/etc/systemd/system/logntfy.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "/etc/systemd/system/dservices.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "/etc/systemd/system/logntfy.service" "$TARGET"/systemd/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/config/config.xml" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/config/cert.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/config/key.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/config/https-key.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/config/https-cert.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g user@nuc.example.com 8888 "~/config/csrftokens.txt.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "~/config/config.xml" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "~/config/cert.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "~/config/key.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "~/config/https-key.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "~/config/https-cert.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "~/config/csrftokens.txt.pem" "$TARGET"/syncthing-config/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg user@nuc.example.com 8888 "~/.local/share/gnome-shell/extensions/" "$TARGET"/extensions/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@nuc.example.com user@localhost 8888 "~/.local/share/gnome-shell/extensions/" "$TARGET"/extensions/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -d user@nuc.example.com 8888 "~/.var/app/org.mozilla.firefox/.mozilla/firefox/" "$TARGET"/firefox/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -d -p ubuntu@nuc.example.com user@localhost 8888 "~/.var/app/org.mozilla.firefox/.mozilla/firefox/" "$TARGET"/firefox/
 
         break
         ;;

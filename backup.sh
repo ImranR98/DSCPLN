@@ -24,7 +24,7 @@ Pick a backup script to run: "
     "Local Files"
     "GNOME Boxes"
     "NUC Files"
-    "FRPS Files"
+    "SRV Files"
     "Media Import"
     "Balance"
     "Wealthsimple Recents to Balance"
@@ -132,11 +132,11 @@ Pick a backup script to run: "
         break
         ;;
 
-      "FRPS Files")
-        # FRPS files must exist on the FRPS to be usable, so cannot live directly in MAINDIR.
+      "SRV Files")
+        # SRV files must exist on the SRV to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
-        TARGET="$MAINDIR/Backups/FRPS"
+        TARGET="$MAINDIR/Backups/SRV"
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg ubuntu@nuc.example.com 22 "~/" "$TARGET"/homeDir/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@nuc.example.com 22 "/etc/systemd/system/frps.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@nuc.example.com 22 "/etc/systemd/system/frps-multiuser.service" "$TARGET"/systemd/

@@ -115,6 +115,7 @@ Pick a backup script to run: "
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@nuc.example.com user@localhost 8888 "~/.ssh/" "$TARGET"/.ssh/
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "/etc/systemd/system/dservices.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "/etc/systemd/system/frpc.service" "$TARGET"/systemd/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "/etc/systemd/system/logntfy.service" "$TARGET"/systemd/
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "~/config/config.xml" "$TARGET"/syncthing-config/

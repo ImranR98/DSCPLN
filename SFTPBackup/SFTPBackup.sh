@@ -63,7 +63,7 @@ if [ "$delete" == "1" ]; then
         rsync -rLq -e "$SSH_STRING" $1:"$3" "$4" --delete
     fi
 else
-    rsync -rLq -e "ssh -p $2" $1:"$3" "$4"
+    rsync -rLq -e "$SSH_STRING" $1:"$3" "$4"
 fi
 echo "$(date)" >"$4"/lastBackedUp.txt
 

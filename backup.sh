@@ -240,7 +240,7 @@ Pick a backup script to run: "
 
         gitCopyHelper "$EXPTDIR"/"My Contacts.vcf" "$TARGET" 'My Contacts.vcf'
         gitCopyHelper "$EXPTDIR"/"TODO.ics" "$TARGET" 'TODO.ics'
-        gitCopyHelper "$EXPTDIR"/"Regular.ics" "$TARGET" 'Regular.ics'
+        gitCopyHelper "$EXPTDIR"/"Regular or Long Term.ics" "$TARGET" 'Regular.ics'
         gitCopyHelper "$EXPTDIR"/Events-*.ics "$TARGET" 'Events.ics'
         gitCopyHelper "$EXPTDIR"/bookmarks-*.json "$TARGET" 'bookmarks.json'
         gitCopyHelper "$EXPTDIR"/obtainium-export-*.json "$TARGET" 'Obtainium.json'

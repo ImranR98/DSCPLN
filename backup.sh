@@ -281,6 +281,19 @@ Pick a backup script to run: "
             fi
           done
         done
+        mkdir -p "$DIR2"/"WhatsApp Voice Notes"
+        rsync -aq "$DIR"/Media/"WhatsApp Voice Notes"/ "$DIR2"/"WhatsApp Voice Notes"/
+        PROCESS_SCRIPT_AUDIO="$MAINDIR"/Code/Automation/random-utils-ir/concatAudio.sh
+        for dir in ""$DIR2"/WhatsApp Voice Notes/"; do
+          for entry in "$dir"/* .; do
+            entryPath="$dir"/"$(basename "$entry")"
+            if [ -d "$entryPath" ]; then
+              mkdir -p "$entryPath"/processed
+              "$PROCESS_SCRIPT_AUDIO" "$entryPath" "$entryPath"/processed || HAD_ERROR="true"
+              "$PROCESS_SCRIPT" "$entryPath"/processed || HAD_ERROR="true"
+            fi
+          done
+        done
         if [ -z "$HAD_ERROR" ]; then
           rm -r "$DIR"/Media
         else

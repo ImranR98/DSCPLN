@@ -24,6 +24,7 @@ Pick a backup script to run: "
     "Local Files"
     "GNOME Boxes"
     "NUC Files"
+    "NUC Unsynced Service Data"
     "SRV Files"
     "Media Import"
     "Balance"
@@ -128,6 +129,22 @@ Pick a backup script to run: "
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@nuc.example.com user@localhost 8888 "~/.local/share/gnome-shell/extensions/" "$TARGET"/extensions/
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -d -p ubuntu@nuc.example.com user@localhost 8888 "~/.var/app/org.mozilla.firefox/.mozilla/firefox/" "$TARGET"/firefox/
+
+        break
+        ;;
+
+      "NUC Unsynced Service Data")
+        # NUC service (specific unsynced) files must exist on the NUC to be usable, so cannot live directly in MAINDIR.
+        # Thus they need to be periodically backed up to MAINDIR.
+        # This is fully automated.
+        SERVICE_DATA_UNSYNCED_TARGET="$MAINDIR"/Other/NUC-services/service-data-unsynced
+        # === ONLY ON PC ===
+        if [ "$ISPC" != 1 ]; then
+          echo "Only available on PC"
+          break
+        fi
+        # ==================
+        "$HERE"/SFTPBackup/SFTPBackup.sh -s -e immich-upload -d -p ubuntu@nuc.example.com user@localhost 8888 "~/Main/Other/NUC-services/service-data-unsynced/" "$SERVICE_DATA_UNSYNCED_TARGET"
 
         break
         ;;

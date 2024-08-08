@@ -19,15 +19,19 @@ function usage() {
     echo >&2 "   -d          Use the Rsync --delete option."
     echo >&2 "   -g              Use git to save changes (initializes an empty repo or uses an existing one)."
     echo >&2 "   -p              Specify a jump host to proxy through (hardcoded to port 22)."
+    echo >&2 "   -e              A pattern to pass to rsync's --exclude option."
+    echo >&2 "   -s              Run rsync with sudo on the remote machine."
     exit 1
 }
 
 # Parse options
-while getopts dgp: opt; do
+while getopts dgp:e:s opt; do
     case $opt in
     d) delete=1 ;;
     g) git=1 ;;
-    p) proxy=$OPTARG ;;
+    p) PROXY=$OPTARG ;;
+    e) EXCLUDE=$OPTARG ;;
+    s) USE_SUDO=true ;;
     \?) usage ;;
     esac
 done
@@ -50,20 +54,26 @@ if [ "$git" == "1" ] && [ ! -d "$4/.git" ]; then
     git init -q
     cd "$HERE"
 fi
+REMOTE_RSYNC_PATH="rsync"
 
 # Run
 SSH_STRING="ssh -p $2"
-if [ -n "$proxy" ]; then
-    SSH_STRING="$SSH_STRING -o 'ProxyCommand ssh -A $proxy -W %h:%p'"
+if [ -n "$PROXY" ]; then
+    SSH_STRING="$SSH_STRING -o 'ProxyCommand ssh -A $PROXY -W %h:%p'"
+fi
+if [ "$USE_SUDO" = true ]; then
+    ENSURE_SUDO_REMOTE_COMMAND='if [ -z "$(sudo grep rsync /etc/sudoers)" ]; then echo "$USER ALL=NOPASSWD:$(which rsync)" | sudo tee -a /etc/sudoers; fi'
+    eval "$SSH_STRING -t $1 '$ENSURE_SUDO_REMOTE_COMMAND'"
+    REMOTE_RSYNC_PATH="sudo rsync"
 fi
 if [ "$delete" == "1" ]; then
     if [ "$git" == "1" ]; then
-        rsync -rLq -e "$SSH_STRING" $1:"$3" "$4" --delete --exclude '/.git/'
+        rsync -rLq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" --delete --exclude '/.git/' --exclude "$EXCLUDE"
     else
-        rsync -rLq -e "$SSH_STRING" $1:"$3" "$4" --delete
+        rsync -rLq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" --delete --exclude "$EXCLUDE"
     fi
 else
-    rsync -rLq -e "$SSH_STRING" $1:"$3" "$4"
+    rsync -rLq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" --exclude "$EXCLUDE"
 fi
 echo "$(date)" >"$4"/lastBackedUp.txt
 

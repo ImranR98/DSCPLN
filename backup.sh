@@ -267,7 +267,6 @@ Pick a backup script to run: "
         gitCopyHelper "$EXPTDIR"/aegis-*-*.json "$TARGET" 'aegis-export.json'
         gitCopyHelper "$EXPTDIR"/*.ceb "$TARGET" 'Cheogram.ceb'
         gitCopyHelper "$EXPTDIR"/ntfy-*.json "$TARGET" 'ntfy-subscriptions.json'
-        gitCopyHelper "$EXPTDIR"/ntfy-*.json "$TARGET" 'ntfy-subscriptions.json'
         gitCopyHelper "$EXPTDIR"/"transistor-backup.zip" "$TARGET" "transistor-backup.zip"
         gitCopyHelper "$EXPTDIR"/"example.com.txt" "$TARGET" "example.com.txt"
 

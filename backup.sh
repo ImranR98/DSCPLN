@@ -8,7 +8,7 @@ EXPTDIR=~/"Downloads"
 if [ "$(hostname)" = "PC" ]; then
   ISPC=1
 fi
-# Set NUC-Specific variables
+# Set Core-Specific variables
 if [ "$ISPC" != 1 ]; then
   PHONESYNCDIR=~"/Phone Sync Folders"
 fi
@@ -23,9 +23,9 @@ Pick a backup script to run: "
   options=(
     "Local Files"
     "GNOME Boxes"
-    "NUC Files"
-    "NUC Unsynced Service Data"
-    "SRV Files"
+    "Core Files"
+    "Core Unsynced Service Data"
+    "Bridge Files"
     "Media Import"
     "Balance"
     "Wealthsimple Recents to Balance"
@@ -102,61 +102,61 @@ Pick a backup script to run: "
         break
         ;;
 
-      "NUC Files")
-        # NUC files must exist on the NUC to be usable, so cannot live directly in MAINDIR.
+      "Core Files")
+        # Core files must exist on the Core to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
-        TARGET="$MAINDIR/Backups/NUC"
+        TARGET="$MAINDIR/Backups/Core"
         # === ONLY ON PC ===
         if [ "$ISPC" != 1 ]; then
           echo "Only available on PC"
           break
         fi
         # ==================
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@nuc.example.com user@localhost 8888 "~/.ssh/" "$TARGET"/.ssh/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.ssh/" "$TARGET"/.ssh/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "/etc/systemd/system/dservices.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "/etc/systemd/system/frpc.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "/etc/systemd/system/logntfy.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "/etc/systemd/system/dservices.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "/etc/systemd/system/frpc.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "/etc/systemd/system/logntfy.service" "$TARGET"/systemd/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "~/config/config.xml" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "~/config/cert.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "~/config/key.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "~/config/https-key.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "~/config/https-cert.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@nuc.example.com user@localhost 8888 "~/config/csrftokens.txt.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/config.xml" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/cert.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/key.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/https-key.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/https-cert.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/csrftokens.txt.pem" "$TARGET"/syncthing-config/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@nuc.example.com user@localhost 8888 "~/.local/share/gnome-shell/extensions/" "$TARGET"/extensions/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.local/share/gnome-shell/extensions/" "$TARGET"/extensions/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -d -p ubuntu@nuc.example.com user@localhost 8888 "~/.var/app/org.mozilla.firefox/.mozilla/firefox/" "$TARGET"/firefox/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -d -p ubuntu@bridge.example.com user@localhost 8888 "~/.var/app/org.mozilla.firefox/.mozilla/firefox/" "$TARGET"/firefox/
 
         break
         ;;
 
-      "NUC Unsynced Service Data")
-        # NUC service (specific unsynced) files must exist on the NUC to be usable, so cannot live directly in MAINDIR.
+      "Core Unsynced Service Data")
+        # Core service (specific unsynced) files must exist on the Core to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
-        SERVICE_DATA_UNSYNCED_TARGET="$MAINDIR"/Other/NUC-services/service-data-unsynced
+        SERVICE_DATA_UNSYNCED_TARGET="$MAINDIR"/Other/Core-services/service-data-unsynced
         # === ONLY ON PC ===
         if [ "$ISPC" != 1 ]; then
           echo "Only available on PC"
           break
         fi
         # ==================
-        "$HERE"/SFTPBackup/SFTPBackup.sh -s -e immich-upload -d -p ubuntu@nuc.example.com user@localhost 8888 "~/Main/Other/NUC-services/service-data-unsynced/" "$SERVICE_DATA_UNSYNCED_TARGET"
+        "$HERE"/SFTPBackup/SFTPBackup.sh -s -e immich-upload -d -p ubuntu@bridge.example.com user@localhost 8888 "~/Main/Other/Core-services/service-data-unsynced/" "$SERVICE_DATA_UNSYNCED_TARGET"
 
         break
         ;;
 
-      "SRV Files")
-        # SRV files must exist on the SRV to be usable, so cannot live directly in MAINDIR.
+      "Bridge Files")
+        # Bridge files must exist on the Bridge to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
-        TARGET="$MAINDIR/Backups/SRV"
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg ubuntu@nuc.example.com 22 "~/" "$TARGET"/homeDir/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@nuc.example.com 22 "/etc/systemd/system/nuc-healthcheck.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@nuc.example.com 22 "/etc/systemd/system/docker-compose.service" "$TARGET"/systemd/
+        TARGET="$MAINDIR/Backups/Bridge"
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg ubuntu@bridge.example.com 22 "~/" "$TARGET"/homeDir/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@bridge.example.com 22 "/etc/systemd/system/nuc-healthcheck.service" "$TARGET"/systemd/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@bridge.example.com 22 "/etc/systemd/system/docker-compose.service" "$TARGET"/systemd/
 
         break
         ;;

@@ -137,14 +137,14 @@ Pick a backup script to run: "
         # Core service (specific unsynced) files must exist on the Core to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
-        SERVICE_DATA_UNSYNCED_TARGET="$MAINDIR"/Other/Core-services/service-data-unsynced
+        SERVICE_DATA_UNSYNCED_TARGET="$MAINDIR"/Other/NUC-services/service-data-unsynced
         # === ONLY ON PC ===
         if [ "$ISPC" != 1 ]; then
           echo "Only available on PC"
           break
         fi
         # ==================
-        "$HERE"/SFTPBackup/SFTPBackup.sh -s -e immich-upload -d -p ubuntu@bridge.example.com user@localhost 8888 "~/Main/Other/Core-services/service-data-unsynced/" "$SERVICE_DATA_UNSYNCED_TARGET"
+        "$HERE"/SFTPBackup/SFTPBackup.sh -s -e immich-upload -d -p ubuntu@bridge.example.com user@localhost 8888 "~/Main/Other/NUC-services/service-data-unsynced/" "$SERVICE_DATA_UNSYNCED_TARGET"
 
         break
         ;;

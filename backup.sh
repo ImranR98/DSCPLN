@@ -24,7 +24,7 @@ Pick a backup script to run: "
     "Local Files"
     "GNOME Boxes"
     "Core Files"
-    "Core Unsynced Service Data"
+    "Core Landscape State"
     "Media Import"
     "Balance"
     "Wealthsimple Recents to Balance"
@@ -128,18 +128,18 @@ Pick a backup script to run: "
         break
         ;;
 
-      "Core Unsynced Service Data")
+      "Core Landscape State")
         # Core service (specific unsynced) files must exist on the Core to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
-        SERVICE_DATA_UNSYNCED_TARGET="$MAINDIR"/Other/NUC-services/service-data-unsynced
+        SERVICE_DATA_UNSYNCED_TARGET="$MAINDIR"/Landscape/state
         # === ONLY ON PC ===
         if [ "$ISPC" != 1 ]; then
           echo "Only available on PC"
           break
         fi
         # ==================
-        "$HERE"/SFTPBackup/SFTPBackup.sh -s -e immich-upload -d -p ubuntu@bridge.example.com user@localhost 8888 "~/Main/Other/NUC-services/service-data-unsynced/" "$SERVICE_DATA_UNSYNCED_TARGET"
+        "$HERE"/SFTPBackup/SFTPBackup.sh -s -e immich/server -d -p ubuntu@bridge.example.com user@localhost 8888 "~/Main/Landscape/state/" "$SERVICE_DATA_UNSYNCED_TARGET"
 
         break
         ;;

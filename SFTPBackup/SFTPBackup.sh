@@ -68,12 +68,12 @@ if [ "$USE_SUDO" = true ]; then
 fi
 if [ "$delete" == "1" ]; then
     if [ "$git" == "1" ]; then
-        rsync -rLq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" --delete --exclude '/.git/' --exclude "$EXCLUDE"
+        rsync -aq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" --delete --exclude '/.git/' --exclude "$EXCLUDE"
     else
-        rsync -rLq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" --delete --exclude "$EXCLUDE"
+        rsync -aq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" --delete --exclude "$EXCLUDE"
     fi
 else
-    rsync -rLq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" --exclude "$EXCLUDE"
+    rsync -aq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" --exclude "$EXCLUDE"
 fi
 echo "$(date)" >"$4"/lastBackedUp.txt
 

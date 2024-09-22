@@ -25,7 +25,6 @@ Pick a backup script to run: "
     "GNOME Boxes"
     "Core Files"
     "Core Unsynced Service Data"
-    "Bridge Files"
     "Media Import"
     "Balance"
     "Wealthsimple Recents to Balance"
@@ -115,10 +114,6 @@ Pick a backup script to run: "
         # ==================
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.ssh/" "$TARGET"/.ssh/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "/etc/systemd/system/dservices.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "/etc/systemd/system/frpc.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "/etc/systemd/system/logntfy.service" "$TARGET"/systemd/
-
         "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/config.xml" "$TARGET"/syncthing-config/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/cert.pem" "$TARGET"/syncthing-config/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/key.pem" "$TARGET"/syncthing-config/
@@ -145,18 +140,6 @@ Pick a backup script to run: "
         fi
         # ==================
         "$HERE"/SFTPBackup/SFTPBackup.sh -s -e immich-upload -d -p ubuntu@bridge.example.com user@localhost 8888 "~/Main/Other/NUC-services/service-data-unsynced/" "$SERVICE_DATA_UNSYNCED_TARGET"
-
-        break
-        ;;
-
-      "Bridge Files")
-        # Bridge files must exist on the Bridge to be usable, so cannot live directly in MAINDIR.
-        # Thus they need to be periodically backed up to MAINDIR.
-        # This is fully automated.
-        TARGET="$MAINDIR/Backups/Bridge"
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg ubuntu@bridge.example.com 22 "~/" "$TARGET"/homeDir/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@bridge.example.com 22 "/etc/systemd/system/nuc-healthcheck.service" "$TARGET"/systemd/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g ubuntu@bridge.example.com 22 "/etc/systemd/system/docker-compose.service" "$TARGET"/systemd/
 
         break
         ;;

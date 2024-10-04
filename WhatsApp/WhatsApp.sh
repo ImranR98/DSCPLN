@@ -36,4 +36,4 @@ TEMPWAD="$TEMPDIR/"$(basename "$1")""
 cp -r "$1" "$TEMPWAD"
 rsync -aq "$TEMPWAD"/ "$2"
 echo "$(date)" > "$2"/lastBackedUp.txt
-rm -r "$TEMPWAD"
+rm -r "$TEMPDIR"

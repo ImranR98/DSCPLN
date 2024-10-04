@@ -151,12 +151,20 @@ Pick a backup script to run: "
         # This is fully automated.
         PROCESS_SCRIPT="$MAINDIR"/Code/Automation/MediaDateStandardize/mediaDateStandardize.sh
         RM_SCRIPT="$MAINDIR"/Code/Automation/MediaDateStandardize/deleteSynced.sh
+        # Delete files already synced by real time MDSCL
         echo "Deleting Synced Camera Files..."
         "$RM_SCRIPT" "$PHONESYNCDIR"/DCIM/Camera "$MAINDIR"/Media/Camera
         echo "Deleting Synced Phone Screenshots..."
         "$RM_SCRIPT" "$PHONESYNCDIR"/Screenshots "$MAINDIR"/Media/Screenshots
         echo "Deleting Synced Phone Screenrecs..."
         "$RM_SCRIPT" "$PHONESYNCDIR"/"Screen Recordings" "$MAINDIR"/Media/Screenshots
+        # Sync everything else
+        echo "Importing Camera Files..."
+        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/DCIM/Camera "$MAINDIR"/Media/Camera
+        echo "Importing Phone Screenshots..."
+        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/Screenshots "$MAINDIR"/Media/Screenshots
+        echo "Importing Phone Screenrecs..."
+        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/"Screen Recordings" "$MAINDIR"/Media/Screenshots
         echo "Importing Snaps..."
         "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/DCIM/Snapchat "$MAINDIR"/Media/Camera
         # === ONLY ON PC ===

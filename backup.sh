@@ -2,7 +2,7 @@
 
 # Define these as needed (MAINDIR should also have various subdirectories as required by the relevant scripts)
 MAINDIR=~/"Main"
-PHONESYNCDIR=~/Documents/"Phone Sync Folders"
+PHONESYNCDIR=~/deviceSync
 EXPTDIR=~/"Downloads"
 # Check if on PC
 if [ "$(hostname)" = "PC" ]; then
@@ -10,7 +10,7 @@ if [ "$(hostname)" = "PC" ]; then
 fi
 # Set Core-Specific variables
 if [ "$ISPC" != 1 ]; then
-  PHONESYNCDIR=~"/Phone Sync Folders"
+  PHONESYNCDIR=~/deviceSync
 fi
 
 # Save script location
@@ -157,14 +157,14 @@ Pick a backup script to run: "
         echo "Deleting Synced Phone Screenshots..."
         "$RM_SCRIPT" "$PHONESYNCDIR"/Screenshots "$MAINDIR"/Media/Screenshots
         echo "Deleting Synced Phone Screenrecs..."
-        "$RM_SCRIPT" "$PHONESYNCDIR"/"Screen Recordings" "$MAINDIR"/Media/Screenshots
+        "$RM_SCRIPT" "$PHONESYNCDIR"/screenRecs "$MAINDIR"/Media/Screenshots
         # Sync everything else
         echo "Importing Camera Files..."
         "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/DCIM/Camera "$MAINDIR"/Media/Camera
         echo "Importing Phone Screenshots..."
         "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/Screenshots "$MAINDIR"/Media/Screenshots
         echo "Importing Phone Screenrecs..."
-        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/"Screen Recordings" "$MAINDIR"/Media/Screenshots
+        "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/screenRecs "$MAINDIR"/Media/Screenshots
         echo "Importing Snaps..."
         "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/DCIM/Snapchat "$MAINDIR"/Media/Camera
         # === ONLY ON PC ===

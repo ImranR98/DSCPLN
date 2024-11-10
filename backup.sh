@@ -271,6 +271,7 @@ Pick a backup script to run: "
         # After the backup, media files are copied and standardized to a temporary location for review, and the live media folder is deleted
         WSAMDIR="$MAINDIR/Backups/Archive/WhatsApp-AllMedia"
         DIR=~/"Main/WhatsApp"
+        read -p "Manually copy anything in WA gifs to video folder, then press Enter to continue... " anything
         echo "Attempting to copy the WhatsApp directory in '"$DIR"' to '"$WSAMDIR"' (merging with existing, if any)... "
         "$HERE"/WhatsApp/WhatsApp.sh "$DIR" "$WSAMDIR"
         DIR2=~/Downloads/WAMedia

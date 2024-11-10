@@ -139,7 +139,7 @@ Pick a backup script to run: "
           break
         fi
         # ==================
-        "$HERE"/SFTPBackup/SFTPBackup.sh -s -e immich/server -d -p ubuntu@bridge.example.com user@localhost 8888 "~/Main/Landscape/state/" "$SERVICE_DATA_UNSYNCED_TARGET"
+        "$HERE"/SFTPBackup/SFTPBackup.sh -s -e immich/upload -d -p ubuntu@bridge.example.com user@localhost 8888 "~/Main/Landscape/state/" "$SERVICE_DATA_UNSYNCED_TARGET"
 
         break
         ;;

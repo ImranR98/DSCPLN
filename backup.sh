@@ -372,7 +372,7 @@ Pick a backup script to run: "
         # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a ChatGPT export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
-        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'cat user.json | jq ".email" | head -c -2 | tail -c +2' "$(find "$EXPTDIR/" | grep -E [a-z0-9]+-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}.zip$)" "$BACKUPSDIR/ChatGPT"
+        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'cat user.json | jq ".email" | head -c -2 | tail -c +2' "$(find "$EXPTDIR/" | grep -E [a-z0-9]+-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[a-z0-9]+.zip$)" "$BACKUPSDIR/ChatGPT"
         break
         ;;
 

@@ -33,7 +33,7 @@ Pick a backup script to run: "
     "Other File Exports (Group)"
     "WhatsApp"
     "WhatsApp TXT"
-    "Emails"
+    "ProtonMail"
     # "Discord"
     "GitHub (no repos/releases)"
     # "ChatGPT"
@@ -334,16 +334,32 @@ Pick a backup script to run: "
         break
         ;;
 
-      "Emails")
+      "ProtonMail")
         # Emails are used on email servers and so cannot live directly in MAINDIR. Thus emails must be periodically exported and backed up.
-        # This is not fully automated; the .mbox files must be manually exported and placed in EXPTDIR.
+        # This is not fully automated; the user must enter their account credentials.
+        echo "Running ProtonMail export CLI and back up emails to '"$DIR"', then delete older backups..."
+        if [ ! -f ~/proton-mail-export-cli-linux_x86_64/proton-mail-export-cli ]; then
+          mkdir -p ~/proton-mail-export-cli-linux_x86_64
+          wget https://proton.me/download/export-tool/proton-mail-export-cli-linux_x86_64.tar.gz -O ~/proton-mail-export-cli-linux_x86_64/proton-mail-export-cli-linux_x86_64.tar.gz
+          tar xf ~/proton-mail-export-cli-linux_x86_64/proton-mail-export-cli-linux_x86_64.tar.gz -C ~/proton-mail-export-cli-linux_x86_64
+          rm ~/proton-mail-export-cli-linux_x86_64/proton-mail-export-cli-linux_x86_64.tar.gz
+          chmod +x ~/proton-mail-export-cli-linux_x86_64/proton-mail-export-cli
+        fi
         DIR="$MAINDIR/Backups/Email"
-        echo "Attempting to find MBOX files in '"$EXPTDIR"' and copy them into '"$DIR"', replacing existing files..."
-        if [ "$(ls "$EXPTDIR"/*.mbox 2>/dev/null | wc -l)" -gt 0 ]; then
-          rm "$DIR"/*
-          mv "$EXPTDIR"/*.mbox "$DIR"
-        else
-          echo "No MBOX files found in "$EXPTDIR""
+        EMAIL_ACC="ImranR98@proton.me"
+        ~/proton-mail-export-cli-linux_x86_64/proton-mail-export-cli -k -o backup -d "$DIR" -u "$EMAIL_ACC"
+        if [ $? == 0 ]; then
+          LATEST_EXPORT_DIR="$DIR/$EMAIL_ACC/$(ls "$DIR/$EMAIL_ACC" | sort -V | head -n -1)"
+          LATEST_EXPORT_FILE_COUNT="$(ls "$LATEST_EXPORT_DIR" | wc -l)"
+          for dir in $(ls "$DIR/$EMAIL_ACC" | sort -V | head -n -1); do
+            CURRENTLY_TARGETED_EXPORT_DIR="$DIR/$EMAIL_ACC/$dir"
+            CURRENTLY_TARGETED_EXPORT_FILE_COUNT="$(ls "$CURRENTLY_TARGETED_EXPORT_DIR" | wc -l)"
+            if [[ $CURRENTLY_TARGETED_EXPORT_FILE_COUNT -gt $LATEST_EXPORT_FILE_COUNT ]]; then
+              echo "WARNING: PREVIOUS BACKUP '$dir' HAS MORE FILES THAN THE LATEST ONE. IT WILL NOT BE DELETED!"
+            else
+              rm -r "$CURRENTLY_TARGETED_EXPORT_DIR"
+            fi
+          done
         fi
         break
         ;;

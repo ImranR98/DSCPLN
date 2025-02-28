@@ -72,7 +72,7 @@ Pick a backup script to run: "
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
           "$HERE"/DirCopy/DirCopy.sh -g "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"
         done
-        SOURCES_NO_GIT=(~/".var/app/org.mozilla.firefox/.mozilla/firefox")
+        SOURCES_NO_GIT=(~/".var/app/io.gitlab.librewolf-community/.librewolf/")
         for SOURCE in "${SOURCES_NO_GIT[@]}"; do
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"'..."
           "$HERE"/DirCopy/DirCopy.sh "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"
@@ -123,7 +123,7 @@ Pick a backup script to run: "
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.local/share/gnome-shell/extensions/" "$TARGET"/extensions/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -d -p ubuntu@bridge.example.com user@localhost 8888 "~/.var/app/org.mozilla.firefox/.mozilla/firefox/" "$TARGET"/firefox/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -d -p ubuntu@bridge.example.com user@localhost 8888 "~/.var/app/io.gitlab.librewolf-community/.librewolf/" "$TARGET"/librewolf/
 
         break
         ;;

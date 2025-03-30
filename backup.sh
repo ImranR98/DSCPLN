@@ -50,6 +50,8 @@ Pick a backup script to run: "
     "Spotify Extended Streaming History"
     "Spotify Technical Logs"
     "Reddit"
+    "Quest Media"
+    "Quest Files"
     "PS5"
   )
   while [ true ]; do
@@ -67,7 +69,7 @@ Pick a backup script to run: "
           break
         fi
         # ==================
-        dconf dump /org/gnome/shell/extensions/ > ~/gnome-extension-settings.conf
+        dconf dump /org/gnome/shell/extensions/ >~/gnome-extension-settings.conf
         SOURCES_GIT=(~/".bashrc" ~/".bash_history" ~/".ssh" ~/".gnupg" ~/.vscode-oss ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks" ~/gnome-extension-settings.conf ~/".config/syncthing")
         for SOURCE in "${SOURCES_GIT[@]}"; do
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
@@ -526,6 +528,57 @@ Pick a backup script to run: "
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Reddit export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep "account name," statistics.csv | tail -c +14 | head -c -2' "$(find "$EXPTDIR/" | grep export_.*.zip$)" "$BACKUPSDIR/Reddit"
+        break
+        ;;
+
+      "Quest Media")
+        # Meta Quest camera media needs to be synced/moved from the device.
+        # This is fully automated if the device is connected.
+        PROCESS_SCRIPT="$MAINDIR"/Code/Automation/MediaDateStandardize/mediaDateStandardize.sh
+        RM_SCRIPT="$MAINDIR"/Code/Automation/MediaDateStandardize/deleteSynced.sh
+        MEDIADIR="$(ls -d /run/user/1000/gvfs/mtp:host=Oculus_Quest_*/"Internal shared storage")"
+        if [ -z "$MEDIADIR" ]; then
+          echo "Quest not connected!" >&2
+          break
+        fi
+        # Delete files already synced in the past
+        if [ -d "$MEDIADIR"/Oculus/Screenshots ]; then
+          echo "Deleting Synced Quest Pictures..."
+          "$RM_SCRIPT" "$MEDIADIR"/Oculus/Screenshots "$MAINDIR"/Media/Camera
+        fi
+        if [ -d "$MEDIADIR"/Oculus/VideoShots ]; then
+          echo "Deleting Synced Quest Videos..."
+          "$RM_SCRIPT" "$MEDIADIR"/Oculus/VideoShots "$MAINDIR"/Media/Camera
+        fi
+        # Sync new files
+        if [ -d "$MEDIADIR"/Oculus/Screenshots ]; then
+          echo "Importing Quest Pictures..."
+          "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$MEDIADIR"/Oculus/Screenshots "$MAINDIR"/Media/Camera
+        fi
+        if [ -d "$MEDIADIR"/Oculus/VideoShots ]; then
+          echo "Importing Quest Videos..."
+          "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$MEDIADIR"/Oculus/VideoShots "$MAINDIR"/Media/Camera
+        fi
+        ;;
+
+      "Quest Files")
+        # Meta Quest files need to be periodically backed up to MAINDIR.
+        # This is fully automated if the device is connected.
+        TARGET="$MAINDIR/Backups/Meta_Quest"
+        MEDIADIR="$(ls -d /run/user/1000/gvfs/mtp:host=Oculus_Quest_*/"Internal shared storage")"
+        if [ -z "$MEDIADIR" ]; then
+          echo "Quest not connected!" >&2
+          break
+        fi
+        SOURCES_NO_GIT=(ModData ModsBeforeFriday Android)
+        for SOURCE in "${SOURCES_NO_GIT[@]}"; do
+          if [ -d "$MEDIADIR"/"$SOURCE" ]; then
+            echo "Attempting to copy '<Quest>/"$SOURCE"' into '"$TARGET"'..."
+            "$HERE"/DirCopy/DirCopy.sh "$MEDIADIR"/"$SOURCE" "$TARGET"/"$SOURCE"
+          else
+            echo "DOES NOT EXIST: <Quest>/$SOURCE"
+          fi
+        done
         break
         ;;
 

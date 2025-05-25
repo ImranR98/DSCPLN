@@ -45,6 +45,7 @@ Pick a backup script to run: "
     "Twitter"
     "TikTok"
     "Instacart Orders"
+    "DeepSeek Chats"
     "Music (Spotify Sync)"
     "Spotify Account Data"
     "Spotify Extended Streaming History"
@@ -481,6 +482,18 @@ Pick a backup script to run: "
         echo "Attempting to scrape Instacart order history and save the data to '"$INSTACART_BACKUP_DIR"'..."
         mkdir -p "$INSTACART_BACKUP_DIR"
         "$BACKUP_SCRIPT" "$INSTACART_BACKUP_DIR" "$DELIVERY_IMAGES_TARGET_DIR" "$PROCESS_SCRIPT -n" --after "$(date -d "$(date +%Y-%m-%d) -4 months" +%Y-%m-%d) $(date +%H:%M)" >/dev/null
+        break
+        ;;
+
+      "DeepSeek Chats")
+        # DeepSeek is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is mostly automated but may require some manual steps.
+        BACKUPSDIR="$MAINDIR/Backups"
+        DEEPSEEK_BACKUP_DIR="$BACKUPSDIR"/DeepSeek
+        BACKUP_SCRIPT="$MAINDIR"/Code/Automation/deepseek-chat-exporter/main.py
+        echo "Attempting to scrape DeepSeek chat history and save the data to '"$DEEPSEEK_BACKUP_DIR"'..."
+        mkdir -p "$DEEPSEEK_BACKUP_DIR"
+        python "$BACKUP_SCRIPT" -o "$DEEPSEEK_BACKUP_DIR/deepseek-chats.json"
         break
         ;;
 

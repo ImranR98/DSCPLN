@@ -43,6 +43,7 @@ Pick a backup script to run: "
     "Presto Transit Usage Report"
     "Google"
     "Twitter"
+    "Mastodon"
     "TikTok"
     "Instacart Orders"
     "DeepSeek Chats"
@@ -459,6 +460,15 @@ Pick a backup script to run: "
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Twitter export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "accountId\" : \".*\"" data/account.js | tail -c +15 | head -c -2' "$(find "$EXPTDIR/" | grep twitter.*.zip$)" "$BACKUPSDIR/Twitter"
+        break
+        ;;
+
+      "Mastodon")
+        # Mastodon is a cloud service. Thus, data from the service must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
+        BACKUPSDIR="$MAINDIR/Backups"
+        echo "Attempting to find a Mastodon export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'jq -r '.id' actor.json | sed '"'"'s|https\?://||; s|/|_|g; s|:|_|g; s|[?&=]|_|g; s|[^a-zA-Z0-9._-]|_|g'"'"'' "$(find "$EXPTDIR/" | grep archive-.*\.zip$)" "$BACKUPSDIR/Mastodon"
         break
         ;;
 

@@ -71,8 +71,8 @@ Pick a backup script to run: "
           break
         fi
         # ==================
-        dconf dump /org/gnome/shell/extensions/ >~/gnome-extension-settings.conf
-        SOURCES_GIT=(~/".bashrc" ~/".bash_history" ~/".ssh" ~/".gnupg" ~/.vscode-oss ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks" ~/gnome-extension-settings.conf ~/".config/syncthing")
+        dconf dump /org/gnome/shell/extensions/ >~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf
+        SOURCES_GIT=(~/".bashrc" ~/".bash_history" ~/".ssh" ~/".gnupg" ~/.vscode-oss ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks" ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf ~/".config/syncthing")
         for SOURCE in "${SOURCES_GIT[@]}"; do
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
           "$HERE"/DirCopy/DirCopy.sh -g "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"
@@ -82,7 +82,7 @@ Pick a backup script to run: "
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"'..."
           "$HERE"/DirCopy/DirCopy.sh "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"
         done
-        rm ~/gnome-extension-settings.conf
+        rm ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf
         break
         ;;
 
@@ -127,9 +127,18 @@ Pick a backup script to run: "
         "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/https-cert.pem" "$TARGET"/syncthing-config/
         "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/csrftokens.txt.pem" "$TARGET"/syncthing-config/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.local/share/gnome-shell/extensions/" "$TARGET"/extensions/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/.bashrc" "$TARGET"/.bashrc
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/.bash_history" "$TARGET"/.bash_history
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/.config/gtk-3.0/bookmarks" "$TARGET"/bookmarks
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.local/share/lutris/" "$TARGET"/lutris/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.config/autostart/" "$TARGET"/autostart/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.config/applications/" "$TARGET"/applications/
+
+        ssh -oProxyCommand="ssh -p22 ubuntu@bridge.example.com -W %h:%p" -p8888 user@localhost "dconf dump /org/gnome/shell/extensions/ >~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf"
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf" "$TARGET"/gnome-extension-settings.conf
+        ssh -oProxyCommand="ssh -p22 ubuntu@bridge.example.com -W %h:%p" -p8888 user@localhost "rm ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf"
+
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -e "/runners/" -e "/runtime/" -p ubuntu@bridge.example.com user@localhost 8888 "~/.local/share/lutris/" "$TARGET"/lutris/
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -d -p ubuntu@bridge.example.com user@localhost 8888 "~/.var/app/io.gitlab.librewolf-community/.librewolf/" "$TARGET"/librewolf/
 

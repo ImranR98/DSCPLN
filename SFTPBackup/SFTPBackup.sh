@@ -25,12 +25,13 @@ function usage() {
 }
 
 # Parse options
+EXCLUDES=()
 while getopts dgp:e:s opt; do
     case $opt in
     d) delete=1 ;;
     g) git=1 ;;
     p) PROXY=$OPTARG ;;
-    e) EXCLUDE=$OPTARG ;;
+    e) EXCLUDES+=("$OPTARG") ;;
     s) USE_SUDO=true ;;
     \?) usage ;;
     esac
@@ -54,7 +55,12 @@ if [ "$git" == "1" ] && [ ! -d "$4/.git" ]; then
     git init -q
     cd "$HERE"
 fi
+EXCLUDE_OPTIONS=()
+for exclude in "${EXCLUDES[@]}"; do
+    EXCLUDE_OPTIONS+=(--exclude "$exclude")  # Add each exclude to the options
+done
 REMOTE_RSYNC_PATH="rsync"
+
 
 # Run
 SSH_STRING="ssh -p $2"
@@ -68,12 +74,12 @@ if [ "$USE_SUDO" = true ]; then
 fi
 if [ "$delete" == "1" ]; then
     if [ "$git" == "1" ]; then
-        rsync -aq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" --delete --exclude '/.git/' --exclude "$EXCLUDE"
+        rsync -aq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" --delete --exclude '/.git/' "${EXCLUDE_OPTIONS[@]}"
     else
-        rsync -aq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" --delete --exclude "$EXCLUDE"
+        rsync -aq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" --delete "${EXCLUDE_OPTIONS[@]}"
     fi
 else
-    rsync -aq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" --exclude "$EXCLUDE"
+    rsync -aq --rsync-path="$REMOTE_RSYNC_PATH" -e "$SSH_STRING" $1:"$3" "$4" "${EXCLUDE_OPTIONS[@]}"
 fi
 echo "$(date)" >"$4"/lastBackedUp.txt
 

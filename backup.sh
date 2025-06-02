@@ -129,6 +129,8 @@ Pick a backup script to run: "
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.local/share/gnome-shell/extensions/" "$TARGET"/extensions/
 
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.local/share/lutris/" "$TARGET"/lutris/
+
         "$HERE"/SFTPBackup/SFTPBackup.sh -d -p ubuntu@bridge.example.com user@localhost 8888 "~/.var/app/io.gitlab.librewolf-community/.librewolf/" "$TARGET"/librewolf/
 
         break

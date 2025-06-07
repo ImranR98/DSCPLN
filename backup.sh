@@ -25,6 +25,7 @@ Pick a backup script to run: "
     "GNOME Boxes"
     "Core Files"
     "Core Landscape State"
+    "Core Wine Game Save Files"
     "Media Import"
     "Balance"
     "Wealthsimple Recents to Balance"
@@ -158,6 +159,23 @@ Pick a backup script to run: "
         # ==================
         "$HERE"/SFTPBackup/SFTPBackup.sh -s -e immich/upload -d -p ubuntu@bridge.example.com user@localhost 8888 "~/Main/Landscape/state/" "$SERVICE_DATA_UNSYNCED_TARGET"
 
+        break
+        ;;
+
+      "Core Wine Game Save Files")
+        # Game save files on Core gaming Wine prefixes must exist on the Core to be usable, so cannot live directly in MAINDIR.
+        # Thus they need to be periodically backed up to MAINDIR.
+        # This is fully automated.
+        # === ONLY ON PC ===
+        if [ "$ISPC" != 1 ]; then
+          echo "Only available on PC"
+          break
+        fi
+        # ==================        
+        RAND_DIRPREF="$RANDOM"
+        "$HERE"/RunScriptRemotely/RunScriptRemotely.sh -p ubuntu@bridge.example.com user@localhost 8888 "$HERE"/BackupGamingWinePrefixes/BackupGamingWinePrefixes.sh /mnt/ssd2/Game_Installs "/home/node/Downloads/${RAND_DIRPREF}_winegamehomebak"
+        "$HERE"/SFTPBackup/SFTPBackup.sh -p ubuntu@bridge.example.com user@localhost 8888 "~/Downloads/${RAND_DIRPREF}_winegamehomebak/" "$MAINDIR/Backups/Game Save Files/"
+        ssh -oProxyCommand="ssh -p22 ubuntu@bridge.example.com -W %h:%p" -p8888 user@localhost "rm -r ~/Downloads/${RAND_DIRPREF}_winegamehomebak"
         break
         ;;
 

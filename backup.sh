@@ -550,7 +550,7 @@ Pick a backup script to run: "
         # Spotify is a cloud service. Thus, data from the service (1 of 3 export types) must be periodically exported and backed up.
         # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
-        echo "Attempting to find a Spotify export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+        echo "Attempting to find a Spotify export (assumed to be Account Data) in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -Eo "username\": \".*\"" "Spotify Account Data/Userdata.json" | tail -c +13 | head -c -2' "$(find "$EXPTDIR/" | grep my_spotify_data.zip$)" "$BACKUPSDIR/Spotify_account"
         break
         ;;
@@ -559,7 +559,7 @@ Pick a backup script to run: "
         # Spotify is a cloud service. Thus, data from the service (1 of 3 export types) must be periodically exported and backed up.
         # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
-        echo "Attempting to find a Spotify export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+        echo "Attempting to find a Spotify export (assumed to be Extended Streaming History) in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$EXPTDIR/" | grep my_spotify_data.zip$)" "$BACKUPSDIR/Spotify_history"
         break
         ;;
@@ -568,7 +568,7 @@ Pick a backup script to run: "
         # Spotify is a cloud service. Thus, data from the service (1 of 3 export types) must be periodically exported and backed up.
         # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
-        echo "Attempting to find a Spotify export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+        echo "Attempting to find a Spotify export (assumed to be Technical Logs) in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg "$(find "$EXPTDIR/" | grep my_spotify_data.zip$)" "$BACKUPSDIR/Spotify_techlogs"
         break
         ;;

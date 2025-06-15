@@ -40,3 +40,4 @@ git add .
 git commit -m "$(date)"
 cd "$here"
 sudo veracrypt -d
+touch "$1" # Somehow VeraCrypt doesn't update the file modification time so any other fs watchers would ignore changes

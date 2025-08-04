@@ -293,7 +293,6 @@ Pick a backup script to run: "
         gitCopyHelper "$EXPTDIR"/*.ceb "$TARGET" 'Cheogram.ceb'
         gitCopyHelper "$EXPTDIR"/ntfy-*.json "$TARGET" 'ntfy-subscriptions.json'
         gitCopyHelper "$EXPTDIR"/"example.com.txt" "$TARGET" "example.com.txt"
-        gitCopyHelper "$EXPTDIR"/"excel.contact.txt" "$TARGET" "excel.contact.txt"
 
         echo ""
         echo "Do NOT FORGET to re-enable your Cheogram account as the backup process disables all active accounts."

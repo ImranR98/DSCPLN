@@ -73,7 +73,7 @@ Pick a backup script to run: "
         fi
         # ==================
         dconf dump /org/gnome/shell/extensions/ >~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf
-        SOURCES_GIT=(~/".bashrc" ~/".bash_history" ~/".ssh" ~/".gnupg" ~/.vscode-oss ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks" ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf ~/".config/syncthing")
+        SOURCES_GIT=(~/".bashrc.d" ~/".bash_history" ~/".ssh" ~/".gnupg" ~/.vscode-oss ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks" ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf ~/".config/syncthing")
         for SOURCE in "${SOURCES_GIT[@]}"; do
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
           "$HERE"/DirCopy/DirCopy.sh -g "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"

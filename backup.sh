@@ -30,7 +30,7 @@ Pick a backup script to run: "
     "Balance"
     "Wealthsimple Recents to Balance"
     "Bank Statements + Balance Extras"
-    "Veracrypted Bitwarden"
+    "Bitwarden (encrypted with 'age')"
     "Other File Exports (Group)"
     "WhatsApp"
     "WhatsApp TXT"
@@ -246,13 +246,13 @@ Pick a backup script to run: "
         break
         ;;
 
-      "Veracrypted Bitwarden")
+      "Bitwarden (encrypted with 'age')")
         # Bitwarden is a cloud service. Thus, data from the service must be periodically exported and backed up.
-        # Due to the sensitive nature of this service's data, this needs to be saved into an encrypted container.
-        # This is not fully automated; files must be manually placed in EXPTDIR, and the Veracrypt container must already exist.
-        BITWARDENCONTAINER="$MAINDIR/Backups/Auth.hc"
-        echo "Attempting to find a Bitwarden JSON export in '"$EXPTDIR"', move it into the '"$BITWARDENCONTAINER"' Veracrypt container, and commit changes to Git..."
-        "$HERE"/BitwardenVeracrypted/BitwardenVeracrypted.sh "$BITWARDENCONTAINER" "$EXPTDIR"/bitwarden_export_*.json
+        # Due to the sensitive nature of this service's data, this needs to be saved in an encrypted format.
+        # This is not fully automated; files must be manually placed in EXPTDIR.
+        BITWARDENDIR="$MAINDIR/Backups/Bitwarden"
+        echo "Attempting to find a Bitwarden JSON export in '"$EXPTDIR"', encrypt it, save it into '"$BITWARDENDIR"', and commit changes to Git..."
+        "$HERE"/BitwardenEncrypted/BitwardenEncrypted.sh "$BITWARDENDIR" "$EXPTDIR"/bitwarden_export_*.json
         break
         ;;
 

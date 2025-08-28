@@ -5,7 +5,7 @@ MAINDIR=~/"Main"
 PHONESYNCDIR=~/deviceSync
 EXPTDIR=~/"Downloads"
 # Check if on PC
-if [ "$(hostname)" = "PC" ]; then
+if [ "$(hostname)" = "PC" ] || [ -f ~/etesync-dav ]; then # Etesync presence is a hacky workaround to recognize PC when running in toolbx
   ISPC=1
 fi
 # Set Core-Specific variables

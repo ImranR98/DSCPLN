@@ -47,10 +47,10 @@ Pick a backup script to run: "
     "TikTok"
     "Instacart Orders"
     "DeepSeek Chats"
-    "Music (Spotify Sync)"
-    "Spotify Account Data"
-    "Spotify Extended Streaming History"
-    "Spotify Technical Logs"
+    "Music (YouTube Music Download)"
+    # "Spotify Account Data"
+    # "Spotify Extended Streaming History"
+    # "Spotify Technical Logs"
     "Reddit"
     "Quest Media"
     "Quest Files"
@@ -513,13 +513,19 @@ Pick a backup script to run: "
         break
         ;;
 
-      "Music (Spotify Sync)")
-        # Spotify is a cloud service. Thus, content from the service must be periodically sourced from YouTube and backed up.
+      "Music (YouTube Music Download)")
+        # YouTube music is a cloud service. Thus, content from the service must be periodically backed up.
         MUSICDIR="$MAINDIR/External Media/Music"
-        MUSIC_SCRIPT="$MAINDIR"/Code/Automation/SpotifARRR/SpotifARRR.sh
-        echo "Attempting to find use Zotify to sync Spotify playlists to '"$MUSICDIR"'..."
-        export NO_DELETE_UNLISTED=true
-        "$MUSIC_SCRIPT" "$MUSICDIR"
+        MUSIC_SCRIPT_DIR="$MAINDIR"/Code/Automation/YTMusicDL
+        echo "Attempting to find use download YouTube Music playlists to '"$MUSICDIR"'..."
+		PREV_PWD="$(pwd)"
+		cd "$MUSIC_SCRIPT_DIR"
+        if [ ! -f ./venv/bin/activate ]; then python -m venv venv; fi
+		source ./venv/bin/activate
+		pip install -r requirements.txt
+		python ytmusic_dl.py --dir "$MUSICDIR"
+		bash validate_m3u8s.sh
+		cd "$PREV_PWD"
         break
         ;;
 

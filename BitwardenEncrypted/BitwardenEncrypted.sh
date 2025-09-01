@@ -36,3 +36,4 @@ fi
 git add .
 git commit -m "$(date)"
 cd "$here"
+rm "$2"

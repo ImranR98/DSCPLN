@@ -262,7 +262,7 @@ Pick a backup script to run: "
         gitCopyHelper "$EXPTDIR"/"TODO.ics" "$TARGET" 'TODO.ics'
         gitCopyHelper "$EXPTDIR"/"Regular or Long Term.ics" "$TARGET" 'Regular.ics'
         gitCopyHelper "$EXPTDIR"/Events-*.ics "$TARGET" 'Events.ics'
-        gitCopyHelper "$EXPTDIR"/bookmarks-*.html "$TARGET" 'bookmarks.html'
+        gitCopyHelper "$EXPTDIR"/bookmarks_*.html "$TARGET" 'bookmarks.html'
         gitCopyHelper "$EXPTDIR"/obtainium-export-*.json "$TARGET" 'Obtainium.json'
         gitCopyHelper "$EXPTDIR"/antennapod-feeds-*.opml "$TARGET" 'Podcasts.opml'
         gitCopyHelper "$EXPTDIR"/AntennaPodBackup-*.db "$TARGET" 'AntennaPod.opml'

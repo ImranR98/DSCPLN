@@ -54,7 +54,7 @@ Pick a backup script to run: "
     "Reddit"
     "Quest Media"
     "Quest Files"
-    "PS5"
+    # "PS5"
   )
   while [ true ]; do
     select option in "${options[@]}"; do

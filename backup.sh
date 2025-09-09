@@ -259,9 +259,9 @@ Pick a backup script to run: "
           fi
         }
 
-        gitCopyHelper "$EXPTDIR"/"My Contacts.vcf" "$TARGET" 'My Contacts.vcf'
-        gitCopyHelper "$EXPTDIR"/"TODO.ics" "$TARGET" 'TODO.ics'
-        gitCopyHelper "$EXPTDIR"/"Regular or Long Term.ics" "$TARGET" 'Regular.ics'
+        gitCopyHelper "$EXPTDIR"/contacts-*.vcf "$TARGET" 'My Contacts.vcf'
+        gitCopyHelper "$EXPTDIR"/todo-*.ics "$TARGET" 'TODO.ics'
+        gitCopyHelper "$EXPTDIR"/regular-or-long-term-*.ics "$TARGET" 'Regular.ics'
         gitCopyHelper "$EXPTDIR"/Events-*.ics "$TARGET" 'Events.ics'
         gitCopyHelper "$EXPTDIR"/bookmarks_*.html "$TARGET" 'bookmarks.html'
         gitCopyHelper "$EXPTDIR"/obtainium-export-*.json "$TARGET" 'Obtainium.json'

@@ -5,7 +5,7 @@ MAINDIR=~/"Main"
 PHONESYNCDIR=~/deviceSync
 EXPTDIR=~/"Downloads"
 # Check if on PC
-if [ "$(hostname)" = "PC" ] || [ -f ~/etesync-dav ]; then # Etesync presence is a hacky workaround to recognize PC when running in toolbx
+if [ "$(hostname)" = "PC" ] || [ -f ~/.isPC ]; then # .isPC presence is a hacky workaround to recognize PC when running in toolbx
   ISPC=1
 fi
 # Set Core-Specific variables
@@ -243,7 +243,7 @@ Pick a backup script to run: "
         # This is not fully automated; files must be manually placed in EXPTDIR.
         TARGET="$MAINDIR/Backups/Manual"
         echo "Will attempt to copy and rename all relevant files in '"$EXPTDIR"' to '"$TARGET"', then commit changes to Git."
-        echo "This is meant for the following backups: Contacts+Tasks (VCF+ICS EteSync exports from http://localhost:37358/.web/), Calendar (ICS from https://account.proton.me/u/0/calendar/import-export) Bookmarks (JSON), Obtainium Apps (JSON), Podcasts (AntennaPod OPML), AntennaPod DB, RSS (Read You OPML), 2FA Codes (Aegis), Cheogram (CEB), NTFY Subscriptions (JSON), and example.com DNS entries (zip)."
+        echo "This is meant for the following backups: Contacts+Tasks (VCF+ICS exports from https://nextcloud.example.com/), Calendar (ICS from https://account.proton.me/u/0/calendar/import-export) Bookmarks (JSON), Obtainium Apps (JSON), Podcasts (AntennaPod OPML), AntennaPod DB, RSS (Read You OPML), 2FA Codes (Aegis), Cheogram (CEB), NTFY Subscriptions (JSON), and example.com DNS entries (zip)."
         echo "Press [ENTER] to continue..."
         read choice
 
@@ -525,7 +525,7 @@ Pick a backup script to run: "
 		source ./venv/bin/activate
 		pip install -r requirements.txt
 		python ytmusic_dl.py --dir "$MUSICDIR"
-		bash validate_m3u8s.sh
+		bash validate_m3u8s.sh "$MUSICDIR"
 		cd "$PREV_PWD"
         break
         ;;

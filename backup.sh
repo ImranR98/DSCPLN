@@ -523,7 +523,7 @@ Pick a backup script to run: "
 		cd "$MUSIC_SCRIPT_DIR"
         if [ ! -f ./venv/bin/activate ]; then python -m venv venv; fi
 		source ./venv/bin/activate
-		pip install -r requirements.txt
+		pip install --upgrade -r requirements.txt
 		python ytmusic_dl.py --dir "$MUSICDIR"
 		bash validate_m3u8s.sh "$MUSICDIR"
 		cd "$PREV_PWD"

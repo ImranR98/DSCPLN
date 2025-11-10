@@ -243,7 +243,7 @@ Pick a backup script to run: "
         # This is not fully automated; files must be manually placed in EXPTDIR.
         TARGET="$MAINDIR/Backups/Manual"
         echo "Will attempt to copy and rename all relevant files in '"$EXPTDIR"' to '"$TARGET"', then commit changes to Git."
-        echo "This is meant for the following backups: Contacts+Tasks (VCF+ICS exports from https://nextcloud.example.com/), Calendar (ICS from https://account.proton.me/u/0/calendar/import-export) Bookmarks (JSON), Obtainium Apps (JSON), Podcasts (AntennaPod OPML), AntennaPod DB, RSS (Read You OPML), 2FA Codes (Aegis), Cheogram (CEB), NTFY Subscriptions (JSON), and example.com DNS entries (zip)."
+        echo "This is meant for the following backups: Contacts+Calendar+Tasks (VCF+ICS exports from https://nextcloud.example.com/), Bookmarks (JSON), Obtainium Apps (JSON), Podcasts (AntennaPod OPML), AntennaPod DB, RSS (Read You OPML), 2FA Codes (Aegis), Cheogram (CEB), NTFY Subscriptions (JSON), and example.com DNS entries (zip)."
         echo "Press [ENTER] to continue..."
         read choice
 
@@ -262,7 +262,7 @@ Pick a backup script to run: "
         gitCopyHelper "$EXPTDIR"/contacts-*.vcf "$TARGET" 'My Contacts.vcf'
         gitCopyHelper "$EXPTDIR"/todo-*.ics "$TARGET" 'TODO.ics'
         gitCopyHelper "$EXPTDIR"/regular-or-long-term-*.ics "$TARGET" 'Regular.ics'
-        gitCopyHelper "$EXPTDIR"/My\ calendar-*.ics "$TARGET" 'Events.ics'
+        gitCopyHelper "$EXPTDIR"/personal-*.ics "$TARGET" 'Events.ics'
         gitCopyHelper "$EXPTDIR"/bookmarks_*.html "$TARGET" 'bookmarks.html'
         gitCopyHelper "$EXPTDIR"/obtainium-export-*.json "$TARGET" 'Obtainium.json'
         gitCopyHelper "$EXPTDIR"/antennapod-feeds-*.opml "$TARGET" 'Podcasts.opml'

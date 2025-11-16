@@ -21,7 +21,7 @@ chooseScript() {
   PS3="
 Pick a backup script to run: "
   options=(
-    "Local Files"
+    "PC Files"
     "Core Files"
     "Core Landscape State"
     "Core Wine Game Save Files"
@@ -60,11 +60,11 @@ Pick a backup script to run: "
     select option in "${options[@]}"; do
       case "$option" in
 
-      "Local Files")
-        # Some local files (like ~/.ssh and ~/.bashrc) must exist in specific locations to be usable, so cannot live directly in MAINDIR.
+      "PC Files")
+        # Some PC files (like ~/.ssh and ~/.bashrc) must exist in specific locations to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
-        TARGET="$MAINDIR/Backups/Local Files"
+        TARGET="$MAINDIR/Backups/PC Files"
         # === ONLY ON PC ===
         if [ "$ISPC" != 1 ]; then
           echo "Only available on PC"
@@ -91,12 +91,7 @@ Pick a backup script to run: "
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
         TARGET="$MAINDIR/Backups/Core"
-        # === ONLY ON PC ===
-        if [ "$ISPC" != 1 ]; then
-          echo "Only available on PC"
-          break
-        fi
-        # ==================
+
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.ssh/" "$TARGET"/.ssh/
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/config.xml" "$TARGET"/syncthing-config/
@@ -132,7 +127,7 @@ Pick a backup script to run: "
         SERVICE_DATA_UNSYNCED_TARGET="$MAINDIR"/Landscape/state
         # === ONLY ON PC ===
         if [ "$ISPC" != 1 ]; then
-          echo "Only available on PC"
+          echo "Only available on PC due to unkown permission issues"
           break
         fi
         # ==================

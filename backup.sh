@@ -511,7 +511,7 @@ Pick a backup script to run: "
 
       "Music (YouTube Music Download)")
         # YouTube music is a cloud service. Thus, content from the service must be periodically backed up.
-        MUSICDIR="$MAINDIR/External Media/Music"
+        MUSICDIR="$MAINDIR/Media/Music"
         MUSIC_SCRIPT_DIR="$MAINDIR"/Code/Automation/YTMusicDL
         echo "Attempting to find use download YouTube Music playlists to '"$MUSICDIR"'..."
 		PREV_PWD="$(pwd)"

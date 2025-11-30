@@ -425,7 +425,7 @@ Pick a backup script to run: "
         # Snapchat is a cloud service. Thus, data from the service must be periodically exported and backed up.
         # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
-        echo "Attempting to find a Medium export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
+        echo "Attempting to find a Snapchat export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
         "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'awk -F , '"'"'{print $1}'"'"' json/account.json | head -c -2 | tail -c +37' "$(find "$EXPTDIR/" | grep -E '.*/mydata~.*\.zip$')" "$BACKUPSDIR/Snapchat"
         break
         ;;

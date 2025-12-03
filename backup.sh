@@ -186,7 +186,7 @@ Pick a backup script to run: "
         # ==================
 
         echo "Moving Call Recordings..."
-        mv "$PHONESYNCDIR"/Calls/{.?*,*} "$MAINDIR"/Media/Audio/Recordings/"Call Recorder"
+        mv "$PHONESYNCDIR"/Calls/{.?*,*} "$MAINDIR"/Media/Recordings/"Call Recorder"
         break
         ;;
 

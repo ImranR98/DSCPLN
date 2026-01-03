@@ -72,7 +72,7 @@ Pick a backup script to run: "
         fi
         # ==================
         dconf dump /org/gnome/shell/extensions/ >~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf
-        SOURCES_GIT=(~/".bashrc.d" ~/".bash_history" ~/".ssh" ~/".gnupg" ~/.vscode-oss ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks" ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf)
+        SOURCES_GIT=(~/".bashrc.d" ~/".bash_history" ~/".config/mimeapps.list" ~/".ssh" ~/".gnupg" ~/.vscode-oss ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks" ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf)
         for SOURCE in "${SOURCES_GIT[@]}"; do
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
           "$HERE"/DirCopy/DirCopy.sh -g "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"
@@ -103,6 +103,7 @@ Pick a backup script to run: "
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/.bashrc" "$TARGET"/.bashrc
         "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/.bash_history" "$TARGET"/.bash_history
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/.config/mimeapps.list" "$TARGET"/mimeapps.list
         "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/.config/gtk-3.0/bookmarks" "$TARGET"/bookmarks
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.config/autostart/" "$TARGET"/autostart/

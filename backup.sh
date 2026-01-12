@@ -115,7 +115,9 @@ Pick a backup script to run: "
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -dg -e "/runners/" -e "/runtime/" -p ubuntu@bridge.example.com user@localhost 8888 "~/.var/app/com.heroicgameslauncher.hgl/config/heroic" "$TARGET"/heroic/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -d -p ubuntu@bridge.example.com user@localhost 8888 "~/.var/app/io.gitlab.librewolf-community/.librewolf/" "$TARGET"/librewolf/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -d -p ubuntu@bridge.example.com user@localhost 8888 "~/.config/trivalent/" "$TARGET"/trivalent/
+
+		"$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "/etc/fstab" "$TARGET"/fstab
 
         break
         ;;

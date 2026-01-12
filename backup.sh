@@ -113,8 +113,7 @@ Pick a backup script to run: "
         "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf" "$TARGET"/gnome-extension-settings.conf
         ssh -oProxyCommand="ssh -p22 ubuntu@bridge.example.com -W %h:%p" -p8888 user@localhost "rm ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf"
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -e "/runners/" -e "/runtime/" -p ubuntu@bridge.example.com user@localhost 8888 "~/.local/share/lutris/" "$TARGET"/lutris/
-        # "$HERE"/SFTPBackup/SFTPBackup.sh -dg -e "/runners/" -e "/runtime/" -p ubuntu@bridge.example.com user@localhost 8888 "~/.var/app/net.lutris.Lutris/data/lutris" "$TARGET"/lutris/ # TODO replace above w this after switch to Flatpak
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -e "/runners/" -e "/runtime/" -p ubuntu@bridge.example.com user@localhost 8888 "~/.var/app/com.heroicgameslauncher.hgl/config/heroic" "$TARGET"/heroic/
 
         "$HERE"/SFTPBackup/SFTPBackup.sh -d -p ubuntu@bridge.example.com user@localhost 8888 "~/.var/app/io.gitlab.librewolf-community/.librewolf/" "$TARGET"/librewolf/
 

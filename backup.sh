@@ -77,7 +77,7 @@ Pick a backup script to run: "
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
           "$HERE"/DirCopy/DirCopy.sh -g "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"
         done
-        SOURCES_NO_GIT=(~/".var/app/io.gitlab.librewolf-community/.librewolf/" ~/".config/trivalent" ~/".config/syncthing")
+        SOURCES_NO_GIT=(~/".var/app/io.gitlab.librewolf-community/.librewolf/" ~/".config/trivalent") # TODO add ~/.config/syncthing but exclude large folder
         for SOURCE in "${SOURCES_NO_GIT[@]}"; do
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"'..."
           "$HERE"/DirCopy/DirCopy.sh "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"

@@ -72,12 +72,12 @@ Pick a backup script to run: "
         fi
         # ==================
         dconf dump /org/gnome/shell/extensions/ >~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf
-        SOURCES_GIT=(~/".bashrc.d" ~/".bash_history" ~/".config/mimeapps.list" ~/".ssh" ~/".gnupg" ~/.vscode-oss ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks" ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf)
+        SOURCES_GIT=(~/".bashrc.d" ~/".bash_history" ~/".config/mimeapps.list" ~/".ssh" ~/".gnupg" ~/".config/autostart" ~/".local/share/applications" ~/".config/gtk-3.0/bookmarks" ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf)
         for SOURCE in "${SOURCES_GIT[@]}"; do
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"' and commit changes to Git..."
           "$HERE"/DirCopy/DirCopy.sh -g "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"
         done
-        SOURCES_NO_GIT=(~/".var/app/io.gitlab.librewolf-community/.librewolf/" ~/".config/trivalent") # TODO add ~/.config/syncthing but exclude large folder
+        SOURCES_NO_GIT=(~/.vscode-oss ~/".config/trivalent") # TODO add ~/.config/syncthing but exclude large folder
         for SOURCE in "${SOURCES_NO_GIT[@]}"; do
           echo "Attempting to copy '"$SOURCE"' into '"$TARGET"'..."
           "$HERE"/DirCopy/DirCopy.sh "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"

@@ -429,7 +429,7 @@ Pick a backup script to run: "
         # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
         BACKUPSDIR="$MAINDIR/Backups"
         echo "Attempting to find a Snapchat export in '"$EXPTDIR"', extract it to a subdirectory of '"$BACKUPSDIR"', and commit changes to Git..."
-        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'awk -F , '"'"'{print $1}'"'"' json/account.json | head -c -2 | tail -c +37' "$(find "$EXPTDIR/" | grep -E '.*/mydata~.*\.zip$')" "$BACKUPSDIR/Snapchat"
+        "$HERE"/ExtractZips/ExtractZips.sh -dg -n 'grep -i username json/account.json | awk -F'"'"'"'"'"' '"'"'{print $4}'"'"'' "$(find "$EXPTDIR/" | grep -E '.*/mydata~.*\.zip$')" "$BACKUPSDIR/Snapchat"
         break
         ;;
 

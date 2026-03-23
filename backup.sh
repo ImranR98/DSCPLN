@@ -359,7 +359,7 @@ Pick a backup script to run: "
           chmod +x ~/proton-mail-export-cli-linux_x86_64/proton-mail-export-cli
         fi
         DIR="$MAINDIR/Backups/Email"
-        EMAIL_ACC="core.clownfish@proton.me"
+        EMAIL_ACC="contact@example.com"
         ~/proton-mail-export-cli-linux_x86_64/proton-mail-export-cli -k -o backup -d "$DIR" -u "$EMAIL_ACC"
         if [ $? == 0 ]; then
           LATEST_EXPORT_DIR="$DIR/$EMAIL_ACC/$(ls "$DIR/$EMAIL_ACC" | sort -V | head -n -1)"

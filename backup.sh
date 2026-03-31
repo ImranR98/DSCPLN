@@ -150,7 +150,6 @@ Pick a backup script to run: "
         # ==================        
         RAND_DIRPREF="$RANDOM"
         "$HERE"/RunScriptRemotely/RunScriptRemotely.sh -p ubuntu@bridge.example.com user@localhost 8888 "$HERE"/BackupGamingWinePrefixes/BackupGamingWinePrefixes.sh /mnt/ssd2/Game_Installs "/home/node/Downloads/${RAND_DIRPREF}_winegamehomebak"
-        "$HERE"/RunScriptRemotely/RunScriptRemotely.sh -p ubuntu@bridge.example.com user@localhost 8888 "$HERE"/BackupGamingWinePrefixes/BackupGamingWinePrefixes.sh /mnt/ssd2/Game_Installs/Synced "/home/node/Downloads/${RAND_DIRPREF}_winegamehomebak"
         "$HERE"/SFTPBackup/SFTPBackup.sh -p ubuntu@bridge.example.com user@localhost 8888 "~/Downloads/${RAND_DIRPREF}_winegamehomebak/" "$MAINDIR/Backups/Game Save Files/"
         ssh -oProxyCommand="ssh -p22 ubuntu@bridge.example.com -W %h:%p" -p8888 user@localhost "rm -r ~/Downloads/${RAND_DIRPREF}_winegamehomebak"
         break

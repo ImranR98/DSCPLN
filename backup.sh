@@ -240,7 +240,7 @@ Pick a backup script to run: "
         # This is not fully automated; files must be manually placed in EXPTDIR.
         TARGET="$MAINDIR/Backups/Manual"
         echo "Will attempt to copy and rename all relevant files in '"$EXPTDIR"' to '"$TARGET"', then commit changes to Git."
-        echo "This is meant for the following backups: Contacts+Calendar+Tasks (VCF+ICS exports from https://nextcloud.example.com/), Bookmarks (JSON), Obtainium Apps (JSON), Podcasts (AntennaPod OPML), AntennaPod DB, RSS (Read You OPML), 2FA Codes (Aegis), Cheogram (CEB), NTFY Subscriptions (JSON), and example.com DNS entries (zip)."
+        echo "This is meant for the following backups: Contacts+Calendar+Tasks (VCF+ICS exports from https://nextcloud.example.com/), Bookmarks (JSON), Obtainium Apps (JSON), Podcasts (AntennaPod OPML), AntennaPod DB, RSS (Read You OPML), 2FA Codes (Aegis), Cheogram (CEB), NTFY Subscriptions (JSON), Molly (Signal) Backups, and example.com DNS entries (zip)."
         echo "Press [ENTER] to continue..."
         read choice
 
@@ -269,6 +269,7 @@ Pick a backup script to run: "
         gitCopyHelper "$EXPTDIR"/*.ceb "$TARGET" 'Cheogram.ceb'
         gitCopyHelper "$EXPTDIR"/ntfy-*.json "$TARGET" 'ntfy-subscriptions.json'
         gitCopyHelper "$EXPTDIR"/"example.com.txt" "$TARGET" "example.com.txt"
+        gitCopyHelper "$EXPTDIR"/molly-*.backup "$TARGET" 'signal.backup'
 
         echo ""
         echo "Do NOT FORGET to re-enable your Cheogram account as the backup process disables all active accounts."

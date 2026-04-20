@@ -46,7 +46,8 @@ Pick a backup script to run: "
     "Mastodon"
     "TikTok"
     "Instacart Orders"
-    "DeepSeek Chats"
+    # "DeepSeek Chats"
+	"Qwen Chats"
     "Music (YouTube Music Download)"
     # "Spotify Account Data"
     # "Spotify Extended Streaming History"
@@ -509,6 +510,23 @@ Pick a backup script to run: "
         echo "Attempting to scrape DeepSeek chat history and save the data to '"$DEEPSEEK_BACKUP_DIR"'..."
         mkdir -p "$DEEPSEEK_BACKUP_DIR"
         python "$BACKUP_SCRIPT" -o "$DEEPSEEK_BACKUP_DIR/deepseek-chats.json"
+        break
+        ;;
+
+	  "Qwen Chats")
+        # Qwen Chat data is generated on the Qwen Chat website servers. Thus, reports from the website must be periodically exported and backed up.
+        # This is not fully automated; the data must be manually exported and placed in EXPTDIR.
+        BACKUPSDIR="$MAINDIR/Backups/Qwen Chat"
+        echo "Attempting to find Qwen Chat export(s) in '"$EXPTDIR"', move them into "$BACKUPSDIR"', and commit changes to Git..."
+        IFS=$'\n' read -r -d '' -a SOURCES < <(find "$EXPTDIR" | grep -E '.*/chat-export-[0-9]+\.json$' && printf '\0')
+        for SOURCE in "${SOURCES[@]}"; do
+          "$HERE"/DirCopy/DirCopy.sh -g -d "$SOURCE" "$BACKUPSDIR"
+        done
+        if [ "${#SOURCES[@]}" -eq 0 ]; then
+          echo "No Qwen Chat JSON found in "$EXPTDIR""
+        else
+          echo "Moved "${#SOURCES[@]}" files"
+        fi
         break
         ;;
 

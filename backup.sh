@@ -178,6 +178,8 @@ Pick a backup script to run: "
         echo "Importing Phone Screenrecs..."
         "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/ScreenRecs "$MAINDIR"/Media/Screenshots
         echo "Importing Snaps..."
+		PROCESS_SCRIPT_SNAPS="$MAINDIR"/Code/Automation/random-utils-ir/concatSnaps.sh
+		"$PROCESS_SCRIPT_SNAPS" "$PHONESYNCDIR"/DCIM/Snapchat && mkdir -p ~/Downloads/snaps_original_deletable && mv "$PHONESYNCDIR"/DCIM/Snapchat/Snapchat-*.mp4 ~/Downloads/snaps_original_deletable
         "$HERE"/ProcessAndMove/ProcessAndMove.sh "$PROCESS_SCRIPT" "$PHONESYNCDIR"/DCIM/Snapchat "$MAINDIR"/Media/Camera
         # === ONLY ON PC ===
         if [ "$ISPC" != 1 ]; then

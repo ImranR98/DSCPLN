@@ -22,6 +22,7 @@ chooseScript() {
 Pick a backup script to run: "
   options=(
     "PC Files"
+	"Luna State"
     "Core Files"
     "Core Landscape State"
     "Core Wine Game Save Files"
@@ -84,6 +85,16 @@ Pick a backup script to run: "
           "$HERE"/DirCopy/DirCopy.sh "$SOURCE" "$TARGET"/"$(basename "$SOURCE")"
         done
         rm ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf
+        break
+        ;;
+
+	  "Luna State")
+        # Luna state files must exist on Luna to be usable, so cannot live directly in MAINDIR.
+        # Thus they need to be periodically backed up to MAINDIR.
+        # This is fully automated.
+        TARGET="$MAINDIR/Infra/Luna/backup"
+		ssh root@luna.example.com 'cd /root/Luna && ./luna.sh backup-state'
+        "$HERE"/SFTPBackup/SFTPBackup.sh -d root@luna.example.com 22 "/root/Luna/backup" "$TARGET"/
         break
         ;;
 

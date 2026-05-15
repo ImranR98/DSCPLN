@@ -94,7 +94,7 @@ Pick a backup script to run: "
         # This is fully automated.
         TARGET="$MAINDIR/Infra/Luna/backup"
 		ssh root@luna.example.com 'cd /root/Luna && ./luna.sh backup-state'
-        "$HERE"/SFTPBackup/SFTPBackup.sh -d root@luna.example.com 22 "/root/Luna/backup" "$TARGET"/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -d root@luna.example.com 22 "/root/Luna/backup/" "$TARGET"/
         break
         ;;
 

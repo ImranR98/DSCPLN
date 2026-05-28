@@ -22,7 +22,7 @@ chooseScript() {
 Pick a backup script to run: "
   options=(
     "PC Files"
-	"Luna State"
+	"Atlas Compose States"
     "Core Files"
     "Core Landscape State"
     "Core Wine Game Save Files"
@@ -88,13 +88,12 @@ Pick a backup script to run: "
         break
         ;;
 
-	  "Luna State")
-        # Luna state files must exist on Luna to be usable, so cannot live directly in MAINDIR.
+	  "Atlas Compose States")
+        # Atlas state files must exist on Lens/Luna to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
-        TARGET="$MAINDIR/Infra/Luna/backup"
-		ssh root@luna.example.com 'cd /root/Luna && ./luna.sh backup-state'
-        "$HERE"/SFTPBackup/SFTPBackup.sh -d root@luna.example.com 22 "/root/Luna/backup/" "$TARGET"/
+		~/Main/Atlas/atlas.sh lens compose backup-state root@lens.example.com:~/Atlas lens
+		~/Main/Atlas/atlas.sh lens compose backup-state root@luna.example.com:~/Atlas luna
         break
         ;;
 

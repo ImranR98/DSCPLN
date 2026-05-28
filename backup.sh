@@ -93,7 +93,7 @@ Pick a backup script to run: "
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
 		~/Main/Atlas/atlas.sh lens compose backup-state root@lens.example.com:~/Atlas lens
-		~/Main/Atlas/atlas.sh lens compose backup-state root@luna.example.com:~/Atlas luna
+		~/Main/Atlas/atlas.sh lens compose backup-state root@luna.example.com:/mnt/disk_7e796ea6-d26b-4ebd-880a-d3d59188f42c/Atlas luna
         break
         ;;
 

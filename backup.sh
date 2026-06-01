@@ -103,32 +103,32 @@ Pick a backup script to run: "
         # This is fully automated.
         TARGET="$MAINDIR/Backups/Core"
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.ssh/" "$TARGET"/.ssh/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@lens.example.com user@localhost 8888 "~/.ssh/" "$TARGET"/.ssh/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/config.xml" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/cert.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/key.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/https-key.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/https-cert.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/config/csrftokens.txt.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@lens.example.com user@localhost 8888 "~/config/config.xml" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@lens.example.com user@localhost 8888 "~/config/cert.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@lens.example.com user@localhost 8888 "~/config/key.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@lens.example.com user@localhost 8888 "~/config/https-key.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@lens.example.com user@localhost 8888 "~/config/https-cert.pem" "$TARGET"/syncthing-config/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@lens.example.com user@localhost 8888 "~/config/csrftokens.txt.pem" "$TARGET"/syncthing-config/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/.bashrc" "$TARGET"/.bashrc
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/.bash_history" "$TARGET"/.bash_history
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/.config/mimeapps.list" "$TARGET"/mimeapps.list
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/.config/gtk-3.0/bookmarks" "$TARGET"/bookmarks
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@lens.example.com user@localhost 8888 "~/.bashrc" "$TARGET"/.bashrc
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@lens.example.com user@localhost 8888 "~/.bash_history" "$TARGET"/.bash_history
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@lens.example.com user@localhost 8888 "~/.config/mimeapps.list" "$TARGET"/mimeapps.list
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@lens.example.com user@localhost 8888 "~/.config/gtk-3.0/bookmarks" "$TARGET"/bookmarks
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.config/autostart/" "$TARGET"/autostart/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@bridge.example.com user@localhost 8888 "~/.config/applications/" "$TARGET"/applications/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@lens.example.com user@localhost 8888 "~/.config/autostart/" "$TARGET"/autostart/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p ubuntu@lens.example.com user@localhost 8888 "~/.config/applications/" "$TARGET"/applications/
 
-        ssh -oProxyCommand="ssh -p22 ubuntu@bridge.example.com -W %h:%p" -p8888 user@localhost "dconf dump /org/gnome/shell/extensions/ >~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf"
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf" "$TARGET"/gnome-extension-settings.conf
-        ssh -oProxyCommand="ssh -p22 ubuntu@bridge.example.com -W %h:%p" -p8888 user@localhost "rm ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf"
+        ssh -oProxyCommand="ssh -p22 ubuntu@lens.example.com -W %h:%p" -p8888 user@localhost "dconf dump /org/gnome/shell/extensions/ >~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf"
+        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@lens.example.com user@localhost 8888 "~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf" "$TARGET"/gnome-extension-settings.conf
+        ssh -oProxyCommand="ssh -p22 ubuntu@lens.example.com -W %h:%p" -p8888 user@localhost "rm ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf"
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -e "/runners/" -e "/runtime/" -p ubuntu@bridge.example.com user@localhost 8888 "~/.var/app/com.heroicgameslauncher.hgl/config/heroic" "$TARGET"/heroic/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -e "/runners/" -e "/runtime/" -p ubuntu@lens.example.com user@localhost 8888 "~/.var/app/com.heroicgameslauncher.hgl/config/heroic" "$TARGET"/heroic/
 
-        "$HERE"/SFTPBackup/SFTPBackup.sh -d -p ubuntu@bridge.example.com user@localhost 8888 "~/.config/trivalent/" "$TARGET"/trivalent/
+        "$HERE"/SFTPBackup/SFTPBackup.sh -d -p ubuntu@lens.example.com user@localhost 8888 "~/.config/trivalent/" "$TARGET"/trivalent/
 
-		"$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@bridge.example.com user@localhost 8888 "/etc/fstab" "$TARGET"/fstab
+		"$HERE"/SFTPBackup/SFTPBackup.sh -g -p ubuntu@lens.example.com user@localhost 8888 "/etc/fstab" "$TARGET"/fstab
 
         break
         ;;
@@ -144,7 +144,7 @@ Pick a backup script to run: "
           break
         fi
         # ==================
-        "$HERE"/SFTPBackup/SFTPBackup.sh -s -e immich/upload -d -p ubuntu@bridge.example.com user@localhost 8888 "~/Main/Landscape/state/" "$SERVICE_DATA_UNSYNCED_TARGET"
+        "$HERE"/SFTPBackup/SFTPBackup.sh -s -e immich/upload -d -p ubuntu@lens.example.com user@localhost 8888 "~/Main/Landscape/state/" "$SERVICE_DATA_UNSYNCED_TARGET"
 
         break
         ;;
@@ -160,9 +160,9 @@ Pick a backup script to run: "
         fi
         # ==================        
         RAND_DIRPREF="$RANDOM"
-        "$HERE"/RunScriptRemotely/RunScriptRemotely.sh -p ubuntu@bridge.example.com user@localhost 8888 "$HERE"/BackupGamingWinePrefixes/BackupGamingWinePrefixes.sh /mnt/ssd2/Game_Installs "/home/node/Downloads/${RAND_DIRPREF}_winegamehomebak"
-        "$HERE"/SFTPBackup/SFTPBackup.sh -p ubuntu@bridge.example.com user@localhost 8888 "~/Downloads/${RAND_DIRPREF}_winegamehomebak/" "$MAINDIR/Backups/Game Save Files/"
-        ssh -oProxyCommand="ssh -p22 ubuntu@bridge.example.com -W %h:%p" -p8888 user@localhost "rm -r ~/Downloads/${RAND_DIRPREF}_winegamehomebak"
+        "$HERE"/RunScriptRemotely/RunScriptRemotely.sh -p ubuntu@lens.example.com user@localhost 8888 "$HERE"/BackupGamingWinePrefixes/BackupGamingWinePrefixes.sh /mnt/ssd2/Game_Installs "/home/node/Downloads/${RAND_DIRPREF}_winegamehomebak"
+        "$HERE"/SFTPBackup/SFTPBackup.sh -p ubuntu@lens.example.com user@localhost 8888 "~/Downloads/${RAND_DIRPREF}_winegamehomebak/" "$MAINDIR/Backups/Game Save Files/"
+        ssh -oProxyCommand="ssh -p22 ubuntu@lens.example.com -W %h:%p" -p8888 user@localhost "rm -r ~/Downloads/${RAND_DIRPREF}_winegamehomebak"
         break
         ;;
 

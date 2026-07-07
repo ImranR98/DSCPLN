@@ -19,8 +19,9 @@ const returnDateLineIfValid = (line) => {
     line = line.normalize('NFKD') // Some versions use weird nbsp
     const androidRegex = /^[0-9]{4}-[0-9]{2}-[0-9]{2}, [0-9]{1,2}:[0-9]{1,2} [a-p]\.[a-p]\. /.exec(line)
     const newAndroidRegex = /^[0-9]{1,2}\/[0-9]{1,2}\/[0-9]{2}, [0-9]{1,2}:[0-9]{1,2} [A-P]{2}/.exec(line)
+    const newDmyRegex = /^[0-9]{1,2}\/[0-9]{1,2}\/[0-9]{4}, [0-9]{1,2}:[0-9]{2} [ap]m/.exec(line)
     const iphoneRegex = /^\[[0-9]{4}-[0-9]{2}-[0-9]{2}, [0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2} [A-P]{2}\] /.exec(line)
-    const resultString = androidRegex ? androidRegex[0].slice(0, -1).replace('.m', 'm') : iphoneRegex ? iphoneRegex[0].slice(1, -2) : newAndroidRegex ? newAndroidRegex[0] : null
+    const resultString = androidRegex ? androidRegex[0].slice(0, -1).replace('.m', 'm') : iphoneRegex ? iphoneRegex[0].slice(1, -2) : newAndroidRegex ? newAndroidRegex[0] : newDmyRegex ? newDmyRegex[0] : null
     return resultString ? new Date(resultString).valueOf() : null
 }
 

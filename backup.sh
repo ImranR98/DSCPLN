@@ -92,9 +92,9 @@ Pick a backup script to run: "
         # Atlas state files must exist on Lens/Luna to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
-		~/Main/Atlas/atlas.sh pc compose backup-state root@lens.example.com:~/Atlas lens
-		~/Main/Atlas/atlas.sh pc compose backup-state root@luna.example.com:/mnt/disk_7e796ea6-d26b-4ebd-880a-d3d59188f42c/Atlas luna
-		~/Main/Atlas/atlas.sh pc compose backup-state
+		~/Main/Atlas/atlas.sh pc0 compose backup-state root@lens.example.com:~/Atlas lens
+		~/Main/Atlas/atlas.sh pc0 compose backup-state root@vps0.example.com:~/Atlas vps0
+		~/Main/Atlas/atlas.sh pc0 compose backup-state
         break
         ;;
 

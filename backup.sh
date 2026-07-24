@@ -22,7 +22,7 @@ chooseScript() {
 Pick a backup script to run: "
   options=(
     "PC Files"
-	"Atlas Compose States"
+	"Infra Compose States"
     "Core Files"
     "Core Landscape State"
     "Core Wine Game Save Files"
@@ -88,13 +88,12 @@ Pick a backup script to run: "
         break
         ;;
 
-	  "Atlas Compose States")
-        # Atlas state files must exist on Lens/Luna to be usable, so cannot live directly in MAINDIR.
+	  "Infra Compose States")
+        # Infra state files must exist on Lens/Luna to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
-		~/Main/Atlas/atlas.sh pc0 compose backup-state root@lens.example.com:~/Atlas lens
-		~/Main/Atlas/atlas.sh pc0 compose backup-state root@vps0.example.com:~/Atlas vps0
-		~/Main/Atlas/atlas.sh pc0 compose backup-state
+		~/Main/Infra/infra.sh pc0 compose backup-state root@vps0.example.com:~/infra vps0
+		~/Main/Infra/infra.sh pc0 compose backup-state
         break
         ;;
 

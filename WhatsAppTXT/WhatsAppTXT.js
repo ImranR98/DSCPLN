@@ -19,9 +19,18 @@ const returnDateLineIfValid = (line) => {
     line = line.normalize('NFKD') // Some versions use weird nbsp
     const androidRegex = /^[0-9]{4}-[0-9]{2}-[0-9]{2}, [0-9]{1,2}:[0-9]{1,2} [a-p]\.[a-p]\. /.exec(line)
     const newAndroidRegex = /^[0-9]{1,2}\/[0-9]{1,2}\/[0-9]{2}, [0-9]{1,2}:[0-9]{1,2} [A-P]{2}/.exec(line)
-    const newDmyRegex = /^[0-9]{1,2}\/[0-9]{1,2}\/[0-9]{4}, [0-9]{1,2}:[0-9]{2} [ap]m/.exec(line)
+    const newDmyRegex = /^([0-9]{1,2})\/([0-9]{1,2})\/([0-9]{4}), ([0-9]{1,2}):([0-9]{2})\s([ap])m/.exec(line)
     const iphoneRegex = /^\[[0-9]{4}-[0-9]{2}-[0-9]{2}, [0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2} [A-P]{2}\] /.exec(line)
-    const resultString = androidRegex ? androidRegex[0].slice(0, -1).replace('.m', 'm') : iphoneRegex ? iphoneRegex[0].slice(1, -2) : newAndroidRegex ? newAndroidRegex[0] : newDmyRegex ? newDmyRegex[0] : null
+    if (newDmyRegex) {
+        let day = parseInt(newDmyRegex[1], 10)
+        let month = parseInt(newDmyRegex[2], 10) - 1
+        let year = parseInt(newDmyRegex[3], 10)
+        let hours = parseInt(newDmyRegex[4], 10)
+        let minutes = parseInt(newDmyRegex[5], 10)
+        if (newDmyRegex[6] === 'p') hours = (hours % 12) + 12
+        return new Date(year, month, day, hours, minutes).valueOf()
+    }
+    const resultString = androidRegex ? androidRegex[0].slice(0, -1).replace('.m', 'm') : iphoneRegex ? iphoneRegex[0].slice(1, -2) : newAndroidRegex ? newAndroidRegex[0] : null
     return resultString ? new Date(resultString).valueOf() : null
 }
 
@@ -72,6 +81,12 @@ const ts2ds = (ts) => {
     return `${dat.getFullYear()}${twoDigits(dat.getMonth() + 1)}${twoDigits(dat.getDate())}`
 }
 
+// Formats a timestamp for display
+const ts2display = (ts) => {
+    const d = new Date(ts)
+    return d.toISOString().slice(0, 10).replace(/-/g, '/')
+}
+
 // Main function
 const main = (dirs) => {
     // NOTE: FIRST DIR IN ARRAY IS TREATED DIFFERENTLY - Previous files are deleted and new ones placed there
@@ -89,6 +104,7 @@ const main = (dirs) => {
     })
     
     // For each file in the map, merge all versions of it from all folders that contain it and save as a new timestamped file, deleting any old ones
+    const summary = []
     files.forEach((ds, txt) => {
         let content = ''
         ds.forEach(folder => {
@@ -102,7 +118,17 @@ const main = (dirs) => {
         if (fs.existsSync(`${dirs[0]}/${txt}`)) {
             fs.unlinkSync(`${dirs[0]}/${txt}`)
         }
-        fs.writeFileSync(`${dirs[0]}/${ts2ds(timestamp)} - ${txt}`, content)
+        const outName = `${ts2ds(timestamp)} - ${txt}`
+        fs.writeFileSync(`${dirs[0]}/${outName}`, content)
+        const dates = returnFirstLastDates(content.split('\n'))
+        summary.push({ name: txt, outName, sources: ds.length, first: dates ? dates[0] : null, last: dates ? dates[1] : null })
+    })
+
+    console.log('')
+    console.log(`=== Merged ${summary.length} conversation(s) ===`)
+    summary.forEach(s => {
+        const range = s.first ? `${ts2display(s.first)} -> ${ts2display(s.last)}` : 'no dates found'
+        console.log(`  ${s.outName}  [${range}]  (${s.sources} source${s.sources > 1 ? 's' : ''})`)
     })
 }
 

@@ -22,9 +22,7 @@ chooseScript() {
 Pick a backup script to run: "
   options=(
     "PC Files"
-	"Infra Compose States"
     "vps0 Infra State"
-    "Core Files"
     "Core Wine Game Save Files"
     "Media Import"
     "Balance"
@@ -92,63 +90,13 @@ Pick a backup script to run: "
         # Infra state files must exist on vps0 to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
-		~/Main/Infra/infra.sh vps0 compose backup-state root@vps0.example.com:~/Infra vps0
-        break
-        ;;
-
-      "Core Files")
-        # Core files must exist on the Core to be usable, so cannot live directly in MAINDIR.
-        # Thus they need to be periodically backed up to MAINDIR.
-        # This is fully automated.
-        TARGET="$MAINDIR/Backups/Core"
-
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p root@lens.example.com user@localhost 8888 "~/.ssh/" "$TARGET"/.ssh/
-
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p root@lens.example.com user@localhost 8888 "~/config/config.xml" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p root@lens.example.com user@localhost 8888 "~/config/cert.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p root@lens.example.com user@localhost 8888 "~/config/key.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p root@lens.example.com user@localhost 8888 "~/config/https-key.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p root@lens.example.com user@localhost 8888 "~/config/https-cert.pem" "$TARGET"/syncthing-config/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p root@lens.example.com user@localhost 8888 "~/config/csrftokens.txt.pem" "$TARGET"/syncthing-config/
-
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p root@lens.example.com user@localhost 8888 "~/.bashrc" "$TARGET"/.bashrc
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p root@lens.example.com user@localhost 8888 "~/.bash_history" "$TARGET"/.bash_history
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p root@lens.example.com user@localhost 8888 "~/.config/mimeapps.list" "$TARGET"/mimeapps.list
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p root@lens.example.com user@localhost 8888 "~/.config/gtk-3.0/bookmarks" "$TARGET"/bookmarks
-
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p root@lens.example.com user@localhost 8888 "~/.config/autostart/" "$TARGET"/autostart/
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -p root@lens.example.com user@localhost 8888 "~/.config/applications/" "$TARGET"/applications/
-
-        ssh -oProxyCommand="ssh -p22 root@lens.example.com -W %h:%p" -p8888 user@localhost "dconf dump /org/gnome/shell/extensions/ >~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf"
-        "$HERE"/SFTPBackup/SFTPBackup.sh -g -p root@lens.example.com user@localhost 8888 "~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf" "$TARGET"/gnome-extension-settings.conf
-        ssh -oProxyCommand="ssh -p22 root@lens.example.com -W %h:%p" -p8888 user@localhost "rm ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf"
-
-        "$HERE"/SFTPBackup/SFTPBackup.sh -dg -e "/runners/" -e "/runtime/" -p root@lens.example.com user@localhost 8888 "~/.var/app/com.heroicgameslauncher.hgl/config/heroic" "$TARGET"/heroic/
-
-        "$HERE"/SFTPBackup/SFTPBackup.sh -d -p root@lens.example.com user@localhost 8888 "~/.config/trivalent/" "$TARGET"/trivalent/
-
-		"$HERE"/SFTPBackup/SFTPBackup.sh -g -p root@lens.example.com user@localhost 8888 "/etc/fstab" "$TARGET"/fstab
-
-        break
-        ;;
-
-      "Core Landscape State")
-        # Core service (specific unsynced) files must exist on the Core to be usable, so cannot live directly in MAINDIR.
-        # Thus they need to be periodically backed up to MAINDIR.
-        # This is fully automated.
-        SERVICE_DATA_UNSYNCED_TARGET="$MAINDIR"/Landscape/state
-        # === ONLY ON PC ===
-        if [ "$ISPC" != 1 ]; then
-          echo "Only available on PC due to unkown permission issues"
-          break
-        fi
-        # ==================
-        "$HERE"/SFTPBackup/SFTPBackup.sh -s -e immich/upload -d -p root@lens.example.com user@localhost 8888 "~/Main/Landscape/state/" "$SERVICE_DATA_UNSYNCED_TARGET"
-
+		~/Main/Infra/infra.sh vps0 compose backup-state root@vps0.example.com:/root/Infra vps0
         break
         ;;
 
       "Core Wine Game Save Files")
+	  	echo "REPLACE THIS WITH bigpc ALTERNATIVE."
+		exit 1
         # Game save files on Core gaming Wine prefixes must exist on the Core to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
@@ -159,8 +107,8 @@ Pick a backup script to run: "
         fi
         # ==================        
         RAND_DIRPREF="$RANDOM"
-        "$HERE"/RunScriptRemotely/RunScriptRemotely.sh -p root@lens.example.com user@localhost 8888 "$HERE"/BackupGamingWinePrefixes/BackupGamingWinePrefixes.sh /mnt/ssd2/Game_Installs "/home/node/Downloads/${RAND_DIRPREF}_winegamehomebak"
-        "$HERE"/SFTPBackup/SFTPBackup.sh -p root@lens.example.com user@localhost 8888 "~/Downloads/${RAND_DIRPREF}_winegamehomebak/" "$MAINDIR/Backups/Game Save Files/"
+        "$HERE"/RunScriptRemotely/RunScriptRemotely.sh user@192.0.2.226 22 "$HERE"/BackupGamingWinePrefixes/BackupGamingWinePrefixes.sh /mnt/ssd2/Game_Installs "/home/node/Downloads/${RAND_DIRPREF}_winegamehomebak"
+        "$HERE"/SFTPBackup/SFTPBackup.sh user@192.0.2.226 22 "~/Downloads/${RAND_DIRPREF}_winegamehomebak/" "$MAINDIR/Backups/Game Save Files/"
         ssh -oProxyCommand="ssh -p22 root@lens.example.com -W %h:%p" -p8888 user@localhost "rm -r ~/Downloads/${RAND_DIRPREF}_winegamehomebak"
         break
         ;;

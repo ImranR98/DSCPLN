@@ -23,8 +23,8 @@ Pick a backup script to run: "
   options=(
     "PC Files"
 	"Infra Compose States"
+    "vps0 Infra State"
     "Core Files"
-    "Core Landscape State"
     "Core Wine Game Save Files"
     "Media Import"
     "Balance"
@@ -88,12 +88,11 @@ Pick a backup script to run: "
         break
         ;;
 
-	  "Infra Compose States")
-        # Infra state files must exist on Lens/Luna to be usable, so cannot live directly in MAINDIR.
+	  "vps0 Infra State")
+        # Infra state files must exist on vps0 to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
-		~/Main/Infra/infra.sh pc0 compose backup-state root@vps0.example.com:~/infra vps0
-		~/Main/Infra/infra.sh pc0 compose backup-state
+		~/Main/Infra/infra.sh vps0 compose backup-state root@vps0.example.com:~/Infra vps0
         break
         ;;
 

@@ -29,7 +29,8 @@ for dir in *; do
         GAME_NAME="$(basename "$dir")"
         BACKUP_PATH="$TMP_DIR/${GAME_NAME} (Wine prefix home dir)"
         mkdir "$BACKUP_PATH"
-        rsync -a ./"$dir"/drive_c/users/steamuser/ "$BACKUP_PATH/"
+		echo "$GAME_NAME"
+        rsync -a --info=progress2 ./"$dir"/drive_c/users/steamuser/ "$BACKUP_PATH/"
         echo "$(date)" > "$BACKUP_PATH/lastBackedUp.txt"
     else
         echo "WARNING: DIR IS NOT A WINE PREFIX WITH a 'steamuser' USER. SKIPPING: $dir" >&2

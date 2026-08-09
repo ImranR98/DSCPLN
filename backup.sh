@@ -91,7 +91,7 @@ Pick a backup script to run: "
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
 		~/Main/Infra/infra.sh pc compose backup-state root@vps0.example.com:/root/Infra vps0
-		~/Main/Infra/infra.sh pc compose backup-state user@192.0.2.176:/root/Infra srv0
+		~/Main/Infra/infra.sh pc compose backup-state user@192.0.2.176:/home/node/Main/Infra srv0
 		# TODO: Find a way to not hardcode IP
         break
         ;;
@@ -210,7 +210,7 @@ Pick a backup script to run: "
           FILE="$1"
           TARGET="$2"
           FNAME="$3"
-          if [ -f "$FILE" ]; then
+          if [ -f "$FILE" ] || [ -d "$FILE" ]; then
             echo "Attempting to move '"$FILE"' into '"$TARGET"/"$FNAME"' and commit changes to Git..."
             "$HERE"/DirCopy/DirCopy.sh -g -d "$FILE" "$TARGET" "$FNAME"
           else
@@ -231,7 +231,7 @@ Pick a backup script to run: "
         gitCopyHelper "$EXPTDIR"/*.ceb "$TARGET" 'Cheogram.ceb'
         gitCopyHelper "$EXPTDIR"/ntfy-*.json "$TARGET" 'ntfy-subscriptions.json'
         gitCopyHelper "$EXPTDIR"/"example.com.txt" "$TARGET" "example.com.txt"
-        gitCopyHelper "$EXPTDIR"/molly-*.backup "$TARGET" 'signal.backup'
+        gitCopyHelper "$EXPTDIR"/signal-backup-* "$TARGET" 'signal.backup'
 
         echo ""
         echo "Do NOT FORGET to re-enable your Cheogram account as the backup process disables all active accounts."

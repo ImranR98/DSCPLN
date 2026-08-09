@@ -22,8 +22,8 @@ chooseScript() {
 Pick a backup script to run: "
   options=(
     "PC Files"
-    "vps0 Infra State"
-    "Core Wine Game Save Files"
+    "Infra Compose State"
+    "Wine Game Save Files"
     "Media Import"
     "Balance"
     "Wealthsimple Recents to Balance"
@@ -86,18 +86,18 @@ Pick a backup script to run: "
         break
         ;;
 
-	  "vps0 Infra State")
-        # Infra state files must exist on vps0 to be usable, so cannot live directly in MAINDIR.
+	  "Infra Compose State")
+        # Infra compose state files must exist on infra devices to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
-		~/Main/Infra/infra.sh vps0 compose backup-state root@vps0.example.com:/root/Infra vps0
+		~/Main/Infra/infra.sh pc compose backup-state root@vps0.example.com:/root/Infra vps0
+		~/Main/Infra/infra.sh pc compose backup-state user@192.0.2.176:/root/Infra srv0
+		# TODO: Find a way to not hardcode IP
         break
         ;;
 
-      "Core Wine Game Save Files")
-	  	echo "REPLACE THIS WITH bigpc ALTERNATIVE."
-		exit 1
-        # Game save files on Core gaming Wine prefixes must exist on the Core to be usable, so cannot live directly in MAINDIR.
+      "Wine Game Save Files")
+        # Game save files on bigpc gaming Wine prefixes must exist on the bigpc to be usable, so cannot live directly in MAINDIR.
         # Thus they need to be periodically backed up to MAINDIR.
         # This is fully automated.
         # === ONLY ON PC ===
@@ -107,9 +107,11 @@ Pick a backup script to run: "
         fi
         # ==================        
         RAND_DIRPREF="$RANDOM"
-        "$HERE"/RunScriptRemotely/RunScriptRemotely.sh user@192.0.2.226 22 "$HERE"/BackupGamingWinePrefixes/BackupGamingWinePrefixes.sh /mnt/ssd2/Game_Installs "/home/node/Downloads/${RAND_DIRPREF}_winegamehomebak"
+        "$HERE"/RunScriptRemotely/RunScriptRemotely.sh user@192.0.2.226 22 "$HERE"/BackupGamingWinePrefixes/BackupGamingWinePrefixes.sh ~/Games/Installs/Synced "/home/node/Downloads/${RAND_DIRPREF}_winegamehomebak"
+        "$HERE"/RunScriptRemotely/RunScriptRemotely.sh user@192.0.2.226 22 "$HERE"/BackupGamingWinePrefixes/BackupGamingWinePrefixes.sh ~/Games/Installs/Unsynced "/home/node/Downloads/${RAND_DIRPREF}_winegamehomebak"
         "$HERE"/SFTPBackup/SFTPBackup.sh user@192.0.2.226 22 "~/Downloads/${RAND_DIRPREF}_winegamehomebak/" "$MAINDIR/Backups/Game Save Files/"
-        ssh -oProxyCommand="ssh -p22 root@lens.example.com -W %h:%p" -p8888 user@localhost "rm -r ~/Downloads/${RAND_DIRPREF}_winegamehomebak"
+        ssh user@192.0.2.226 "rm -r ~/Downloads/${RAND_DIRPREF}_winegamehomebak"
+		# TODO: Find a way to not hardcode IP
         break
         ;;
 

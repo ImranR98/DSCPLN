@@ -25,11 +25,9 @@ backupctl/
     index.html         Page skeleton (favicon inlined as a data URL)
     app.css            Full design system (plain CSS, dark, red accent)
     app.js             Frontend logic (rendering, drops, modals, polling)
-scripts/               Personal automation scripts that tasks call (referenced
-                       via the {{scriptroot}} token): mostly git submodules,
-                       plus a few small scripts vendored directly
-                       (random-utils/); init with `git submodule update
-                       --init --recursive`
+scripts/               Git submodules: the personal automation scripts that
+                       tasks call (referenced via the {{scriptroot}} token);
+                       init with `git submodule update --init --recursive`
 config/
   config.example.yaml  Committed, generic: schema docs + one example per kind
   config.yaml          Gitignored, personal: values + tasks (the only personal file)

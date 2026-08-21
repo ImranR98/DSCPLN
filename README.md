@@ -33,7 +33,7 @@ Every task runs with a timeout (default 10 min, overridable per task via `timeou
 
 Placeholders like `{{maindir}}` or `{{hosts.bigpc.host}}` are resolved from the same file's top-level values at run time; values may reference other tokens. A built-in `{{repo_dir}}` token resolves to this repository's root (env-overridable via `BACKUPCTL_REPO_DIR`). Every task needs either `dest:` or `state_dir:` — run state is stored there as `.backup-state-<task>.json`.
 
-**Personal scripts live as git submodules** under `scripts/` in this repo (plus a couple of small scripts vendored directly, e.g. `scripts/random-utils/`). Tasks that need one (e.g. a Balance-format parser) reference it via the `{{scriptroot}}` token — see the example config.
+**Personal scripts live as git submodules** under `scripts/` in this repo. Tasks that need one (e.g. a Balance-format parser) reference it via the `{{scriptroot}}` token — see the example config.
 
 ## Docker
 

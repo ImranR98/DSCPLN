@@ -14,9 +14,7 @@ from pathlib import Path
 
 import yaml
 
-# ---------------------------------------------------------------------------
-# config
-# ---------------------------------------------------------------------------
+# config ---------------------------------------------------------------------
 
 REPO_DIR = Path(__file__).resolve().parent.parent
 CONFIG_DIR = Path(os.environ.get("BACKUPCTL_CONFIG_DIR", REPO_DIR / "config"))
@@ -25,7 +23,6 @@ EXAMPLE_FILE = CONFIG_DIR / "config.example.yaml"
 
 
 def load_config(path=None):
-    """Load the personal config file (top-level values + `tasks:` list)."""
     path = Path(path) if path else CONFIG_FILE
     if not path.exists():
         raise FileNotFoundError(f"Missing config file {path} — copy {EXAMPLE_FILE} to {path} and fill it in")
@@ -47,7 +44,6 @@ def load_config(path=None):
 
 
 def expand(path):
-    """Expand ~ and environment variables in a path."""
     return os.path.expanduser(os.path.expandvars(str(path)))
 
 
@@ -55,7 +51,6 @@ _TOKEN_RE = re.compile(r"\{\{([a-zA-Z0-9_.]+)\}\}")
 
 
 def _lookup(key, local, extra):
-    """Resolve one token path to its value (None when not found)."""
     if key in extra:
         return extra[key]
     node = local
@@ -68,10 +63,10 @@ def _lookup(key, local, extra):
 
 
 def resolve(template, local, extra=None):
-    """Replace {{a.b.c}} tokens from the local config (and per-run extra dict).
-    Values may themselves contain tokens, so resolution loops until stable.
-    A template that is exactly one token resolves to the token's typed value
-    (dict/list/int); embedded tokens are stringified."""
+    """Replace {{a.b.c}} tokens from local (and per-run extra). Values may
+    reference other tokens, so resolution loops until stable. A template that
+    is exactly one token resolves to its typed value (dict/list/int);
+    embedded tokens are stringified."""
     if not isinstance(template, str):
         return template
     extra = extra or {}
@@ -97,21 +92,17 @@ def resolve(template, local, extra=None):
     return result
 
 
-# ---------------------------------------------------------------------------
-# run state + staging
-# ---------------------------------------------------------------------------
+# run state + staging --------------------------------------------------------
 
 STATE_DIR = Path.home() / ".backupctl"
 RUNNING_FILE = STATE_DIR / "running.json"
 
 
 def slugify(name):
-    """Sanitize a task name for use in file names."""
     return "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
 
 
 def state_file_for(task, local):
-    """Path of the .backup-state-<slug>.json file for a task (dest or state_dir)."""
     raw = task.get("state_dir") or task.get("dest")
     if not raw:
         raise RuntimeError(f"Task '{task['name']}' needs a 'dest' or 'state_dir' for its run state")
@@ -120,7 +111,6 @@ def state_file_for(task, local):
 
 
 def save_task_state(task, local, ok, summary, output=""):
-    """Atomically record a run's outcome next to the task's data."""
     path = state_file_for(task, local)
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {
@@ -136,7 +126,6 @@ def save_task_state(task, local, ok, summary, output=""):
 
 
 def load_task_state(task, local):
-    """Return the last recorded run state for a task, or None."""
     path = state_file_for(task, local)
     if not path.exists():
         return None
@@ -147,18 +136,15 @@ def load_task_state(task, local):
 
 
 def mark_running(task_name):
-    """Write the interrupted-run marker for a task."""
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     RUNNING_FILE.write_text(json.dumps({"task": task_name, "ts": time.time()}))
 
 
 def clear_running():
-    """Remove the interrupted-run marker."""
     RUNNING_FILE.unlink(missing_ok=True)
 
 
 def running_marker():
-    """Return the marker dict ({task, ts}) if a run was interrupted."""
     if RUNNING_FILE.exists():
         try:
             return json.loads(RUNNING_FILE.read_text())
@@ -168,19 +154,15 @@ def running_marker():
 
 
 def staging_dir(task_name):
-    """Directory holding a task's dropped-but-unprocessed uploads."""
     safe = slugify(task_name)
     d = STATE_DIR / "staging" / safe
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-# ---------------------------------------------------------------------------
-# subprocess layer
-# ---------------------------------------------------------------------------
+# subprocess layer -----------------------------------------------------------
 
 def _ensure_askpass():
-    """Create (once) a failing SSH askpass script and return its path."""
     path = Path.home() / ".backupctl" / "askpass.sh"
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -206,7 +188,6 @@ TIMEOUT_RC = 124  # exit code returned when a command's deadline expires
 
 
 def _spawn(cmd, cwd, shell=False, capture=False):
-    """Start a child in its own process group with the safe environment."""
     kwargs = dict(cwd=cwd, text=True, stdin=subprocess.DEVNULL, env=SAFE_ENV, start_new_session=True)
     if capture:
         proc = subprocess.Popen(cmd, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs)
@@ -217,12 +198,10 @@ def _spawn(cmd, cwd, shell=False, capture=False):
 
 
 def _display(cmd, shell):
-    """Human-readable command for logging (list commands get shell-quoted)."""
     return cmd if isinstance(cmd, str) and shell else " ".join(shlex.quote(str(a)) for a in cmd)
 
 
 def _killpg(pid, log):
-    """TERM then KILL the process group `pid`."""
     try:
         os.killpg(pid, signal.SIGTERM)
     except (ProcessLookupError, PermissionError):
@@ -236,10 +215,9 @@ def _killpg(pid, log):
 
 
 def run(cmd, shell=False, cwd=None, log=None, timeout=None, redact=None):
-    """Run a command (list or shell string), streaming output lines into log(). Returns exit code.
-
-    timeout: seconds before the process group is killed (returns TIMEOUT_RC).
-    redact: list of secret strings to mask in the logged command and output."""
+    """Run a command (list or shell string), streaming output lines into
+    log(). Returns exit code; timeout kills the process group and returns
+    TIMEOUT_RC; redact masks secrets in the logged command and output."""
     if log is None:
         log = lambda line: None  # noqa: E731
     if isinstance(cmd, str) and not shell:
@@ -279,12 +257,10 @@ def run(cmd, shell=False, cwd=None, log=None, timeout=None, redact=None):
 
 
 def sh(cmd, cwd=None, log=None, timeout=None, redact=None):
-    """Run a shell command string; see run()."""
     return run(cmd, shell=True, cwd=cwd, log=log, timeout=timeout, redact=redact)
 
 
 def sh_capture(cmd, cwd=None, timeout=None, redact=None):
-    """Run a shell command, capturing output; returns (rc, stdout, stderr)."""
     proc = _spawn(cmd, cwd, shell=True, capture=True)
     try:
         try:
@@ -305,7 +281,6 @@ def sh_capture(cmd, cwd=None, timeout=None, redact=None):
 
 
 def rsync(src, dst, delete=False, excludes=(), log=None, ssh=None, timeout=None):
-    """Run rsync -aq with optional --delete/excludes/ssh transport; returns rc."""
     args = ["rsync", "-aq"]
     if delete:
         args.append("--delete")
@@ -321,7 +296,6 @@ def rsync(src, dst, delete=False, excludes=(), log=None, ssh=None, timeout=None)
 
 
 def cancel_all():
-    """Terminate every command started by this process (used by the Stop button)."""
     for pid in list(PROC_GROUPS):
         _killpg(pid, lambda line: None)
 
@@ -330,7 +304,6 @@ GIT_TIMEOUT = 300
 
 
 def git_commit(dest, message, log=None):
-    """git init/add/commit in dest (state files excluded); tolerates empty commits."""
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
     if run(["git", "init", "-q"], cwd=dest, log=log, timeout=GIT_TIMEOUT) != 0:
@@ -343,7 +316,8 @@ def git_commit(dest, message, log=None):
 
 
 def age_encrypt_passphrase(src, out, passphrase, log=None):
-    """Encrypt a file with age using a passphrase (prompts fed via a pty)."""
+    """age -p refuses non-TTY stdin, so encryption is driven through a pty
+    (passphrase sent twice: enter + confirm)."""
     import io
 
     import pexpect
@@ -384,7 +358,6 @@ def age_encrypt_passphrase(src, out, passphrase, log=None):
 
 
 def human_ago(ts):
-    """Human-readable elapsed time (e.g. '3 weeks ago')."""
     delta = time.time() - ts
     if delta < 3600:
         return f"{int(delta // 60)} min ago"

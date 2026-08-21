@@ -19,4 +19,5 @@ USER user
 RUN git config --global user.name "Backupctl" && git config --global user.email "backupctl@localhost"
 EXPOSE 8080
 ENV BACKUPCTL_CONFIG_DIR=/app/config
+ENV BACKUPCTL_REPO_DIR=/home/node/Main/Code/Automation/ImranR-Backup
 CMD ["backupctl", "--no-browser", "--host", "0.0.0.0"]

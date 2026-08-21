@@ -18,6 +18,8 @@ def load_config(path=None):
 
     The file holds machine-specific values at the top level (referenced from
     task entries as {{token}}) plus a `tasks:` list of task definitions.
+    A built-in `repo_dir` token (this repository's root; overridable via the
+    BACKUPCTL_REPO_DIR env var) is available to every value.
     """
     path = Path(path) if path else CONFIG_FILE
     if not path.exists():
@@ -25,6 +27,7 @@ def load_config(path=None):
     data = yaml.safe_load(path.read_text()) or {}
     tasks = data.get("tasks") or []
     local = {k: v for k, v in data.items() if k != "tasks"}
+    local.setdefault("repo_dir", os.environ.get("BACKUPCTL_REPO_DIR", str(REPO_DIR)))
     seen = set()
     for t in tasks:
         name = t.get("name")

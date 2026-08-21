@@ -4,6 +4,8 @@
 #
 # Top-level values are referenced from tasks as {{token}} (e.g. {{maindir}}).
 # Values may reference other tokens (e.g. '{{maindir}}/Documents').
+# A built-in token {{repo_dir}} resolves to this repository's root (set via
+# the BACKUPCTL_REPO_DIR env var when not running from a checkout).
 # Every task needs either `dest:` or `state_dir:` — run state is stored there
 # as .backup-state-<task>.json (excluded from git commits).
 #
@@ -16,7 +18,7 @@
 
 maindir: ~/Main                                  # where backups live (Backups/, Media/, Documents/...)
 phone_sync_dir: ~/<phone sync dir>               # default source root for `media` tasks
-scriptroot: '{{maindir}}/Code/Automation/<this repo>/scripts'   # git submodules with the personal scripts
+scriptroot: '{{repo_dir}}/scripts'   # git submodules with the personal scripts
 media_process_script: '{{scriptroot}}/<media script repo>/<standardize script>.sh'
 media_rm_script: '{{scriptroot}}/<media script repo>/<delete-synced script>.sh'
 

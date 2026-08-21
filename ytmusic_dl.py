@@ -96,12 +96,7 @@ def download_track(video_id, track_info, download_dir):
         'ignoreerrors': False,
         'retries': 3,
         'fragment_retries': 3,
-        'extractor_args': {
-            'youtube': {
-                'skip': ['dash', 'hls']
-            }
-        },
-        'logger': logger,
+        'logger': logger
     }
     
     try:
@@ -154,7 +149,6 @@ def main():
     
     try:
         # Initialize YTMusic API
-        print(os.environ.get('CLIENT_SECRET'))
         # ytmusic = YTMusic('oauth.json', oauth_credentials=OAuthCredentials(client_id=os.environ.get('CLIENT_ID'), client_secret=os.environ.get('CLIENT_SECRET')))
         ytmusic = YTMusic('browser.json') # OAuth fails: https://github.com/sigma67/ytmusicapi/issues/813
         logger.info("YouTube Music API initialized successfully")

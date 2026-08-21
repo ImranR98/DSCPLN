@@ -243,17 +243,19 @@ tasks:
     note: Runs the backup script on the gaming PC over SSH and pulls the results down.
 
   # run + tool + args + fresh_dir + prune: a service-specific CLI expressed
-  # generically. `tool` downloads and extracts the binary if missing (its
-  # path becomes {{tool_binary}}); `args` runs as argv (no shell) and empty
-  # values drop their flag pair (so -t {{totp}} vanishes without a code);
-  # `fresh_dir` fails the run unless the newest export dir is non-empty and
-  # fresh; `prune` deletes older export dirs (keep_newer keeps any larger
-  # than the newest). Prompt secrets are redacted from the log.
+  # generically. `require` lists prompt keys that must have a value; `tool`
+  # downloads and extracts the binary if missing (its path becomes
+  # {{tool_binary}}); `args` runs as argv (no shell) and empty values drop
+  # their flag pair (so -t {{totp}} vanishes without a code); `fresh_dir`
+  # fails the run unless the newest export dir is non-empty and fresh;
+  # `prune` deletes older export dirs (keep_newer keeps any larger than the
+  # newest). Prompt secrets are redacted from the log.
   - name: Mail Export
     group: Tools
     kind: run
     timeout: 1800
     state_dir: '{{maindir}}/Backups/Email'
+    require: [password]
     tool:
       url: https://example.com/export-cli.tar.gz
       dir: ~/export-cli

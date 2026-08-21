@@ -31,7 +31,7 @@ Every task runs with a timeout (default 10 min, overridable per task via `timeou
 - `config/config.yaml` — your personal file (gitignored): machine-specific values at the top level (`maindir`, `phone_sync_dir`, hosts, emails, script paths...) plus the `tasks:` list. Add a task by adding an entry; the menu, categories, and drop-zone validation update automatically.
 - `config/config.example.yaml` — committed template demonstrating every task kind with generic examples and schema comments.
 
-Placeholders like `{{maindir}}` or `{{hosts.bigpc.host}}` are resolved from the same file's top-level values at run time; values may reference other tokens. A built-in `{{repo_dir}}` token resolves to this repository's root (env-overridable via `BACKUPCTL_REPO_DIR`). Every task needs either `dest:` or `state_dir:` — run state is stored there as `.backup-state-<task>.json`.
+Placeholders like `{{maindir}}` or `{{hosts.gaming_pc.host}}` are resolved from the same file's top-level values at run time; values may reference other tokens. A built-in `{{repo_dir}}` token resolves to this repository's root (env-overridable via `BACKUPCTL_REPO_DIR`). Every task needs either `dest:` or `state_dir:` — run state is stored there as `.backup-state-<task>.json`.
 
 **Personal scripts live as git submodules** under `scripts/` in this repo. Tasks that need one (e.g. a Balance-format parser) reference it via the `{{scriptroot}}` token — see the example config.
 
@@ -53,11 +53,11 @@ What degrades in a container:
 
 ## Task kinds
 
-The engine provides eight generic kinds — `ingest`, `move`, `copy`, `run` (with `uploads:`/`capture:`/`args:`/`tool:`/`fresh_dir:`/`prune:` options), `media` (any configurable source root), `archive`, `encrypt`, `remote` (run a script on a host over SSH and pull results). Every field, prompt, and option is demonstrated with a generic example in `config/config.example.yaml`; see `ARCHITECTURE.md` for the code-level semantics.
+The engine provides eight generic kinds — `ingest`, `move`, `copy`, `run` (with `uploads:`/`capture:`/`args:`/`require:`/`tool:`/`fresh_dir:`/`prune:` options), `media` (any configurable source root), `archive`, `encrypt`, `remote` (run a script on a host over SSH and pull results). Every field, prompt, and option is demonstrated with a generic example in `config/config.example.yaml`; see `ARCHITECTURE.md` for the code-level semantics.
 
 ## Dependencies
 
-- Python 3.10+ and the venv above (`fastapi`, `uvicorn`, `pyyaml`)
+- Python 3.10+ and the venv above (`fastapi`, `uvicorn`, `pyyaml`, `pexpect`)
 - System tools used by tasks: `rsync`, `ssh`, `unzip`/`tar`, `git`, `age`, `node`, `jq`, `wget`, ImageMagick, plus whatever each external script needs
 - Personal automation scripts live as **git submodules** under `scripts/` (referenced from the personal config via the `{{scriptroot}}` token); init them with `git submodule update --init --recursive`
 

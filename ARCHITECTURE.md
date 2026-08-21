@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-A local web application for config-driven backup workflows. The repo is a **generic engine**: it contains no task definitions, no personal paths, and no personal scripts. One gitignored config file defines everything the app does; a committed example config documents every capability.
+A local web application for config-driven backup workflows. The repo is a **generic engine**: it contains no task definitions and no personal paths; personal scripts are referenced as git submodules under `scripts/`. One gitignored config file defines everything the app does; a committed example config documents every capability.
 
 Design goals (in priority order):
 
@@ -71,13 +71,13 @@ pyproject.toml         Package metadata, deps, `backupctl` entry point
 ## 4. Config model (`backupctl/config.py`)
 
 - `load_config(path)` reads **one YAML file** and returns `(local, tasks)`. Top-level keys are machine-specific values; the `tasks:` key is the task list. If the file is missing it raises `FileNotFoundError` with instructions; `server.py` catches this at import and serves the app with a red warning banner instead.
-- `resolve(template, local, extra)` substitutes `{{a.b.c}}` tokens from the value dict (and a per-run `extra` dict, e.g. `{{uploads}}`, `{{tmp}}`). Resolution **loops until stable**, so values can reference other tokens (`balance_script: '{{scriptroot}}/Balance/...'`). A built-in `{{repo_dir}}` token (the repository root, overridable via `BACKUPCTL_REPO_DIR`) lets configs reference repo-relative paths.
+- `resolve(template, local, extra)` substitutes `{{a.b.c}}` tokens from the value dict (and a per-run `extra` dict, e.g. `{{uploads}}`, `{{tmp}}`). Resolution **loops until stable**, so values can reference other tokens (`balance_script: '{{scriptroot}}/Balance/...'`). A template that is exactly one token resolves to the token's **typed value** (dict/list/int) — e.g. `host: '{{hosts.gaming_pc}}'` and `args: '{{hosts.gaming_pc.games_dirs}}'` — while embedded tokens are stringified. A built-in `{{repo_dir}}` token (the repository root, overridable via `BACKUPCTL_REPO_DIR`) lets configs reference repo-relative paths.
 
 ### Task fields
 
 Common: `name`, `group` (card category), `kind`, `note` (help text, shown inside the drop zone for upload tasks), `timeout` (seconds, default 600), `dest` / `state_dir` (run state location; `state_dir` falls back to `dest`; boot fails loudly if neither), `root` (source root for media/copy; glob-aware), `prompts`, `glob`, `export_url` (optional; shows a "Generate Export" button on the card that opens the service's export page).
 
-Kind-specific: `identify` (ingest), `rename_to` / `mappings` (move), `sources` / `pre` / `post` / `git` (copy), `uploads` / `capture` / `command(s)` / `cwd` / `args` / `tool` / `fresh_dir` / `prune` (run), `commit_dir` (run+capture), `root` / `process_script` / `rm_script` / `pairs` (media), `src_dir` / `out_dir` / `subdirs` / `media_dir` / `confirm_key` / `concat_dir` (archive), `output` (encrypt), `host` / `script` / `args` / `remote_tmp` / `remote_out` / `pull` (remote).
+Kind-specific: `identify` (ingest), `rename_to` / `mappings` (move), `sources` / `pre` / `post` / `git` (copy), `uploads` / `capture` / `command(s)` / `cwd` / `args` / `require` / `tool` / `fresh_dir` / `prune` (run), `commit_dir` (run+capture), `root` / `process_script` / `rm_script` / `pairs` (media), `src_dir` / `out_dir` / `subdirs` / `media_dir` / `confirm_key` / `concat_dir` (archive), `output` (encrypt), `host` / `script` / `args` / `remote_tmp` / `remote_out` / `pull` (remote).
 
 Interactive input is config: `prompts: [{key, label, type: confirm|secret}]` — the GUI renders them generically, the values travel in the run `extra` payload, and secret values are also usable as `{{key}}` tokens inside run commands.
 
@@ -111,7 +111,7 @@ LOCAL, TASK_LIST                                           # from load_config()
 | `ingest` | Extract dropped archives (zip/tar), optionally run an `identify` shell command inside the extracted tree to derive a folder suffix, rsync into `dest` (rc checked), git commit, clear staging |
 | `move` | Move dropped files into `dest`, renamed via `rename_to` (single) or `mappings` (group of exports per card), git commit |
 | `copy` | rsync each `sources` entry into `dest/<basename>` (rc checked per source; any failure fails the run), optional git, `pre`/`post` shell commands |
-| `run` | Execute `command`/`commands` (shell) or `args` (argv list; empty values drop their flag pair) with token resolution, per-command timeouts (rc 124 → "timed out"), output streamed to the log, prompt secrets redacted. With `uploads: true`, requires ≥1 staged file and provides `{{uploads}}`. With `capture: true`, the output becomes the summary and is shown in a copy/paste dialog ("Done" commits `commit_dir`). Optional `tool:` downloads+extracts a CLI if missing (exposed as `{{tool_binary}}`), `fresh_dir:` fails the run unless the newest export dir is non-empty and fresh, `prune:` deletes older export dirs (`keep_newer` keeps any larger than the newest) |
+| `run` | Execute `command`/`commands` (shell) or `args` (argv list; empty values drop their flag pair) with token resolution, per-command timeouts (rc 124 → "timed out"), output streamed to the log, prompt secrets redacted. `require: [key...]` fails the run unless each prompt key has a value. With `uploads: true`, requires ≥1 staged file and provides `{{uploads}}`. With `capture: true`, the output becomes the summary and is shown in a copy/paste dialog ("Done" commits `commit_dir`). Optional `tool:` downloads+extracts a CLI if missing (exposed as `{{tool_binary}}`), `fresh_dir:` fails the run unless the newest export dir is non-empty and fresh, `prune:` deletes older export dirs (`keep_newer` keeps any larger than the newest) |
 | `media` | Per `pairs:` entry (`src` under the task's `root`, `dest` template, optional `pre_script`/`pre_args`, optional per-pair `process_script`/`rm_script` overrides): run the pre script, delete already-synced files, copy+standardize+move, delete originals. `process: false` entries plain-move instead |
 
 | `archive` | Snapshot `src_dir` to `dest` (rsync rc checked), rsync each `subdirs:` entry raw into `out_dir`, standardize the live copies (concat first for entries with a `concat_script`), delete originals **only if every step succeeded** |

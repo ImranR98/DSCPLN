@@ -1,4 +1,4 @@
-"""Backup Web App — FastAPI server + the six task kinds.
+"""backupctl — FastAPI server + the six task kinds.
 
 Kinds: ingest (extract a dropped export), move (dropped files, renamed or
 per-mapping), copy (rsync configured sources), run (shell command(s) with
@@ -712,7 +712,7 @@ LOCAL, TASK_LIST, MISSING_CONFIG = _initial_config()
 TASK_MAP = {t["name"]: t for t in TASK_LIST}
 
 
-app = FastAPI(title="Backup Web App", docs_url=None, redoc_url=None)
+app = FastAPI(title="backupctl", docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")

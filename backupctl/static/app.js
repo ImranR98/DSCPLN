@@ -1,4 +1,4 @@
-/* Backup Web App — vanilla JS frontend */
+/* backupctl — vanilla JS frontend */
 
 const STATE = { tasks: [], serverRunning: null, pollTimer: null, pendingQueue: [] };
 

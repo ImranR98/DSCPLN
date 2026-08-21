@@ -1,4 +1,4 @@
-# Backup Web App — Architecture
+# backupctl — Architecture
 
 ## 1. Overview
 
@@ -19,8 +19,8 @@ backupctl/
                        per-task run-state files, upload staging, the safe
                        subprocess runner (timeouts, process groups, redaction,
                        askpass), git commits, age pty encryption
-  app.py               FastAPI server (single in-flight run slot) + the six
-                       task engines ("kinds") and their dispatcher
+  app.py               FastAPI server (single in-flight run slot), the six
+                       task engines ("kinds") + dispatcher, and the CLI entry
   static/
     index.html         Page skeleton (favicon inlined as a data URL)
     app.css            Full design system (plain CSS, dark, red accent)
@@ -201,7 +201,7 @@ Sandbox suites in `/tmp/opencode` (never touching real destinations) build a tem
 1. **Plain HTML/CSS/JS instead of a UI framework** — no cascade layers, no runtime-injected component CSS, no custom elements: every style rule is fully deterministic.
 2. **One gitignored personal config** — the repo stays a pure engine; the example file documents every kind generically.
 3. **State next to the data** — each task's last-run record lives in its destination folder (`.backup-state-<task>.json`), consistent with data ownership, and excluded from git.
-4. **Two Python modules** — `core.py` holds everything shared (config, state, subprocess safety); `app.py` holds the server and the six kinds. No cross-module plumbing, no hot config reload: edit config → restart.
+4. **Two Python modules** — `core.py` holds everything shared (config, state, subprocess safety); `app.py` holds the server, the six kinds, and the CLI entry. No cross-module plumbing, no hot config reload: edit config → restart.
 5. **Six kinds, one per workflow shape** — media-in-an-archive is the `media` kind with `snapshot`/`raw`/`delete_originals`; running a script on a remote host is a `run` task with an ssh/rsync command list. Fewer concepts, same guarantees.
 6. **Subprocess process groups + timeouts** — the UI can never get stuck in a silent "Running" state.
 7. **`pexpect` for `age -p`** — the standard library for feeding a passphrase to a tool that insists on a terminal.

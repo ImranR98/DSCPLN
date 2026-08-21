@@ -1,4 +1,4 @@
-# Backup Web App
+# backupctl
 
 A local web app that runs config-driven backup workflows. Nothing personal is committed to this repo: the repo is a generic engine, and all tasks plus machine-specific values live in a single gitignored `config/config.yaml`. A committed, heavily-commented `config/config.example.yaml` demonstrates every task kind with generic examples.
 
@@ -63,7 +63,7 @@ The engine provides six generic kinds — `ingest`, `move`, `copy`, `run` (with 
 
 ## Structure
 
-- `backupctl/app.py` — FastAPI server (task/upload/run/status endpoints) + the task engines
+- `backupctl/app.py` — FastAPI server (task/upload/run/status endpoints) + the task engines + CLI entry
 - `backupctl/core.py` — config loading/tokens, run state, staging, and the safe subprocess layer
 - `backupctl/static/` — plain HTML/CSS/JS frontend (`index.html`, `app.css`, `app.js`; favicon inlined) — no UI framework
 - `scripts/` — git submodules with the personal automation scripts referenced by the config

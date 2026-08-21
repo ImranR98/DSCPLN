@@ -1,0 +1,243 @@
+# Example backup config — copy this file to config/config.yaml (gitignored)
+# and fill in your own values. Every task kind is demonstrated below;
+# delete the examples and add your own tasks.
+#
+# Top-level values are referenced from tasks as {{token}} (e.g. {{maindir}}).
+# Values may reference other tokens (e.g. '{{maindir}}/Documents').
+# Every task needs either `dest:` or `state_dir:` — run state is stored there
+# as .backup-state-<task>.json (excluded from git commits).
+#
+# Interactive input is declared per task as `prompts:` — the GUI renders the
+# dialogs. Each prompt: {key: <extra key sent to the engine>, label: <text>,
+# type: confirm|secret}.
+# secret values are also usable as {{key}} tokens inside run commands.
+
+# ---------- machine-specific values -----------------------------------------
+
+maindir: ~/Main                                  # where backups live (Backups/, Media/, Documents/...)
+phone_sync_dir: ~/<phone sync dir>               # default source root for `media` tasks
+media_process_script: '{{maindir}}/Code/Automation/<media script dir>/<standardize script>.sh'
+media_rm_script: '{{maindir}}/Code/Automation/<media script dir>/<delete-synced script>.sh'
+
+# Personal scripts outside this repo, referenced by generic tasks:
+balance_script: '{{maindir}}/Code/Automation/<balance script>/<script>.js'
+balance_dir: '{{maindir}}/Code/Automation/<balance script>'
+acc_dir: '{{maindir}}/<notes dir>'
+acc_glob: '<notes file glob>'
+balance_xlsx: '{{maindir}}/<balance xlsx path>'
+watxt_script: '{{maindir}}/Code/Automation/<chat txt script>/<script>.js'
+wine_backup_script: '{{maindir}}/Code/Automation/<game saves script>/<script>.sh'
+wamedia_dir: ~/Downloads/<chat media staging dir>
+snaps_deletable_dir: ~/Downloads/<deletable snaps dir>
+dns_export_file: '<dns export filename>'
+
+hosts:
+  bigpc:                  # used by the winesaves example
+    user: <user>
+    host: <host>
+    port: 22
+    games_dirs:           # remote dirs to back up, one run each
+      - '~/<games dir 1>'
+      - '~/<games dir 2>'
+  srv0:                   # used by run tasks that ssh somewhere
+    user: <user>
+    host: <host>
+    infra_path: /home/<user>/<infra dir>
+
+protonmail_email: <email>
+
+
+# ---------- task definitions ------------------------------------------------
+# Common fields: name, group (card category), kind, note (help text shown on
+# the card), dest (where data goes), state_dir (defaults to dest), timeout
+# (seconds, default 600). Upload-based tasks use `glob:` for drop matching.
+# Optional `export_url:` shows a "Generate Export" button on the card that
+# opens the service's export page (e.g. Google Takeout) in a new tab.
+
+tasks:
+
+  # ingest: extract a dropped archive into dest, optionally naming the
+  # folder from a shell command run inside the extracted content, then
+  # git commit the result.
+  - name: Example Cloud Export
+    group: Manual Exports
+    kind: ingest
+    glob: 'example-export-*.zip'
+    identify: 'cat account.json | jq -r ".username"'
+    dest: '{{maindir}}/Backups/Example Cloud'
+    export_url: https://example.com/settings/export
+    note: Drop the example-export-*.zip file here.
+
+  # move: dropped files are moved into dest. rename_to gives the file a
+  # fixed name; mappings handles a group of related exports in one card.
+  - name: Bookmarks
+    group: Manual Exports
+    kind: move
+    glob: 'bookmarks_*.html'
+    rename_to: bookmarks.html
+    dest: '{{maindir}}/Backups/Manual'
+
+  - name: Contacts + Calendar
+    group: Manual Exports
+    kind: move
+    dest: '{{maindir}}/Backups/Manual'
+    note: Drop the contacts (VCF) and calendar (ICS) exports here.
+    mappings:
+      - {glob: 'contacts-*.vcf', name: 'My Contacts.vcf'}
+      - {glob: 'todo-*.ics', name: 'TODO.ics'}
+
+  # watxt-style merge expressed as a generic run task: drop chat zips,
+  # extract to the {{tmp}} dir, delete unwanted files, run a personal
+  # merge script. {{uploads}} expands to the dropped files.
+  - name: Chat TXT Backup
+    group: Manual Exports
+    kind: run
+    uploads: true
+    glob: '*.zip'
+    state_dir: '{{maindir}}/Backups/Chat TXT'
+    command: 'mkdir -p "{{maindir}}/Backups/Chat TXT" && rm -rf "{{tmp}}" && mkdir -p "{{tmp}}" && unzip -oq {{uploads}} -d "{{tmp}}" && rm -f "{{tmp}}"/*.vcf && node {{watxt_script}} "{{maindir}}/Backups/Chat TXT" "{{tmp}}"'
+    note: Drop chat zips here; they are merged into the cumulative backup.
+
+  # encrypt: age-encrypt a dropped export (passphrase prompted in the GUI).
+  - name: Password Vault (encrypted)
+    group: Manual Exports
+    kind: encrypt
+    glob: vault-export_*.json
+    dest: '{{maindir}}/Backups/Vault'
+    output: vault.json
+    export_url: https://vault.example.com/#/tools/export
+    prompts:
+      - {key: password, label: 'Passphrase', type: secret}
+    note: Drop the vault export here; you will be asked for a passphrase.
+
+  # run with uploads: drop files, then run a command with them appended
+  # ({{uploads}} expands to the uploaded paths).
+  - name: Bank Statements
+    group: Manual Exports
+    kind: run
+    uploads: true
+    glob: '*.pdf'
+    timeout: 300
+    state_dir: '{{maindir}}/Documents/Banking/eStatements'
+    command: '{{maindir}}/Code/Automation/<statements script>.sh {{maindir}}/Documents/Banking/eStatements {{uploads}}'
+    note: Drop the downloaded statement PDFs here.
+
+  # run: execute shell command(s) non-interactively. Output streams to the
+  # log; nonzero exit fails the run; timeout kills hung commands.
+  - name: Infra State Pull
+    group: Local Backups
+    kind: run
+    state_dir: '{{maindir}}/Infra'
+    commands:
+      - '{{maindir}}/Infra/infra.sh backup-state {{hosts.srv0.user}}@{{hosts.srv0.host}}:{{hosts.srv0.infra_path}} srv0'
+
+  - name: Playlist Download
+    group: Tools
+    kind: run
+    timeout: 1800
+    state_dir: '{{maindir}}/Media/Music'
+    cwd: '{{maindir}}/Code/Automation/<downloader>'
+    command: |
+      if [ ! -f ./venv/bin/activate ]; then python -m venv venv; fi
+      source ./venv/bin/activate
+      pip install --upgrade -r requirements.txt
+      python download.py --dir {{maindir}}/Media/Music
+
+  # run with capture: like run, but the output is shown in a dialog for
+  # copy/pasting; "Done" commits commit_dir to git.
+  - name: Spreadsheet Transactions
+    group: Tools
+    kind: run
+    capture: true
+    commit_dir: '{{maindir}}/Documents/Finance'
+    cwd: '{{balance_dir}}'
+    commands:
+      - 'npm i'
+      - 'node {{balance_script}} "$(cat $(ls {{acc_dir}}/{{acc_glob}} | tail -1))" {{balance_xlsx}}'
+    note: Paste the results into the spreadsheet, then press Done to commit.
+
+  # copy: rsync a list of sources into dest (optionally git-committed);
+  # pre/post run shell commands before/after. An optional `root:` prefixes
+  # every source (e.g. a mounted device).
+  - name: PC Config Files
+    group: Local Backups
+    kind: copy
+    git: true
+    dest: '{{maindir}}/Backups/PC Files'
+    pre: 'dconf dump /org/gnome/shell/extensions/ > ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf'
+    post: 'rm ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf'
+    sources:
+      - '~/.ssh'
+      - '~/.bashrc.d'
+      - '~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf'
+
+  # media: import media from a source root (default {{phone_sync_dir}}).
+  # Each pair is <source subdir of root> -> <dest subdir of maindir>; the
+  # processing script standardizes files (dates/names) before the move.
+  # Optional blocks: `snaps:` (concat short clips, then import) and
+  # `calls:` (move recordings into a folder).
+  - name: Phone Media Import
+    group: Device Imports
+    kind: media
+    state_dir: '{{maindir}}/Media'
+    note: Imports and standardizes media from the synced phone folders.
+    pairs:
+      - ['DCIM/Camera', 'Media/Camera']
+      - ['Screenshots', 'Media/Screenshots']
+    snaps:
+      src: 'DCIM/Snapchat'
+      dest: 'Media/Camera'
+      concat_script: '{{maindir}}/Code/Automation/<media script dir>/<concat script>.sh'
+    calls:
+      src: 'Calls'
+      dest: 'Media/Recordings/<recordings folder>'
+
+  # media with an explicit root — e.g. a device mounted over MTP (glob
+  # patterns are supported, first match wins).
+  - name: Headset Media Import
+    group: Device Imports
+    kind: media
+    root: '/run/user/<uid>/gvfs/mtp:host=<Device>_*/Internal shared storage'
+    state_dir: '{{maindir}}/Media/<device media folder>'
+    note: Imports headset screenshots and video clips.
+    pairs:
+      - ['<Screenshots dir>', 'Media/Camera']
+      - ['<VideoShots dir>', 'Media/Camera']
+
+  # archive: chat-app archive (src_dir -> dest) + media standardization
+  # into wamedia_dir; originals deleted only if every step succeeded.
+  # Folder layout is config: media_root (parent of media_dirs/audio_dir,
+  # default 'Media'), media_dirs (standardized in place), audio_dir
+  # (concatenated per chat first via audio_concat_script).
+  - name: Chat App Archive
+    group: Device Imports
+    kind: archive
+    src_dir: '{{maindir}}/<chat app folder>'
+    dest: '{{maindir}}/Backups/Archive/<Chat-AllMedia>'
+    media_root: Media
+    media_dirs: ['Chat Images', 'Chat Video', 'Chat Video Notes']
+    audio_dir: 'Chat Voice Notes'
+    audio_concat_script: '{{maindir}}/Code/Automation/<media script dir>/<concat audio script>.sh'
+    prompts:
+      - {key: confirmed, label: 'Manually copy anything in the GIFs folder to the video folder, then press OK.', type: confirm}
+    note: Archives the live chat folder, then standardizes media and deletes the originals on success.
+
+  # winesaves: push wine_backup_script to hosts.bigpc, run it once per
+  # games_dirs entry, and pull the results back.
+  - name: Game Save Files
+    group: Local Backups
+    kind: winesaves
+    dest: '{{maindir}}/Backups/Game Save Files'
+    note: Runs the backup script on the gaming PC over SSH and pulls the results down.
+
+  # proton: export a mailbox using the ProtonMail export CLI (password and
+  # optional TOTP are prompted in the GUI; the result is validated).
+  - name: Mail Export
+    group: Tools
+    kind: proton
+    timeout: 1800
+    dest: '{{maindir}}/Backups/Email'
+    prompts:
+      - {key: password, label: 'Password', type: secret}
+      - {key: totp, label: 'TOTP code (if 2FA is enabled)', type: secret}
+    note: Exports the mailbox. You will be asked for your password and TOTP code (if 2FA is enabled).

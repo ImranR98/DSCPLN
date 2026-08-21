@@ -49,25 +49,32 @@ def expand(path):
 _TOKEN_RE = re.compile(r"\{\{([a-zA-Z0-9_.]+)\}\}")
 
 
+def _lookup(key, local, extra):
+    """Resolve one token path to its value (None when not found)."""
+    if key in extra:
+        return extra[key]
+    node = local
+    for part in key.split("."):
+        if isinstance(node, dict) and part in node:
+            node = node[part]
+        else:
+            return None
+    return node
+
+
 def resolve(template, local, extra=None):
     """Replace {{a.b.c}} tokens from the local config (and per-run extra dict).
-    Values may themselves contain tokens (e.g. {{maindir}}/...), so resolution loops until stable."""
+    Values may themselves contain tokens (e.g. {{maindir}}/...), so resolution
+    loops until stable. A template that is exactly one token resolves to the
+    token's typed value (dict/list/int); embedded tokens are stringified."""
     if not isinstance(template, str):
         return template
     extra = extra or {}
 
     def repl(m):
         """Replace one {{token}} occurrence."""
-        key = m.group(1)
-        if key in extra:
-            return str(extra[key])
-        node = local
-        for part in key.split("."):
-            if isinstance(node, dict) and part in node:
-                node = node[part]
-            else:
-                return m.group(0)
-        return str(node)
+        value = _lookup(m.group(1), local, extra)
+        return m.group(0) if value is None else str(value)
 
     result = template
     for _ in range(10):
@@ -75,4 +82,12 @@ def resolve(template, local, extra=None):
         if next_result == result:
             break
         result = next_result
+    match = _TOKEN_RE.fullmatch(template)
+    if match:
+        value = _lookup(match.group(1), local, extra)
+        if value is None:
+            return result  # unresolved token: leave the literal template
+        if not isinstance(value, str):
+            return value
+        return result
     return result

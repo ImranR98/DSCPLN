@@ -52,7 +52,7 @@ pyproject.toml         Package metadata, deps, `backupctl` entry point
                     ┌──────────────────▼─────────────────────────┐
                     │  tasks.py — kind dispatcher                │
                     │  ingest move copy run media archive        │
-                    │  encrypt winesaves proton                  │
+                    │  encrypt remote                            │
                     └────────┬───────────────────┬───────────────┘
                              │                   │
               ┌──────────────▼──────┐   ┌────────▼──────────────┐
@@ -77,7 +77,7 @@ pyproject.toml         Package metadata, deps, `backupctl` entry point
 
 Common: `name`, `group` (card category), `kind`, `note` (help text, shown inside the drop zone for upload tasks), `timeout` (seconds, default 600), `dest` / `state_dir` (run state location; `state_dir` falls back to `dest`; boot fails loudly if neither), `root` (source root for media/copy; glob-aware), `prompts`, `glob`, `export_url` (optional; shows a "Generate Export" button on the card that opens the service's export page).
 
-Kind-specific: `identify` (ingest), `rename_to` / `mappings` (move), `sources` / `pre` / `post` / `git` (copy), `uploads` / `capture` / `command(s)` / `cwd` (run), `commit_dir` (run+capture), `pairs` (media), `src_dir` / `media_dirs` / `audio_dir` (archive), `output` (encrypt).
+Kind-specific: `identify` (ingest), `rename_to` / `mappings` (move), `sources` / `pre` / `post` / `git` (copy), `uploads` / `capture` / `command(s)` / `cwd` / `args` / `tool` / `fresh_dir` / `prune` (run), `commit_dir` (run+capture), `root` / `process_script` / `rm_script` / `pairs` (media), `src_dir` / `out_dir` / `subdirs` / `media_dir` / `confirm_key` / `concat_dir` (archive), `output` (encrypt), `host` / `script` / `args` / `remote_tmp` / `remote_out` / `pull` (remote).
 
 Interactive input is config: `prompts: [{key, label, type: confirm|secret}]` — the GUI renders them generically, the values travel in the run `extra` payload, and secret values are also usable as `{{key}}` tokens inside run commands.
 
@@ -111,15 +111,14 @@ LOCAL, TASK_LIST                                           # from load_config()
 | `ingest` | Extract dropped archives (zip/tar), optionally run an `identify` shell command inside the extracted tree to derive a folder suffix, rsync into `dest` (rc checked), git commit, clear staging |
 | `move` | Move dropped files into `dest`, renamed via `rename_to` (single) or `mappings` (group of exports per card), git commit |
 | `copy` | rsync each `sources` entry into `dest/<basename>` (rc checked per source; any failure fails the run), optional git, `pre`/`post` shell commands |
-| `run` | Execute `command`/`commands` with token resolution, per-command timeouts (rc 124 → "timed out"), output streamed to the log. With `uploads: true`, requires ≥1 staged file and provides `{{uploads}}`. With `capture: true`, the output becomes the summary and is shown in a copy/paste dialog ("Done" commits `commit_dir`) |
-| `media` | Per `pairs:` (relative to the task's `root`, default `{{phone_sync_dir}}`), delete already-synced files (`{{media_rm_script}}`), then copy, standardize (`{{media_process_script}}`), move, delete originals. Optional `snaps:` (concat + import) and `calls:` (move recordings) blocks |
+| `run` | Execute `command`/`commands` (shell) or `args` (argv list; empty values drop their flag pair) with token resolution, per-command timeouts (rc 124 → "timed out"), output streamed to the log, prompt secrets redacted. With `uploads: true`, requires ≥1 staged file and provides `{{uploads}}`. With `capture: true`, the output becomes the summary and is shown in a copy/paste dialog ("Done" commits `commit_dir`). Optional `tool:` downloads+extracts a CLI if missing (exposed as `{{tool_binary}}`), `fresh_dir:` fails the run unless the newest export dir is non-empty and fresh, `prune:` deletes older export dirs (`keep_newer` keeps any larger than the newest) |
+| `media` | Per `pairs:` entry (`src` under the task's `root`, `dest` template, optional `pre_script`/`pre_args`, optional per-pair `process_script`/`rm_script` overrides): run the pre script, delete already-synced files, copy+standardize+move, delete originals. `process: false` entries plain-move instead |
 
-| `archive` | Chat-app archive: copy `src_dir` to `dest` (rsync rc checked), standardize `media_dirs` into `wamedia_dir`, concat `audio_dir` per chat, delete originals **only if every step succeeded** |
+| `archive` | Snapshot `src_dir` to `dest` (rsync rc checked), rsync each `subdirs:` entry raw into `out_dir`, standardize the live copies (concat first for entries with a `concat_script`), delete originals **only if every step succeeded** |
 | `encrypt` | `age --encrypt --passphrase` driven through a pseudo-terminal (see §7), git commit, clear staging — fully generic, service-agnostic |
-| `winesaves` | Push `{{wine_backup_script}}` to `hosts.bigpc` over SSH (`BatchMode=yes`), run it once per `games_dirs` entry, rsync the results back, remote cleanup in `finally`; every step rc-checked |
-| `proton` | Build `proton-mail-export-cli -k -o backup -d <dest> -u <email> -p <pw> [-t <totp>]`, secrets redacted from log; after exit 0 the newest export dir must be non-empty and fresh (≤1 day) or the run **fails**; older exports pruned |
+| `remote` | Push `script` to a configured `host` (a typed `{{token}}` resolving to a user/host/port dict) over SSH (`BatchMode=yes`), run it once per `args:` entry (a typed list token), rsync `remote_out` into `dest`, remote cleanup in `finally`; `remote_tmp`/`remote_out` are templates with a unique `{{tag}}` per run; every step rc-checked |
 
-`availability(task, local)` decides card state (source root present, bigpc configured). `supports_uploads(task)` and `upload_patterns(task, local)` define drop-zone presence and filename matching (patterns are token-resolved, so `{{dns_export_file}}` works).
+`availability(task, local)` decides card state (source `root` present for media/copy, `host` token resolving for remote). `supports_uploads(task)` and `upload_patterns(task, local)` define drop-zone presence and filename matching (patterns are token-resolved, so `{{dns_export_file}}` works).
 
 ## 7. Process safety (`backupctl/shell.py`)
 
@@ -130,7 +129,7 @@ Every subprocess goes through `run()` / `sh()` / `sh_capture()` / `rsync()`:
 - **`stdin=DEVNULL`** — interactive prompts fail fast instead of hanging.
 - **`SSH_ASKPASS_REQUIRE=force` + a failing askpass script** (generated at `~/.backupctl/askpass.sh`) — ssh can never prompt for a password on a hidden terminal.
 - **`PROC_GROUPS` registry + `cancel_all()`** — the Stop button kills every live child process group.
-- **`redact=[...]`** — secrets are masked in both the logged command line and the streamed output (used by the proton task).
+- **`redact=[...]`** — secrets are masked in both the logged command line and the streamed output (every `run` task redacts its prompt values).
 - **`age_encrypt_passphrase`** — `age -p` refuses non-TTY stdin, so encryption is driven through a pty via `pexpect` (passphrase sent twice: enter + confirm; 30s timeouts; exit status checked).
 
 ## 8. State layer (`backupctl/state.py`)
@@ -193,7 +192,7 @@ User clicks Run / confirms batch
 | Command hangs (prompt, network, deadlock) | Per-task timeout (default 10 min) kills the process group → red "timed out" |
 | User wants out | Stop button kills all live process groups → "Cancelled by user" |
 | Server dies mid-run | `running.json` survives → pill shows red "Interrupted · ago" |
-| Command exits 0 but did nothing (proton CLI) | Post-run validation of the actual export (non-empty, fresh) fails the run |
+| Command exits 0 but did nothing | `fresh_dir:` post-run validation of the actual export (non-empty, fresh) fails the run |
 | rsync/unzip failure swallowed | rc checked in ingest/copy/archive and every run command; any failure fails the run |
 | Uploaded files ignored | run-with-uploads refuses zero files; ingest/move/encrypt refuse empty staging |
 | Secrets in logs | `redact=` masks passwords/TOTP in command display and output |
@@ -204,7 +203,7 @@ User clicks Run / confirms batch
 Sandbox suites in `/tmp/opencode` (never touching real destinations):
 - `test_engine.py` — ingest (incl. identify suffix), move mappings/rename, encrypt pty encryption, run-with-tokens
 - `test_engine2.py` — copy+git, media import, archive/media/delete-originals, chat-TXT run+uploads merge, run-capture paste, bank upload run
-- `test_engine3.py` — timeout kill, zero-upload refusal, proton credential flags + log redaction + export validation + pruning, interrupted marker, `_task_json` display
+- `test_engine3.py` — timeout kill, zero-upload refusal, run-with-tool credential flags + log redaction + fresh_dir validation + pruning, interrupted marker, `_task_json` display
 
 Each suite builds a temporary merged config file (sandbox values + the machine's task list) and loads it through `config.load_config(path)`.
 
@@ -215,4 +214,4 @@ Each suite builds a temporary merged config file (sandbox values + the machine's
 3. **State next to the data** — each task's last-run record lives in its destination folder (`.backup-state-<task>.json`), consistent with data ownership, and excluded from git.
 4. **Subprocess process groups + timeouts** — the UI can never get stuck in a silent "Running" state.
 5. **`pexpect` for `age -p`** — the standard library for feeding a passphrase to a tool that insists on a terminal.
-6. **Success = verified side effects** — exit codes plus post-run validation (proton), not just "the command returned".
+6. **Success = verified side effects** — exit codes plus post-run validation (`fresh_dir`), not just "the command returned".

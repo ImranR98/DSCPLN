@@ -17,10 +17,8 @@
 # ---------- machine-specific values -----------------------------------------
 
 maindir: ~/Main                                  # where backups live (Backups/, Media/, Documents/...)
-phone_sync_dir: ~/<phone sync dir>               # default source root for `media` tasks
+phone_sync_dir: ~/<phone sync dir>               # source root for `media` tasks (task field `root`)
 scriptroot: '{{repo_dir}}/scripts'   # git submodules with the personal scripts
-media_process_script: '{{scriptroot}}/<media script repo>/<standardize script>.sh'
-media_rm_script: '{{scriptroot}}/<media script repo>/<delete-synced script>.sh'
 
 # Personal scripts kept as submodules under {{scriptroot}}:
 balance_script: '{{scriptroot}}/<balance repo>/<script>.js'
@@ -29,13 +27,12 @@ acc_dir: '{{maindir}}/<notes dir>'
 acc_glob: '<notes file glob>'
 balance_xlsx: '{{maindir}}/<balance xlsx path>'
 watxt_script: '{{scriptroot}}/<chat txt repo>/<script>.js'
-wine_backup_script: '{{scriptroot}}/<game saves repo>/<script>.sh'
 wamedia_dir: ~/Downloads/<chat media staging dir>
 snaps_deletable_dir: ~/Downloads/<deletable snaps dir>
 dns_export_file: '<dns export filename>'
 
 hosts:
-  bigpc:                  # used by the winesaves example
+  gaming_pc:              # used by the remote example
     user: <user>
     host: <host>
     port: 22
@@ -47,7 +44,7 @@ hosts:
     host: <host>
     infra_path: /home/<user>/<infra dir>
 
-protonmail_email: <email>
+mail_email: <email>
 
 
 # ---------- task definitions ------------------------------------------------
@@ -174,26 +171,27 @@ tasks:
       - '~/.bashrc.d'
       - '~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf'
 
-  # media: import media from a source root (default {{phone_sync_dir}}).
-  # Each pair is <source subdir of root> -> <dest subdir of maindir>; the
-  # processing script standardizes files (dates/names) before the move.
-  # Optional blocks: `snaps:` (concat short clips, then import) and
-  # `calls:` (move recordings into a folder).
+  # media: import media from a source root. Each pair is a dict:
+  # {src: <subdir of root>, dest: <template>, pre_script?, pre_args?,
+  #  process_script?, rm_script?, process?}. The task's process_script
+  # standardizes files (dates/names) before the move; process: false
+  # plain-moves files; pre_script runs on the source dir first.
   - name: Phone Media Import
     group: Device Imports
     kind: media
+    root: '{{phone_sync_dir}}'
+    process_script: '{{scriptroot}}/<media repo>/<standardize script>.sh'
+    rm_script: '{{scriptroot}}/<media repo>/<delete-synced script>.sh'
     state_dir: '{{maindir}}/Media'
     note: Imports and standardizes media from the synced phone folders.
     pairs:
-      - ['DCIM/Camera', 'Media/Camera']
-      - ['Screenshots', 'Media/Screenshots']
-    snaps:
-      src: 'DCIM/Snapchat'
-      dest: 'Media/Camera'
-      concat_script: '{{scriptroot}}/<utils repo>/<concat script>.sh'
-    calls:
-      src: 'Calls'
-      dest: 'Media/Recordings/<recordings folder>'
+      - {src: 'DCIM/Camera', dest: '{{maindir}}/Media/Camera'}
+      - {src: 'Screenshots', dest: '{{maindir}}/Media/Screenshots'}
+      - src: 'DCIM/Snapchat'
+        dest: '{{maindir}}/Media/Camera'
+        pre_script: '{{scriptroot}}/<utils repo>/<concat script>.sh'
+        pre_args: ['{{snaps_deletable_dir}}']
+      - {src: 'Calls', dest: '{{maindir}}/Media/Recordings/<recordings folder>', process: false}
 
   # media with an explicit root — e.g. a device mounted over MTP (glob
   # patterns are supported, first match wins).
@@ -201,45 +199,81 @@ tasks:
     group: Device Imports
     kind: media
     root: '/run/user/<uid>/gvfs/mtp:host=<Device>_*/Internal shared storage'
+    process_script: '{{scriptroot}}/<media repo>/<standardize script>.sh'
+    rm_script: '{{scriptroot}}/<media repo>/<delete-synced script>.sh'
     state_dir: '{{maindir}}/Media/<device media folder>'
     note: Imports headset screenshots and video clips.
     pairs:
-      - ['<Screenshots dir>', 'Media/Camera']
-      - ['<VideoShots dir>', 'Media/Camera']
+      - {src: '<Screenshots dir>', dest: '{{maindir}}/Media/Camera'}
+      - {src: '<VideoShots dir>', dest: '{{maindir}}/Media/Camera'}
 
-  # archive: chat-app archive (src_dir -> dest) + media standardization
-  # into wamedia_dir; originals deleted only if every step succeeded.
-  # Folder layout is config: media_root (parent of media_dirs/audio_dir,
-  # default 'Media'), media_dirs (standardized in place), audio_dir
-  # (concatenated per chat first via audio_concat_script).
+  # archive: snapshot src_dir into dest, standardize its media subdirs
+  # into out_dir; originals deleted only if every step succeeded. Each
+  # subdir is rsynced raw, then standardized; entries with a concat_script
+  # concatenate segments per child dir (into <concat_dir>/) first.
   - name: Chat App Archive
     group: Device Imports
     kind: archive
     src_dir: '{{maindir}}/<chat app folder>'
     dest: '{{maindir}}/Backups/Archive/<Chat-AllMedia>'
-    media_root: Media
-    media_dirs: ['Chat Images', 'Chat Video', 'Chat Video Notes']
-    audio_dir: 'Chat Voice Notes'
-    audio_concat_script: '{{scriptroot}}/<utils repo>/<concat audio script>.sh'
+    out_dir: ~/Downloads/<chat media staging dir>
+    process_script: '{{scriptroot}}/<media repo>/<standardize script>.sh'
+    media_dir: Media
+    subdirs:
+      - {name: 'Chat Images'}
+      - {name: 'Chat Video'}
+      - {name: 'Chat Video Notes'}
+      - {name: 'Chat Voice Notes', concat_script: '{{scriptroot}}/<utils repo>/<concat audio script>.sh'}
     prompts:
       - {key: confirmed, label: 'Manually copy anything in the GIFs folder to the video folder, then press OK.', type: confirm}
     note: Archives the live chat folder, then standardizes media and deletes the originals on success.
 
-  # winesaves: push wine_backup_script to hosts.bigpc, run it once per
-  # games_dirs entry, and pull the results back.
+  # remote: push a script to a host, run it once per `args` entry, and
+  # pull the results back. host/args resolve to typed tokens (dict/list);
+  # {{tag}} is a unique per-run suffix for remote temp paths.
   - name: Game Save Files
     group: Local Backups
-    kind: winesaves
+    kind: remote
+    host: '{{hosts.gaming_pc}}'
+    script: '{{scriptroot}}/<game saves repo>/<script>.sh'
+    args: '{{hosts.gaming_pc.games_dirs}}'
+    remote_tmp: '/tmp/{{tag}}_backup'
+    remote_out: '/home/{{hosts.gaming_pc.user}}/Downloads/{{tag}}_backup_out'
     dest: '{{maindir}}/Backups/Game Save Files'
     note: Runs the backup script on the gaming PC over SSH and pulls the results down.
 
-  # proton: export a mailbox using the ProtonMail export CLI (password and
-  # optional TOTP are prompted in the GUI; the result is validated).
+  # run + tool + args + fresh_dir + prune: a service-specific CLI expressed
+  # generically. `tool` downloads and extracts the binary if missing (its
+  # path becomes {{tool_binary}}); `args` runs as argv (no shell) and empty
+  # values drop their flag pair (so -t {{totp}} vanishes without a code);
+  # `fresh_dir` fails the run unless the newest export dir is non-empty and
+  # fresh; `prune` deletes older export dirs (keep_newer keeps any larger
+  # than the newest). Prompt secrets are redacted from the log.
   - name: Mail Export
     group: Tools
-    kind: proton
+    kind: run
     timeout: 1800
-    dest: '{{maindir}}/Backups/Email'
+    state_dir: '{{maindir}}/Backups/Email'
+    tool:
+      url: https://example.com/export-cli.tar.gz
+      dir: ~/export-cli
+      binary: ~/export-cli/export-cli
+      extract: true
+      chmod: true
+    args:
+      - '{{tool_binary}}'
+      - -d
+      - '{{maindir}}/Backups/Email'
+      - -u
+      - '{{mail_email}}'
+      - -p
+      - '{{password}}'
+      - -t
+      - '{{totp}}'
+    fresh_dir: '{{maindir}}/Backups/Email/{{mail_email}}'
+    prune:
+      dir: '{{maindir}}/Backups/Email/{{mail_email}}'
+      keep_newer: true
     prompts:
       - {key: password, label: 'Password', type: secret}
       - {key: totp, label: 'TOTP code (if 2FA is enabled)', type: secret}

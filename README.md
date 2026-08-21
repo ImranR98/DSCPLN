@@ -53,7 +53,7 @@ What degrades in a container:
 
 ## Task kinds
 
-The engine provides nine generic kinds — `ingest`, `move`, `copy`, `run` (with `uploads:`/`capture:` modes), `media` (any configurable source root), `archive`, `encrypt`, `winesaves`, `proton`. Every field, prompt, and option is demonstrated with a generic example in `config/config.example.yaml`; see `ARCHITECTURE.md` for the code-level semantics.
+The engine provides eight generic kinds — `ingest`, `move`, `copy`, `run` (with `uploads:`/`capture:`/`args:`/`tool:`/`fresh_dir:`/`prune:` options), `media` (any configurable source root), `archive`, `encrypt`, `remote` (run a script on a host over SSH and pull results). Every field, prompt, and option is demonstrated with a generic example in `config/config.example.yaml`; see `ARCHITECTURE.md` for the code-level semantics.
 
 ## Dependencies
 

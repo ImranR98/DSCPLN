@@ -115,7 +115,7 @@ def sh(cmd, cwd=None, log=None, timeout=None, redact=None):
     return run(cmd, shell=True, cwd=cwd, log=log, timeout=timeout, redact=redact)
 
 
-def sh_capture(cmd, cwd=None, timeout=None):
+def sh_capture(cmd, cwd=None, timeout=None, redact=None):
     """Run a shell command, capturing output; returns (rc, stdout, stderr)."""
     proc = _spawn(cmd, cwd, shell=True, capture=True)
     try:
@@ -124,7 +124,13 @@ def sh_capture(cmd, cwd=None, timeout=None):
         except subprocess.TimeoutExpired:
             _killpg(proc.pid, lambda line: None)
             out, err = proc.communicate()
+            for secret in redact or []:
+                out = out.replace(secret, "***")
+                err = err.replace(secret, "***")
             return TIMEOUT_RC, out, err
+        for secret in redact or []:
+            out = out.replace(secret, "***")
+            err = err.replace(secret, "***")
         return proc.returncode, out, err
     finally:
         PROC_GROUPS.discard(proc.pid)

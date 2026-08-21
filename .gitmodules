@@ -22,6 +22,6 @@
 [submodule "scripts/YTMusicDL"]
 	path = scripts/YTMusicDL
 	url = git@github.com:ImranR98/YTMusicDL.git
-[submodule "scripts/random-utils"]
-	path = scripts/random-utils
-	url = git@github.com:ImranR98/random-utils.git
+[submodule "scripts/mediaConcat"]
+	path = scripts/mediaConcat
+	url = git@github.com:ImranR98/mediaConcat.git

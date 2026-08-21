@@ -16,17 +16,18 @@
 
 maindir: ~/Main                                  # where backups live (Backups/, Media/, Documents/...)
 phone_sync_dir: ~/<phone sync dir>               # default source root for `media` tasks
-media_process_script: '{{maindir}}/Code/Automation/<media script dir>/<standardize script>.sh'
-media_rm_script: '{{maindir}}/Code/Automation/<media script dir>/<delete-synced script>.sh'
+scriptroot: '{{maindir}}/Code/Automation/<this repo>/scripts'   # git submodules with the personal scripts
+media_process_script: '{{scriptroot}}/<media script repo>/<standardize script>.sh'
+media_rm_script: '{{scriptroot}}/<media script repo>/<delete-synced script>.sh'
 
-# Personal scripts outside this repo, referenced by generic tasks:
-balance_script: '{{maindir}}/Code/Automation/<balance script>/<script>.js'
-balance_dir: '{{maindir}}/Code/Automation/<balance script>'
+# Personal scripts kept as submodules under {{scriptroot}}:
+balance_script: '{{scriptroot}}/<balance repo>/<script>.js'
+balance_dir: '{{scriptroot}}/<balance repo>'
 acc_dir: '{{maindir}}/<notes dir>'
 acc_glob: '<notes file glob>'
 balance_xlsx: '{{maindir}}/<balance xlsx path>'
-watxt_script: '{{maindir}}/Code/Automation/<chat txt script>/<script>.js'
-wine_backup_script: '{{maindir}}/Code/Automation/<game saves script>/<script>.sh'
+watxt_script: '{{scriptroot}}/<chat txt repo>/<script>.js'
+wine_backup_script: '{{scriptroot}}/<game saves repo>/<script>.sh'
 wamedia_dir: ~/Downloads/<chat media staging dir>
 snaps_deletable_dir: ~/Downloads/<deletable snaps dir>
 dns_export_file: '<dns export filename>'
@@ -119,7 +120,7 @@ tasks:
     glob: '*.pdf'
     timeout: 300
     state_dir: '{{maindir}}/Documents/Banking/eStatements'
-    command: '{{maindir}}/Code/Automation/<statements script>.sh {{maindir}}/Documents/Banking/eStatements {{uploads}}'
+    command: '{{scriptroot}}/<statements repo>/<statements script>.sh {{maindir}}/Documents/Banking/eStatements {{uploads}}'
     note: Drop the downloaded statement PDFs here.
 
   # run: execute shell command(s) non-interactively. Output streams to the
@@ -136,7 +137,7 @@ tasks:
     kind: run
     timeout: 1800
     state_dir: '{{maindir}}/Media/Music'
-    cwd: '{{maindir}}/Code/Automation/<downloader>'
+    cwd: '{{scriptroot}}/<downloader repo>'
     command: |
       if [ ! -f ./venv/bin/activate ]; then python -m venv venv; fi
       source ./venv/bin/activate
@@ -187,7 +188,7 @@ tasks:
     snaps:
       src: 'DCIM/Snapchat'
       dest: 'Media/Camera'
-      concat_script: '{{maindir}}/Code/Automation/<media script dir>/<concat script>.sh'
+      concat_script: '{{scriptroot}}/<utils repo>/<concat script>.sh'
     calls:
       src: 'Calls'
       dest: 'Media/Recordings/<recordings folder>'
@@ -217,7 +218,7 @@ tasks:
     media_root: Media
     media_dirs: ['Chat Images', 'Chat Video', 'Chat Video Notes']
     audio_dir: 'Chat Voice Notes'
-    audio_concat_script: '{{maindir}}/Code/Automation/<media script dir>/<concat audio script>.sh'
+    audio_concat_script: '{{scriptroot}}/<utils repo>/<concat audio script>.sh'
     prompts:
       - {key: confirmed, label: 'Manually copy anything in the GIFs folder to the video folder, then press OK.', type: confirm}
     note: Archives the live chat folder, then standardizes media and deletes the originals on success.

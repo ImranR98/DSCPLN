@@ -1,0 +1,27 @@
+[submodule "scripts/Balance"]
+	path = scripts/Balance
+	url = git@github.com:ImranR98/Balance.git
+[submodule "scripts/WhatsAppTXT"]
+	path = scripts/WhatsAppTXT
+	url = git@github.com:ImranR98/WhatsAppTXT.git
+[submodule "scripts/WineGameSaveBackup"]
+	path = scripts/WineGameSaveBackup
+	url = git@github.com:ImranR98/WineGameSaveBackup.git
+[submodule "scripts/MediaDateStandardize"]
+	path = scripts/MediaDateStandardize
+	url = git@github.com:ImranR98/MediaDateStandardize.git
+[submodule "scripts/random-utils-ir"]
+	path = scripts/random-utils-ir
+	url = git@github.com:ImranR98/random-utils-ir.git
+[submodule "scripts/BrokeETL"]
+	path = scripts/BrokeETL
+	url = git@github.com:ImranR98/BrokeETL.git
+[submodule "scripts/Wealthsimpleton"]
+	path = scripts/Wealthsimpleton
+	url = git@github.com:ImranR98/Wealthsimpleton.git
+[submodule "scripts/InstacartFlation"]
+	path = scripts/InstacartFlation
+	url = git@github.com:ImranR98/InstacartFlation.git
+[submodule "scripts/YTMusicDL"]
+	path = scripts/YTMusicDL
+	url = git@github.com:ImranR98/YTMusicDL.git

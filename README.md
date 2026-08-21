@@ -5,6 +5,7 @@ A local web app that runs config-driven backup workflows. Nothing personal is co
 ## Usage
 
 ```sh
+git clone --recurse-submodules git@github.com:ImranR98/ImranR-Backup.git   # or: git submodule update --init --recursive after cloning
 python3 -m venv .venv
 .venv/bin/pip install -e .
 cp config/config.example.yaml config/config.yaml   # fill in your own values and tasks
@@ -32,7 +33,7 @@ Every task runs with a timeout (default 10 min, overridable per task via `timeou
 
 Placeholders like `{{maindir}}` or `{{hosts.bigpc.host}}` are resolved from the same file's top-level values at run time; values may reference other tokens. Every task needs either `dest:` or `state_dir:` — run state is stored there as `.backup-state-<task>.json`.
 
-**Personal scripts are not part of this repo.** Tasks that need one (e.g. a Balance-format parser) reference it via a token such as `{{balance_script}}` pointing anywhere under `{{maindir}}` — see the example config.
+**Personal scripts live as git submodules** under `scripts/` in this repo. Tasks that need one (e.g. a Balance-format parser) reference it via the `{{scriptroot}}` token — see the example config.
 
 ## Docker
 
@@ -58,12 +59,13 @@ The engine provides nine generic kinds — `ingest`, `move`, `copy`, `run` (with
 
 - Python 3.10+ and the venv above (`fastapi`, `uvicorn`, `pyyaml`)
 - System tools used by tasks: `rsync`, `ssh`, `unzip`/`tar`, `git`, `age`, `node`, `jq`, `wget`, ImageMagick, plus whatever each external script needs
-- External automation scripts under `{{maindir}}/Code/Automation` (referenced from the personal config) are called as-is
+- Personal automation scripts live as **git submodules** under `scripts/` (referenced from the personal config via the `{{scriptroot}}` token); init them with `git submodule update --init --recursive`
 
 ## Structure
 
 - `backupctl/server.py` — FastAPI server (task/upload/run/status endpoints)
 - `backupctl/static/` — plain HTML/CSS/JS frontend (`index.html`, `app.css`, `app.js`; favicon inlined) — no UI framework
 - `backupctl/tasks.py` — task engines; `config.py`, `state.py`, `shell.py` — config/state/helpers
+- `scripts/` — git submodules with the personal automation scripts referenced by the config
 - `config/config.example.yaml` — generic example (your personal `config/config.yaml` is gitignored)
 - `ARCHITECTURE.md` — detailed architecture and code-level explanation

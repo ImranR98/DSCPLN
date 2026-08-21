@@ -28,10 +28,10 @@ Every task runs with a timeout (default 10 min, overridable per task via `timeou
 
 ## Configuration
 
-- `config/config.yaml` — your personal file (gitignored): machine-specific values at the top level (`maindir`, `phone_sync_dir`, hosts, emails, script paths...) plus the `tasks:` list. Add a task by adding an entry; the menu, categories, and drop-zone validation update automatically.
+- `config/config.yaml` — your personal file (gitignored): machine-specific values at the top level (`backup_root`, `sync_dir`, hosts, emails, script paths...) plus the `tasks:` list. Add a task by adding an entry; the menu, categories, and drop-zone validation update automatically.
 - `config/config.example.yaml` — committed template demonstrating every task kind with generic examples and schema comments.
 
-Placeholders like `{{maindir}}` or `{{hosts.gaming_pc.host}}` are resolved from the same file's top-level values at run time; values may reference other tokens. A built-in `{{repo_dir}}` token resolves to this repository's root (env-overridable via `BACKUPCTL_REPO_DIR`). Every task needs either `dest:` or `state_dir:` — run state is stored there as `.backup-state-<task>.json`.
+Placeholders like `{{backup_root}}` or `{{hosts.gaming_pc.host}}` are resolved from the same file's top-level values at run time; values may reference other tokens. A built-in `{{repo_dir}}` token resolves to this repository's root (env-overridable via `BACKUPCTL_REPO_DIR`). Every task needs either `dest:` or `state_dir:` — run state is stored there as `.backup-state-<task>.json`.
 
 **Personal scripts live as git submodules** under `scripts/` in this repo. Tasks that need one (e.g. a Balance-format parser) reference it via the `{{scriptroot}}` token — see the example config.
 

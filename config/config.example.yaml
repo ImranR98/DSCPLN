@@ -2,8 +2,8 @@
 # and fill in your own values. Every task kind is demonstrated below;
 # delete the examples and add your own tasks.
 #
-# Top-level values are referenced from tasks as {{token}} (e.g. {{maindir}}).
-# Values may reference other tokens (e.g. '{{maindir}}/Documents').
+# Top-level values are referenced from tasks as {{token}} (e.g. {{backup_root}}).
+# Values may reference other tokens (e.g. '{{backup_root}}/Documents').
 # A built-in token {{repo_dir}} resolves to this repository's root (set via
 # the BACKUPCTL_REPO_DIR env var when not running from a checkout).
 # Every task needs either `dest:` or `state_dir:` — run state is stored there
@@ -11,25 +11,25 @@
 #
 # Interactive input is declared per task as `prompts:` — the GUI renders the
 # dialogs. Each prompt: {key: <extra key sent to the engine>, label: <text>,
-# type: confirm|secret}.
-# secret values are also usable as {{key}} tokens inside run commands.
+# type: confirm|secret}. secret values are also usable as {{key}} tokens
+# inside run commands.
 
 # ---------- machine-specific values -----------------------------------------
 
-maindir: ~/Main                                  # where backups live (Backups/, Media/, Documents/...)
-phone_sync_dir: ~/<phone sync dir>               # source root for `media` tasks (task field `root`)
-scriptroot: '{{repo_dir}}/scripts'   # git submodules with the personal scripts
+backup_root: ~/Backups                          # where backup data lives
+sync_dir: ~/Sync                                # source root for `media` tasks (task field `root`)
+scriptroot: '{{repo_dir}}/scripts'              # git submodules with the personal scripts
+media_staging_dir: ~/Downloads/MediaStaging     # archive kind: standardized-media output
+raw_media_dir: ~/Downloads/RawMedia             # media kind: where a pre script parks originals
+dns_export_file: '<dns export filename>'
 
 # Personal scripts kept as submodules under {{scriptroot}}:
 balance_script: '{{scriptroot}}/<balance repo>/<script>.js'
 balance_dir: '{{scriptroot}}/<balance repo>'
-acc_dir: '{{maindir}}/<notes dir>'
-acc_glob: '<notes file glob>'
-balance_xlsx: '{{maindir}}/<balance xlsx path>'
-watxt_script: '{{scriptroot}}/<chat txt repo>/<script>.js'
-wamedia_dir: ~/Downloads/<chat media staging dir>
-snaps_deletable_dir: ~/Downloads/<deletable snaps dir>
-dns_export_file: '<dns export filename>'
+notes_dir: '{{backup_root}}/Notes'
+notes_glob: '<notes file glob>'
+spreadsheet_xlsx: '{{backup_root}}/Documents/<spreadsheet>.xlsx'
+chat_merge_script: '{{scriptroot}}/<chat txt repo>/<script>.js'
 
 hosts:
   gaming_pc:              # used by the remote example
@@ -39,12 +39,12 @@ hosts:
     games_dirs:           # remote dirs to back up, one run each
       - '~/<games dir 1>'
       - '~/<games dir 2>'
-  srv0:                   # used by run tasks that ssh somewhere
+  fileserver:             # used by run tasks that ssh somewhere
     user: <user>
     host: <host>
-    infra_path: /home/<user>/<infra dir>
+    data_path: /home/<user>/<data dir>
 
-mail_email: <email>
+mail_email: you@example.com
 
 
 # ---------- task definitions ------------------------------------------------
@@ -64,7 +64,7 @@ tasks:
     kind: ingest
     glob: 'example-export-*.zip'
     identify: 'cat account.json | jq -r ".username"'
-    dest: '{{maindir}}/Backups/Example Cloud'
+    dest: '{{backup_root}}/Example Cloud'
     export_url: https://example.com/settings/export
     note: Drop the example-export-*.zip file here.
 
@@ -75,27 +75,38 @@ tasks:
     kind: move
     glob: 'bookmarks_*.html'
     rename_to: bookmarks.html
-    dest: '{{maindir}}/Backups/Manual'
+    dest: '{{backup_root}}/Manual'
 
   - name: Contacts + Calendar
     group: Manual Exports
     kind: move
-    dest: '{{maindir}}/Backups/Manual'
+    dest: '{{backup_root}}/Manual'
     note: Drop the contacts (VCF) and calendar (ICS) exports here.
     mappings:
       - {glob: 'contacts-*.vcf', name: 'My Contacts.vcf'}
       - {glob: 'todo-*.ics', name: 'TODO.ics'}
 
-  # watxt-style merge expressed as a generic run task: drop chat zips,
-  # extract to the {{tmp}} dir, delete unwanted files, run a personal
-  # merge script. {{uploads}} expands to the dropped files.
-  - name: Chat TXT Backup
+  # move with a token-resolved drop pattern (the {{token}} is replaced
+  # before filename matching).
+  - name: DNS Zone File
+    group: Manual Exports
+    kind: move
+    glob: '{{dns_export_file}}'
+    rename_to: '{{dns_export_file}}'
+    dest: '{{backup_root}}/Manual'
+    note: Drop the DNS zone export file here.
+
+  # run with uploads: drop files, then run a command with them appended
+  # ({{uploads}} expands to the uploaded paths; {{tmp}} is a unique
+  # per-run temp path). This shows a chat-archive merge: extract the
+  # zips to {{tmp}}, drop unwanted files, run a personal merge script.
+  - name: Chat Archive Merge
     group: Manual Exports
     kind: run
     uploads: true
     glob: '*.zip'
-    state_dir: '{{maindir}}/Backups/Chat TXT'
-    command: 'mkdir -p "{{maindir}}/Backups/Chat TXT" && rm -rf "{{tmp}}" && mkdir -p "{{tmp}}" && unzip -oq {{uploads}} -d "{{tmp}}" && rm -f "{{tmp}}"/*.vcf && node {{watxt_script}} "{{maindir}}/Backups/Chat TXT" "{{tmp}}"'
+    state_dir: '{{backup_root}}/Chat Archive'
+    command: 'mkdir -p "{{backup_root}}/Chat Archive" && rm -rf "{{tmp}}" && mkdir -p "{{tmp}}" && unzip -oq {{uploads}} -d "{{tmp}}" && rm -f "{{tmp}}"/*.vcf && node {{chat_merge_script}} "{{backup_root}}/Chat Archive" "{{tmp}}"'
     note: Drop chat zips here; they are merged into the cumulative backup.
 
   # encrypt: age-encrypt a dropped export (passphrase prompted in the GUI).
@@ -103,45 +114,44 @@ tasks:
     group: Manual Exports
     kind: encrypt
     glob: vault-export_*.json
-    dest: '{{maindir}}/Backups/Vault'
+    dest: '{{backup_root}}/Vault'
     output: vault.json
     export_url: https://vault.example.com/#/tools/export
     prompts:
       - {key: password, label: 'Passphrase', type: secret}
     note: Drop the vault export here; you will be asked for a passphrase.
 
-  # run with uploads: drop files, then run a command with them appended
-  # ({{uploads}} expands to the uploaded paths).
+  # run with uploads: drop files, then run a command with them appended.
   - name: Bank Statements
     group: Manual Exports
     kind: run
     uploads: true
     glob: '*.pdf'
     timeout: 300
-    state_dir: '{{maindir}}/Documents/Banking/eStatements'
-    command: '{{scriptroot}}/<statements repo>/<statements script>.sh {{maindir}}/Documents/Banking/eStatements {{uploads}}'
+    state_dir: '{{backup_root}}/Documents/Banking/Statements'
+    command: '{{scriptroot}}/<statements repo>/<statements script>.sh {{backup_root}}/Documents/Banking/Statements {{uploads}}'
     note: Drop the downloaded statement PDFs here.
 
   # run: execute shell command(s) non-interactively. Output streams to the
   # log; nonzero exit fails the run; timeout kills hung commands.
-  - name: Infra State Pull
+  - name: File Server State Pull
     group: Local Backups
     kind: run
-    state_dir: '{{maindir}}/Infra'
+    state_dir: '{{backup_root}}/Server State'
     commands:
-      - '{{maindir}}/Infra/infra.sh backup-state {{hosts.srv0.user}}@{{hosts.srv0.host}}:{{hosts.srv0.infra_path}} srv0'
+      - '{{scriptroot}}/<infra repo>/<pull script>.sh pull {{hosts.fileserver.user}}@{{hosts.fileserver.host}}:{{hosts.fileserver.data_path}}'
 
   - name: Playlist Download
     group: Tools
     kind: run
     timeout: 1800
-    state_dir: '{{maindir}}/Media/Music'
+    state_dir: '{{backup_root}}/Media/Music'
     cwd: '{{scriptroot}}/<downloader repo>'
     command: |
       if [ ! -f ./venv/bin/activate ]; then python -m venv venv; fi
       source ./venv/bin/activate
       pip install --upgrade -r requirements.txt
-      python download.py --dir {{maindir}}/Media/Music
+      python download.py --dir {{backup_root}}/Media/Music
 
   # run with capture: like run, but the output is shown in a dialog for
   # copy/pasting; "Done" commits commit_dir to git.
@@ -149,21 +159,22 @@ tasks:
     group: Tools
     kind: run
     capture: true
-    commit_dir: '{{maindir}}/Documents/Finance'
+    state_dir: '{{backup_root}}/Documents/Finance'
+    commit_dir: '{{backup_root}}/Documents/Finance'
     cwd: '{{balance_dir}}'
     commands:
       - 'npm i'
-      - 'node {{balance_script}} "$(cat $(ls {{acc_dir}}/{{acc_glob}} | tail -1))" {{balance_xlsx}}'
+      - 'node {{balance_script}} "$(cat $(ls {{notes_dir}}/{{notes_glob}} | tail -1))" {{spreadsheet_xlsx}}'
     note: Paste the results into the spreadsheet, then press Done to commit.
 
   # copy: rsync a list of sources into dest (optionally git-committed);
   # pre/post run shell commands before/after. An optional `root:` prefixes
   # every source (e.g. a mounted device).
-  - name: PC Config Files
+  - name: Personal Config Files
     group: Local Backups
     kind: copy
     git: true
-    dest: '{{maindir}}/Backups/PC Files'
+    dest: '{{backup_root}}/Config Files'
     pre: 'dconf dump /org/gnome/shell/extensions/ > ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf'
     post: 'rm ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf'
     sources:
@@ -175,23 +186,24 @@ tasks:
   # {src: <subdir of root>, dest: <template>, pre_script?, pre_args?,
   #  process_script?, rm_script?, process?}. The task's process_script
   # standardizes files (dates/names) before the move; process: false
-  # plain-moves files; pre_script runs on the source dir first.
-  - name: Phone Media Import
+  # plain-moves files; pre_script runs on the source dir first (e.g.
+  # concatenating clips and parking the raw originals in pre_args[0]).
+  - name: Device Media Import
     group: Device Imports
     kind: media
-    root: '{{phone_sync_dir}}'
+    root: '{{sync_dir}}'
     process_script: '{{scriptroot}}/<media repo>/<standardize script>.sh'
     rm_script: '{{scriptroot}}/<media repo>/<delete-synced script>.sh'
-    state_dir: '{{maindir}}/Media'
-    note: Imports and standardizes media from the synced phone folders.
+    state_dir: '{{backup_root}}/Media'
+    note: Imports and standardizes media from the synced device folders.
     pairs:
-      - {src: 'DCIM/Camera', dest: '{{maindir}}/Media/Camera'}
-      - {src: 'Screenshots', dest: '{{maindir}}/Media/Screenshots'}
-      - src: 'DCIM/Snapchat'
-        dest: '{{maindir}}/Media/Camera'
+      - {src: 'DCIM/Camera', dest: '{{backup_root}}/Media/Camera'}
+      - {src: 'Screenshots', dest: '{{backup_root}}/Media/Screenshots'}
+      - src: 'DCIM/Short Clips'
+        dest: '{{backup_root}}/Media/Camera'
         pre_script: '{{scriptroot}}/<utils repo>/<concat script>.sh'
-        pre_args: ['{{snaps_deletable_dir}}']
-      - {src: 'Calls', dest: '{{maindir}}/Media/Recordings/<recordings folder>', process: false}
+        pre_args: ['{{raw_media_dir}}']
+      - {src: 'Recordings', dest: '{{backup_root}}/Media/Recordings', process: false}
 
   # media with an explicit root — e.g. a device mounted over MTP (glob
   # patterns are supported, first match wins).
@@ -201,22 +213,24 @@ tasks:
     root: '/run/user/<uid>/gvfs/mtp:host=<Device>_*/Internal shared storage'
     process_script: '{{scriptroot}}/<media repo>/<standardize script>.sh'
     rm_script: '{{scriptroot}}/<media repo>/<delete-synced script>.sh'
-    state_dir: '{{maindir}}/Media/<device media folder>'
+    state_dir: '{{backup_root}}/Media/Headset'
     note: Imports headset screenshots and video clips.
     pairs:
-      - {src: '<Screenshots dir>', dest: '{{maindir}}/Media/Camera'}
-      - {src: '<VideoShots dir>', dest: '{{maindir}}/Media/Camera'}
+      - {src: '<Screenshots dir>', dest: '{{backup_root}}/Media/Headset'}
+      - {src: '<VideoShots dir>', dest: '{{backup_root}}/Media/Headset'}
 
   # archive: snapshot src_dir into dest, standardize its media subdirs
   # into out_dir; originals deleted only if every step succeeded. Each
   # subdir is rsynced raw, then standardized; entries with a concat_script
-  # concatenate segments per child dir (into <concat_dir>/) first.
+  # concatenate segments per child dir (into <concat_dir>/, default
+  # "processed") first. confirm_key names the prompt whose approval is
+  # required before anything is deleted.
   - name: Chat App Archive
     group: Device Imports
     kind: archive
-    src_dir: '{{maindir}}/<chat app folder>'
-    dest: '{{maindir}}/Backups/Archive/<Chat-AllMedia>'
-    out_dir: ~/Downloads/<chat media staging dir>
+    src_dir: '{{backup_root}}/<chat app folder>'
+    dest: '{{backup_root}}/Archive/<Chat-AllMedia>'
+    out_dir: '{{media_staging_dir}}'
     process_script: '{{scriptroot}}/<media repo>/<standardize script>.sh'
     media_dir: Media
     subdirs:
@@ -230,7 +244,7 @@ tasks:
 
   # remote: push a script to a host, run it once per `args` entry, and
   # pull the results back. host/args resolve to typed tokens (dict/list);
-  # {{tag}} is a unique per-run suffix for remote temp paths.
+  # remote_tmp/remote_out are templates with a unique {{tag}} per run.
   - name: Game Save Files
     group: Local Backups
     kind: remote
@@ -239,7 +253,7 @@ tasks:
     args: '{{hosts.gaming_pc.games_dirs}}'
     remote_tmp: '/tmp/{{tag}}_backup'
     remote_out: '/home/{{hosts.gaming_pc.user}}/Downloads/{{tag}}_backup_out'
-    dest: '{{maindir}}/Backups/Game Save Files'
+    dest: '{{backup_root}}/Game Save Files'
     note: Runs the backup script on the gaming PC over SSH and pulls the results down.
 
   # run + tool + args + fresh_dir + prune: a service-specific CLI expressed
@@ -254,7 +268,7 @@ tasks:
     group: Tools
     kind: run
     timeout: 1800
-    state_dir: '{{maindir}}/Backups/Email'
+    state_dir: '{{backup_root}}/Email'
     require: [password]
     tool:
       url: https://example.com/export-cli.tar.gz
@@ -265,16 +279,16 @@ tasks:
     args:
       - '{{tool_binary}}'
       - -d
-      - '{{maindir}}/Backups/Email'
+      - '{{backup_root}}/Email'
       - -u
       - '{{mail_email}}'
       - -p
       - '{{password}}'
       - -t
       - '{{totp}}'
-    fresh_dir: '{{maindir}}/Backups/Email/{{mail_email}}'
+    fresh_dir: '{{backup_root}}/Email/{{mail_email}}'
     prune:
-      dir: '{{maindir}}/Backups/Email/{{mail_email}}'
+      dir: '{{backup_root}}/Email/{{mail_email}}'
       keep_newer: true
     prompts:
       - {key: password, label: 'Password', type: secret}

@@ -64,14 +64,14 @@ pyproject.toml         Package metadata, deps, `backupctl` entry point
                              │
               ┌──────────────▼──────────────────────────────────┐
               │ config.py → config/config.yaml (personal)       │
-              │ values (maindir, hosts, scripts...) + tasks[]   │
+              │ values (backup_root, hosts, scripts...) + tasks[]            │
               └─────────────────────────────────────────────────┘
 ```
 
 ## 4. Config model (`backupctl/config.py`)
 
 - `load_config(path)` reads **one YAML file** and returns `(local, tasks)`. Top-level keys are machine-specific values; the `tasks:` key is the task list. If the file is missing it raises `FileNotFoundError` with instructions; `server.py` catches this at import and serves the app with a red warning banner instead.
-- `resolve(template, local, extra)` substitutes `{{a.b.c}}` tokens from the value dict (and a per-run `extra` dict, e.g. `{{uploads}}`, `{{tmp}}`). Resolution **loops until stable**, so values can reference other tokens (`balance_script: '{{scriptroot}}/Balance/...'`). A template that is exactly one token resolves to the token's **typed value** (dict/list/int) — e.g. `host: '{{hosts.gaming_pc}}'` and `args: '{{hosts.gaming_pc.games_dirs}}'` — while embedded tokens are stringified. A built-in `{{repo_dir}}` token (the repository root, overridable via `BACKUPCTL_REPO_DIR`) lets configs reference repo-relative paths.
+- `resolve(template, local, extra)` substitutes `{{a.b.c}}` tokens from the value dict (and a per-run `extra` dict, e.g. `{{uploads}}`, `{{tmp}}`). Resolution **loops until stable**, so values can reference other tokens (`balance_script: '{{scriptroot}}/<repo>/<script>.js'`). A template that is exactly one token resolves to the token's **typed value** (dict/list/int) — e.g. `host: '{{hosts.gaming_pc}}'` and `args: '{{hosts.gaming_pc.games_dirs}}'` — while embedded tokens are stringified. A built-in `{{repo_dir}}` token (the repository root, overridable via `BACKUPCTL_REPO_DIR`) lets configs reference repo-relative paths.
 
 ### Task fields
 

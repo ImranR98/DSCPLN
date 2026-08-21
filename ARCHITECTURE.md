@@ -25,9 +25,11 @@ backupctl/
     index.html         Page skeleton (favicon inlined as a data URL)
     app.css            Full design system (plain CSS, dark, red accent)
     app.js             Frontend logic (rendering, drops, modals, polling)
-scripts/               Git submodules: the personal automation scripts that
-                       tasks call (referenced via the {{scriptroot}} token);
-                       init with `git submodule update --init --recursive`
+scripts/               Personal automation scripts that tasks call (referenced
+                       via the {{scriptroot}} token): mostly git submodules,
+                       plus a few small scripts vendored directly
+                       (random-utils/); init with `git submodule update
+                       --init --recursive`
 config/
   config.example.yaml  Committed, generic: schema docs + one example per kind
   config.yaml          Gitignored, personal: values + tasks (the only personal file)
@@ -71,7 +73,7 @@ pyproject.toml         Package metadata, deps, `backupctl` entry point
 ## 4. Config model (`backupctl/config.py`)
 
 - `load_config(path)` reads **one YAML file** and returns `(local, tasks)`. Top-level keys are machine-specific values; the `tasks:` key is the task list. If the file is missing it raises `FileNotFoundError` with instructions; `server.py` catches this at import and serves the app with a red warning banner instead.
-- `resolve(template, local, extra)` substitutes `{{a.b.c}}` tokens from the value dict (and a per-run `extra` dict, e.g. `{{uploads}}`, `{{tmp}}`). Resolution **loops until stable**, so values can reference other tokens (`balance_script: '{{scriptroot}}/Balance/...'`).
+- `resolve(template, local, extra)` substitutes `{{a.b.c}}` tokens from the value dict (and a per-run `extra` dict, e.g. `{{uploads}}`, `{{tmp}}`). Resolution **loops until stable**, so values can reference other tokens (`balance_script: '{{scriptroot}}/Balance/...'`). A built-in `{{repo_dir}}` token (the repository root, overridable via `BACKUPCTL_REPO_DIR`) lets configs reference repo-relative paths.
 
 ### Task fields
 

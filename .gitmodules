@@ -10,9 +10,6 @@
 [submodule "scripts/MediaDateStandardize"]
 	path = scripts/MediaDateStandardize
 	url = git@github.com:ImranR98/MediaDateStandardize.git
-[submodule "scripts/random-utils-ir"]
-	path = scripts/random-utils-ir
-	url = git@github.com:ImranR98/random-utils-ir.git
 [submodule "scripts/BrokeETL"]
 	path = scripts/BrokeETL
 	url = git@github.com:ImranR98/BrokeETL.git

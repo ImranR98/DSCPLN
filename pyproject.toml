@@ -6,7 +6,7 @@ requires-python = ">=3.10"
 dependencies = ["fastapi", "uvicorn", "pyyaml", "pexpect"]
 
 [project.scripts]
-backupctl = "backupctl.server:main"
+backupctl = "backupctl.app:main"
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -53,7 +53,7 @@ What degrades in a container:
 
 ## Task kinds
 
-The engine provides eight generic kinds — `ingest`, `move`, `copy`, `run` (with `uploads:`/`capture:`/`args:`/`require:`/`tool:`/`fresh_dir:`/`prune:` options), `media` (any configurable source root), `archive`, `encrypt`, `remote` (run a script on a host over SSH and pull results). Every field, prompt, and option is demonstrated with a generic example in `config/config.example.yaml`; see `ARCHITECTURE.md` for the code-level semantics.
+The engine provides six generic kinds — `ingest`, `move`, `copy`, `run` (with `uploads:`/`capture:`/`args:`/`require:`/`tool:`/`fresh_dir:`/`prune:` options), `media` (any configurable source root, with optional `snapshot:`, per-pair `raw:`/`concat_script:`, and `delete_originals:` for archive-style workflows), and `encrypt`. Remote workflows are plain `run` tasks with an `ssh`/`rsync` command list. Every field, prompt, and option is demonstrated with a generic example in `config/config.example.yaml`; see `ARCHITECTURE.md` for the code-level semantics.
 
 ## Dependencies
 
@@ -63,9 +63,9 @@ The engine provides eight generic kinds — `ingest`, `move`, `copy`, `run` (wit
 
 ## Structure
 
-- `backupctl/server.py` — FastAPI server (task/upload/run/status endpoints)
+- `backupctl/app.py` — FastAPI server (task/upload/run/status endpoints) + the task engines
+- `backupctl/core.py` — config loading/tokens, run state, staging, and the safe subprocess layer
 - `backupctl/static/` — plain HTML/CSS/JS frontend (`index.html`, `app.css`, `app.js`; favicon inlined) — no UI framework
-- `backupctl/tasks.py` — task engines; `config.py`, `state.py`, `shell.py` — config/state/helpers
 - `scripts/` — git submodules with the personal automation scripts referenced by the config
 - `config/config.example.yaml` — generic example (your personal `config/config.yaml` is gitignored)
 - `ARCHITECTURE.md` — detailed architecture and code-level explanation

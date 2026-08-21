@@ -1,26 +1,12 @@
-"""Task engines: the eight generic "kinds" and the plumbing around them.
+"""Backup Web App — FastAPI server + the six task kinds.
 
-File layout:
-  constants · Logger · Ctx
-  shared helpers        resolution, paths, staging, extraction, bash scripts,
-                        git commits, tmp cleanup
-  kind: ingest          drop a cloud export archive
-  kind: move            move dropped files (renamed, or per mapping)
-  kind: copy            rsync configured sources into a backup dir
-  kind: run             execute shell command(s) with generic tool/fresh/prune options
-  kind: media           import + standardize media from a source root
-  kind: archive         snapshot + standardize media, delete originals on success
-  kind: encrypt         age-encrypt a dropped file
-  kind: remote          run a script on a remote host and pull its results
-  task metadata         availability, upload support, drop patterns
-  dispatcher            KINDS table + run_task
+Kinds: ingest (extract a dropped export), move (dropped files, renamed or
+per-mapping), copy (rsync configured sources), run (shell command(s) with
+uploads/capture/args/require/tool/fresh_dir/prune options), media (import +
+standardize media; optional snapshot, raw copy, concat, delete-originals),
+encrypt (age-encrypt a dropped file)."""
 
-Kinds are generic engines: every service-specific detail lives in the task
-config (paths, scripts, hosts, prompts). Task configs stay plain dicts from
-config.yaml; paths in task fields are {{token}} strings resolved with
-_resolve/_path.
-"""
-
+import argparse
 import fnmatch
 import glob
 import random
@@ -28,29 +14,41 @@ import re
 import shlex
 import shutil
 import tempfile
+import threading
 import time
+import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
-from . import config, shell, state
+from urllib.parse import urlparse
+
+import uvicorn
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+from . import core
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 DEFAULT_TIMEOUT = 600  # seconds, per task; overridable via task config "timeout"
 DAY_SECONDS = 86400
+
+# ---------------------------------------------------------------------------
+# run plumbing
+# ---------------------------------------------------------------------------
 
 
 class Logger:
     """Callable that collects log lines."""
 
     def __init__(self):
-        """Start with an empty line buffer."""
         self.lines = []
 
     def __call__(self, line):
-        """Append one log line."""
         self.lines.append(line)
 
     @property
     def text(self):
-        """All log lines joined with newlines."""
         return "\n".join(self.lines)
 
 
@@ -64,13 +62,9 @@ class Ctx:
     extra: dict = field(default_factory=dict)
 
 
-# ---------------------------------------------------------------------------
-# shared helpers
-# ---------------------------------------------------------------------------
-
 def _resolve(template, ctx, extra=None):
     """Resolve {{tokens}} (local config + per-run extras), then expand ~/$ENV."""
-    return config.expand(config.resolve(template, ctx.local, extra))
+    return core.expand(core.resolve(template, ctx.local, extra))
 
 
 def _path(ctx, template):
@@ -103,11 +97,11 @@ def _task_root(ctx):
 
 def _staging_files(ctx, patterns=None):
     """Uploaded files for the task, optionally filtered by resolved globs."""
-    d = state.staging_dir(ctx.task["name"])
+    d = core.staging_dir(ctx.task["name"])
     files = [f for f in sorted(d.iterdir()) if f.is_file()]
     if not patterns:
         return files
-    patterns = [config.resolve(p, ctx.local) for p in patterns]
+    patterns = [core.resolve(p, ctx.local) for p in patterns]
     return [f for f in files if any(fnmatch.fnmatch(f.name, p) for p in patterns)]
 
 
@@ -119,7 +113,7 @@ def _require_staging(ctx, pattern):
 
 def _clear_staging(ctx):
     """Remove everything in the task's staging dir."""
-    d = state.staging_dir(ctx.task["name"])
+    d = core.staging_dir(ctx.task["name"])
     shutil.rmtree(d, ignore_errors=True)
     d.mkdir(parents=True, exist_ok=True)
 
@@ -135,13 +129,13 @@ def _cleanup_tmp(tmp):
 def _extract_archive(f, dest, ctx):
     """Extract a zip/tar archive into dest; returns rc."""
     if f.name.lower().endswith(".zip"):
-        return shell.run(["unzip", "-oq", str(f), "-d", str(dest)], log=ctx.log)
-    return shell.run(["tar", "-xf", str(f), "-C", str(dest)], log=ctx.log)
+        return core.run(["unzip", "-oq", str(f), "-d", str(dest)], log=ctx.log)
+    return core.run(["tar", "-xf", str(f), "-C", str(dest)], log=ctx.log)
 
 
 def _bash_script(script, *args, ctx):
     """Run a bash script with quoted args; returns rc."""
-    return shell.sh(
+    return core.sh(
         f"bash {shlex.quote(str(script))} {' '.join(shlex.quote(str(a)) for a in args)}",
         log=ctx.log,
         timeout=_timeout(ctx),
@@ -150,7 +144,7 @@ def _bash_script(script, *args, ctx):
 
 def _commit(ctx, dest):
     """git commit dest with the task's standard message."""
-    shell.git_commit(dest, f"{ctx.task['name']} · {time.ctime()}", log=ctx.log)
+    core.git_commit(dest, f"{ctx.task['name']} · {time.ctime()}", log=ctx.log)
 
 
 def _commit_and_clear(ctx, dest):
@@ -162,6 +156,7 @@ def _commit_and_clear(ctx, dest):
 # ---------------------------------------------------------------------------
 # kind: ingest — drop a cloud export archive
 # ---------------------------------------------------------------------------
+
 
 def run_ingest(ctx):
     """Drop a cloud export: extract, optional identify-suffix, rsync into dest, git commit."""
@@ -179,7 +174,7 @@ def run_ingest(ctx):
         suffix = _identify_suffix(task, tmp, ctx)
         dest = f"{dest_base} - {suffix}" if suffix else dest_base
         Path(dest).mkdir(parents=True, exist_ok=True)
-        if shell.rsync(tmp, dest, delete=True, excludes=[".git/"], log=ctx.log, timeout=_timeout(ctx)) != 0:
+        if core.rsync(tmp, dest, delete=True, excludes=[".git/"], log=ctx.log, timeout=_timeout(ctx)) != 0:
             return False, f"rsync failed → {dest}"
         if task.get("git", True):
             _commit_and_clear(ctx, dest)
@@ -194,7 +189,7 @@ def _identify_suffix(task, tmp, ctx):
     """Run the identify command inside the extracted tree; returns the suffix."""
     if not task.get("identify"):
         return ""
-    rc, out, err = shell.sh_capture(task["identify"], cwd=tmp, timeout=_timeout(ctx))
+    rc, out, err = core.sh_capture(task["identify"], cwd=tmp, timeout=_timeout(ctx))
     if err.strip():
         ctx.log(err.strip())
     return out.strip() if rc == 0 else ""
@@ -203,6 +198,7 @@ def _identify_suffix(task, tmp, ctx):
 # ---------------------------------------------------------------------------
 # kind: move — move dropped files (renamed, or per mapping)
 # ---------------------------------------------------------------------------
+
 
 def run_move(ctx):
     """Move dropped files into dest (rename_to, or per-mapping renames), git commit."""
@@ -218,10 +214,10 @@ def _move_mappings(ctx, dest):
     files = _staging_files(ctx)
     copied = []
     for m in ctx.task["mappings"]:
-        m_glob = config.resolve(m["glob"], ctx.local)
+        m_glob = core.resolve(m["glob"], ctx.local)
         match = next((f for f in files if f not in copied and fnmatch.fnmatch(f.name, m_glob)), None)
         if match:
-            name = config.resolve(m["name"], ctx.local)
+            name = core.resolve(m["name"], ctx.local)
             ctx.log(f"{match.name} → {dest / name}")
             shutil.move(str(match), str(dest / name))
             copied.append(match)
@@ -244,7 +240,7 @@ def _move_renamed(ctx, dest):
     files = _require_staging(ctx, task["glob"])
     if not files:
         return False, f"No files matching '{task['glob']}' are queued — drop them here first"
-    rename = config.resolve(task.get("rename_to"), ctx.local) if task.get("rename_to") else None
+    rename = core.resolve(task.get("rename_to"), ctx.local) if task.get("rename_to") else None
     if rename and len(files) > 1:
         return False, f"Multiple files match '{task['glob']}' but rename_to is set — drop one file at a time"
     for f in files:
@@ -258,6 +254,7 @@ def _move_renamed(ctx, dest):
 # ---------------------------------------------------------------------------
 # kind: copy — rsync configured sources into a backup dir
 # ---------------------------------------------------------------------------
+
 
 def run_copy(ctx):
     """rsync each configured source into dest (optional task root, git, pre/post)."""
@@ -283,7 +280,7 @@ def run_copy(ctx):
 def _run_hook(ctx, hook):
     """Run an optional pre/post shell command."""
     if hook:
-        shell.sh(_resolve(hook, ctx), log=ctx.log)
+        core.sh(_resolve(hook, ctx), log=ctx.log)
 
 
 def _sync_source(ctx, path, target, git):
@@ -291,7 +288,7 @@ def _sync_source(ctx, path, target, git):
     if not path.exists():
         ctx.log(f"DOES NOT EXIST: {path}")
         return True
-    if shell.rsync(path, target, delete=True, excludes=[".git/"] if git else (), log=ctx.log, timeout=_timeout(ctx)) != 0:
+    if core.rsync(path, target, delete=True, excludes=[".git/"] if git else (), log=ctx.log, timeout=_timeout(ctx)) != 0:
         ctx.log(f"rsync failed for {path}")
         return False
     if git:
@@ -302,6 +299,7 @@ def _sync_source(ctx, path, target, git):
 # ---------------------------------------------------------------------------
 # kind: run — execute shell command(s)
 # ---------------------------------------------------------------------------
+
 
 def run_commands(ctx):
     """Execute shell command(s). Generic options: `capture: true` (output
@@ -320,7 +318,7 @@ def run_commands(ctx):
         if not (ctx.extra or {}).get(key):
             return False, f"Missing required input: {key}"
     timeout = _timeout(ctx)
-    tmp = Path(state.staging_dir(task["name"]) / f"tmp_{_rand_tag()}")
+    tmp = Path(core.staging_dir(task["name"]) / f"tmp_{_rand_tag()}")
     extra = _tokens(ctx, tmp)
     redact = [str(v) for v in (ctx.extra or {}).values() if v]
     ok, err = _ensure_tool(ctx, task, extra, timeout)
@@ -331,28 +329,28 @@ def run_commands(ctx):
         argv = _resolve_args(task["args"], ctx, extra)
         if not argv:
             return False, "Command args are empty"
-        rc = shell.run(argv, cwd=_resolve(task.get("cwd", "."), ctx), log=ctx.log, timeout=timeout, redact=redact)
+        rc = core.run(argv, cwd=_resolve(task.get("cwd", "."), ctx), log=ctx.log, timeout=timeout, redact=redact)
         if rc != 0:
             _cleanup_tmp(tmp)
-            if rc == shell.TIMEOUT_RC:
+            if rc == core.TIMEOUT_RC:
                 return False, f"Command timed out after {timeout}s"
             return False, f"Command failed (exit {rc})"
     else:
         for cmd in _commands(task):
-            cmd = config.resolve(cmd, ctx.local, extra)
+            cmd = core.resolve(cmd, ctx.local, extra)
             cwd = _resolve(task.get("cwd", "."), ctx)
             if capture:
-                rc, out, err = shell.sh_capture(cmd, cwd=cwd, timeout=timeout, redact=redact)
+                rc, out, err = core.sh_capture(cmd, cwd=cwd, timeout=timeout, redact=redact)
                 for line in out.splitlines():
                     ctx.log(line)
                 if err.strip():
                     ctx.log(err.strip())
                 output.extend(out.splitlines())
             else:
-                rc = shell.sh(cmd, cwd=cwd, log=ctx.log, timeout=timeout, redact=redact)
+                rc = core.sh(cmd, cwd=cwd, log=ctx.log, timeout=timeout, redact=redact)
             if rc != 0:
                 _cleanup_tmp(tmp)
-                if rc == shell.TIMEOUT_RC:
+                if rc == core.TIMEOUT_RC:
                     return False, f"Command timed out after {timeout}s"
                 return False, f"Command failed (exit {rc})"
     if task.get("uploads"):
@@ -407,7 +405,7 @@ def _ensure_tool(ctx, task, extra, timeout):
         ]
     if tool.get("chmod", False):
         steps += [f"chmod +x {shlex.quote(str(binary_path))}"]
-    if shell.sh(" && ".join(steps), log=ctx.log, timeout=timeout) != 0:
+    if core.sh(" && ".join(steps), log=ctx.log, timeout=timeout) != 0:
         return False, f"Failed to install {binary_path.name}"
     extra["tool_binary"] = binary
     return True, ""
@@ -419,7 +417,7 @@ def _resolve_args(args, ctx, extra):
     `-t {{totp}}` pairs work)."""
     resolved = []
     for arg in args:
-        value = config.resolve(arg, ctx.local, extra)
+        value = core.resolve(arg, ctx.local, extra)
         if isinstance(value, str) and (not value.strip() or "{{" in value):
             if resolved:
                 resolved.pop()
@@ -479,44 +477,65 @@ def _sorted_export_dirs(root):
 # kind: media — import + standardize media from a source root
 # ---------------------------------------------------------------------------
 
-def _process_and_move(process_script, src, dest, ctx):
-    """Copy a dir's files to a temp dir, run the process script on them,
-    move the results to dest, and delete the originals."""
-    files = [f for f in src.iterdir() if f.is_file()]
-    if not files:
-        ctx.log(f"No files in directory, skipped: {src}")
-        return True
-    dest.mkdir(parents=True, exist_ok=True)
-    tmp = Path(tempfile.mkdtemp(prefix="pam_"))
-    try:
-        for f in files:
-            shutil.copy2(f, tmp / f.name)
-        if _bash_script(process_script, tmp, ctx=ctx) != 0:
-            ctx.log(f"Processing script failed for {src}")
-            return False
-        for f in tmp.iterdir():
-            shutil.move(str(f), str(dest / f.name))
-        for f in files:
-            f.unlink(missing_ok=True)
-        return True
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+
+def run_media_import(ctx):
+    """For each `pairs:` entry: optional pre script, optional raw rsync into
+    dest, then standardize and move the rest (concat segments first when a
+    concat_script is set; plain move when `process: false`). Optional
+    `snapshot: {src, dest}` rsyncs a full snapshot first; with
+    `delete_originals: true` (requires the confirm prompt) the source dirs
+    are deleted only after every pair succeeded."""
+    root = _task_root(ctx)
+    if root is None:
+        return False, "Source directory not found"
+    task = ctx.task
+    delete_later = bool(task.get("delete_originals"))
+    if delete_later and not ctx.extra.get(task.get("confirm_key", "confirmed")):
+        return False, "Aborted by user"
+    snap = task.get("snapshot")
+    if snap:
+        src_path = _path(ctx, snap["src"])
+        dest_path = _path(ctx, snap["dest"])
+        dest_path.mkdir(parents=True, exist_ok=True)
+        ctx.log(f"Snapshotting {src_path} → {dest_path}...")
+        if core.rsync(src_path, dest_path, log=ctx.log, timeout=_timeout(ctx)) != 0:
+            return False, "Snapshot failed; originals NOT deleted"
+    defaults = {
+        "process_script": task.get("process_script"),
+        "rm_script": task.get("rm_script"),
+    }
+    failed = False
+    for pair in task["pairs"]:
+        if not _sync_pair(ctx, root, pair, defaults, delete_later):
+            failed = True
+    if delete_later and not failed:
+        for pair in task["pairs"]:
+            src = root / pair["src"]
+            if src.is_dir():
+                shutil.rmtree(src, ignore_errors=True)
+        return True, "Import completed; originals deleted"
+    if failed:
+        return False, "Some imports failed — see log"
+    return True, "Media import completed"
 
 
-def _sync_pair(ctx, root, pair, defaults):
-    """One media pair: optional pre script, optional delete-synced, then
+def _sync_pair(ctx, root, pair, defaults, delete_later):
+    """One media pair: optional pre script, optional raw rsync, then
     standardize-and-move (or plain move when `process: false`)."""
     src = root / pair["src"]
     if not src.is_dir():
         ctx.log(f"Missing source dir: {src}")
         return True
     dest = _path(ctx, pair["dest"])
+    dest.mkdir(parents=True, exist_ok=True)
     pre = pair.get("pre_script")
     if pre:
-        pre_args = [config.resolve(a, ctx.local) for a in pair.get("pre_args", [])]
+        pre_args = [core.resolve(a, ctx.local) for a in pair.get("pre_args", [])]
         _bash_script(_path(ctx, pre), src, *pre_args, ctx=ctx)
+    if pair.get("raw"):
+        if core.rsync(src, dest, log=ctx.log, timeout=_timeout(ctx)) != 0:
+            return False
     if not pair.get("process", True):
-        dest.mkdir(parents=True, exist_ok=True)
         moved = 0
         for f in src.iterdir():
             shutil.move(str(f), str(dest / f.name))
@@ -528,116 +547,55 @@ def _sync_pair(ctx, root, pair, defaults):
     rm_script = _path(ctx, rm_script_raw) if rm_script_raw else None
     if rm_script:
         _bash_script(rm_script, src, dest, ctx=ctx)
+    concat = _path(ctx, pair["concat_script"]) if pair.get("concat_script") else None
     ctx.log(f"Importing {src.name} → {dest}...")
-    return _process_and_move(process, src, dest, ctx)
+    return _import_pair(ctx, src, dest, process, concat, ctx.task.get("concat_dir", "processed"), delete_later, bool(pair.get("raw")))
 
 
-def run_media_import(ctx):
-    """Media import: for each `pairs:` entry, run its optional pre script,
-    delete already-synced files, then standardize and move the rest (plain
-    move when `process: false`). Scripts come from the task's
-    `process_script`/`rm_script` fields, overridable per pair."""
-    root = _task_root(ctx)
-    if root is None:
-        return False, "Source directory not found"
-    task = ctx.task
-    defaults = {
-        "process_script": task.get("process_script"),
-        "rm_script": task.get("rm_script"),
-    }
-    failed = False
-    for pair in task["pairs"]:
-        if not _sync_pair(ctx, root, pair, defaults):
-            failed = True
-    if failed:
-        return False, "Some imports failed — see log"
-    return True, "Media import completed"
-
-
-# ---------------------------------------------------------------------------
-# kind: archive — snapshot a source, standardize its media subdirs, then
-# delete the originals only if every step succeeded
-# ---------------------------------------------------------------------------
-
-def _standardize_subdirs(ctx, media_root, out_root, process, concat=None, concat_dir="processed"):
-    """For each subdir of media_root: standardize its contents into out_root.
-    With concat set, segments are first concatenated into a per-subdir
-    <concat_dir>/ directory."""
-    out_root.mkdir(parents=True, exist_ok=True)
-    for entry in sorted(media_root.iterdir()):
-        if not entry.is_dir():
-            continue
+def _import_pair(ctx, src, dest, process, concat, concat_dir, delete_later, subdirs):
+    """Standardize src's contents into dest: flat file processing, or (for
+    raw pairs) one pass per child dir, concatenating segments first with
+    concat. Originals are deleted immediately unless the task defers
+    deletion to the end (delete_later)."""
+    targets = [d for d in sorted(src.iterdir()) if d.is_dir()] if subdirs else [src]
+    for target in targets:
         if concat:
-            processed = entry / concat_dir
+            processed = target / concat_dir
             processed.mkdir(parents=True, exist_ok=True)
-            if _bash_script(concat, entry, processed, ctx=ctx) != 0:
+            if _bash_script(concat, target, processed, ctx=ctx) != 0:
                 return False
-            if _bash_script(process, processed, ctx=ctx) != 0:
-                return False
-            for f in processed.iterdir():
-                shutil.move(str(f), str(out_root / f.name))
-            shutil.rmtree(processed, ignore_errors=True)
-        elif not _process_and_move(process, entry, out_root, ctx):
-            return False
-    return True
-
-
-def run_archive(ctx):
-    """Snapshot src_dir into dest, standardize its media subdirs into
-    out_dir, then delete the originals — only if every step succeeded."""
-    task = ctx.task
-    src = _path(ctx, task["src_dir"])
-    if not src.is_dir():
-        return False, f"Source directory not found: {src}"
-    if not ctx.extra.get(task.get("confirm_key", "confirmed")):
-        return False, "Aborted by user"
-    archive = _path(ctx, task["dest"])
-    ok, err = _copy_snapshot(ctx, src, archive)
-    if not ok:
-        return False, err
-    out = _path(ctx, task["out_dir"])
-    process = _path(ctx, task["process_script"])
-    media = src / task.get("media_dir", "Media")
-    ok, err = _archive_subdirs(ctx, media, out, process)
-    if not ok:
-        return False, err
-    shutil.rmtree(media, ignore_errors=True)
-    return True, "Archive completed; originals deleted"
-
-
-def _copy_snapshot(ctx, src, archive):
-    """Snapshot src_dir into the archive via a temp copy."""
-    tmp = Path(tempfile.mkdtemp(prefix="arc_"))
-    try:
-        shutil.copytree(src, tmp / src.name)
-        archive.mkdir(parents=True, exist_ok=True)
-        if shell.rsync(tmp / src.name, archive, log=ctx.log, timeout=_timeout(ctx)) != 0:
-            return False, "Archive copy failed; originals NOT deleted"
-        return True, ""
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
-def _archive_subdirs(ctx, media, out, process):
-    """Rsync each configured media subdir into out, then standardize the
-    live copies (concat first for subdirs with a concat_script)."""
-    task = ctx.task
-    for sub in task.get("subdirs", []):
-        s = media / sub["name"]
-        if not s.is_dir():
+            work = processed
+        else:
+            work = target
+        files = [f for f in work.iterdir() if f.is_file()]
+        if not files:
+            ctx.log(f"No files in directory, skipped: {work}")
+            if concat:
+                shutil.rmtree(processed, ignore_errors=True)
             continue
-        (out / sub["name"]).mkdir(parents=True, exist_ok=True)
-        if shell.rsync(s, out / sub["name"], log=ctx.log, timeout=_timeout(ctx)) != 0:
-            return False, "Media copy failed; originals NOT deleted"
-        concat = _path(ctx, sub["concat_script"]) if sub.get("concat_script") else None
-        if not _standardize_subdirs(ctx, s, out / sub["name"], process, concat, task.get("concat_dir", "processed")):
-            return False, "Media processing failed; originals NOT deleted"
-    return True, ""
+        tmp = Path(tempfile.mkdtemp(prefix="pam_"))
+        try:
+            for f in files:
+                shutil.copy2(f, tmp / f.name)
+            if _bash_script(process, tmp, ctx=ctx) != 0:
+                ctx.log(f"Processing script failed for {work}")
+                return False
+            for f in tmp.iterdir():
+                shutil.move(str(f), str(dest / f.name))
+            if not delete_later:
+                for f in files:
+                    f.unlink(missing_ok=True)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        if concat:
+            shutil.rmtree(processed, ignore_errors=True)
+    return True
 
 
 # ---------------------------------------------------------------------------
 # kind: encrypt — age-encrypt a dropped file
 # ---------------------------------------------------------------------------
+
 
 def run_encrypt(ctx):
     """age-encrypt the dropped file with a prompted passphrase, then git commit."""
@@ -653,82 +611,16 @@ def run_encrypt(ctx):
     dest = _path(ctx, task["dest"])
     dest.mkdir(parents=True, exist_ok=True)
     out = dest / task.get("output", "backup.json")
-    if shell.age_encrypt_passphrase(files[0], out, password, log=ctx.log) != 0:
+    if core.age_encrypt_passphrase(files[0], out, password, log=ctx.log) != 0:
         return False, "age encryption failed"
     _commit_and_clear(ctx, dest)
     return True, f"Encrypted export → {out}"
 
 
 # ---------------------------------------------------------------------------
-# kind: remote — run a script on a remote host and pull its results
+# task metadata + dispatcher
 # ---------------------------------------------------------------------------
 
-def run_remote(ctx):
-    """Push `script` to a remote host, run it once per `args` entry, pull
-    the results into `dest`, and clean up the remote temp dirs."""
-    task = ctx.task
-    host = config.resolve(task["host"], ctx.local)
-    if not isinstance(host, dict) or not host.get("host"):
-        return False, "Remote host is not configured in config.yaml"
-    if not host.get("user"):
-        return False, "Remote user is not configured in config.yaml"
-    args_entries = config.resolve(task["args"], ctx.local)
-    if not isinstance(args_entries, list) or not args_entries:
-        return False, "Remote args are not configured in config.yaml"
-    script = _path(ctx, task["script"])
-    if not script.is_file():
-        return False, f"Script not found: {script}"
-    dest = _path(ctx, task["dest"])
-    dest.mkdir(parents=True, exist_ok=True)
-    extra = {"tag": str(_rand_tag()), **{k: str(v) for k, v in (ctx.extra or {}).items()}}
-    remote_tmp = _resolve(task["remote_tmp"], ctx, extra)
-    remote_out = _resolve(task["remote_out"], ctx, extra)
-    home = f"/home/{host['user']}"
-    try:
-        if _ssh_run(ctx, host, f"mkdir -p {_remote_path(remote_tmp, home)}") != 0:
-            return False, "Could not reach remote host"
-        if shell.rsync(script, f"{host['user']}@{host['host']}:{remote_tmp}/", ssh=_ssh_opt(host.get("port", 22)), log=ctx.log, timeout=_timeout(ctx)) != 0:
-            return False, "Failed to copy script to remote host"
-        for entry in args_entries:
-            rc = _ssh_run(
-                ctx, host,
-                f"cd {_remote_path(remote_tmp, home)} && bash ./{shlex.quote(script.name)} "
-                f"{_remote_path(entry, home)} {_remote_path(remote_out, home)}",
-            )
-            if rc != 0:
-                return False, f"Remote run failed for {entry} (exit {rc})"
-        if task.get("pull", True):
-            if shell.rsync(f"{host['user']}@{host['host']}:{remote_out}/", dest, ssh=_ssh_opt(host.get("port", 22)), log=ctx.log, timeout=_timeout(ctx)) != 0:
-                return False, "Failed to pull results from remote host"
-        return True, f"Results → {dest}"
-    finally:
-        _ssh_run(ctx, host, f"rm -rf {_remote_path(remote_tmp, home)} {_remote_path(remote_out, home)}")
-
-
-def _ssh_opt(port):
-    """rsync -e ssh option string (non-interactive)."""
-    return f"ssh -p {port} -o BatchMode=yes -o StrictHostKeyChecking=no"
-
-
-def _ssh_run(ctx, host, remote_cmd):
-    """Run a shell command on the host over SSH; returns rc."""
-    return shell.run(
-        ["ssh", "-p", str(host.get("port", 22)), f"{host['user']}@{host['host']}", remote_cmd],
-        log=ctx.log,
-        timeout=_timeout(ctx),
-    )
-
-
-def _remote_path(path, home):
-    """Quote a path for the remote shell, expanding a leading ~ to home."""
-    if path.startswith("~"):
-        path = home + path[1:]
-    return shlex.quote(path)
-
-
-# ---------------------------------------------------------------------------
-# task metadata
-# ---------------------------------------------------------------------------
 
 def availability(task, local):
     """Return (available, reason) for a task on this machine."""
@@ -736,14 +628,10 @@ def availability(task, local):
     if task["kind"] == "media" or root_raw:
         if not root_raw:
             return False, "Source directory not found"
-        pattern = config.expand(config.resolve(root_raw, local))
+        pattern = core.expand(core.resolve(root_raw, local))
         found = any(glob.glob(pattern)) if any(c in pattern for c in "*?[") else Path(pattern).is_dir()
         if not found:
             return False, "Source directory not found"
-    if task.get("host"):
-        h = config.resolve(task["host"], local)
-        if not isinstance(h, dict) or not h.get("host"):
-            return False, "host not configured"
     return True, ""
 
 
@@ -761,13 +649,9 @@ def upload_patterns(task, local=None):
     else:
         patterns = [task.get("glob", "*")]
     if local is not None:
-        patterns = [config.resolve(p, local) for p in patterns]
+        patterns = [core.resolve(p, local) for p in patterns]
     return patterns
 
-
-# ---------------------------------------------------------------------------
-# dispatcher
-# ---------------------------------------------------------------------------
 
 KINDS = {
     "ingest": run_ingest,
@@ -775,9 +659,7 @@ KINDS = {
     "copy": run_copy,
     "run": run_commands,
     "media": run_media_import,
-    "archive": run_archive,
     "encrypt": run_encrypt,
-    "remote": run_remote,
 }
 
 
@@ -796,5 +678,271 @@ def run_task(task, local, files, log=None, extra=None):
         except Exception as e:  # noqa: BLE001
             log(f"ERROR: {e}")
             ok, summary = False, str(e)
-    state.save_task_state(task, local, ok, summary, output=log.text)
+    core.save_task_state(task, local, ok, summary, output=log.text)
     return ok, summary
+
+
+# ---------------------------------------------------------------------------
+# server
+# ---------------------------------------------------------------------------
+
+
+def _load_config():
+    """Load the config; on failure return empty data."""
+    try:
+        return core.load_config(), False
+    except FileNotFoundError as e:
+        print(f"WARNING: {e}", flush=True)
+        return ({}, []), True
+    except ValueError as e:
+        print(f"WARNING: config error: {e}", flush=True)
+        return None
+
+
+def _initial_config():
+    """Load config at startup, refusing to boot on invalid content."""
+    result = _load_config()
+    if result is None:
+        raise SystemExit("config.yaml has errors — fix it and restart")
+    (LOCAL, TASK_LIST), MISSING_CONFIG = result
+    return LOCAL, TASK_LIST, MISSING_CONFIG
+
+
+LOCAL, TASK_LIST, MISSING_CONFIG = _initial_config()
+TASK_MAP = {t["name"]: t for t in TASK_LIST}
+
+
+app = FastAPI(title="Backup Web App", docs_url=None, redoc_url=None)
+
+
+@app.middleware("http")
+async def block_cross_origin(request: Request, call_next):
+    """Reject cross-origin POSTs to /api/* (CSRF guard)."""
+    if request.method == "POST" and request.url.path.startswith("/api/"):
+        origin = request.headers.get("origin") or request.headers.get("referer")
+        if origin and urlparse(origin).netloc != request.headers.get("host"):
+            return JSONResponse({"detail": "cross-origin request blocked"}, status_code=403)
+    return await call_next(request)
+
+
+CURRENT = {"name": None, "log": [], "read": 0, "done": None, "cancelled": False}
+
+
+def _queued_count(name):
+    """Number of files staged for a task."""
+    return len([p for p in core.staging_dir(name).iterdir() if p.is_file()])
+
+
+def _state_json(ts, ok, summary, output, label):
+    """Build the per-task last-run state payload."""
+    return {
+        "ts": ts,
+        "ok": ok,
+        "summary": summary,
+        "output": output,
+        "last_run_text": label,
+    }
+
+
+def _pill(state_json):
+    """One staleness policy: running > ok(<24h) > neutral(<=7d) > fail."""
+    if not state_json:
+        return "fail"
+    if not state_json["ok"]:
+        return "fail"
+    age = time.time() - state_json["ts"]
+    if age < 24 * 3600:
+        return "ok"
+    if age <= 7 * 86400:
+        return "neutral"
+    return "fail"
+
+
+def _task_json(t):
+    """Full card payload for one task."""
+    avail, reason = availability(t, LOCAL)
+    rec = core.load_task_state(t, LOCAL)
+    marker = core.running_marker()
+    state_json = None
+    if marker and marker.get("task") == t["name"]:
+        # a previous run was interrupted (server stopped/crashed mid-task)
+        ts = marker.get("ts", time.time())
+        state_json = _state_json(ts, False, "Interrupted", "", f"Interrupted · {core.human_ago(ts)}")
+    elif rec:
+        ok = rec.get("ok", False)
+        state_json = _state_json(
+            rec["ts"], ok, rec.get("summary", ""), rec.get("output", ""),
+            f"{'OK' if ok else 'FAILED'} · {core.human_ago(rec['ts'])}",
+        )
+    running = CURRENT["name"] == t["name"]
+    return {
+        "name": t["name"],
+        "group": t["group"],
+        "kind": t["kind"],
+        "note": t.get("note"),
+        "prompts": t.get("prompts", []),
+        "uploads": supports_uploads(t),
+        "export_url": t.get("export_url"),
+        "avail": avail,
+        "avail_reason": reason,
+        "queued": _queued_count(t["name"]),
+        "state": state_json,
+        "pill": "running" if running else _pill(state_json),
+        "running": running,
+        "live": (CURRENT["log"][-1][:120] if running and CURRENT["log"] else ""),
+    }
+
+
+def _detect(name):
+    """Return the task a dropped file belongs to (most specific pattern wins)."""
+    candidates = []
+    for t in TASK_LIST:
+        if not supports_uploads(t):
+            continue
+        for p in upload_patterns(t, LOCAL):
+            if fnmatch.fnmatch(name, p):
+                candidates.append({"task": t["name"], "score": sum(c not in "*?" for c in p)})
+    if not candidates:
+        return None
+    best = max(c["score"] for c in candidates)
+    tied = [c["task"] for c in candidates if c["score"] == best]
+    return {"task": tied[0], "ambiguous": tied}
+
+
+@app.post("/api/detect")
+async def api_detect(name: str):
+    """Return the task a filename belongs to (most specific pattern wins)."""
+    return {"result": _detect(Path(name).name)}
+
+
+@app.get("/api/tasks")
+def api_tasks():
+    """List all tasks with state, availability, and run status."""
+    return {
+        "tasks": [_task_json(t) for t in TASK_LIST],
+        "missing_config": MISSING_CONFIG,
+    }
+
+
+@app.post("/api/upload/{task_name}")
+async def api_upload(task_name: str, name: str, request: Request):
+    """Save a dropped file into the task's staging (glob-validated)."""
+    task = TASK_MAP.get(task_name)
+    if task is None or not supports_uploads(task):
+        raise HTTPException(404, "Unknown task")
+    filename = Path(name).name
+    patterns = upload_patterns(task, LOCAL)
+    if not any(fnmatch.fnmatch(filename, p) for p in patterns):
+        raise HTTPException(400, f"{filename} does not match the expected pattern(s): {', '.join(patterns)}")
+    body = await request.body()
+    staging = core.staging_dir(task_name)
+    (staging / filename).write_bytes(body)
+    return {"queued": filename, "count": _queued_count(task_name)}
+
+
+@app.post("/api/run/{task_name}")
+def api_run(task_name: str, payload: dict = Body(default={})):
+    """Start a task in the background (extra payload carries prompt values). 409 if busy."""
+    task = TASK_MAP.get(task_name)
+    if task is None:
+        raise HTTPException(404, "Unknown task")
+    if CURRENT["name"]:
+        raise HTTPException(409, "Another task is already running")
+    avail, reason = availability(task, LOCAL)
+    if not avail:
+        raise HTTPException(400, reason)
+    files = [p for p in core.staging_dir(task_name).iterdir() if p.is_file()]
+    logger = Logger()
+    CURRENT["name"] = task_name
+    CURRENT["log"] = logger.lines
+    CURRENT["read"] = 0
+    CURRENT["done"] = None
+    CURRENT["cancelled"] = False
+    core.mark_running(task_name)
+
+    def worker():
+        """Run the task, honour cancellation, publish the result."""
+        ok, summary = False, "Internal error"
+        try:
+            ok, summary = run_task(task, LOCAL, files, logger, payload or {})
+            if CURRENT["cancelled"]:
+                ok, summary = False, "Cancelled by user"
+                core.save_task_state(task, LOCAL, False, summary, output=logger.text)
+        finally:
+            CURRENT["done"] = {
+                "task": task_name,
+                "ok": ok,
+                "summary": summary,
+                "paste": bool(task.get("capture")),
+            }
+            CURRENT["name"] = None
+            CURRENT["cancelled"] = False
+            core.clear_running()
+
+    threading.Thread(target=worker, daemon=True).start()
+    return {"started": True}
+
+
+@app.get("/api/status")
+def api_status():
+    """Running task name, new log lines, and a one-shot completion result."""
+    log = CURRENT["log"]
+    new_lines = log[CURRENT["read"]:]
+    CURRENT["read"] = len(log)
+    done = CURRENT["done"]
+    CURRENT["done"] = None
+    return {"running": CURRENT["name"], "log": new_lines, "done": done}
+
+
+@app.post("/api/cancel")
+def api_cancel():
+    """Stop the running task (kills its process groups)."""
+    if not CURRENT["name"]:
+        raise HTTPException(409, "No task is running")
+    CURRENT["cancelled"] = True
+    core.cancel_all()
+    return {"cancelled": True}
+
+
+@app.post("/api/paste_done/{task_name}")
+def api_paste_done(task_name: str):
+    """git-commit the task's commit_dir (the paste dialog's Done button)."""
+    task = TASK_MAP.get(task_name)
+    if task is None:
+        raise HTTPException(404, "Unknown task")
+    commit_dir = task.get("commit_dir")
+    if not commit_dir:
+        return {"committed": False}
+    dest = core.expand(core.resolve(commit_dir, LOCAL))
+    try:
+        core.git_commit(dest, f"{task_name} · {time.ctime()}")
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"git commit failed: {e}")
+    return {"committed": True, "dest": dest}
+
+
+@app.get("/")
+def index():
+    """Serve the static frontend."""
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+def main():
+    """CLI entry: --port/--host/--no-browser, then run the server."""
+    parser = argparse.ArgumentParser(prog="backupctl", description="Config-driven backup web GUI")
+    parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--host", default="127.0.0.1", help="bind address (use 0.0.0.0 inside Docker)")
+    parser.add_argument("--no-browser", action="store_true")
+    args = parser.parse_args()
+
+    url = f"http://{args.host}:{args.port}"
+    if not args.no_browser:
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+
+
+if __name__ == "__main__":
+    main()

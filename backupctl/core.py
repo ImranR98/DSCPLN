@@ -1,8 +1,10 @@
-"""Safe subprocess layer: runs commands in their own process groups with
-timeouts, cancellation, secret redaction, and a fail-fast environment
-(closed stdin, forced SSH askpass). Also git commits and age encryption."""
+"""Core plumbing: config loading + {{token}} resolution, per-task run-state
+files, upload staging, and the safe subprocess layer (process groups,
+timeouts, redaction, fail-fast env), plus git commits and age encryption."""
 
+import json
 import os
+import re
 import select
 import shlex
 import signal
@@ -10,6 +12,172 @@ import subprocess
 import time
 from pathlib import Path
 
+import yaml
+
+# ---------------------------------------------------------------------------
+# config
+# ---------------------------------------------------------------------------
+
+REPO_DIR = Path(__file__).resolve().parent.parent
+CONFIG_DIR = Path(os.environ.get("BACKUPCTL_CONFIG_DIR", REPO_DIR / "config"))
+CONFIG_FILE = CONFIG_DIR / "config.yaml"
+EXAMPLE_FILE = CONFIG_DIR / "config.example.yaml"
+
+
+def load_config(path=None):
+    """Load the personal config file (top-level values + `tasks:` list)."""
+    path = Path(path) if path else CONFIG_FILE
+    if not path.exists():
+        raise FileNotFoundError(f"Missing config file {path} — copy {EXAMPLE_FILE} to {path} and fill it in")
+    data = yaml.safe_load(path.read_text()) or {}
+    tasks = data.get("tasks") or []
+    local = {k: v for k, v in data.items() if k != "tasks"}
+    local.setdefault("repo_dir", os.environ.get("BACKUPCTL_REPO_DIR", str(REPO_DIR)))
+    seen = set()
+    for t in tasks:
+        name = t.get("name")
+        if not name:
+            raise ValueError("Every task needs a 'name'")
+        if not (t.get("state_dir") or t.get("dest")):
+            raise ValueError(f"Task '{name}' needs a 'dest' or 'state_dir' for its run state")
+        if name in seen:
+            raise ValueError(f"Duplicate task name: '{name}'")
+        seen.add(name)
+    return local, tasks
+
+
+def expand(path):
+    """Expand ~ and environment variables in a path."""
+    return os.path.expanduser(os.path.expandvars(str(path)))
+
+
+_TOKEN_RE = re.compile(r"\{\{([a-zA-Z0-9_.]+)\}\}")
+
+
+def _lookup(key, local, extra):
+    """Resolve one token path to its value (None when not found)."""
+    if key in extra:
+        return extra[key]
+    node = local
+    for part in key.split("."):
+        if isinstance(node, dict) and part in node:
+            node = node[part]
+        else:
+            return None
+    return node
+
+
+def resolve(template, local, extra=None):
+    """Replace {{a.b.c}} tokens from the local config (and per-run extra dict).
+    Values may themselves contain tokens, so resolution loops until stable.
+    A template that is exactly one token resolves to the token's typed value
+    (dict/list/int); embedded tokens are stringified."""
+    if not isinstance(template, str):
+        return template
+    extra = extra or {}
+
+    def repl(m):
+        value = _lookup(m.group(1), local, extra)
+        return m.group(0) if value is None else str(value)
+
+    result = template
+    for _ in range(10):
+        next_result = _TOKEN_RE.sub(repl, result)
+        if next_result == result:
+            break
+        result = next_result
+    match = _TOKEN_RE.fullmatch(template)
+    if match:
+        value = _lookup(match.group(1), local, extra)
+        if value is None:
+            return result  # unresolved token: leave the literal template
+        if not isinstance(value, str):
+            return value
+        return result
+    return result
+
+
+# ---------------------------------------------------------------------------
+# run state + staging
+# ---------------------------------------------------------------------------
+
+STATE_DIR = Path.home() / ".backupctl"
+RUNNING_FILE = STATE_DIR / "running.json"
+
+
+def slugify(name):
+    """Sanitize a task name for use in file names."""
+    return "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+
+
+def state_file_for(task, local):
+    """Path of the .backup-state-<slug>.json file for a task (dest or state_dir)."""
+    raw = task.get("state_dir") or task.get("dest")
+    if not raw:
+        raise RuntimeError(f"Task '{task['name']}' needs a 'dest' or 'state_dir' for its run state")
+    base = Path(expand(resolve(raw, local)))
+    return base / f".backup-state-{slugify(task['name'])}.json"
+
+
+def save_task_state(task, local, ok, summary, output=""):
+    """Atomically record a run's outcome next to the task's data."""
+    path = state_file_for(task, local)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "task": task["name"],
+        "ts": time.time(),
+        "ok": ok,
+        "summary": summary,
+        "output": output[-20000:],
+    }
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=1))
+    tmp.replace(path)
+
+
+def load_task_state(task, local):
+    """Return the last recorded run state for a task, or None."""
+    path = state_file_for(task, local)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return None
+
+
+def mark_running(task_name):
+    """Write the interrupted-run marker for a task."""
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    RUNNING_FILE.write_text(json.dumps({"task": task_name, "ts": time.time()}))
+
+
+def clear_running():
+    """Remove the interrupted-run marker."""
+    RUNNING_FILE.unlink(missing_ok=True)
+
+
+def running_marker():
+    """Return the marker dict ({task, ts}) if a run was interrupted."""
+    if RUNNING_FILE.exists():
+        try:
+            return json.loads(RUNNING_FILE.read_text())
+        except Exception:
+            return None
+    return None
+
+
+def staging_dir(task_name):
+    """Directory holding a task's dropped-but-unprocessed uploads."""
+    safe = slugify(task_name)
+    d = STATE_DIR / "staging" / safe
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+# ---------------------------------------------------------------------------
+# subprocess layer
+# ---------------------------------------------------------------------------
 
 def _ensure_askpass():
     """Create (once) a failing SSH askpass script and return its path."""

@@ -32,13 +32,10 @@ spreadsheet_xlsx: '{{backup_root}}/Documents/<spreadsheet>.xlsx'
 chat_merge_script: '{{scriptroot}}/<chat txt repo>/<script>.js'
 
 hosts:
-  gaming_pc:              # used by the remote example
+  gaming_pc:              # used by the run-with-commands example
     user: <user>
     host: <host>
     port: 22
-    games_dirs:           # remote dirs to back up, one run each
-      - '~/<games dir 1>'
-      - '~/<games dir 2>'
   fileserver:             # used by run tasks that ssh somewhere
     user: <user>
     host: <host>
@@ -184,10 +181,13 @@ tasks:
 
   # media: import media from a source root. Each pair is a dict:
   # {src: <subdir of root>, dest: <template>, pre_script?, pre_args?,
-  #  process_script?, rm_script?, process?}. The task's process_script
-  # standardizes files (dates/names) before the move; process: false
-  # plain-moves files; pre_script runs on the source dir first (e.g.
-  # concatenating clips and parking the raw originals in pre_args[0]).
+  #  process_script?, rm_script?, process?, raw?, concat_script?, concat_dir?}.
+  # The task's process_script standardizes files (dates/names) before the
+  # move; process: false plain-moves files; raw: true first rsyncs a raw
+  # copy into dest; concat_script concatenates segments per child dir (into
+  # <concat_dir>/, default "processed"); pre_script runs on the source dir
+  # first (e.g. concatenating clips and parking the raw originals in
+  # pre_args[0]).
   - name: Device Media Import
     group: Device Imports
     kind: media
@@ -219,41 +219,43 @@ tasks:
       - {src: '<Screenshots dir>', dest: '{{backup_root}}/Media/Headset'}
       - {src: '<VideoShots dir>', dest: '{{backup_root}}/Media/Headset'}
 
-  # archive: snapshot src_dir into dest, standardize its media subdirs
-  # into out_dir; originals deleted only if every step succeeded. Each
-  # subdir is rsynced raw, then standardized; entries with a concat_script
-  # concatenate segments per child dir (into <concat_dir>/, default
-  # "processed") first. confirm_key names the prompt whose approval is
-  # required before anything is deleted.
+  # media with snapshot + delete-originals: rsync a full snapshot of
+  # snapshot.src into snapshot.dest first, then standardize each pair
+  # (rsyncing a raw copy into dest first with raw: true; concatenating
+  # segments per child dir with concat_script). Originals are deleted only
+  # if every pair succeeded, and only after the confirm prompt is approved.
+  # confirm_key names the prompt whose approval is required.
   - name: Chat App Archive
     group: Device Imports
-    kind: archive
-    src_dir: '{{backup_root}}/<chat app folder>'
-    dest: '{{backup_root}}/Archive/<Chat-AllMedia>'
-    out_dir: '{{media_staging_dir}}'
+    kind: media
+    root: '{{backup_root}}/<chat app folder>/Media'
+    state_dir: '{{backup_root}}/Archive/<Chat-AllMedia>'
+    snapshot:
+      src: '{{backup_root}}/<chat app folder>'
+      dest: '{{backup_root}}/Archive/<Chat-AllMedia>'
+    delete_originals: true
     process_script: '{{scriptroot}}/<media repo>/<standardize script>.sh'
-    media_dir: Media
-    subdirs:
-      - {name: 'Chat Images'}
-      - {name: 'Chat Video'}
-      - {name: 'Chat Video Notes'}
-      - {name: 'Chat Voice Notes', concat_script: '{{scriptroot}}/<utils repo>/<concat audio script>.sh'}
+    pairs:
+      - {src: 'Chat Images', raw: true, dest: '{{media_staging_dir}}/Chat Images'}
+      - {src: 'Chat Video', raw: true, dest: '{{media_staging_dir}}/Chat Video'}
+      - {src: 'Chat Voice Notes', raw: true, concat_script: '{{scriptroot}}/<utils repo>/<concat audio script>.sh', dest: '{{media_staging_dir}}/Chat Voice Notes'}
     prompts:
       - {key: confirmed, label: 'Manually copy anything in the GIFs folder to the video folder, then press OK.', type: confirm}
     note: Archives the live chat folder, then standardizes media and deletes the originals on success.
 
-  # remote: push a script to a host, run it once per `args` entry, and
-  # pull the results back. host/args resolve to typed tokens (dict/list);
-  # remote_tmp/remote_out are templates with a unique {{tag}} per run.
+  # run with a commands list: a remote workflow expressed as plain shell
+  # commands (ssh + rsync push/pull + cleanup) with rc-checked steps.
   - name: Game Save Files
     group: Local Backups
-    kind: remote
-    host: '{{hosts.gaming_pc}}'
-    script: '{{scriptroot}}/<game saves repo>/<script>.sh'
-    args: '{{hosts.gaming_pc.games_dirs}}'
-    remote_tmp: '/tmp/{{tag}}_backup'
-    remote_out: '/home/{{hosts.gaming_pc.user}}/Downloads/{{tag}}_backup_out'
-    dest: '{{backup_root}}/Game Save Files'
+    kind: run
+    state_dir: '{{backup_root}}/Game Save Files'
+    commands:
+      - 'ssh -o BatchMode=yes {{hosts.gaming_pc.user}}@{{hosts.gaming_pc.host}} "mkdir -p /tmp/gamehomebak"'
+      - 'rsync -aq -e "ssh -o BatchMode=yes" "{{scriptroot}}/<game saves repo>/<script>.sh" {{hosts.gaming_pc.user}}@{{hosts.gaming_pc.host}}:/tmp/gamehomebak/'
+      - 'ssh -o BatchMode=yes {{hosts.gaming_pc.user}}@{{hosts.gaming_pc.host}} "cd /tmp/gamehomebak && bash ./<script>.sh ~/<games dir 1> /home/{{hosts.gaming_pc.user}}/Downloads/gamehomebak_out"'
+      - 'ssh -o BatchMode=yes {{hosts.gaming_pc.user}}@{{hosts.gaming_pc.host}} "cd /tmp/gamehomebak && bash ./<script>.sh ~/<games dir 2> /home/{{hosts.gaming_pc.user}}/Downloads/gamehomebak_out"'
+      - 'rsync -aq -e "ssh -o BatchMode=yes" {{hosts.gaming_pc.user}}@{{hosts.gaming_pc.host}}:/home/{{hosts.gaming_pc.user}}/Downloads/gamehomebak_out/ "{{backup_root}}/Game Save Files"'
+      - 'ssh -o BatchMode=yes {{hosts.gaming_pc.user}}@{{hosts.gaming_pc.host}} "rm -rf /tmp/gamehomebak /home/{{hosts.gaming_pc.user}}/Downloads/gamehomebak_out"'
     note: Runs the backup script on the gaming PC over SSH and pulls the results down.
 
   # run + tool + args + fresh_dir + prune: a service-specific CLI expressed

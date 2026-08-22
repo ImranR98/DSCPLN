@@ -21,13 +21,12 @@ import yaml
 REPO_DIR = Path(__file__).resolve().parent.parent
 CONFIG_DIR = Path(os.environ.get("BACKUPCTL_CONFIG_DIR", REPO_DIR / "config"))
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
-EXAMPLE_FILE = CONFIG_DIR / "config.example.yaml"
 
 
 def load_config(path=None):
     path = Path(path) if path else CONFIG_FILE
     if not path.exists():
-        raise FileNotFoundError(f"Missing config file {path} — copy {EXAMPLE_FILE} to {path} and fill it in")
+        raise FileNotFoundError(f"Missing config file {path} — create it (see ARCHITECTURE.md for the schema)")
     data = yaml.safe_load(path.read_text()) or {}
     tasks = data.get("tasks") or []
     local = {k: v for k, v in data.items() if k != "tasks"}
@@ -76,7 +75,13 @@ def resolve(template, local, extra=None):
 
     def repl(m):
         value = _lookup(m.group(1), local, extra)
-        return m.group(0) if value is None else str(value)
+        if value is None:
+            return m.group(0)
+        if isinstance(value, str):
+            # ~ values must expand here: inside the command string they are
+            # usually quoted, so the shell's tilde expansion never sees them
+            value = os.path.expanduser(value)
+        return str(value)
 
     result = template
     for _ in range(10):

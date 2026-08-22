@@ -1,6 +1,5 @@
 # backupctl config — personal backup workflows (committed; this repo is personal).
-# config/config.example.yaml documents every field generically; this file is
-# the real one: machine values up top, the task list below.
+# Machine values up top, the task list below; ARCHITECTURE.md documents the schema.
 #
 # Every task is a bash command. Simple tasks call backupctl/lib.sh (the
 # built-in {{lib}} token) as a subcommand; anything with logic sources it
@@ -13,20 +12,8 @@
 # ---- machine values --------------------------------------------------------
 
 maindir: ~/Main                              # root of all backup data
-phone_sync_dir: ~/deviceSync                 # phone synced folders (media import)
 scriptroot: '{{repo_dir}}/scripts'           # git submodules with personal scripts
 quest_root: /run/user/1000/gvfs/mtp:host=Oculus_Quest_*/Internal shared storage
-wamedia_dir: ~/Downloads/WAMedia             # WhatsApp media staging (archive task)
-snaps_deletable_dir: ~/Downloads/snaps_original_deletable
-dns_export_file: example.com.txt
-
-# Personal scripts kept as submodules under {{scriptroot}}:
-balance_script: '{{scriptroot}}/Balance/accMDToXLSX.js'
-balance_dir: '{{scriptroot}}/Balance'
-acc_dir: '{{maindir}}/Notes/Transactions'
-acc_glob: Acc*.md
-balance_xlsx: '{{maindir}}/Documents/Balance/Balance.xlsx'
-watxt_script: '{{scriptroot}}/WhatsAppTXT/WhatsAppTXT.js'
 
 hosts:
   bigpc:                # gaming PC (wine game saves)
@@ -166,15 +153,15 @@ tasks:
     summary_last_line: true
     command: "bash '{{lib}}' move --rename ntfy-subscriptions.json '{{maindir}}/Backups/Manual' {{uploads}}"
 
-  # DNS zone file ({{dns_export_file}}), kept under its own name.
+  # DNS zone file (example.com.txt), kept under its own name.
   - name: DNS Entries
     group: Apps & Accounts
     uploads: true
-    glob: '{{dns_export_file}}'
+    glob: 'example.com.txt'
     state_dir: '{{maindir}}/Backups/Manual'
     note: Drop the DNS entries export here.
     summary_last_line: true
-    command: "bash '{{lib}}' move --rename '{{dns_export_file}}' '{{maindir}}/Backups/Manual' {{uploads}}"
+    command: "bash '{{lib}}' move --rename 'example.com.txt' '{{maindir}}/Backups/Manual' {{uploads}}"
 
   # Presto transit usage reports, kept under their own names.
   - name: Presto Transit Usage Report
@@ -483,7 +470,7 @@ tasks:
     state_dir: '{{maindir}}/Backups/WhatsApp TXT'
     command: mkdir -p "{{maindir}}/Backups/WhatsApp TXT" && rm -rf "{{tmp}}" && mkdir
       -p "{{tmp}}" && unzip -oq {{uploads}} -d "{{tmp}}" && rm -f "{{tmp}}"/*.vcf &&
-      node {{watxt_script}} "{{maindir}}/Backups/WhatsApp TXT" "{{tmp}}"
+      node '{{scriptroot}}/WhatsAppTXT/WhatsAppTXT.js' "{{maindir}}/Backups/WhatsApp TXT" "{{tmp}}"
 
   # Qwen chat exports, kept under their own names.
   - name: Qwen Chats
@@ -516,7 +503,7 @@ tasks:
       source '{{lib}}'
       SRC='{{maindir}}/WhatsApp'
       MEDIA="$SRC/Media"
-      OUT='{{wamedia_dir}}'
+      OUT='~/Downloads/WAMedia'
       ARCHIVE='{{maindir}}/Backups/Archive/WhatsApp-AllMedia'
 
       # snapshot the whole live folder first
@@ -577,10 +564,10 @@ tasks:
     state_dir: '{{maindir}}/Documents/Balance'
     group: Finance
     commit_dir: '{{maindir}}/Documents/Balance'
-    cwd: '{{balance_dir}}'
+    cwd: '{{scriptroot}}/Balance'
     commands:
     - npm i
-    - node {{balance_script}} "$(cat $(ls {{acc_dir}}/{{acc_glob}} | tail -1))" {{balance_xlsx}}
+    - "node '{{scriptroot}}/Balance/accMDToXLSX.js' \"$(cat $(ls '{{maindir}}/Notes/Transactions'/Acc*.md | tail -1))\" '{{maindir}}/Documents/Balance/Balance.xlsx'"
     note: You still need to manually add Transaction Types, sort entries, and remove
       duplicates. Press "Done" to commit the Balance.xlsx change to git.
     capture: true
@@ -613,14 +600,14 @@ tasks:
   - name: Media Import
     state_dir: '{{maindir}}/Media'
     group: Devices
-    root: '{{phone_sync_dir}}'
+    root: '~/deviceSync'
     note: Imports and standardizes media from the synced phone folders. Requires phone
       sync to be running.
     summary_last_line: true
     command: |
       bash <<'BASH_SCRIPT'
       source '{{lib}}'
-      SRC='{{phone_sync_dir}}'
+      SRC='~/deviceSync'
       import_pair() {
         local src="$1" dest="$2"
         if [[ ! -d "$src" ]]; then
@@ -638,7 +625,7 @@ tasks:
 
       # Snapchat: concatenate clips first (parking the originals), then import
       if [[ -d "$SRC/DCIM/Snapchat" ]]; then
-        bash '{{scriptroot}}/mediaConcat/snapsPre.sh' "$SRC/DCIM/Snapchat" '{{snaps_deletable_dir}}'
+        bash '{{scriptroot}}/mediaConcat/snapsPre.sh' "$SRC/DCIM/Snapchat" '~/Downloads/snaps_original_deletable'
         import_pair "$SRC/DCIM/Snapchat" '{{maindir}}/Media/Camera'
       fi
 

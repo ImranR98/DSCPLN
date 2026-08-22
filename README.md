@@ -1,6 +1,6 @@
 # backupctl
 
-A local web app that runs config-driven backup workflows. This repo is **personal**: `config/config.yaml` (values + tasks) is committed, and personal automation scripts are referenced as git submodules under `scripts/`. `config/config.example.yaml` documents every capability generically.
+A local web app that runs config-driven backup workflows. This repo is **personal**: `config/config.yaml` (values + tasks) is committed, and personal automation scripts are referenced as git submodules under `scripts/`. `ARCHITECTURE.md` documents every field and capability.
 
 ## Usage
 
@@ -8,8 +8,7 @@ A local web app that runs config-driven backup workflows. This repo is **persona
 git clone --recurse-submodules git@github.com:ImranR98/ImranR-Backup.git   # or: git submodule update --init --recursive after cloning
 python3 -m venv .venv
 .venv/bin/pip install -e .
-cp config/config.example.yaml config/config.yaml   # fill in your own values and tasks
-.venv/bin/backupctl
+.venv/bin/backupctl      # config.yaml is committed; edit it to match your machine
 ```
 
 This starts a local server (http://127.0.0.1:8080) and opens your browser. To run without opening a browser: `backupctl --no-browser`. Different port: `backupctl --port 8081`.
@@ -29,11 +28,10 @@ Every task runs with a timeout (default 10 min, overridable per task via `timeou
 ## Configuration
 
 - `config/config.yaml` — your personal file (committed): machine-specific values at the top level (`backup_root`, `sync_dir`, hosts, emails, script paths...) plus the `tasks:` list. Add a task by adding an entry; the menu, categories, and drop-zone validation update automatically.
-- `config/config.example.yaml` — committed template demonstrating every capability with generic examples and schema comments.
 
 Placeholders like `{{backup_root}}` or `{{hosts.gaming_pc.host}}` are resolved from the same file's top-level values at run time; values may reference other tokens. Built-in tokens: `{{repo_dir}}` (this repository's root, env-overridable via `BACKUPCTL_REPO_DIR`) and `{{lib}}` (the packaged `backupctl/lib.sh`). Every task needs either `dest:` or `state_dir:` — run state is stored there as `.backup-state-<task>.json`.
 
-**Personal scripts live as git submodules** under `scripts/` in this repo. Tasks that need one (e.g. a Balance-format parser) reference it via the `{{scriptroot}}` token — see the example config.
+**Personal scripts live as git submodules** under `scripts/` in this repo. Tasks that need one (e.g. a Balance-format parser) reference it via the `{{scriptroot}}` token — see `config/config.yaml` for real examples.
 
 ## How tasks work
 
@@ -78,5 +76,5 @@ What degrades in a container:
 - `backupctl/lib.sh` — generic, committed bash helpers that tasks call (subcommands + sourceable functions)
 - `backupctl/static/` — plain HTML/CSS/JS frontend (`index.html`, `app.css`, `app.js`; favicon inlined) — no UI framework
 - `scripts/` — git submodules with the personal automation scripts referenced by the config
-- `config/config.example.yaml` — generic example documenting every capability
+- `config/config.yaml` — the committed personal config (values + tasks)
 - `ARCHITECTURE.md` — detailed architecture and code-level explanation

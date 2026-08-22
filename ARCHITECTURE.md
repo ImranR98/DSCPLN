@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-A local web application for config-driven backup workflows. The repo is **personal**: `config/config.yaml` holds all values and task definitions (committed), and personal scripts are referenced as git submodules under `scripts/`. `config/config.example.yaml` documents every capability generically.
+A local web application for config-driven backup workflows. The repo is **personal**: `config/config.yaml` holds all values and task definitions (committed), and personal scripts are referenced as git submodules under `scripts/`. This document is the schema reference.
 
 Design goals (in priority order):
 
@@ -32,7 +32,6 @@ scripts/
   <submodules>         The personal automation scripts that tasks call
                        (referenced via the {{scriptroot}} token)
 config/
-  config.example.yaml  Committed, generic: schema docs + examples
   config.yaml          Committed, personal: values + tasks (the one personal file)
 pyproject.toml         Package metadata, deps, `backupctl` + `backupctl-pty` entry points
 ```
@@ -210,7 +209,7 @@ Sandbox suites in `/tmp/opencode` (never touching real destinations) build a tem
 ## 13. Key design decisions (and why)
 
 1. **Plain HTML/CSS/JS instead of a UI framework** — no cascade layers, no runtime-injected component CSS, no custom elements: every style rule is fully deterministic.
-2. **One committed personal config** — the repo is a personal tool; the example file documents every capability generically.
+2. **One committed personal config** — the repo is a personal tool; this document is the schema reference.
 3. **State next to the data** — each task's last-run record lives in its destination folder (`.backup-state-<task>.json`), consistent with data ownership, and excluded from git.
 4. **No task types — Python runs bash, bash does the work** — the engine is a generic runner (tokens, timeouts, pgids, redaction, state, prompts) plus a small rc-checked bash library. Everything service-specific is a bash command in the config; no kind registry to maintain.
 5. **Two Python modules** — `core.py` holds everything shared (config, state, subprocess safety, pty runner); `app.py` holds the server, the runner, and the CLI. No cross-module plumbing, no hot config reload: edit config → restart.

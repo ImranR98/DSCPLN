@@ -2,36 +2,39 @@
 
 ## 1. Overview
 
-A local web application for config-driven backup workflows. The repo is a **generic engine**: it contains no task definitions and no personal paths; personal scripts are referenced as git submodules under `scripts/`. One gitignored config file defines everything the app does; a committed example config documents every capability.
+A local web application for config-driven backup workflows. The repo is **personal**: `config/config.yaml` holds all values and task definitions (committed), and personal scripts are referenced as git submodules under `scripts/`. `config/config.example.yaml` documents every capability generically.
 
 Design goals (in priority order):
 
 1. **Honesty** — a run is reported OK only when its commands actually succeeded (exit codes checked, exports validated); hung commands are killed by timeouts; crashed runs show as *Interrupted*, never as success.
 2. **Determinism** — the UI is plain HTML/CSS/JS with no framework, so every pixel is controlled by one stylesheet with no cascade surprises.
 3. **Zero-friction automation** — drop a file anywhere, the app detects which task it belongs to, asks once, and runs the batch.
-4. **Low maintenance** — declarative tasks, one config file, no external UI dependencies beyond the Python stdlib ecosystem (`fastapi`, `uvicorn`, `pyyaml`).
+4. **Low maintenance** — one config file, no hard-coded task types: every task is a bash command. No external UI dependencies beyond the Python stdlib ecosystem (`fastapi`, `uvicorn`, `pyyaml`, `pexpect`).
 
 ## 2. Repository layout
 
 ```
 backupctl/
-  core.py              Shared plumbing: config loading + {{token}} resolution,
-                       per-task run-state files, upload staging, the safe
-                       subprocess runner (timeouts, process groups, redaction,
-                       askpass), git commits, age pty encryption
-  app.py               FastAPI server (single in-flight run slot), the six
-                       task engines ("kinds") + dispatcher, and the CLI entry
+  app.py               FastAPI server, the generic bash runner (timeouts,
+                       pgids, redaction, runner options), CLI entry
+  core.py              Config loading + {{token}} resolution, run-state
+                       files, staging, the safe subprocess layer, and the
+                       generic pty runner (python -m backupctl.core CMD...)
+  lib.sh               Generic, committed bash helpers: subcommands (move,
+                       copy, encrypt) + sourceable functions (extract,
+                       rsync, git commit, process-and-move, ...); tasks
+                       reach it via the built-in {{lib}} token
   static/
     index.html         Page skeleton (favicon inlined as a data URL)
     app.css            Full design system (plain CSS, dark, red accent)
     app.js             Frontend logic (rendering, drops, modals, polling)
-scripts/               Git submodules: the personal automation scripts that
-                       tasks call (referenced via the {{scriptroot}} token);
-                       init with `git submodule update --init --recursive`
+scripts/
+  <submodules>         The personal automation scripts that tasks call
+                       (referenced via the {{scriptroot}} token)
 config/
-  config.example.yaml  Committed, generic: schema docs + one example per kind
-  config.yaml          Gitignored, personal: values + tasks (the only personal file)
-pyproject.toml         Package metadata, deps, `backupctl` entry point
+  config.example.yaml  Committed, generic: schema docs + examples
+  config.yaml          Committed, personal: values + tasks (the one personal file)
+pyproject.toml         Package metadata, deps, `backupctl` + `backupctl-pty` entry points
 ```
 
 ## 3. Component diagram
@@ -50,32 +53,36 @@ pyproject.toml         Package metadata, deps, `backupctl` entry point
                     └────────┬───────────────────┬───────────────┘
                              │                   │
               ┌──────────────▼──────┐   ┌────────▼──────────────┐
-              │  app.py — kinds     │   │  core.py              │
-              │  ingest move copy   │   │  subprocesses with    │
-              │  run media encrypt  │   │  timeouts, pgids,     │
-              └──────────┬──────────┘   │  askpass, redaction   │
-                         │              │  .backup-state-*.json │
-                         │              │  running.json marker  │
-                         │              │  staging/<task>/ dirs │
+              │  app.py — runner    │   │  core.py              │
+              │  resolves tokens,   │   │  subprocesses with    │
+              │  runs the task's    │   │  timeouts, pgids,     │
+              │  bash command(s)    │   │  askpass, redaction   │
+              │  (tool/fresh/prune  │   │  .backup-state-*.json │
+              │  /capture options)  │   │  running.json marker  │
+              └──────────┬──────────┘   │  staging/<task>/ dirs │
                          │              └───────────────────────┘
               ┌──────────▼──────────────────────────────────────┐
-              │  core.py → config/config.yaml (personal)        │
-              │  values (backup_root, hosts, scripts...) + tasks[]│
+              │  task command → bash backupctl/lib.sh   │
+              │  (or a heredoc sourcing it) + personal scripts   │
               └─────────────────────────────────────────────────┘
+              ┌──────────────────────────────────────────────────┐
+              │  core.py → config/config.yaml (personal)         │
+              │  values (backup_root, hosts, scripts...) + tasks[]│
+              └──────────────────────────────────────────────────┘
 ```
 
 ## 4. Config model (`backupctl/core.py`)
 
 - `load_config(path)` reads **one YAML file** and returns `(local, tasks)`. Top-level keys are machine-specific values; the `tasks:` key is the task list. If the file is missing it raises `FileNotFoundError` with instructions; `app.py` catches this at import and serves the app with a red warning banner instead.
-- `resolve(template, local, extra)` substitutes `{{a.b.c}}` tokens from the value dict (and a per-run `extra` dict, e.g. `{{uploads}}`, `{{tmp}}`). Resolution **loops until stable**, so values can reference other tokens (`balance_script: '{{scriptroot}}/<repo>/<script>.js'`). A template that is exactly one token resolves to the token's **typed value** (dict/list/int) — e.g. `host: '{{hosts.gaming_pc}}'` — while embedded tokens are stringified. A built-in `{{repo_dir}}` token (the repository root, overridable via `BACKUPCTL_REPO_DIR`) lets configs reference repo-relative paths.
+- `resolve(template, local, extra)` substitutes `{{a.b.c}}` tokens from the value dict (and a per-run `extra` dict). Resolution **loops until stable**, so values can reference other tokens (`balance_script: '{{scriptroot}}/<repo>/<script>.js'`). A template that is exactly one token resolves to the token's **typed value** (dict/list/int) — e.g. `host: '{{hosts.gaming_pc}}'` — while embedded tokens are stringified. Built-in tokens: `{{repo_dir}}` (the repository root, overridable via `BACKUPCTL_REPO_DIR`) and `{{lib}}` (the packaged `backupctl/lib.sh`, wherever the package is installed).
 
 ### Task fields
 
-Common: `name`, `group` (card category), `kind`, `note` (help text, shown inside the drop zone for upload tasks), `timeout` (seconds, default 600), `dest` / `state_dir` (run state location; `state_dir` falls back to `dest`; boot fails loudly if neither), `root` (source root for media/copy; glob-aware), `prompts`, `glob`, `export_url` (optional; shows a "Generate Export" button on the card that opens the service's export page).
+Common: `name`, `group` (card category), `note` (help text, shown inside the drop zone for upload tasks), `timeout` (seconds, default 600), `dest` / `state_dir` (run state location; `state_dir` falls back to `dest`; boot fails loudly if neither), `prompts`, `export_url` (optional; shows a "Generate Export" button on the card that opens the service's export page).
 
-Kind-specific: `identify` (ingest), `rename_to` / `mappings` (move), `sources` / `pre` / `post` / `git` (copy), `uploads` / `capture` / `command(s)` / `cwd` / `args` / `require` / `tool` / `fresh_dir` / `prune` (run), `commit_dir` (run+capture), `root` / `process_script` / `rm_script` / `pairs` / `snapshot` / `delete_originals` / `confirm_key` / `concat_dir` (media), `output` (encrypt).
+Runner: `command` / `commands` (bash; the only required field), `cwd`, `args` (argv form; empty values drop their flag pair), `uploads: true` + `glob` (drop zone; glob may be a list of patterns), `require: [key...]` (fail unless each prompt key has a value), `capture: true` + `commit_dir` (output becomes the summary, shown in a copy/paste dialog whose Done button git-commits `commit_dir`), `tool:` (download+extract a CLI if missing, exposed as `{{tool_binary}}`), `fresh_dir:` (fail unless the newest export dir is non-empty and fresh), `prune:` (delete older export dirs, `keep_newer` keeps any larger than the newest), `root:` (source directory the card requires; glob-aware, drives the availability badge), `summary_last_line: true` (card summary = last non-command log line).
 
-Interactive input is config: `prompts: [{key, label, type: confirm|secret}]` — the GUI renders them generically, the values travel in the run `extra` payload, and secret values are also usable as `{{key}}` tokens inside run commands.
+Per-run tokens: `{{uploads}}` (shlex-quoted staged file paths), `{{tmp}}` (unique temp path under the task's staging dir), `{{python}}` (the server's interpreter), plus one `{{key}}` per prompt value. Interactive input is config: `prompts: [{key, label, type: confirm|secret}]` — the GUI renders them generically, the values travel in the run `extra` payload, and secret values are redacted from the command display and output.
 
 ## 5. Server layer (`backupctl/app.py`)
 
@@ -98,20 +105,23 @@ LOCAL, TASK_LIST                                           # from load_config()
 
 **Worker thread** (the run slot): calls `run_task(...)`; if `cancelled` was set, overwrites the result with `Cancelled by user`; publishes `done`, clears the slot and the running marker in `finally`.
 
-## 6. Engine layer (`backupctl/app.py`)
+## 6. Runner (`backupctl/app.py`)
 
-`run_task(task, local, files, log, extra)` wraps every kind: builds a `Ctx` (task, local, files, `Logger`, extra), dispatches through the `KINDS` table, catches exceptions, and records run state via `save_task_state(...)` — so **state is recorded exactly once, for every kind, on both success and failure**.
+`run_task(task, local, files, log, extra)` wraps the single execution path: builds a `Ctx`, resolves tokens, checks `uploads`/`require`, optionally installs the task's `tool`, runs `args:` or each `command` (token-resolved) with per-command timeouts, redacts prompt secrets, then clears staging (upload tasks) or the `{{tmp}}` dir, validates `fresh_dir`, prunes old exports, and records run state via `save_task_state(...)` — so **state is recorded exactly once, on both success and failure**. With `capture:` the captured output is the summary; with `summary_last_line:` the summary is the last non-command log line; otherwise "Completed".
 
-| Kind | Behavior |
+The bash library `backupctl/lib.sh` (sourced or called as a subcommand) is rc-checked under `set -euo pipefail` and provides:
+
+| Entry | Behavior |
 |---|---|
-| `ingest` | Extract dropped archives (zip/tar), optionally run an `identify` shell command inside the extracted tree to derive a folder suffix, rsync into `dest` (rc checked), git commit, clear staging |
-| `move` | Move dropped files into `dest`, renamed via `rename_to` (single) or `mappings` (group of exports per card; unmatched files stay queued), git commit |
-| `copy` | rsync each `sources` entry into `dest/<basename>` (rc checked per source; any failure fails the run), optional git, `pre`/`post` shell commands |
-| `run` | Execute `command`/`commands` (shell) or `args` (argv list; empty values drop their flag pair) with token resolution, per-command timeouts (rc 124 → "timed out"), output streamed to the log, prompt secrets redacted. `require: [key...]` fails the run unless each prompt key has a value. With `uploads: true`, requires ≥1 staged file and provides `{{uploads}}`. With `capture: true`, the output becomes the summary and is shown in a copy/paste dialog ("Done" commits `commit_dir`). Optional `tool:` downloads+extracts a CLI if missing (exposed as `{{tool_binary}}`), `fresh_dir:` fails the run unless the newest export dir is non-empty and fresh, `prune:` deletes older export dirs (`keep_newer` keeps any larger than the newest). Remote workflows are `run` tasks whose command list pushes a script over SSH, runs it, rsyncs the results back, and cleans up — every step rc-checked |
-| `media` | Per `pairs:` entry (`src` under the task's `root`, `dest` template, optional `pre_script`/`pre_args`, optional per-pair `process_script`/`rm_script` overrides): run the pre script, delete already-synced files, copy+standardize+move, delete originals. `process: false` entries plain-move instead. `raw: true` pairs first rsync a raw copy into `dest` and process one pass per child dir (concatenating segments per child into `<concat_dir>/` first when a `concat_script` is set). Optional `snapshot: {src, dest}` rsyncs a full snapshot before the pairs; with `delete_originals: true` (requires the confirm prompt) the source dirs are deleted **only after every pair succeeded** |
-| `encrypt` | `age --encrypt --passphrase` driven through a pseudo-terminal (see §7), git commit, clear staging — fully generic, service-agnostic |
+| `move [--rename NAME] DEST FILE...` | move files into dest (fixed name optional; multiple files with a rename set fail), git commit |
+| `copy [--git] [--pre CMD] [--post CMD] DEST SRC...` | rsync each source into `dest/<basename>` (missing sources skipped, failures fail the run), per-source git commit when `--git` |
+| `encrypt PYTHON DEST OUTNAME FILE` | age-encrypt exactly one file via the generic pty runner; passphrase comes from `AGE_PASSPHRASE` (env, never argv); git commit |
+| `bctl_extract` / `bctl_rsync(_delete)` | unzip/tar extraction; rsync -aq with optional --delete |
+| `bctl_git_commit DIR` | git init/add/commit with `:(exclude).backup-state-*`; empty commits tolerated |
+| `bctl_process_and_move SRC DEST SCRIPT [keep]` | copy files to a temp dir, run the standardize script once, move results to dest, delete originals (unless kept) |
+| `bctl_first_glob PATTERN` | first match of a glob (e.g. MTP mounts) |
 
-`availability(task, local)` decides card state (source `root` present for media/copy). `supports_uploads(task)` and `upload_patterns(task, local)` define drop-zone presence and filename matching (patterns are token-resolved, so `{{dns_export_file}}` works).
+Task commands are plain shell — export ingestion with an account-name suffix, per-pattern renames, and media workflows (snapshot → raw rsync → standardize → delete originals) are small heredoc scripts sourcing the library. **Delete-originals honesty** comes from `set -e`: the final `rm -rf` is only reached when every prior step succeeded, and `require: [confirmed]` gates the confirm prompt.
 
 ## 7. Process safety (`backupctl/core.py`)
 
@@ -122,13 +132,13 @@ Every subprocess goes through `run()` / `sh()` / `sh_capture()` / `rsync()`:
 - **`stdin=DEVNULL`** — interactive prompts fail fast instead of hanging.
 - **`SSH_ASKPASS_REQUIRE=force` + a failing askpass script** (generated at `~/.backupctl/askpass.sh`) — ssh can never prompt for a password on a hidden terminal.
 - **`PROC_GROUPS` registry + `cancel_all()`** — the Stop button kills every live child process group.
-- **`redact=[...]`** — secrets are masked in both the logged command line and the streamed output (every `run` task redacts its prompt values).
-- **`age_encrypt_passphrase`** — `age -p` refuses non-TTY stdin, so encryption is driven through a pty via `pexpect` (passphrase sent twice: enter + confirm; 30s timeouts; exit status checked).
+- **`redact=[...]`** — secrets are masked in both the logged command line and the streamed output (every prompt value is redacted).
+- **Generic pty runner** (`pty_main`, also the `backupctl-pty` entry point) — for tools that refuse non-TTY stdin (e.g. `age --passphrase`): spawns the command in a pseudo-terminal via `pexpect`, forwards piped stdin to it, strips terminal control sequences, exits with the child's status. Secrets are piped in from env vars, never placed on a command line.
 
 ## 8. State layer (`backupctl/core.py`)
 
 - **Run state lives with the data**: `<state_dir>/.backup-state-<slug>.json` — `{task, ts, ok, summary, output}` (output capped at 20k chars). Written atomically (tmp + rename).
-- **Git hygiene**: `git_commit()` stages with `git add -A . ':(exclude).backup-state-*'`, so state files never enter backup repos (and "nothing added to commit" is tolerated).
+- **Git hygiene**: `git_commit()` and `bctl_git_commit` stage with `git add -A . ':(exclude).backup-state-*'`, so state files never enter backup repos (and "nothing added to commit" is tolerated).
 - **`running.json`** (app dir) marks an in-flight task; `_task_json` reports such a task as red `Interrupted · <ago>` after a server crash.
 - **`staging/<task>/`** holds dropped-but-unprocessed uploads; cleared after a successful run.
 
@@ -149,7 +159,7 @@ Topbar (logo, title, config-missing warning) → global drop zone → `#page` co
 | (server) `_pill` | Single staleness policy served to the UI: running → ok(<24h) → neutral(≤7d) → fail; the frontend just renders the class |
 | `uploadFiles` | Per-card drop handling; validation happens server-side (400 → toast) |
 | `handleGlobalFiles` | **Global drop flow** (below) |
-| `runTask(task, opts)` | Renders the task's `prompts:` (confirm/secret) generically — no kind-specific branches — then POSTs `/api/run` and starts polling. Prompt-less non-upload tasks get the generic confirm (skippable via `opts.skipGenericConfirm` for batch runs) |
+| `runTask(task, opts)` | Renders the task's `prompts:` (confirm/secret) generically — no task-type branches — then POSTs `/api/run` and starts polling. Prompt-less non-upload tasks get the generic confirm (skippable via `opts.skipGenericConfirm` for batch runs) |
 | `cancelRun` | Stop button: kills processes and clears the pending batch queue |
 | `startPolling` | 700 ms polling of `/api/status`; while running it simply **re-renders from `/api/tasks`** (the server reports per-task `running`/`live`/`pill`), and on completion toasts the result, opens the paste dialog, and auto-starts the next pending batch task. The frontend holds no imperative DOM refs |
 | `openLog/openPaste` | Monospace log modal; paste modal with Copy + Done (Done POSTs `/api/paste_done`) |
@@ -161,7 +171,7 @@ Topbar (logo, title, config-missing warning) → global drop zone → `#page` co
 2. Group files by detected task (duplicates of one task run it **once**).
 3. Upload everything to each task's staging.
 4. One **batch confirm** modal: `Detected: <task> (N files), ... Run all now?` — Cancel leaves files queued.
-5. `STATE.pendingQueue` holds the ordered task list; the first runs immediately (generic confirm skipped; kind-specific prompts still appear at their turn), and each completion in the poll loop starts the next.
+5. `STATE.pendingQueue` holds the ordered task list; the first runs immediately (generic confirm skipped; task-specific prompts still appear at their turn), and each completion in the poll loop starts the next.
 
 ## 10. Run lifecycle (end-to-end)
 
@@ -170,8 +180,9 @@ User clicks Run / confirms batch
   → JS POST /api/run {extra}
   → server: slot check → availability check → snapshot staging files
       → write running.json → spawn worker thread
-  → worker: run_task → kind function (core.py runs every command
-      with timeout/pgid/env safety) → save_task_state(dest-dir file)
+  → worker: run_task → token resolution → the task's bash command(s)
+      (core.py runs every command with timeout/pgid/env safety)
+      → fresh_dir/prune validation → save_task_state(dest-dir file)
       → cancelled? record "Cancelled by user"
       → publish done, clear slot + marker
   → JS poll loop: live log line on card → completion → toast → refresh
@@ -186,23 +197,23 @@ User clicks Run / confirms batch
 | User wants out | Stop button kills all live process groups → "Cancelled by user" |
 | Server dies mid-run | `running.json` survives → pill shows red "Interrupted · ago" |
 | Command exits 0 but did nothing | `fresh_dir:` post-run validation of the actual export (non-empty, fresh) fails the run |
-| rsync/unzip failure swallowed | rc checked in ingest/copy/media and every run command; any failure fails the run |
-| Uploaded files ignored | run-with-uploads refuses zero files; ingest/move/encrypt refuse empty staging |
-| Originals deleted prematurely | `delete_originals:` deletes only after every pair succeeded and the confirm prompt was approved |
-| Secrets in logs | `redact=` masks passwords/TOTP in command display and output |
+| rsync/unzip failure swallowed | rc checked in the lib and every run command; any failure fails the run |
+| Uploaded files ignored | run-with-uploads refuses zero files |
+| Originals deleted prematurely | media heredocs delete only after every step succeeded (`set -e`) and the confirm prompt was approved (`require: [confirmed]`) |
+| Secrets in logs | `redact=` masks passwords/TOTP in command display and output; the age passphrase travels in an env var, never argv |
 | State files churning git repos | `:(exclude).backup-state-*` pathspec in every commit |
 
 ## 12. Testing
 
-Sandbox suites in `/tmp/opencode` (never touching real destinations) build a temporary merged config (sandbox values + the machine's task list) and load it through `core.load_config(path)`. The current suite covers: ingest (incl. identify suffix), move rename/mappings (incl. unmatched-file queuing), copy+git+pre/post (state files excluded from commits), run with uploads/capture/tool+fresh_dir+prune/timeout-kill/redaction, media plain/process:false/pre pairs, media snapshot+raw+concat+delete-originals with confirm, and encrypt pty encryption + round-trip decryption.
+Sandbox suites in `/tmp/opencode` (never touching real destinations) build a temporary merged config (sandbox values + the machine's task list) and load it through `core.load_config(path)`. The current suite covers: move subcommand (rename + staging cleared), mappings heredoc, ingest heredoc with identify suffix, copy subcommand with git + pre/post (state files excluded from commits), encrypt via the generic pty runner (round-trip decryption + passphrase redaction), run with uploads/capture/tool+fresh_dir+prune/timeout-kill/redaction, media heredoc (plain pairs, process:false, pre script), and media snapshot+raw+concat+delete-originals with confirm.
 
 ## 13. Key design decisions (and why)
 
 1. **Plain HTML/CSS/JS instead of a UI framework** — no cascade layers, no runtime-injected component CSS, no custom elements: every style rule is fully deterministic.
-2. **One gitignored personal config** — the repo stays a pure engine; the example file documents every kind generically.
+2. **One committed personal config** — the repo is a personal tool; the example file documents every capability generically.
 3. **State next to the data** — each task's last-run record lives in its destination folder (`.backup-state-<task>.json`), consistent with data ownership, and excluded from git.
-4. **Two Python modules** — `core.py` holds everything shared (config, state, subprocess safety); `app.py` holds the server, the six kinds, and the CLI entry. No cross-module plumbing, no hot config reload: edit config → restart.
-5. **Six kinds, one per workflow shape** — media-in-an-archive is the `media` kind with `snapshot`/`raw`/`delete_originals`; running a script on a remote host is a `run` task with an ssh/rsync command list. Fewer concepts, same guarantees.
+4. **No task types — Python runs bash, bash does the work** — the engine is a generic runner (tokens, timeouts, pgids, redaction, state, prompts) plus a small rc-checked bash library. Everything service-specific is a bash command in the config; no kind registry to maintain.
+5. **Two Python modules** — `core.py` holds everything shared (config, state, subprocess safety, pty runner); `app.py` holds the server, the runner, and the CLI. No cross-module plumbing, no hot config reload: edit config → restart.
 6. **Subprocess process groups + timeouts** — the UI can never get stuck in a silent "Running" state.
-7. **`pexpect` for `age -p`** — the standard library for feeding a passphrase to a tool that insists on a terminal.
+7. **A generic pty runner instead of a special-cased encryptor** — any tool that insists on a terminal (`age -p`, `ssh-add`, ...) is driven the same way: pipe input in, stream output out, secrets off argv.
 8. **Success = verified side effects** — exit codes plus post-run validation (`fresh_dir`), not just "the command returned".

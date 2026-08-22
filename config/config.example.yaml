@@ -1,26 +1,36 @@
-# Example backup config — copy this file to config/config.yaml (gitignored)
-# and fill in your own values. Every task kind is demonstrated below;
-# delete the examples and add your own tasks.
+# Example backup config — a schema reference documenting every field and
+# capability with generic examples. Your real values live in config.yaml.
 #
 # Top-level values are referenced from tasks as {{token}} (e.g. {{backup_root}}).
 # Values may reference other tokens (e.g. '{{backup_root}}/Documents').
 # A built-in token {{repo_dir}} resolves to this repository's root (set via
 # the BACKUPCTL_REPO_DIR env var when not running from a checkout).
+# Built-in per-run tokens: {{uploads}} (quoted staged file paths),
+# {{tmp}} (unique temp path), {{python}} (the server's interpreter).
 # Every task needs either `dest:` or `state_dir:` — run state is stored there
 # as .backup-state-<task>.json (excluded from git commits).
 #
-# Interactive input is declared per task as `prompts:` — the GUI renders the
-# dialogs. Each prompt: {key: <extra key sent to the engine>, label: <text>,
-# type: confirm|secret}. secret values are also usable as {{key}} tokens
-# inside run commands.
+# Every task is a bash command. Simple tasks call backupctl/lib.sh (the
+# built-in {{lib}} token) as a subcommand (move/copy/encrypt); anything with
+# logic sources it inside a bash heredoc and uses its functions
+# (bctl_extract, bctl_rsync, bctl_git_commit, bctl_process_and_move, ...).
+# Task fields:
+#   uploads: true + glob:   drop zone on the card; glob may be a list
+#   prompts:                confirm/secret dialogs (values usable as {{key}})
+#   require: [key...]       fail unless each prompt key has a value
+#   capture + commit_dir    output shown in a copy/paste dialog
+#   tool/fresh_dir/prune    CLI download, post-run validation, old-export prune
+#   root:                   source dir the card requires (availability badge)
+#   summary_last_line       card summary = last log line
+#   timeout, cwd, note, export_url
 
 # ---------- machine-specific values -----------------------------------------
 
 backup_root: ~/Backups                          # where backup data lives
-sync_dir: ~/Sync                                # source root for `media` tasks (task field `root`)
-scriptroot: '{{repo_dir}}/scripts'              # git submodules with the personal scripts
-media_staging_dir: ~/Downloads/MediaStaging     # archive kind: standardized-media output
-raw_media_dir: ~/Downloads/RawMedia             # media kind: where a pre script parks originals
+sync_dir: ~/Sync                                # source root for device tasks (task field `root`)
+scriptroot: '{{repo_dir}}/scripts'              # git submodules with personal scripts
+media_staging_dir: ~/Downloads/MediaStaging
+raw_media_dir: ~/Downloads/RawMedia
 dns_export_file: '<dns export filename>'
 
 # Personal scripts kept as submodules under {{scriptroot}}:
@@ -32,11 +42,11 @@ spreadsheet_xlsx: '{{backup_root}}/Documents/<spreadsheet>.xlsx'
 chat_merge_script: '{{scriptroot}}/<chat txt repo>/<script>.js'
 
 hosts:
-  gaming_pc:              # used by the run-with-commands example
+  gaming_pc:              # used by the ssh/rsync example
     user: <user>
     host: <host>
     port: 22
-  fileserver:             # used by run tasks that ssh somewhere
+  fileserver:
     user: <user>
     host: <host>
     data_path: /home/<user>/<data dir>
@@ -45,116 +55,115 @@ mail_email: you@example.com
 
 
 # ---------- task definitions ------------------------------------------------
-# Common fields: name, group (card category), kind, note (help text shown on
-# the card), dest (where data goes), state_dir (defaults to dest), timeout
-# (seconds, default 600). Upload-based tasks use `glob:` for drop matching.
-# Optional `export_url:` shows a "Generate Export" button on the card that
-# opens the service's export page (e.g. Google Takeout) in a new tab.
 
 tasks:
 
-  # ingest: extract a dropped archive into dest, optionally naming the
-  # folder from a shell command run inside the extracted content, then
-  # git commit the result.
+  # move subcommand: drop files, they are moved into dest (optionally under
+  # one fixed name) and dest is git-committed.
+  - name: Bookmarks
+    group: Apps & Accounts
+    uploads: true
+    glob: 'bookmarks_*.html'
+    state_dir: '{{backup_root}}/Manual'
+    summary_last_line: true
+    note: Drop the bookmarks export (HTML) here.
+    command: "bash '{{lib}}' move --rename bookmarks.html '{{backup_root}}/Manual' {{uploads}}"
+
+  # A group of related exports in one card: a heredoc script matches each
+  # dropped file by name and renames it per pattern.
+  - name: Contacts + Calendar
+    group: Apps & Accounts
+    uploads: true
+    glob: ['contacts-*.vcf', 'todo-*.ics']
+    state_dir: '{{backup_root}}/Manual'
+    summary_last_line: true
+    note: Drop the contacts (VCF) and calendar (ICS) exports here.
+    command: |
+      bash <<'BASH_SCRIPT'
+      source '{{lib}}'
+      DEST='{{backup_root}}/Manual'
+      mkdir -p "$DEST"
+      for f in {{uploads}}; do
+        case "$(basename "$f")" in
+          contacts-*.vcf) mv "$f" "$DEST/My Contacts.vcf" ;;
+          todo-*.ics) mv "$f" "$DEST/TODO.ics" ;;
+        esac
+      done
+      bctl_git_commit "$DEST"
+      log "Files → $DEST"
+      BASH_SCRIPT
+
+  # Ingest heredoc: extract the dropped archive, optionally derive a folder
+  # suffix by running a shell command inside the extracted tree, rsync into
+  # dest, git commit.
   - name: Example Cloud Export
-    group: Manual Exports
-    kind: ingest
+    group: Social Media
+    uploads: true
     glob: 'example-export-*.zip'
-    identify: 'cat account.json | jq -r ".username"'
-    dest: '{{backup_root}}/Example Cloud'
+    state_dir: '{{backup_root}}/Example Cloud'
+    summary_last_line: true
     export_url: https://example.com/settings/export
     note: Drop the example-export-*.zip file here.
+    command: |
+      bash <<'BASH_SCRIPT'
+      source '{{lib}}'
+      FILES=({{uploads}})
+      tmp=$(mktemp -d -t bctl_ingest.XXXXXX)
+      for f in "${FILES[@]}"; do
+        log "Extracting $(basename "$f")..."
+        bctl_extract "$f" "$tmp"
+      done
+      suffix=$(cd "$tmp" && cat account.json | jq -r ".username" 2>/dev/null) || true
+      DEST='{{backup_root}}/Example Cloud'
+      [[ -n "$suffix" ]] && DEST="$DEST - $suffix"
+      mkdir -p "$DEST"
+      bctl_rsync_delete --exclude .git/ "$tmp/" "$DEST"
+      rm -rf "$tmp"
+      bctl_git_commit "$DEST"
+      log "Imported into $DEST"
+      BASH_SCRIPT
 
-  # move: dropped files are moved into dest. rename_to gives the file a
-  # fixed name; mappings handles a group of related exports in one card.
-  - name: Bookmarks
-    group: Manual Exports
-    kind: move
-    glob: 'bookmarks_*.html'
-    rename_to: bookmarks.html
-    dest: '{{backup_root}}/Manual'
+  # encrypt subcommand: age-encrypt a dropped file with a prompted
+  # passphrase. The passphrase travels in AGE_PASSPHRASE (env var, redacted
+  # from the log, never on a command line); the generic pty runner
+  # (`python -m backupctl.core`) feeds it to age, which refuses non-TTY
+  # stdin.
+  - name: Password Vault (encrypted)
+    group: Apps & Accounts
+    uploads: true
+    glob: vault-export_*.json
+    require: [password]
+    state_dir: '{{backup_root}}/Vault'
+    summary_last_line: true
+    export_url: https://vault.example.com/#/tools/export
+    prompts:
+      - {key: password, label: 'Passphrase', type: secret}
+    note: Drop the vault export here; you will be asked for a passphrase.
+    command: "AGE_PASSPHRASE='{{password}}' bash '{{lib}}' encrypt '{{python}}' '{{backup_root}}/Vault' vault.json {{uploads}}"
 
-  - name: Contacts + Calendar
-    group: Manual Exports
-    kind: move
-    dest: '{{backup_root}}/Manual'
-    note: Drop the contacts (VCF) and calendar (ICS) exports here.
-    mappings:
-      - {glob: 'contacts-*.vcf', name: 'My Contacts.vcf'}
-      - {glob: 'todo-*.ics', name: 'TODO.ics'}
-
-  # move with a token-resolved drop pattern (the {{token}} is replaced
-  # before filename matching).
-  - name: DNS Zone File
-    group: Manual Exports
-    kind: move
-    glob: '{{dns_export_file}}'
-    rename_to: '{{dns_export_file}}'
-    dest: '{{backup_root}}/Manual'
-    note: Drop the DNS zone export file here.
+  # Plain run: execute bash command(s) non-interactively. Output streams to
+  # the log; nonzero exit fails the run; timeout kills hung commands.
+  - name: File Server State Pull
+    group: System Backups
+    state_dir: '{{backup_root}}/Server State'
+    commands:
+      - '{{scriptroot}}/<infra repo>/<pull script>.sh pull {{hosts.fileserver.user}}@{{hosts.fileserver.host}}:{{hosts.fileserver.data_path}}'
 
   # run with uploads: drop files, then run a command with them appended
-  # ({{uploads}} expands to the uploaded paths; {{tmp}} is a unique
-  # per-run temp path). This shows a chat-archive merge: extract the
-  # zips to {{tmp}}, drop unwanted files, run a personal merge script.
+  # ({{uploads}} expands to the quoted uploaded paths; {{tmp}} is a unique
+  # per-run temp path).
   - name: Chat Archive Merge
-    group: Manual Exports
-    kind: run
+    group: Chats
     uploads: true
     glob: '*.zip'
     state_dir: '{{backup_root}}/Chat Archive'
     command: 'mkdir -p "{{backup_root}}/Chat Archive" && rm -rf "{{tmp}}" && mkdir -p "{{tmp}}" && unzip -oq {{uploads}} -d "{{tmp}}" && rm -f "{{tmp}}"/*.vcf && node {{chat_merge_script}} "{{backup_root}}/Chat Archive" "{{tmp}}"'
     note: Drop chat zips here; they are merged into the cumulative backup.
 
-  # encrypt: age-encrypt a dropped export (passphrase prompted in the GUI).
-  - name: Password Vault (encrypted)
-    group: Manual Exports
-    kind: encrypt
-    glob: vault-export_*.json
-    dest: '{{backup_root}}/Vault'
-    output: vault.json
-    export_url: https://vault.example.com/#/tools/export
-    prompts:
-      - {key: password, label: 'Passphrase', type: secret}
-    note: Drop the vault export here; you will be asked for a passphrase.
-
-  # run with uploads: drop files, then run a command with them appended.
-  - name: Bank Statements
-    group: Manual Exports
-    kind: run
-    uploads: true
-    glob: '*.pdf'
-    timeout: 300
-    state_dir: '{{backup_root}}/Documents/Banking/Statements'
-    command: '{{scriptroot}}/<statements repo>/<statements script>.sh {{backup_root}}/Documents/Banking/Statements {{uploads}}'
-    note: Drop the downloaded statement PDFs here.
-
-  # run: execute shell command(s) non-interactively. Output streams to the
-  # log; nonzero exit fails the run; timeout kills hung commands.
-  - name: File Server State Pull
-    group: Local Backups
-    kind: run
-    state_dir: '{{backup_root}}/Server State'
-    commands:
-      - '{{scriptroot}}/<infra repo>/<pull script>.sh pull {{hosts.fileserver.user}}@{{hosts.fileserver.host}}:{{hosts.fileserver.data_path}}'
-
-  - name: Playlist Download
-    group: Tools
-    kind: run
-    timeout: 1800
-    state_dir: '{{backup_root}}/Media/Music'
-    cwd: '{{scriptroot}}/<downloader repo>'
-    command: |
-      if [ ! -f ./venv/bin/activate ]; then python -m venv venv; fi
-      source ./venv/bin/activate
-      pip install --upgrade -r requirements.txt
-      python download.py --dir {{backup_root}}/Media/Music
-
-  # run with capture: like run, but the output is shown in a dialog for
-  # copy/pasting; "Done" commits commit_dir to git.
+  # run with capture: the output is shown in a dialog for copy/pasting;
+  # "Done" commits commit_dir to git.
   - name: Spreadsheet Transactions
-    group: Tools
-    kind: run
+    group: Finance
     capture: true
     state_dir: '{{backup_root}}/Documents/Finance'
     commit_dir: '{{backup_root}}/Documents/Finance'
@@ -164,96 +173,105 @@ tasks:
       - 'node {{balance_script}} "$(cat $(ls {{notes_dir}}/{{notes_glob}} | tail -1))" {{spreadsheet_xlsx}}'
     note: Paste the results into the spreadsheet, then press Done to commit.
 
-  # copy: rsync a list of sources into dest (optionally git-committed);
-  # pre/post run shell commands before/after. An optional `root:` prefixes
-  # every source (e.g. a mounted device).
+  # copy subcommand: rsync a list of sources into dest (optionally
+  # git-committed per source); --pre/--post run shell commands before/after.
   - name: Personal Config Files
-    group: Local Backups
-    kind: copy
-    git: true
-    dest: '{{backup_root}}/Config Files'
-    pre: 'dconf dump /org/gnome/shell/extensions/ > ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf'
-    post: 'rm ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf'
-    sources:
-      - '~/.ssh'
-      - '~/.bashrc.d'
-      - '~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf'
+    group: System Backups
+    state_dir: '{{backup_root}}/Config Files'
+    summary_last_line: true
+    command: "bash '{{lib}}' copy --git --pre 'dconf dump /org/gnome/shell/extensions/ > ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf' --post 'rm ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf' '{{backup_root}}/Config Files' ~/.ssh ~/.bashrc.d"
 
-  # media: import media from a source root. Each pair is a dict:
-  # {src: <subdir of root>, dest: <template>, pre_script?, pre_args?,
-  #  process_script?, rm_script?, process?, raw?, concat_script?, concat_dir?}.
-  # The task's process_script standardizes files (dates/names) before the
-  # move; process: false plain-moves files; raw: true first rsyncs a raw
-  # copy into dest; concat_script concatenates segments per child dir (into
-  # <concat_dir>/, default "processed"); pre_script runs on the source dir
-  # first (e.g. concatenating clips and parking the raw originals in
-  # pre_args[0]).
+  # Media import heredoc: for each pair, optionally run a pre script, delete
+  # already-synced files, then standardize-and-move (originals deleted on
+  # success); process:false pairs plain-move instead. `root:` is the
+  # availability check (the card is disabled while the source is missing).
   - name: Device Media Import
-    group: Device Imports
-    kind: media
+    group: Devices
     root: '{{sync_dir}}'
-    process_script: '{{scriptroot}}/<media repo>/<standardize script>.sh'
-    rm_script: '{{scriptroot}}/<media repo>/<delete-synced script>.sh'
     state_dir: '{{backup_root}}/Media'
+    summary_last_line: true
     note: Imports and standardizes media from the synced device folders.
-    pairs:
-      - {src: 'DCIM/Camera', dest: '{{backup_root}}/Media/Camera'}
-      - {src: 'Screenshots', dest: '{{backup_root}}/Media/Screenshots'}
-      - src: 'DCIM/Short Clips'
-        dest: '{{backup_root}}/Media/Camera'
-        pre_script: '{{scriptroot}}/<utils repo>/<concat script>.sh'
-        pre_args: ['{{raw_media_dir}}']
-      - {src: 'Recordings', dest: '{{backup_root}}/Media/Recordings', process: false}
+    command: |
+      bash <<'BASH_SCRIPT'
+      source '{{lib}}'
+      SRC='{{sync_dir}}'
+      import_pair() {
+        local src="$1" dest="$2"
+        if [[ ! -d "$src" ]]; then
+          log "Missing source dir: $src"
+          return 0
+        fi
+        bash '{{scriptroot}}/<media repo>/<delete-synced script>.sh' "$src" "$dest"
+        log "Importing $(basename "$src") → $dest..."
+        bctl_process_and_move "$src" "$dest" '{{scriptroot}}/<media repo>/<standardize script>.sh'
+      }
+      import_pair "$SRC/DCIM/Camera" '{{backup_root}}/Media/Camera'
+      import_pair "$SRC/Screenshots" '{{backup_root}}/Media/Screenshots'
+      DEST='{{backup_root}}/Media/Recordings'
+      mkdir -p "$DEST"
+      for f in "$SRC/Recordings"/*; do mv "$f" "$DEST/$(basename "$f")"; done
+      log "Media import completed"
+      BASH_SCRIPT
 
-  # media with an explicit root — e.g. a device mounted over MTP (glob
-  # patterns are supported, first match wins).
-  - name: Headset Media Import
-    group: Device Imports
-    kind: media
-    root: '/run/user/<uid>/gvfs/mtp:host=<Device>_*/Internal shared storage'
-    process_script: '{{scriptroot}}/<media repo>/<standardize script>.sh'
-    rm_script: '{{scriptroot}}/<media repo>/<delete-synced script>.sh'
-    state_dir: '{{backup_root}}/Media/Headset'
-    note: Imports headset screenshots and video clips.
-    pairs:
-      - {src: '<Screenshots dir>', dest: '{{backup_root}}/Media/Headset'}
-      - {src: '<VideoShots dir>', dest: '{{backup_root}}/Media/Headset'}
-
-  # media with snapshot + delete-originals: rsync a full snapshot of
-  # snapshot.src into snapshot.dest first, then standardize each pair
-  # (rsyncing a raw copy into dest first with raw: true; concatenating
-  # segments per child dir with concat_script). Originals are deleted only
-  # if every pair succeeded, and only after the confirm prompt is approved.
-  # confirm_key names the prompt whose approval is required.
+  # Archive-style media: snapshot the live folder first, rsync each subdir
+  # raw into the staging dir, standardize the live copies (concatenating
+  # segments per child dir for entries with a concat script), then delete
+  # the originals — only because set -e aborts on any failure before the
+  # final rm -rf. `require: [confirmed]` gates the deletion behind the
+  # confirm prompt.
   - name: Chat App Archive
-    group: Device Imports
-    kind: media
+    group: Chats
     root: '{{backup_root}}/<chat app folder>/Media'
+    require: [confirmed]
     state_dir: '{{backup_root}}/Archive/<Chat-AllMedia>'
-    snapshot:
-      src: '{{backup_root}}/<chat app folder>'
-      dest: '{{backup_root}}/Archive/<Chat-AllMedia>'
-    delete_originals: true
-    process_script: '{{scriptroot}}/<media repo>/<standardize script>.sh'
-    pairs:
-      - {src: 'Chat Images', raw: true, dest: '{{media_staging_dir}}/Chat Images'}
-      - {src: 'Chat Video', raw: true, dest: '{{media_staging_dir}}/Chat Video'}
-      - {src: 'Chat Voice Notes', raw: true, concat_script: '{{scriptroot}}/<utils repo>/<concat audio script>.sh', dest: '{{media_staging_dir}}/Chat Voice Notes'}
+    summary_last_line: true
     prompts:
       - {key: confirmed, label: 'Manually copy anything in the GIFs folder to the video folder, then press OK.', type: confirm}
     note: Archives the live chat folder, then standardizes media and deletes the originals on success.
+    command: |
+      bash <<'BASH_SCRIPT'
+      source '{{lib}}'
+      SRC='{{backup_root}}/<chat app folder>'
+      MEDIA="$SRC/Media"
+      OUT='{{media_staging_dir}}'
+      ARCHIVE='{{backup_root}}/Archive/<Chat-AllMedia>'
+      log "Snapshotting $SRC → $ARCHIVE..."
+      mkdir -p "$ARCHIVE"
+      bctl_rsync "$SRC/" "$ARCHIVE"
+      src="$MEDIA/Chat Images"
+      out="$OUT/Chat Images"
+      mkdir -p "$out"
+      bctl_rsync "$src/" "$out"
+      for child in "$src"/*/; do
+        [[ -d "$child" ]] || continue
+        bctl_process_and_move "$child" "$out" '{{scriptroot}}/<media repo>/<standardize script>.sh' 1
+      done
+      src="$MEDIA/Chat Voice Notes"
+      out="$OUT/Chat Voice Notes"
+      mkdir -p "$out"
+      bctl_rsync "$src/" "$out"
+      for child in "$src"/*/; do
+        [[ -d "$child" ]] || continue
+        processed="$child/processed"
+        mkdir -p "$processed"
+        bash '{{scriptroot}}/<utils repo>/<concat audio script>.sh' "$child" "$processed"
+        bash '{{scriptroot}}/<media repo>/<standardize script>.sh' "$processed"
+        for f in "$processed"/*; do mv "$f" "$out/$(basename "$f")"; done
+        rm -rf "$processed"
+      done
+      rm -rf "$MEDIA/Chat Images" "$MEDIA/Chat Voice Notes"
+      log "Import completed; originals deleted"
+      BASH_SCRIPT
 
-  # run with a commands list: a remote workflow expressed as plain shell
-  # commands (ssh + rsync push/pull + cleanup) with rc-checked steps.
+  # Remote workflow as a plain command list: push a script over SSH, run it,
+  # rsync the results back, clean up. Every step is rc-checked.
   - name: Game Save Files
-    group: Local Backups
-    kind: run
+    group: System Backups
     state_dir: '{{backup_root}}/Game Save Files'
     commands:
       - 'ssh -o BatchMode=yes {{hosts.gaming_pc.user}}@{{hosts.gaming_pc.host}} "mkdir -p /tmp/gamehomebak"'
       - 'rsync -aq -e "ssh -o BatchMode=yes" "{{scriptroot}}/<game saves repo>/<script>.sh" {{hosts.gaming_pc.user}}@{{hosts.gaming_pc.host}}:/tmp/gamehomebak/'
-      - 'ssh -o BatchMode=yes {{hosts.gaming_pc.user}}@{{hosts.gaming_pc.host}} "cd /tmp/gamehomebak && bash ./<script>.sh ~/<games dir 1> /home/{{hosts.gaming_pc.user}}/Downloads/gamehomebak_out"'
-      - 'ssh -o BatchMode=yes {{hosts.gaming_pc.user}}@{{hosts.gaming_pc.host}} "cd /tmp/gamehomebak && bash ./<script>.sh ~/<games dir 2> /home/{{hosts.gaming_pc.user}}/Downloads/gamehomebak_out"'
+      - 'ssh -o BatchMode=yes {{hosts.gaming_pc.user}}@{{hosts.gaming_pc.host}} "cd /tmp/gamehomebak && bash ./<script>.sh ~/<games dir> /home/{{hosts.gaming_pc.user}}/Downloads/gamehomebak_out"'
       - 'rsync -aq -e "ssh -o BatchMode=yes" {{hosts.gaming_pc.user}}@{{hosts.gaming_pc.host}}:/home/{{hosts.gaming_pc.user}}/Downloads/gamehomebak_out/ "{{backup_root}}/Game Save Files"'
       - 'ssh -o BatchMode=yes {{hosts.gaming_pc.user}}@{{hosts.gaming_pc.host}} "rm -rf /tmp/gamehomebak /home/{{hosts.gaming_pc.user}}/Downloads/gamehomebak_out"'
     note: Runs the backup script on the gaming PC over SSH and pulls the results down.
@@ -268,7 +286,6 @@ tasks:
   # newest). Prompt secrets are redacted from the log.
   - name: Mail Export
     group: Tools
-    kind: run
     timeout: 1800
     state_dir: '{{backup_root}}/Email'
     require: [password]

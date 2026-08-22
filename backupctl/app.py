@@ -1,9 +1,15 @@
-"""backupctl — FastAPI server, the six task kinds, and the CLI entry.
+"""backupctl — FastAPI server + generic bash runner + CLI entry.
 
-Kinds: ingest (extract a dropped export), move (renamed or per-mapping),
-copy (rsync configured sources), run (shell command(s) with
-uploads/capture/args/require/tool/fresh_dir/prune options), media (import +
-standardize; optional snapshot/raw/concat/delete-originals), encrypt (age)."""
+Tasks are bash: each task is a `command`/`commands` (usually calling
+backupctl/lib.sh) executed by the runner with timeouts, process
+groups, secret redaction, and per-task state recording. Runner options:
+`uploads:` (dropped files, available as {{uploads}}), `glob:` (drop pattern,
+or list of patterns), `prompts:` (confirm/secret, redacted), `require:`,
+`capture:` + `commit_dir:` (output shown in a paste dialog), `args:`
+(argv form; empty values drop their flag pair), `tool:` (download+extract
+a CLI if missing, as {{tool_binary}}), `fresh_dir:` (validate the newest
+export dir is non-empty and fresh), `prune:` (delete older export dirs),
+`summary_last_line:` (summary = last log line)."""
 
 import argparse
 import fnmatch
@@ -12,7 +18,7 @@ import random
 import re
 import shlex
 import shutil
-import tempfile
+import sys
 import threading
 import time
 import webbrowser
@@ -59,37 +65,8 @@ def _resolve(template, ctx, extra=None):
     return core.expand(core.resolve(template, ctx.local, extra))
 
 
-def _path(ctx, template):
-    return Path(_resolve(template, ctx))
-
-
 def _timeout(ctx):
     return int(ctx.task.get("timeout", DEFAULT_TIMEOUT))
-
-
-def _task_root(ctx):
-    raw = ctx.task.get("root")
-    if not raw:
-        return None
-    pattern = _resolve(raw, ctx)
-    if any(c in pattern for c in "*?["):
-        matches = glob.glob(pattern)
-        return Path(matches[0]) if matches else None
-    return Path(pattern)
-
-
-def _staging_files(ctx, patterns=None):
-    d = core.staging_dir(ctx.task["name"])
-    files = [f for f in sorted(d.iterdir()) if f.is_file()]
-    if not patterns:
-        return files
-    patterns = [core.resolve(p, ctx.local) for p in patterns]
-    return [f for f in files if any(fnmatch.fnmatch(f.name, p) for p in patterns)]
-
-
-def _require_staging(ctx, pattern):
-    files = _staging_files(ctx, [pattern])
-    return files if files else None
 
 
 def _clear_staging(ctx):
@@ -103,147 +80,6 @@ def _cleanup_tmp(tmp):
         shutil.rmtree(tmp, ignore_errors=True)
     else:
         tmp.unlink(missing_ok=True)
-
-
-def _bash_script(script, *args, ctx):
-    return core.sh(
-        f"bash {shlex.quote(str(script))} {' '.join(shlex.quote(str(a)) for a in args)}",
-        log=ctx.log,
-        timeout=_timeout(ctx),
-    )
-
-
-def _commit(ctx, dest):
-    core.git_commit(dest, f"{ctx.task['name']} · {time.ctime()}", log=ctx.log)
-
-
-def _commit_and_clear(ctx, dest):
-    _commit(ctx, dest)
-    _clear_staging(ctx)
-
-
-# ingest ---------------------------------------------------------------------
-
-
-def run_ingest(ctx):
-    task = ctx.task
-    files = _require_staging(ctx, task["glob"])
-    if not files:
-        return False, f"No files matching '{task['glob']}' are queued — drop the export here first"
-    dest_base = _resolve(task["dest"], ctx)
-    tmp = Path(tempfile.mkdtemp(prefix="ingest_"))
-    try:
-        for f in files:
-            ctx.log(f"Extracting {f.name}...")
-            if f.name.lower().endswith(".zip"):
-                rc = core.run(["unzip", "-oq", str(f), "-d", str(tmp)], log=ctx.log)
-            else:
-                rc = core.run(["tar", "-xf", str(f), "-C", str(tmp)], log=ctx.log)
-            if rc != 0:
-                return False, f"Failed to extract {f.name}"
-        suffix = ""
-        if task.get("identify"):
-            rc, out, err = core.sh_capture(task["identify"], cwd=tmp, timeout=_timeout(ctx))
-            if err.strip():
-                ctx.log(err.strip())
-            suffix = out.strip() if rc == 0 else ""
-        dest = f"{dest_base} - {suffix}" if suffix else dest_base
-        Path(dest).mkdir(parents=True, exist_ok=True)
-        if core.rsync(tmp, dest, delete=True, excludes=[".git/"], log=ctx.log, timeout=_timeout(ctx)) != 0:
-            return False, f"rsync failed → {dest}"
-        if task.get("git", True):
-            _commit_and_clear(ctx, dest)
-        else:
-            _clear_staging(ctx)
-        return True, f"{len(files)} export(s) → {dest}"
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
-# move -----------------------------------------------------------------------
-
-
-def run_move(ctx):
-    dest = _path(ctx, ctx.task["dest"])
-    dest.mkdir(parents=True, exist_ok=True)
-    if "mappings" in ctx.task:
-        return _move_mappings(ctx, dest)
-    return _move_renamed(ctx, dest)
-
-
-def _move_mappings(ctx, dest):
-    files = _staging_files(ctx)
-    copied = []
-    for m in ctx.task["mappings"]:
-        m_glob = core.resolve(m["glob"], ctx.local)
-        match = next((f for f in files if f not in copied and fnmatch.fnmatch(f.name, m_glob)), None)
-        if match:
-            name = core.resolve(m["name"], ctx.local)
-            ctx.log(f"{match.name} → {dest / name}")
-            shutil.move(str(match), str(dest / name))
-            copied.append(match)
-        else:
-            ctx.log(f"No file matching pattern: {m_glob}")
-    if not copied:
-        return False, "No matching files were queued"
-    _commit(ctx, dest)
-    leftover = [f for f in files if f not in copied]
-    if leftover:
-        ctx.log(f"Keeping {len(leftover)} unmatched file(s) queued")
-    else:
-        _clear_staging(ctx)
-    return True, f"Files → {dest}"
-
-
-def _move_renamed(ctx, dest):
-    task = ctx.task
-    files = _require_staging(ctx, task["glob"])
-    if not files:
-        return False, f"No files matching '{task['glob']}' are queued — drop them here first"
-    rename = core.resolve(task.get("rename_to"), ctx.local) if task.get("rename_to") else None
-    if rename and len(files) > 1:
-        return False, f"Multiple files match '{task['glob']}' but rename_to is set — drop one file at a time"
-    for f in files:
-        name = rename or f.name
-        ctx.log(f"Moving {f.name} → {dest / name}")
-        shutil.move(str(f), str(dest / name))
-    _commit_and_clear(ctx, dest)
-    return True, f"Files → {dest}"
-
-
-# copy -----------------------------------------------------------------------
-
-
-def run_copy(ctx):
-    task = ctx.task
-    dest = _path(ctx, task["dest"])
-    dest.mkdir(parents=True, exist_ok=True)
-    git = task.get("git", False)
-    if task.get("pre"):
-        core.sh(_resolve(task["pre"], ctx), log=ctx.log)
-    root = _task_root(ctx) if task.get("root") else None
-    if task.get("root") and root is None:
-        return False, "Source directory not found"
-    failed = False
-    for src in task["sources"]:
-        path = root / src if root is not None else _path(ctx, src)
-        target = dest / path.name
-        if not path.exists():
-            ctx.log(f"DOES NOT EXIST: {path}")
-            continue
-        if core.rsync(path, target, delete=True, excludes=[".git/"] if git else (), log=ctx.log, timeout=_timeout(ctx)) != 0:
-            ctx.log(f"rsync failed for {path}")
-            failed = True
-        elif git:
-            _commit(ctx, target)
-    if task.get("post"):
-        core.sh(_resolve(task["post"], ctx), log=ctx.log)
-    if failed:
-        return False, "Some sources failed to sync"
-    return True, f"Synced sources → {dest}"
-
-
-# run ------------------------------------------------------------------------
 
 
 def _fail(rc, tmp, timeout):
@@ -266,6 +102,7 @@ def run_commands(ctx):
     extra = {
         "uploads": " ".join(shlex.quote(str(f)) for f in ctx.files),
         "tmp": str(tmp),
+        "python": sys.executable,
         **{k: str(v) for k, v in (ctx.extra or {}).items()},
     }
     redact = [str(v) for v in (ctx.extra or {}).values() if v]
@@ -305,6 +142,9 @@ def run_commands(ctx):
     _prune_exports(ctx, task, extra)
     if capture:
         return True, "\n".join(output)
+    if task.get("summary_last_line"):
+        last = next((l for l in reversed(ctx.log.lines) if l.strip() and not l.startswith("$ ")), None)
+        return True, last if last else "Completed"
     return True, "Completed"
 
 
@@ -395,143 +235,13 @@ def _sorted_export_dirs(root):
     )
 
 
-# media ----------------------------------------------------------------------
-
-
-def run_media_import(ctx):
-    root = _task_root(ctx)
-    if root is None:
-        return False, "Source directory not found"
-    task = ctx.task
-    delete_later = bool(task.get("delete_originals"))
-    if delete_later and not ctx.extra.get(task.get("confirm_key", "confirmed")):
-        return False, "Aborted by user"
-    snap = task.get("snapshot")
-    if snap:
-        src_path = _path(ctx, snap["src"])
-        dest_path = _path(ctx, snap["dest"])
-        dest_path.mkdir(parents=True, exist_ok=True)
-        ctx.log(f"Snapshotting {src_path} → {dest_path}...")
-        if core.rsync(src_path, dest_path, log=ctx.log, timeout=_timeout(ctx)) != 0:
-            return False, "Snapshot failed; originals NOT deleted"
-    defaults = {
-        "process_script": task.get("process_script"),
-        "rm_script": task.get("rm_script"),
-    }
-    failed = False
-    for pair in task["pairs"]:
-        if not _sync_pair(ctx, root, pair, defaults, delete_later):
-            failed = True
-    if delete_later and not failed:
-        for pair in task["pairs"]:
-            src = root / pair["src"]
-            if src.is_dir():
-                shutil.rmtree(src, ignore_errors=True)
-        return True, "Import completed; originals deleted"
-    if failed:
-        return False, "Some imports failed — see log"
-    return True, "Media import completed"
-
-
-def _sync_pair(ctx, root, pair, defaults, delete_later):
-    src = root / pair["src"]
-    if not src.is_dir():
-        ctx.log(f"Missing source dir: {src}")
-        return True
-    dest = _path(ctx, pair["dest"])
-    dest.mkdir(parents=True, exist_ok=True)
-    pre = pair.get("pre_script")
-    if pre:
-        pre_args = [core.resolve(a, ctx.local) for a in pair.get("pre_args", [])]
-        _bash_script(_path(ctx, pre), src, *pre_args, ctx=ctx)
-    if pair.get("raw"):
-        if core.rsync(src, dest, log=ctx.log, timeout=_timeout(ctx)) != 0:
-            return False
-    if not pair.get("process", True):
-        moved = 0
-        for f in src.iterdir():
-            shutil.move(str(f), str(dest / f.name))
-            moved += 1
-        ctx.log(f"Moved {moved} file(s) from {src.name}")
-        return True
-    process = _path(ctx, pair.get("process_script", defaults["process_script"]))
-    rm_script_raw = pair.get("rm_script", defaults.get("rm_script"))
-    rm_script = _path(ctx, rm_script_raw) if rm_script_raw else None
-    if rm_script:
-        _bash_script(rm_script, src, dest, ctx=ctx)
-    concat = _path(ctx, pair["concat_script"]) if pair.get("concat_script") else None
-    ctx.log(f"Importing {src.name} → {dest}...")
-    return _import_pair(ctx, src, dest, process, concat, ctx.task.get("concat_dir", "processed"), delete_later, bool(pair.get("raw")))
-
-
-def _import_pair(ctx, src, dest, process, concat, concat_dir, delete_later, subdirs):
-    # originals are deleted immediately unless the task defers deletion to
-    # the end (delete_later); raw pairs process one pass per child dir
-    targets = [d for d in sorted(src.iterdir()) if d.is_dir()] if subdirs else [src]
-    for target in targets:
-        if concat:
-            processed = target / concat_dir
-            processed.mkdir(parents=True, exist_ok=True)
-            if _bash_script(concat, target, processed, ctx=ctx) != 0:
-                return False
-            work = processed
-        else:
-            work = target
-        files = [f for f in work.iterdir() if f.is_file()]
-        if not files:
-            ctx.log(f"No files in directory, skipped: {work}")
-            if concat:
-                shutil.rmtree(processed, ignore_errors=True)
-            continue
-        tmp = Path(tempfile.mkdtemp(prefix="pam_"))
-        try:
-            for f in files:
-                shutil.copy2(f, tmp / f.name)
-            if _bash_script(process, tmp, ctx=ctx) != 0:
-                ctx.log(f"Processing script failed for {work}")
-                return False
-            for f in tmp.iterdir():
-                shutil.move(str(f), str(dest / f.name))
-            if not delete_later:
-                for f in files:
-                    f.unlink(missing_ok=True)
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
-        if concat:
-            shutil.rmtree(processed, ignore_errors=True)
-    return True
-
-
-# encrypt --------------------------------------------------------------------
-
-
-def run_encrypt(ctx):
-    task = ctx.task
-    files = _require_staging(ctx, task["glob"])
-    if not files:
-        return False, "No file queued — drop the export here"
-    if len(files) > 1:
-        return False, f"Multiple files queued ({len(files)}) — encrypt one file at a time"
-    password = ctx.extra.get("password", "")
-    if not password:
-        return False, "No passphrase provided"
-    dest = _path(ctx, task["dest"])
-    dest.mkdir(parents=True, exist_ok=True)
-    out = dest / task.get("output", "backup.json")
-    if core.age_encrypt_passphrase(files[0], out, password, log=ctx.log) != 0:
-        return False, "age encryption failed"
-    _commit_and_clear(ctx, dest)
-    return True, f"Encrypted export → {out}"
-
-
 # task metadata + dispatcher -------------------------------------------------
 
 
 def availability(task, local):
+    # tasks with a `root` (e.g. device mounts) are unavailable when missing
     root_raw = task.get("root")
-    if task["kind"] == "media" or root_raw:
-        if not root_raw:
-            return False, "Source directory not found"
+    if root_raw:
         pattern = core.expand(core.resolve(root_raw, local))
         found = any(glob.glob(pattern)) if any(c in pattern for c in "*?[") else Path(pattern).is_dir()
         if not found:
@@ -540,45 +250,26 @@ def availability(task, local):
 
 
 def supports_uploads(task):
-    return task["kind"] in ("ingest", "move", "encrypt") or (
-        task["kind"] == "run" and task.get("uploads")
-    )
+    return bool(task.get("uploads"))
 
 
 def upload_patterns(task, local=None):
-    if task["kind"] == "move" and "mappings" in task:
-        patterns = [m["glob"] for m in task["mappings"]]
-    else:
-        patterns = [task.get("glob", "*")]
+    globs = task.get("glob", "*")
+    patterns = globs if isinstance(globs, list) else [globs]
     if local is not None:
         patterns = [core.resolve(p, local) for p in patterns]
     return patterns
-
-
-KINDS = {
-    "ingest": run_ingest,
-    "move": run_move,
-    "copy": run_copy,
-    "run": run_commands,
-    "media": run_media_import,
-    "encrypt": run_encrypt,
-}
 
 
 def run_task(task, local, files, log=None, extra=None):
     if log is None:
         log = Logger()
     ctx = Ctx(task=task, local=local, files=files, log=log, extra=extra or {})
-    fn = KINDS.get(task["kind"])
-    if fn is None:
-        log(f"ERROR: unknown task kind: {task['kind']}")
-        ok, summary = False, f"Unknown task kind: {task['kind']}"
-    else:
-        try:
-            ok, summary = fn(ctx)
-        except Exception as e:  # noqa: BLE001
-            log(f"ERROR: {e}")
-            ok, summary = False, str(e)
+    try:
+        ok, summary = run_commands(ctx)
+    except Exception as e:  # noqa: BLE001
+        log(f"ERROR: {e}")
+        ok, summary = False, str(e)
     core.save_task_state(task, local, ok, summary, output=log.text)
     return ok, summary
 
@@ -652,7 +343,6 @@ def _task_json(t):
     return {
         "name": t["name"],
         "group": t["group"],
-        "kind": t["kind"],
         "note": t.get("note"),
         "prompts": t.get("prompts", []),
         "uploads": supports_uploads(t),

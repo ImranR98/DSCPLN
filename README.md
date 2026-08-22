@@ -1,6 +1,6 @@
 # backupctl
 
-A local web app that runs config-driven backup workflows. Nothing personal is committed to this repo: the repo is a generic engine, and all tasks plus machine-specific values live in a single gitignored `config/config.yaml`. A committed, heavily-commented `config/config.example.yaml` demonstrates every task kind with generic examples.
+A local web app that runs config-driven backup workflows. This repo is **personal**: `config/config.yaml` (values + tasks) is committed, and personal automation scripts are referenced as git submodules under `scripts/`. `config/config.example.yaml` documents every capability generically.
 
 ## Usage
 
@@ -16,7 +16,7 @@ This starts a local server (http://127.0.0.1:8080) and opens your browser. To ru
 
 ## What you see
 
-A **drop zone at the top** detects what kind of export you're uploading from the filename and asks for confirmation before running the matching task (e.g. `medium-export-*.zip` → Medium). If the file matches no task, or is ambiguous, you're told / asked. Cancelling just queues the file so you can run it from the card later. Task cards are grouped into categories (Manual Exports, Device Imports, Local Backups, Tools); each card has:
+A **drop zone at the top** detects what kind of export you're uploading from the filename and asks for confirmation before running the matching task (e.g. `medium-export-*.zip` → Medium). If the file matches no task, or is ambiguous, you're told / asked. Cancelling just queues the file so you can run it from the card later. Task cards are grouped into categories (Apps & Accounts, Social Media, Chats, Finance, Devices, System Backups, Tools); each card has:
 
 - a **drop zone** to queue files for that task specifically (also detected against its patterns)
 - a **Run** button (disabled if the task is unavailable, e.g. its source directory is missing) — becomes a **Stop** button while running (kills the task's processes)
@@ -28,12 +28,26 @@ Every task runs with a timeout (default 10 min, overridable per task via `timeou
 
 ## Configuration
 
-- `config/config.yaml` — your personal file (gitignored): machine-specific values at the top level (`backup_root`, `sync_dir`, hosts, emails, script paths...) plus the `tasks:` list. Add a task by adding an entry; the menu, categories, and drop-zone validation update automatically.
-- `config/config.example.yaml` — committed template demonstrating every task kind with generic examples and schema comments.
+- `config/config.yaml` — your personal file (committed): machine-specific values at the top level (`backup_root`, `sync_dir`, hosts, emails, script paths...) plus the `tasks:` list. Add a task by adding an entry; the menu, categories, and drop-zone validation update automatically.
+- `config/config.example.yaml` — committed template demonstrating every capability with generic examples and schema comments.
 
-Placeholders like `{{backup_root}}` or `{{hosts.gaming_pc.host}}` are resolved from the same file's top-level values at run time; values may reference other tokens. A built-in `{{repo_dir}}` token resolves to this repository's root (env-overridable via `BACKUPCTL_REPO_DIR`). Every task needs either `dest:` or `state_dir:` — run state is stored there as `.backup-state-<task>.json`.
+Placeholders like `{{backup_root}}` or `{{hosts.gaming_pc.host}}` are resolved from the same file's top-level values at run time; values may reference other tokens. Built-in tokens: `{{repo_dir}}` (this repository's root, env-overridable via `BACKUPCTL_REPO_DIR`) and `{{lib}}` (the packaged `backupctl/lib.sh`). Every task needs either `dest:` or `state_dir:` — run state is stored there as `.backup-state-<task>.json`.
 
 **Personal scripts live as git submodules** under `scripts/` in this repo. Tasks that need one (e.g. a Balance-format parser) reference it via the `{{scriptroot}}` token — see the example config.
+
+## How tasks work
+
+There are no hard-coded task types — **every task is a bash command** executed by the runner with timeouts, process-group cancellation, secret redaction, and per-task state recording. The repo ships a generic bash library, `backupctl/lib.sh`, which tasks call either as a subcommand for simple cases:
+
+```sh
+bash '{{lib}}' move --rename bookmarks.html '{{backup_root}}/Manual' {{uploads}}
+```
+
+or by sourcing it inside a heredoc for anything with logic (export ingestion with an account-name suffix, media import with snapshot/standardize/delete-originals, ...). The library's functions (`bctl_extract`, `bctl_rsync`, `bctl_git_commit`, `bctl_process_and_move`, ...) are rc-checked under `set -e`.
+
+Task fields control the runner: `uploads: true` + `glob:` (drop zone, glob can be a list), `prompts:` (confirm/secret dialogs whose values become `{{key}}` tokens), `require:` (prompt keys that must have a value), `capture:` + `commit_dir:` (output in a copy/paste dialog with a Done button that git-commits), `tool:` (download+extract a CLI if missing, exposed as `{{tool_binary}}`), `fresh_dir:` (fail unless the newest export dir is non-empty and fresh), `prune:` (delete older export dirs), `root:` (source directory the card needs — availability badge), `summary_last_line:` (card summary = last log line), plus `timeout`, `cwd`, `note`, `export_url`.
+
+Per-run tokens available in commands: `{{uploads}}` (quoted staged file paths), `{{tmp}}` (unique temp path), `{{python}}` (the server's interpreter — for `python -m backupctl.core`, the generic pty runner for tools like `age` that refuse non-TTY stdin).
 
 ## Docker
 
@@ -51,21 +65,18 @@ What degrades in a container:
 - **ProtonMail** — its export CLI re-downloads into the container home after image rebuilds
 - No browser auto-open (`--no-browser` is the container default)
 
-## Task kinds
-
-The engine provides six generic kinds — `ingest`, `move`, `copy`, `run` (with `uploads:`/`capture:`/`args:`/`require:`/`tool:`/`fresh_dir:`/`prune:` options), `media` (any configurable source root, with optional `snapshot:`, per-pair `raw:`/`concat_script:`, and `delete_originals:` for archive-style workflows), and `encrypt`. Remote workflows are plain `run` tasks with an `ssh`/`rsync` command list. Every field, prompt, and option is demonstrated with a generic example in `config/config.example.yaml`; see `ARCHITECTURE.md` for the code-level semantics.
-
 ## Dependencies
 
-- Python 3.10+ and the venv above (`fastapi`, `uvicorn`, `pyyaml`, `pexpect`)
-- System tools used by tasks: `rsync`, `ssh`, `unzip`/`tar`, `git`, `age`, `node`, `jq`, `wget`, ImageMagick, plus whatever each external script needs
+- Python 3.10+ and the venv above (`fastapi`, `uvicorn`, `pyyaml`, `pexpect` — the last for the generic pty runner)
+- System tools used by tasks: `bash`, `rsync`, `ssh`, `unzip`/`tar`, `git`, `age`, `node`, `jq`, `wget`, ImageMagick, plus whatever each external script needs
 - Personal automation scripts live as **git submodules** under `scripts/` (referenced from the personal config via the `{{scriptroot}}` token); init them with `git submodule update --init --recursive`
 
 ## Structure
 
-- `backupctl/app.py` — FastAPI server (task/upload/run/status endpoints) + the task engines + CLI entry
-- `backupctl/core.py` — config loading/tokens, run state, staging, and the safe subprocess layer
+- `backupctl/app.py` — FastAPI server (task/upload/run/status endpoints), the generic bash runner, and the CLI entry
+- `backupctl/core.py` — config loading/tokens, run state, staging, the safe subprocess layer, and the generic pty runner (`python -m backupctl.core CMD...`)
+- `backupctl/lib.sh` — generic, committed bash helpers that tasks call (subcommands + sourceable functions)
 - `backupctl/static/` — plain HTML/CSS/JS frontend (`index.html`, `app.css`, `app.js`; favicon inlined) — no UI framework
 - `scripts/` — git submodules with the personal automation scripts referenced by the config
-- `config/config.example.yaml` — generic example (your personal `config/config.yaml` is gitignored)
+- `config/config.example.yaml` — generic example documenting every capability
 - `ARCHITECTURE.md` — detailed architecture and code-level explanation

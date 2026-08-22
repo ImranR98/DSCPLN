@@ -9,6 +9,8 @@ import select
 import shlex
 import signal
 import subprocess
+import sys
+import threading
 import time
 from pathlib import Path
 
@@ -30,6 +32,7 @@ def load_config(path=None):
     tasks = data.get("tasks") or []
     local = {k: v for k, v in data.items() if k != "tasks"}
     local.setdefault("repo_dir", os.environ.get("BACKUPCTL_REPO_DIR", str(REPO_DIR)))
+    local.setdefault("lib", str(Path(__file__).parent / "lib.sh"))
     seen = set()
     for t in tasks:
         name = t.get("name")
@@ -315,48 +318,6 @@ def git_commit(dest, message, log=None):
         raise RuntimeError(f"git commit failed in {dest}: {err.strip()}")
 
 
-def age_encrypt_passphrase(src, out, passphrase, log=None):
-    """age -p refuses non-TTY stdin, so encryption is driven through a pty
-    (passphrase sent twice: enter + confirm)."""
-    import io
-
-    import pexpect
-
-    if log is None:
-        log = lambda line: None  # noqa: E731
-    log(f"$ age --encrypt --passphrase -o {out} {src}")
-    try:
-        child = pexpect.spawn(
-            "age", ["--encrypt", "--passphrase", "-o", str(out), str(src)],
-            encoding="utf-8", timeout=30,
-        )
-    except pexpect.ExceptionPexpect as e:
-        log(f"ERROR: could not start age: {e}")
-        return 127
-    PROC_GROUPS.add(child.pid)
-    capture = io.StringIO()
-    child.logfile_read = capture
-    try:
-        child.expect("Enter passphrase")
-        child.sendline(passphrase)
-        child.expect("Confirm passphrase")
-        child.sendline(passphrase)
-        child.expect(pexpect.EOF)
-    except pexpect.TIMEOUT:
-        child.close(force=True)
-        log("TIMEOUT: age did not respond")
-        return TIMEOUT_RC
-    except pexpect.EOF:
-        pass  # age failed early; its output is logged below
-    finally:
-        PROC_GROUPS.discard(child.pid)
-    child.close()
-    output = capture.getvalue().strip()
-    if output:
-        log(output)
-    return child.exitstatus if child.exitstatus is not None else 1
-
-
 def human_ago(ts):
     delta = time.time() - ts
     if delta < 3600:
@@ -368,3 +329,48 @@ def human_ago(ts):
     if delta < 86400 * 365:
         return f"{int(delta // (86400 * 30))} months ago"
     return f"{int(delta // (86400 * 365))} years ago"
+
+
+# pty runner -----------------------------------------------------------------
+
+
+def pty_main():
+    """Run a command in a pseudo-terminal, forwarding piped stdin to it.
+
+    For tools that refuse non-TTY input (e.g. `age --passphrase`). Output
+    streams to stdout (terminal control sequences stripped); exit code is
+    the child's. Secrets stay off argv by piping them in (e.g. from an env
+    var), never passing them as arguments.
+
+    Usage: printf 'pw\npw\n' | python -m backupctl.core CMD [ARGS...]"""
+    import pexpect
+
+    ansi = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
+    if len(sys.argv) < 2:
+        print("usage: python -m backupctl.core CMD [ARGS...]", file=sys.stderr)
+        sys.exit(2)
+    child = pexpect.spawn(sys.argv[1], sys.argv[2:], encoding="utf-8", timeout=30)
+
+    def feed():
+        for line in sys.stdin:
+            child.send(line)
+        try:
+            child.sendeof()
+        except Exception:
+            pass
+
+    threading.Thread(target=feed, daemon=True).start()
+    while True:
+        try:
+            sys.stdout.write(ansi.sub("", child.read_nonblocking(size=65536, timeout=0.5)))
+            sys.stdout.flush()
+        except pexpect.TIMEOUT:
+            pass
+        except pexpect.EOF:
+            break
+    child.close()
+    sys.exit(child.exitstatus if child.exitstatus is not None else 1)
+
+
+if __name__ == "__main__":
+    pty_main()

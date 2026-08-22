@@ -88,7 +88,7 @@ tasks:
     state_dir: '{{maindir}}/Backups/Manual'
     note: Drop the browser bookmarks export (HTML) here.
     summary_last_line: true
-    command: "bash '{{lib}}' move --rename bookmarks.html '{{maindir}}/Backups/Manual' {{uploads}}"
+    command: "bash '{{lib}}' move --git --rename bookmarks.html '{{maindir}}/Backups/Manual' {{uploads}}"
 
   # Obtainium app list export -> Obtainium.json.
   - name: Obtainium Apps
@@ -98,7 +98,7 @@ tasks:
     state_dir: '{{maindir}}/Backups/Manual'
     note: Drop the Obtainium app list export (JSON) here.
     summary_last_line: true
-    command: "bash '{{lib}}' move --rename Obtainium.json '{{maindir}}/Backups/Manual' {{uploads}}"
+    command: "bash '{{lib}}' move --git --rename Obtainium.json '{{maindir}}/Backups/Manual' {{uploads}}"
 
   # AntennaPod feeds (OPML) and/or DB backup, renamed per pattern.
   - name: AntennaPod (Feeds + DB)
@@ -131,7 +131,7 @@ tasks:
     state_dir: '{{maindir}}/Backups/Manual'
     note: Drop the Read You feeds export (OPML) here.
     summary_last_line: true
-    command: "bash '{{lib}}' move --rename RSS.opml '{{maindir}}/Backups/Manual' {{uploads}}"
+    command: "bash '{{lib}}' move --git --rename RSS.opml '{{maindir}}/Backups/Manual' {{uploads}}"
 
   # Aegis 2FA vault export -> aegis-export.json.
   - name: Aegis 2FA
@@ -141,7 +141,7 @@ tasks:
     state_dir: '{{maindir}}/Backups/Manual'
     note: Drop the Aegis 2FA backup export (JSON) here.
     summary_last_line: true
-    command: "bash '{{lib}}' move --rename aegis-export.json '{{maindir}}/Backups/Manual' {{uploads}}"
+    command: "bash '{{lib}}' move --git --rename aegis-export.json '{{maindir}}/Backups/Manual' {{uploads}}"
 
   # ntfy subscriptions export -> ntfy-subscriptions.json.
   - name: NTFY Subscriptions
@@ -151,7 +151,7 @@ tasks:
     state_dir: '{{maindir}}/Backups/Manual'
     note: Drop the ntfy subscriptions export (JSON) here.
     summary_last_line: true
-    command: "bash '{{lib}}' move --rename ntfy-subscriptions.json '{{maindir}}/Backups/Manual' {{uploads}}"
+    command: "bash '{{lib}}' move --git --rename ntfy-subscriptions.json '{{maindir}}/Backups/Manual' {{uploads}}"
 
   # DNS zone file (example.com.txt), kept under its own name.
   - name: DNS Entries
@@ -161,7 +161,7 @@ tasks:
     state_dir: '{{maindir}}/Backups/Manual'
     note: Drop the DNS entries export here.
     summary_last_line: true
-    command: "bash '{{lib}}' move --rename 'example.com.txt' '{{maindir}}/Backups/Manual' {{uploads}}"
+    command: "bash '{{lib}}' move --git --rename 'example.com.txt' '{{maindir}}/Backups/Manual' {{uploads}}"
 
   # Presto transit usage reports, kept under their own names.
   - name: Presto Transit Usage Report
@@ -172,7 +172,7 @@ tasks:
     export_url: https://www.prestocard.ca/en/dashboard/transit-usage-report
     note: Drop the transit_usage_report.csv file(s) here.
     summary_last_line: true
-    command: "bash '{{lib}}' move '{{maindir}}/Backups/Archive/Presto Transit Usage Reports' {{uploads}}"
+    command: "bash '{{lib}}' move --git '{{maindir}}/Backups/Archive/Presto Transit Usage Reports' {{uploads}}"
 
 # ============================================================ Social Media =
 
@@ -448,7 +448,7 @@ tasks:
     note: 'Drop the Cheogram export (CEB) here. Do NOT FORGET to re-enable your Cheogram
       account: the backup process disables all active accounts.'
     summary_last_line: true
-    command: "bash '{{lib}}' move --rename Cheogram.ceb '{{maindir}}/Backups/Manual' {{uploads}}"
+    command: "bash '{{lib}}' move --git --rename Cheogram.ceb '{{maindir}}/Backups/Manual' {{uploads}}"
 
   # Molly (Signal) backup.
   - name: Molly (Signal)
@@ -458,7 +458,7 @@ tasks:
     state_dir: '{{maindir}}/Backups/Manual'
     note: Drop the Molly (Signal) backup here.
     summary_last_line: true
-    command: "bash '{{lib}}' move --rename signal.backup '{{maindir}}/Backups/Manual' {{uploads}}"
+    command: "bash '{{lib}}' move --git --rename signal.backup '{{maindir}}/Backups/Manual' {{uploads}}"
 
   # Drop WhatsApp chat zips; they are merged into the cumulative TXT backup.
   - name: WhatsApp TXT
@@ -469,8 +469,10 @@ tasks:
       cumulative backup.
     state_dir: '{{maindir}}/Backups/WhatsApp TXT'
     command: mkdir -p "{{maindir}}/Backups/WhatsApp TXT" && rm -rf "{{tmp}}" && mkdir
-      -p "{{tmp}}" && unzip -oq {{uploads}} -d "{{tmp}}" && rm -f "{{tmp}}"/*.vcf &&
-      node '{{scriptroot}}/WhatsAppTXT/WhatsAppTXT.js' "{{maindir}}/Backups/WhatsApp TXT" "{{tmp}}"
+      -p "{{tmp}}" && unzip -oq {{uploads}} -d "{{tmp}}" && for z in "{{tmp}}"/*.zip;
+      do [ -f "$z" ] || continue; unzip -oq "$z" -d "{{tmp}}"; rm -f "$z"; done &&
+      rm -f "{{tmp}}"/*.vcf && node '{{scriptroot}}/WhatsAppTXT/WhatsAppTXT.js'
+      "{{maindir}}/Backups/WhatsApp TXT" "{{tmp}}"
 
   # Qwen chat exports, kept under their own names.
   - name: Qwen Chats
@@ -480,7 +482,7 @@ tasks:
     state_dir: '{{maindir}}/Backups/Qwen Chat'
     note: Drop the chat-export-*.json file(s) here.
     summary_last_line: true
-    command: "bash '{{lib}}' move '{{maindir}}/Backups/Qwen Chat' {{uploads}}"
+    command: "bash '{{lib}}' move --git '{{maindir}}/Backups/Qwen Chat' {{uploads}}"
 
   # Archive the live WhatsApp folder: snapshot it, standardize the media
   # into the staging dir (concatenating voice notes per chat), then delete
@@ -634,6 +636,31 @@ tasks:
       mkdir -p "$DEST"
       for f in "$SRC/Calls"/*; do mv "$f" "$DEST/$(basename "$f")"; done
       log "Media import completed"
+      BASH_SCRIPT
+
+  # Import PC screenshots into the media library. Everything in
+  # ~/Pictures/Screenshots is standardized and moved — confirmation required.
+  - name: PC Screenshots
+    state_dir: '{{maindir}}/Media/Screenshots'
+    group: Devices
+    require: [confirmed]
+    note: Moves and standardizes everything in ~/Pictures/Screenshots.
+    summary_last_line: true
+    prompts:
+    - key: confirmed
+      label: Move and standardize everything in ~/Pictures/Screenshots into the media library?
+      type: confirm
+    command: |
+      bash <<'BASH_SCRIPT'
+      source '{{lib}}'
+      SRC=~/Pictures/Screenshots
+      if [[ ! -d "$SRC" ]]; then
+        log "Missing source dir: $SRC"
+        exit 0
+      fi
+      log "Importing $(basename "$SRC") → {{maindir}}/Media/Screenshots..."
+      bctl_process_and_move "$SRC" '{{maindir}}/Media/Screenshots' '{{scriptroot}}/MediaDateStandardize/mediaDateStandardize.sh'
+      log "PC screenshots imported"
       BASH_SCRIPT
 
   # Import Quest screenshots and video clips (requires the Quest connected).

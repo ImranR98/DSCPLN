@@ -76,10 +76,16 @@ fi
 
 case "${1:-}" in
   move)
-    # lib.sh move [--rename NAME] DEST FILE...
+    # backupctl-lib.sh move [--rename NAME] [--git] DEST FILE...
     shift
-    rename="" dest="" name="" count=0
-    if [[ "$1" == "--rename" ]]; then rename="$2"; shift 2; fi
+    rename="" git=0 dest="" name="" count=0
+    while [[ $# -gt 1 && "$1" == --* ]]; do
+      case "$1" in
+        --rename) rename="$2"; shift 2 ;;
+        --git) git=1; shift ;;
+        *) log "unknown flag: $1" >&2; exit 2 ;;
+      esac
+    done
     dest="$1"; shift
     if [[ -n "$rename" && $# -gt 1 ]]; then
       log "Multiple files queued but a fixed name is set — drop one file at a time" >&2
@@ -93,7 +99,9 @@ case "${1:-}" in
       mv "$f" "$dest/$name"
       count=$((count + 1))
     done
-    bctl_git_commit "$dest"
+    if [[ $git -eq 1 ]]; then
+      bctl_git_commit "$dest"
+    fi
     log "Moved $count file(s) → $dest"
     ;;
 

@@ -38,7 +38,7 @@ Placeholders like `{{backup_root}}` or `{{hosts.gaming_pc.host}}` are resolved f
 There are no hard-coded task types — **every task is a bash command** executed by the runner with timeouts, process-group cancellation, secret redaction, and per-task state recording. The repo ships a generic bash library, `backupctl/lib.sh`, which tasks call either as a subcommand for simple cases:
 
 ```sh
-bash '{{lib}}' move --rename bookmarks.html '{{backup_root}}/Manual' {{uploads}}
+bash '{{lib}}' move --git --rename bookmarks.html '{{backup_root}}/Manual' {{uploads}}
 ```
 
 or by sourcing it inside a heredoc for anything with logic (export ingestion with an account-name suffix, media import with snapshot/standardize/delete-originals, ...). The library's functions (`bctl_extract`, `bctl_rsync`, `bctl_git_commit`, `bctl_process_and_move`, ...) are rc-checked under `set -e`.

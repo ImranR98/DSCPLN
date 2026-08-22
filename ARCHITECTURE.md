@@ -112,7 +112,7 @@ The bash library `backupctl/lib.sh` (sourced or called as a subcommand) is rc-ch
 
 | Entry | Behavior |
 |---|---|
-| `move [--rename NAME] DEST FILE...` | move files into dest (fixed name optional; multiple files with a rename set fail), git commit |
+| `move [--rename NAME] [--git] DEST FILE...` | move files into dest (fixed name optional; multiple files with a rename set fail), git commit when `--git` (like `copy`) |
 | `copy [--git] [--pre CMD] [--post CMD] DEST SRC...` | rsync each source into `dest/<basename>` (missing sources skipped, failures fail the run), per-source git commit when `--git` |
 | `encrypt PYTHON DEST OUTNAME FILE` | age-encrypt exactly one file via the generic pty runner; passphrase comes from `AGE_PASSPHRASE` (env, never argv); git commit |
 | `bctl_extract` / `bctl_rsync(_delete)` | unzip/tar extraction; rsync -aq with optional --delete |

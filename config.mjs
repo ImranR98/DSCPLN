@@ -470,30 +470,6 @@ BASH_SCRIPT
 `,
         },
 
-        // Import PC screenshots into the media library. Everything in
-        // ~/Pictures/Screenshots is standardized and moved — confirmation required.
-        {
-          name: 'PC Screenshots',
-          state_dir: '{{maindir}}/Media/Screenshots',
-          require: ['confirmed'],
-          note: 'Moves and standardizes everything in ~/Pictures/Screenshots.',
-          prompts: [
-            { key: 'confirmed', label: 'Move and standardize everything in ~/Pictures/Screenshots into the media library?', type: 'confirm' },
-          ],
-          commands: `bash <<'BASH_SCRIPT'
-source '{{lib}}'
-SRC=~/Pictures/Screenshots
-if [[ ! -d "$SRC" ]]; then
-  log "Missing source dir: $SRC"
-  exit 0
-fi
-log "Importing $(basename "$SRC") → {{maindir}}/Media/Screenshots..."
-bctl_process_and_move "$SRC" '{{maindir}}/Media/Screenshots' '{{scriptroot}}/MediaDateStandardize/mediaDateStandardize.sh'
-log "PC screenshots imported"
-BASH_SCRIPT
-`,
-        },
-
         // Import Quest screenshots and video clips (requires the Quest connected).
         {
           name: 'Quest Media',

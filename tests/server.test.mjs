@@ -1,24 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
-const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'bctl-run-'));
+// Sandboxed state dir — set BEFORE importing the module so its module-level
+// STATE_DIR / askpass paths point at the sandbox.
+const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'bctl-'));
 process.env.BACKUPCTL_STATE_DIR = path.join(SANDBOX, 'state');
 
-const core = await import('../core.mjs');
-const server = await import('../server.mjs');
+const bctl = await import('../server.mjs');
 
 const DATA = path.join(SANDBOX, 'data');
 const maindir = DATA;
+const PTY_HELPER = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'pty_runner.py');
 
-function makeConfig(tasks, extraValues = {}) {
-  const p = path.join(SANDBOX, `config-${Math.random().toString(36).slice(2)}.mjs`);
-  const data = { maindir, ...extraValues, tasks };
+function writeConfig(name, data) {
+  const p = path.join(SANDBOX, name);
   fs.writeFileSync(p, `export default ${JSON.stringify(data)};`);
   return p;
+}
+
+function makeConfig(tasks, extraValues = {}) {
+  return writeConfig(`config-${Math.random().toString(36).slice(2)}.mjs`, { maindir, ...extraValues, tasks });
 }
 
 function task(name, fields) {
@@ -26,11 +30,11 @@ function task(name, fields) {
 }
 
 async function bootWith(configPath) {
-  await server.boot(configPath);
+  await bctl.boot(configPath);
 }
 
 async function api() {
-  const app = server.createApp();
+  const app = bctl.createApp();
   const srv = await new Promise((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
   });
@@ -62,11 +66,161 @@ async function pollUntil(fn, timeoutMs = 8000) {
 }
 
 async function stage(taskName, filename, content) {
-  const d = core.stagingDir(taskName);
+  const d = bctl.stagingDir(taskName);
   fs.writeFileSync(path.join(d, filename), content);
 }
 
-// ---- runner-level task suites ---------------------------------------------
+async function hasPtyTools() {
+  for (const bin of ['python3', 'age', 'tar']) {
+    const { rc } = await bctl.shCapture(`command -v ${bin} >/dev/null 2>&1`);
+    if (rc !== 0) return false;
+  }
+  return true;
+}
+
+// ---- config / tokens / state / subprocess layer ----------------------------
+
+test('loadConfig: validates names, state_dir, commands, duplicates', async () => {
+  const [local, tasks] = await bctl.loadConfig(
+    writeConfig('valid.mjs', {
+      maindir: '/tmp',
+      tasks: [{ name: 'a', state_dir: '/tmp/a', commands: 'true' }],
+    })
+  );
+  assert.equal(local.maindir, '/tmp');
+  assert.equal(tasks.length, 1);
+  assert.ok(local.repo_dir);
+  assert.ok(local.lib.endsWith('lib.sh'));
+
+  await assert.rejects(
+    bctl.loadConfig(writeConfig('nofile.mjs', { tasks: [{ name: 'a' }] })),
+    bctl.ConfigError
+  );
+  await assert.rejects(
+    bctl.loadConfig(writeConfig('nocmd.mjs', { tasks: [{ name: 'a', state_dir: '/x' }] })),
+    /needs 'commands'/
+  );
+  await assert.rejects(
+    bctl.loadConfig(writeConfig('dup.mjs', {
+      tasks: [
+        { name: 'a', state_dir: '/x', commands: 'true' },
+        { name: 'a', state_dir: '/y', commands: 'true' },
+      ],
+    })),
+    /Duplicate task name/
+  );
+  await assert.rejects(bctl.loadConfig(path.join(SANDBOX, 'absent.mjs')), bctl.ConfigMissingError);
+});
+
+test('resolve: nested lookup, typed values, loops, tildes', () => {
+  const local = {
+    repo_dir: bctl.REPO_DIR,
+    maindir: '~/Main',
+    scriptroot: '{{repo_dir}}/scripts',
+    hosts: { bigpc: { user: 'user', port: 22 } },
+    list: [1, 2],
+  };
+  assert.equal(bctl.resolve('{{maindir}}/Backups', local), `${os.homedir()}/Main/Backups`);
+  assert.equal(bctl.resolve('{{scriptroot}}', local), `${bctl.REPO_DIR}/scripts`); // loops to stable
+  assert.equal(bctl.resolve('{{hosts.bigpc.user}}', local), 'user');
+  assert.equal(bctl.resolve('{{hosts.bigpc.port}}', local), 22); // typed value
+  assert.equal(bctl.resolve('port={{hosts.bigpc.port}}', local), 'port=22'); // embedded: stringified
+  assert.deepEqual(bctl.resolve('{{hosts.bigpc}}', local), local.hosts.bigpc); // typed
+  assert.deepEqual(bctl.resolve('{{list}}', local), [1, 2]); // typed
+  assert.equal(bctl.resolve('{{missing}}', local), '{{missing}}'); // unresolved literal
+  assert.equal(bctl.resolve('{{missing}}/x', local), '{{missing}}/x');
+  const extra = { uploads: 'a b' };
+  assert.equal(bctl.resolve('{{uploads}}', local, extra), 'a b');
+});
+
+test('slugify + state file round-trip (atomic, capped output)', () => {
+  const local = { maindir: path.join(SANDBOX, 'data') };
+  const t = { name: 'Test Task!', state_dir: '{{maindir}}/Dest' };
+  assert.equal(bctl.slugify('Test Task!'), 'Test_Task_');
+  bctl.saveTaskState(t, local, true, 'summary', 'x'.repeat(25000));
+  const rec = bctl.loadTaskState(t, local);
+  assert.equal(rec.ok, true);
+  assert.equal(rec.summary, 'summary');
+  assert.equal(rec.output.length, 20000);
+  assert.ok(fs.existsSync(path.join(SANDBOX, 'data/Dest', '.backup-state-Test_Task_.json')));
+});
+
+test('running marker + staging', () => {
+  bctl.markRunning('task-x');
+  assert.equal(bctl.runningMarker().task, 'task-x');
+  bctl.clearRunning();
+  assert.equal(bctl.runningMarker(), null);
+  const d = bctl.stagingDir('Task With Spaces');
+  assert.ok(d.endsWith('Task_With_Spaces'));
+  assert.ok(fs.existsSync(d));
+});
+
+test('run: streams lines, redacts secrets, returns rc', async () => {
+  const lines = [];
+  const rc = await bctl.run(
+    ['bash', '-c', 'echo secret123 out; echo other; exit 3'],
+    { log: (l) => lines.push(l), redact: ['secret123'] }
+  );
+  assert.equal(rc, 3);
+  assert.ok(lines.some((l) => l.includes('$ ')));
+  assert.ok(lines.some((l) => l.includes('*** out')));
+  assert.ok(!lines.some((l) => l.includes('secret123')));
+});
+
+test('run: timeout kills the process group and returns 124', async () => {
+  const lines = [];
+  const rc = await bctl.run(['bash', '-c', 'sleep 100'], {
+    log: (l) => lines.push(l),
+    timeout: 1,
+  });
+  assert.equal(rc, bctl.TIMEOUT_RC);
+  assert.ok(lines.some((l) => l.includes('TIMEOUT: command killed')));
+});
+
+test('shCapture: captures output and redacts', async () => {
+  const { rc, out, err } = await bctl.shCapture('echo secret99; echo oops >&2', {
+    redact: ['secret99'],
+  });
+  assert.equal(rc, 0);
+  assert.ok(out.includes('***'));
+  assert.ok(err.includes('oops'));
+});
+
+test('run: nonexistent binary returns 127', async () => {
+  const rc = await bctl.run(['definitely-not-a-binary-xyz'], { log: () => {} });
+  assert.equal(rc, 127);
+});
+
+test('shellQuote', () => {
+  assert.equal(bctl.shellQuote('plain'), 'plain');
+  assert.equal(bctl.shellQuote('a b'), `'a b'`);
+  assert.equal(bctl.shellQuote(`c'd`), `'c'\\''d'`);
+});
+
+test('gitCommit: excludes state files, tolerates empty commits', async () => {
+  const dest = path.join(SANDBOX, 'gitdest');
+  await bctl.gitCommit(dest, 'first');
+  fs.writeFileSync(path.join(dest, 'a.txt'), 'hi');
+  fs.writeFileSync(path.join(dest, '.backup-state-x.json'), '{"ok":true}');
+  await bctl.gitCommit(dest, 'second');
+  const { rc, out } = await bctl.shCapture(`git -C ${bctl.shellQuote(dest)} ls-files`, {});
+  assert.equal(rc, 0);
+  assert.ok(out.includes('a.txt'));
+  assert.ok(!out.includes('.backup-state-x.json'));
+  // empty commit tolerated
+  await bctl.gitCommit(dest, 'third');
+});
+
+test('pathFound: globs and plain dirs', () => {
+  const d = path.join(SANDBOX, 'pfound');
+  fs.mkdirSync(d, { recursive: true });
+  assert.equal(bctl.pathFound(d), true);
+  assert.equal(bctl.pathFound(path.join(SANDBOX, 'nope')), false);
+  assert.equal(bctl.pathFound(path.join(SANDBOX, 'pfo*')), true);
+  assert.equal(bctl.pathFound(path.join(SANDBOX, 'z*')), false);
+});
+
+// ---- runner-level task suites ----------------------------------------------
 
 test('move subcommand: renames the drop, commits, clears staging, records state', async () => {
   const t = task('Move Test', {
@@ -74,23 +228,23 @@ test('move subcommand: renames the drop, commits, clears staging, records state'
     uploads: true,
     glob: 'bookmarks_*.html',
     summary_last_line: true,
-    command:
+    commands:
       "bash '{{lib}}' move --git --rename bookmarks.html '{{maindir}}/Dest' {{uploads}}",
   });
   const cfgPath = makeConfig([t]);
-  const [l2, t2] = await core.loadConfig(cfgPath);
+  const [l2, t2] = await bctl.loadConfig(cfgPath);
   await stage(t.name, 'bookmarks_2024.html', '<html>');
-  const [ok, summary] = await server.runTask(t2[0], l2, [
-    path.join(core.stagingDir(t.name), 'bookmarks_2024.html'),
+  const [ok, summary] = await bctl.runTask(t2[0], l2, [
+    path.join(bctl.stagingDir(t.name), 'bookmarks_2024.html'),
   ]);
   assert.equal(ok, true, summary);
   assert.equal(summary, 'Moved 1 file(s) → ' + path.join(maindir, 'Dest'));
   assert.ok(fs.existsSync(path.join(maindir, 'Dest', 'bookmarks.html')));
-  assert.deepEqual(fs.readdirSync(core.stagingDir(t.name)), []); // staging cleared
-  const state = core.loadTaskState(t2[0], l2);
+  assert.deepEqual(fs.readdirSync(bctl.stagingDir(t.name)), []); // staging cleared
+  const state = bctl.loadTaskState(t2[0], l2);
   assert.equal(state.ok, true);
   // git commit happened and excluded state files
-  const { rc, out } = await core.shCapture(`git -C ${core.shellQuote(path.join(maindir, 'Dest'))} ls-files`);
+  const { rc, out } = await bctl.shCapture(`git -C ${bctl.shellQuote(path.join(maindir, 'Dest'))} ls-files`);
   assert.equal(rc, 0);
   assert.ok(out.includes('bookmarks.html'));
   assert.ok(!out.includes('.backup-state'));
@@ -102,7 +256,7 @@ test('mappings heredoc: per-pattern renames', async () => {
     uploads: true,
     glob: ['contacts-*.vcf', 'todo-*.ics'],
     summary_last_line: true,
-    command: `bash <<'BASH_SCRIPT'
+    commands: `bash <<'BASH_SCRIPT'
 source '{{lib}}'
 DEST='{{maindir}}/Dest2'
 mkdir -p "$DEST"
@@ -119,9 +273,9 @@ BASH_SCRIPT`,
   const cfgPath = makeConfig([t]);
   await stage(t.name, 'contacts-1.vcf', 'vcf');
   await stage(t.name, 'todo-2.ics', 'ics');
-  const [local, tasks] = await core.loadConfig(cfgPath);
-  const files = fs.readdirSync(core.stagingDir(t.name)).map((f) => path.join(core.stagingDir(t.name), f));
-  const [ok, summary] = await server.runTask(tasks[0], local, files);
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
+  const files = fs.readdirSync(bctl.stagingDir(t.name)).map((f) => path.join(bctl.stagingDir(t.name), f));
+  const [ok, summary] = await bctl.runTask(tasks[0], local, files);
   assert.equal(ok, true, summary);
   assert.ok(fs.existsSync(path.join(maindir, 'Dest2', 'My Contacts.vcf')));
   assert.ok(fs.existsSync(path.join(maindir, 'Dest2', 'TODO.ics')));
@@ -135,14 +289,14 @@ test('ingest heredoc: extracts, identifies account, names the folder', async () 
     path.join(archiveSrc, 'users_000001.json'),
     JSON.stringify([{ login: 'user', billing_plan: 'x' }, { login: 'other' }])
   );
-  const { rc } = await core.shCapture(`tar czf ${core.shellQuote(path.join(SANDBOX, 'gh.tar.gz'))} -C ${core.shellQuote(archiveSrc)} .`);
+  const { rc } = await bctl.shCapture(`tar czf ${bctl.shellQuote(path.join(SANDBOX, 'gh.tar.gz'))} -C ${bctl.shellQuote(archiveSrc)} .`);
   assert.equal(rc, 0);
   const t = task('GitHub Ingest', {
     group: 'G',
     uploads: true,
     glob: '*.tar.gz',
     summary_last_line: true,
-    command: `bash <<'BASH_SCRIPT'
+    commands: `bash <<'BASH_SCRIPT'
 source '{{lib}}'
 FILES=({{uploads}})
 tmp=$(mktemp -d -t bctl_ingest.XXXXXX)
@@ -161,9 +315,9 @@ BASH_SCRIPT`,
   });
   const cfgPath = makeConfig([t]);
   await stage(t.name, 'gh.tar.gz', fs.readFileSync(path.join(SANDBOX, 'gh.tar.gz')));
-  const [local, tasks] = await core.loadConfig(cfgPath);
-  const files = [path.join(core.stagingDir(t.name), 'gh.tar.gz')];
-  const [ok, summary] = await server.runTask(tasks[0], local, files);
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
+  const files = [path.join(bctl.stagingDir(t.name), 'gh.tar.gz')];
+  const [ok, summary] = await bctl.runTask(tasks[0], local, files);
   assert.equal(ok, true, summary);
   assert.ok(fs.existsSync(path.join(maindir, 'Backups', 'GitHub - imranr', 'users_000001.json')));
 });
@@ -176,19 +330,19 @@ test('copy subcommand with --git + --pre: sources synced, state excluded', async
   const t = task('Copy Test', {
     group: 'G',
     summary_last_line: true,
-    command: `bash '{{lib}}' copy --git --pre 'echo pre > ${pre}' '{{maindir}}/Copied' ${src1}`,
+    commands: `bash '{{lib}}' copy --git --pre 'echo pre > ${pre}' '{{maindir}}/Copied' ${src1}`,
   });
   const cfgPath = makeConfig([t]);
-  const [local, tasks] = await core.loadConfig(cfgPath);
-  const [ok, summary] = await server.runTask(tasks[0], local, []);
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
+  const [ok, summary] = await bctl.runTask(tasks[0], local, []);
   assert.equal(ok, true, summary);
   assert.ok(fs.existsSync(path.join(maindir, 'Copied', 'src1', 'f.txt')));
   assert.equal(fs.readFileSync(pre, 'utf8').trim(), 'pre');
-  const { out } = await core.shCapture(`git -C ${core.shellQuote(path.join(maindir, 'Copied', 'src1'))} ls-files`);
+  const { out } = await bctl.shCapture(`git -C ${bctl.shellQuote(path.join(maindir, 'Copied', 'src1'))} ls-files`);
   assert.ok(out.includes('f.txt'));
 });
 
-test('encrypt task: age round-trip via the pty runner, passphrase redacted', { skip: !(await hasPtyTools()) }, async () => {
+test('encrypt task: age round-trip via pty_runner.py, passphrase redacted', { skip: !(await hasPtyTools()) }, async () => {
   const src = path.join(SANDBOX, 'secret.txt');
   fs.writeFileSync(src, 'top secret data');
   const t = task('Encrypt', {
@@ -197,22 +351,21 @@ test('encrypt task: age round-trip via the pty runner, passphrase redacted', { s
     glob: 'secret.txt',
     require: ['password'],
     summary_last_line: true,
-    command: "AGE_PASSPHRASE='{{password}}' bash '{{lib}}' encrypt '{{node}}' '{{maindir}}/Encrypted' secret.txt.age {{uploads}}",
+    commands: "AGE_PASSPHRASE='{{password}}' bash '{{lib}}' encrypt '{{maindir}}/Encrypted' secret.txt.age {{uploads}}",
   });
   const cfgPath = makeConfig([t]);
   await stage(t.name, 'secret.txt', fs.readFileSync(src));
-  const [local, tasks] = await core.loadConfig(cfgPath);
-  const files = [path.join(core.stagingDir(t.name), 'secret.txt')];
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
+  const files = [path.join(bctl.stagingDir(t.name), 'secret.txt')];
   const log = [];
-  const [ok, summary] = await server.runTask(tasks[0], local, files, (l) => log.push(l), { password: 'hunter2-secret' });
+  const [ok, summary] = await bctl.runTask(tasks[0], local, files, (l) => log.push(l), { password: 'hunter2-secret' });
   assert.equal(ok, true, `summary=${summary}; log=${log.join(' | ')}`);
   const enc = path.join(maindir, 'Encrypted', 'secret.txt.age');
   assert.ok(fs.existsSync(enc));
-  // round-trip decrypt through the same pty runner (passphrase-protected
+  // round-trip decrypt through the pty runner (passphrase-protected
   // files are auto-detected by age)
-  const coreMjs = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'core.mjs');
-  const { rc } = await core.shCapture(
-    `printf '%s\n%s\n' hunter2-secret hunter2-secret | node ${core.shellQuote(coreMjs)} age --decrypt -o ${core.shellQuote(path.join(SANDBOX, 'dec.txt'))} ${core.shellQuote(enc)}`
+  const { rc } = await bctl.shCapture(
+    `printf '%s\\n%s\\n' hunter2-secret hunter2-secret | python3 ${bctl.shellQuote(PTY_HELPER)} age --decrypt -o ${bctl.shellQuote(path.join(SANDBOX, 'dec.txt'))} ${bctl.shellQuote(enc)}`
   );
   assert.equal(rc, 0);
   assert.equal(fs.readFileSync(path.join(SANDBOX, 'dec.txt'), 'utf8'), 'top secret data');
@@ -220,27 +373,19 @@ test('encrypt task: age round-trip via the pty runner, passphrase redacted', { s
   assert.ok(!log.join('\n').includes('hunter2-secret'));
 });
 
-async function hasPtyTools() {
-  for (const bin of ['python3', 'age', 'tar']) {
-    const { rc } = await core.shCapture(`command -v ${bin} >/dev/null 2>&1`);
-    if (rc !== 0) return false;
-  }
-  return true;
-}
-
 test('uploads with no files fails fast', async () => {
-  const t = task('Empty Uploads', { group: 'G', uploads: true, glob: '*.txt', command: 'true' });
-  const [ok, summary] = await server.runTask(t, { maindir }, []);
+  const t = task('Empty Uploads', { group: 'G', uploads: true, glob: '*.txt', commands: 'true' });
+  const [ok, summary] = await bctl.runTask(t, { maindir }, []);
   assert.equal(ok, false);
   assert.equal(summary, 'No files queued — drop them here first');
 });
 
 test('require: missing input fails', async () => {
-  const t = task('Req', { group: 'G', require: ['confirmed'], command: 'true' });
-  const [ok, summary] = await server.runTask(t, { maindir }, []);
+  const t = task('Req', { group: 'G', require: ['confirmed'], commands: 'true' });
+  const [ok, summary] = await bctl.runTask(t, { maindir }, []);
   assert.equal(ok, false);
   assert.equal(summary, 'Missing required input: confirmed');
-  const [ok2] = await server.runTask(t, { maindir }, [], null, { confirmed: 'yes' });
+  const [ok2] = await bctl.runTask(t, { maindir }, [], null, { confirmed: 'yes' });
   assert.equal(ok2, true);
 });
 
@@ -251,27 +396,27 @@ test('capture: output becomes the summary; paste_done commits', async () => {
     commit_dir: '{{maindir}}/CapDest',
     commands: ['echo line1', 'echo line2'],
   });
-  const [ok, summary] = await server.runTask(t, { maindir }, []);
+  const [ok, summary] = await bctl.runTask(t, { maindir }, []);
   assert.equal(ok, true);
   assert.equal(summary, 'line1\nline2');
   // paste done via gitCommit path
-  await core.gitCommit(path.join(maindir, 'CapDest'), 'test');
+  await bctl.gitCommit(path.join(maindir, 'CapDest'), 'test');
 });
 
 test('summary_last_line: last non-command log line', async () => {
   const t = task('SumLast', {
     group: 'G',
     summary_last_line: true,
-    command: 'echo first; echo lastline',
+    commands: 'echo first; echo lastline',
   });
-  const [ok, summary] = await server.runTask(t, { maindir }, []);
+  const [ok, summary] = await bctl.runTask(t, { maindir }, []);
   assert.equal(ok, true);
   assert.equal(summary, 'lastline');
 });
 
 test('timeout: hangs are killed and reported', async () => {
-  const t = task('Slow', { group: 'G', timeout: 1, command: 'sleep 100' });
-  const [ok, summary] = await server.runTask(t, { maindir }, []);
+  const t = task('Slow', { group: 'G', timeout: 1, commands: 'sleep 100' });
+  const [ok, summary] = await bctl.runTask(t, { maindir }, []);
   assert.equal(ok, false);
   assert.equal(summary, 'Command timed out after 1s');
 });
@@ -279,46 +424,18 @@ test('timeout: hangs are killed and reported', async () => {
 test('redaction: secret in command output is masked, state output too', async () => {
   const t = task('Redact', {
     group: 'G',
-    command: "echo 'my-super-secret-token'",
+    commands: "echo 'my-super-secret-token'",
   });
   const log = [];
-  const [ok, summary] = await server.runTask(t, { maindir }, [], (l) => log.push(l), { password: 'my-super-secret-token' });
+  const [ok, summary] = await bctl.runTask(t, { maindir }, [], (l) => log.push(l), { password: 'my-super-secret-token' });
   assert.equal(ok, true);
   assert.ok(!log.join('\n').includes('my-super-secret-token'));
-  const state = core.loadTaskState(t, { maindir });
+  const state = bctl.loadTaskState(t, { maindir });
   assert.ok(!state.output.includes('my-super-secret-token'));
   assert.ok(state.output.includes('***'));
 });
 
-test('args: empty values drop their flag pair; tool installs from a local server', async () => {
-  // serve a tiny "cli" tarball
-  const toolDir = path.join(SANDBOX, 'toolbuild');
-  fs.mkdirSync(toolDir);
-  fs.writeFileSync(path.join(toolDir, 'mycli'), '#!/bin/sh\necho "ran $@"\n');
-  fs.chmodSync(path.join(toolDir, 'mycli'), 0o755);
-  await core.shCapture(`tar czf ${core.shellQuote(path.join(SANDBOX, 'tool.tar.gz'))} -C ${core.shellQuote(toolDir)} mycli`);
-  const httpSrv = http.createServer((req, res) => {
-    res.end(fs.readFileSync(path.join(SANDBOX, 'tool.tar.gz')));
-  });
-  await new Promise((r) => httpSrv.listen(0, '127.0.0.1', r));
-  const toolUrl = `http://127.0.0.1:${httpSrv.address().port}/tool.tar.gz`;
-  const outFile = path.join(SANDBOX, 'args-out.txt');
-  const t = task('Tool Args', {
-    group: 'G',
-    tool: { url: toolUrl, dir: path.join(SANDBOX, 'tools'), binary: 'mycli', extract: true, chmod: true },
-    args: ['{{tool_binary}}', '-k', '-p', '{{password}}', '-t', '{{totp}}'],
-    command: 'true',
-  });
-  const log = [];
-  const [ok, summary] = await server.runTask(t, { maindir }, [], (l) => log.push(l), { password: 'pw1' });
-  assert.equal(ok, true, summary);
-  const joined = log.join('\n');
-  assert.ok(joined.includes('ran -k -p ***'), `password masked and pair kept; got: ${joined}`);
-  assert.ok(!joined.includes('-t'), `empty {{totp}} pair must be dropped; got: ${joined}`);
-  httpSrv.close();
-});
-
-test('fresh_dir + prune: stale check, old exports pruned, keep_newer respected', async () => {
+test('validate-fresh + prune-exports: stale check, old exports pruned, keep-newer respected', async () => {
   const exportRoot = path.join(SANDBOX, 'exports');
   // pre-existing export dirs: 01 (1 file), 02 (2 files), 03 (stale)
   fs.mkdirSync(path.join(exportRoot, '2024-01'), { recursive: true });
@@ -333,38 +450,67 @@ test('fresh_dir + prune: stale check, old exports pruned, keep_newer respected',
 
   const t = task('FreshPrune', {
     group: 'G',
-    fresh_dir: exportRoot,
-    prune: { dir: exportRoot, keep_newer: true },
-    command: `mkdir -p ${exportRoot}/2024-04 && echo x > ${exportRoot}/2024-04/f.txt`,
+    commands: [
+      `mkdir -p ${exportRoot}/2024-04 && echo x > ${exportRoot}/2024-04/f.txt`,
+      `bash '{{lib}}' validate-fresh ${exportRoot}`,
+      `bash '{{lib}}' prune-exports ${exportRoot} --keep-newer`,
+    ],
   });
+  const cfgPath = makeConfig([t]);
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
   const log = [];
-  const [ok, summary] = await server.runTask(t, { maindir }, [], (l) => log.push(l));
+  const [ok, summary] = await bctl.runTask(tasks[0], local, [], (l) => log.push(l));
   assert.equal(ok, true, summary);
   const remaining = fs.readdirSync(exportRoot);
   assert.ok(remaining.includes('2024-04'), 'newest export kept');
   assert.ok(remaining.includes('2024-02'), 'keep_newer keeps bigger dirs');
   assert.ok(!remaining.includes('2024-01'), 'older smaller dir pruned');
-  assert.ok(!remaining.includes('2024-03'), 'stale dir pruned');
+  assert.ok(!remaining.includes('2024-03'), 'older dir pruned');
   assert.ok(log.join('\n').includes('MORE files'));
+  assert.ok(log.join('\n').includes('Validated export: 2024-04'));
 });
 
-test('fresh_dir: empty newest export fails the run', async () => {
+test('validate-fresh: empty newest export fails the run', async () => {
   const exportRoot = path.join(SANDBOX, 'exports2');
   const t = task('FreshEmpty', {
     group: 'G',
-    fresh_dir: exportRoot,
-    command: `mkdir -p ${exportRoot}/backup`,
+    commands: [
+      `mkdir -p ${exportRoot}/backup`,
+      `bash '{{lib}}' validate-fresh ${exportRoot}`,
+    ],
   });
-  const [ok, summary] = await server.runTask(t, { maindir }, []);
+  const cfgPath = makeConfig([t]);
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
+  const log = [];
+  const [ok, summary] = await bctl.runTask(tasks[0], local, [], (l) => log.push(l));
   assert.equal(ok, false);
-  assert.match(summary, /empty or stale/);
+  assert.match(summary, /Command failed/);
+  assert.ok(log.join('\n').includes('empty or stale'));
+});
+
+test('validate-fresh: stale newest export fails the run', async () => {
+  const exportRoot = path.join(SANDBOX, 'exports3');
+  fs.mkdirSync(path.join(exportRoot, 'backup'), { recursive: true });
+  fs.writeFileSync(path.join(exportRoot, 'backup', 'f'), '1');
+  const old = new Date(Date.now() - 2000 * 86400);
+  fs.utimesSync(path.join(exportRoot, 'backup'), old, old);
+  const t = task('FreshStale', {
+    group: 'G',
+    commands: [`bash '{{lib}}' validate-fresh ${exportRoot}`],
+  });
+  const cfgPath = makeConfig([t]);
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
+  const log = [];
+  const [ok, summary] = await bctl.runTask(tasks[0], local, [], (l) => log.push(l));
+  assert.equal(ok, false);
+  assert.ok(log.join('\n').includes('empty or stale'));
 });
 
 // ---- API-level suites ------------------------------------------------------
 
 test('API: upload validation, detect scoring + ambiguity, CSRF guard', async () => {
-  const t1 = task('Detect A', { group: 'G', uploads: true, glob: 'takeout-*.zip', command: 'true' });
-  const t2 = task('Detect B', { group: 'G', uploads: true, glob: '*.zip', command: 'true' });
+  const t1 = task('Detect A', { group: 'G', uploads: true, glob: 'takeout-*.zip', commands: 'true' });
+  const t2 = task('Detect B', { group: 'G', uploads: true, glob: '*.zip', commands: 'true' });
   await bootWith(makeConfig([t1, t2]));
   const { base, req, close } = await api();
 
@@ -392,7 +538,7 @@ test('API: upload validation, detect scoring + ambiguity, CSRF guard', async () 
   res = await req('POST', '/api/run/Detect%20A', {});
   assert.equal(res.status, 200);
   // wait for run to finish, then GET tasks shows state
-  await pollUntil(() => !server.CURRENT.name);
+  await pollUntil(() => !bctl.CURRENT.name);
   res = await req('GET', '/api/tasks');
   const ta = res.json.tasks.find((x) => x.name === 'Detect A');
   assert.equal(ta.state.ok, true);
@@ -402,42 +548,42 @@ test('API: upload validation, detect scoring + ambiguity, CSRF guard', async () 
   assert.equal(res.status, 403);
   res = await req('POST', '/api/run/Detect%20A', {}, false, { origin: base });
   assert.equal(res.status, 200);
-  await pollUntil(() => !server.CURRENT.name);
+  await pollUntil(() => !bctl.CURRENT.name);
   await close();
 });
 
 test('API: run/cancel flow kills the task', async () => {
-  const t = task('Cancel Me', { group: 'G', timeout: 300, command: 'sleep 100' });
+  const t = task('Cancel Me', { group: 'G', timeout: 300, commands: 'sleep 100' });
   await bootWith(makeConfig([t]));
   const { req, close } = await api();
   let res = await req('POST', '/api/run/Cancel%20Me', {});
   assert.equal(res.status, 200);
-  assert.equal(server.CURRENT.name, 'Cancel Me');
+  assert.equal(bctl.CURRENT.name, 'Cancel Me');
   // concurrent run refused
   res = await req('POST', '/api/run/Cancel%20Me', {});
   assert.equal(res.status, 409);
   // cancel
   res = await req('POST', '/api/cancel');
   assert.equal(res.status, 200);
-  await pollUntil(() => server.CURRENT.done !== null, 8000);
-  assert.equal(server.CURRENT.done.ok, false);
-  assert.equal(server.CURRENT.done.summary, 'Cancelled by user');
+  await pollUntil(() => bctl.CURRENT.done !== null, 8000);
+  assert.equal(bctl.CURRENT.done.ok, false);
+  assert.equal(bctl.CURRENT.done.summary, 'Cancelled by user');
   await close();
 });
 
 test('API: paste_done commits the capture dir', async () => {
   const commitDir = path.join(SANDBOX, 'paste-dest');
-  const t = task('Paste', { group: 'G', capture: true, commit_dir: commitDir, command: 'true' });
+  const t = task('Paste', { group: 'G', capture: true, commit_dir: commitDir, commands: 'true' });
   await bootWith(makeConfig([t]));
   const { req, close } = await api();
   let res = await req('POST', '/api/run/Paste', {});
-  await pollUntil(() => server.CURRENT.done !== null);
+  await pollUntil(() => bctl.CURRENT.done !== null);
   fs.mkdirSync(commitDir, { recursive: true });
   fs.writeFileSync(path.join(commitDir, 'data.txt'), 'x');
   res = await req('POST', '/api/paste_done/Paste', {});
   assert.equal(res.status, 200);
   assert.equal(res.json.committed, true);
-  const { out } = await core.shCapture(`git -C ${core.shellQuote(commitDir)} ls-files`);
+  const { out } = await bctl.shCapture(`git -C ${bctl.shellQuote(commitDir)} ls-files`);
   assert.ok(out.includes('data.txt'));
   await close();
 });

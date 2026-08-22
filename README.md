@@ -34,17 +34,17 @@ Placeholders like `{{maindir}}` or `{{hosts.bigpc.host}}` inside command strings
 
 ## How tasks work
 
-There are no hard-coded task types — **every task is a bash command** executed by the runner with timeouts, process-group cancellation, secret redaction, and per-task state recording. The repo ships a generic bash library, `lib.sh`, which tasks call either as a subcommand for simple cases:
+There are no hard-coded task types — **every task is a `commands` list of bash commands** executed in order by the runner with timeouts, process-group cancellation, secret redaction, and per-task state recording. A single string is accepted for one-command tasks. The repo ships a generic bash library, `lib.sh`, which tasks call either as a subcommand for simple cases:
 
 ```sh
 bash '{{lib}}' move --git --rename bookmarks.html '{{maindir}}/Manual' {{uploads}}
 ```
 
-or by sourcing it inside a heredoc for anything with logic (export ingestion with an account-name suffix, media import with snapshot/standardize/delete-originals, ...). The library's functions (`bctl_extract`, `bctl_rsync`, `bctl_git_commit`, `bctl_process_and_move`, ...) are rc-checked under `set -e`.
+or by sourcing it inside a heredoc for anything with logic (export ingestion with an account-name suffix, media import with snapshot/standardize/delete-originals, ...). The library's functions (`bctl_extract`, `bctl_rsync`, `bctl_git_commit`, `bctl_process_and_move`, ...) and subcommands (`move`, `copy`, `encrypt`, `validate-fresh`, `prune-exports`) are rc-checked under `set -e`.
 
-Task fields control the runner: `uploads: true` + `glob:` (drop zone, glob can be a list), `prompts:` (confirm/secret dialogs whose values become `{{key}}` tokens), `require:` (prompt keys that must have a value), `capture:` + `commit_dir:` (output in a copy/paste dialog with a Done button that git-commits), `tool:` (download+extract a CLI if missing, exposed as `{{tool_binary}}`), `fresh_dir:` (fail unless the newest export dir is non-empty and fresh), `prune:` (delete older export dirs), `root:` (source directory the card needs — availability badge), `summary_last_line:` (card summary = last log line), plus `timeout`, `cwd`, `note`, `export_url`.
+Task fields control the runner: `uploads: true` + `glob:` (drop zone, glob can be a list), `prompts:` (confirm/secret dialogs whose values become `{{key}}` tokens), `require:` (prompt keys that must have a value), `capture:` + `commit_dir:` (output in a copy/paste dialog with a Done button that git-commits), `root:` (source directory the card needs — availability badge), `summary_last_line:` (card summary = last log line), plus `timeout`, `cwd`, `note`, `export_url`. Service-specific concerns — installing a CLI, validating an export is fresh, pruning old exports — are plain bash in the task's `commands` (see the ProtonMail task for the full pattern: install-if-missing → export → `validate-fresh` → `prune-exports`).
 
-Per-run tokens available in commands: `{{uploads}}` (quoted staged file paths), `{{tmp}}` (unique temp path), `{{node}}` (the server's Node executable — for the generic pty runner used by tools like `age` that refuse non-TTY stdin).
+Per-run tokens available in commands: `{{uploads}}` (quoted staged file paths) and `{{tmp}}` (unique temp path).
 
 ## Docker
 
@@ -64,16 +64,15 @@ What degrades in a container:
 
 ## Dependencies
 
-- Node.js 20+ (npm dependencies: `express`, `minimatch`)
+- Node.js 22+ (npm dependencies: `express`, `minimatch`)
 - System tools used by tasks: `bash`, `rsync`, `ssh`, `unzip`/`tar`, `git`, `age`, `jq`, `wget`, ImageMagick, plus whatever each external script needs (some personal scripts are Python and need `python3`)
-- **`python3`** (stdlib only) — the generic pty runner delegates to a small committed helper (`pty_runner.py`) that uses Python's stdlib `pty` module for tools like `age` that refuse non-TTY stdin; python3 is already required by several personal scripts
+- **`python3`** (stdlib only) — `lib.sh`'s `encrypt` subcommand drives tools that refuse non-TTY stdin (like `age`) through the committed helper `pty_runner.py`, which uses Python's stdlib `pty` module; python3 is already required by several personal scripts
 - Personal automation scripts live as **git submodules** under `scripts/` (referenced from the personal config via the `{{scriptroot}}` token); init them with `git submodule update --init --recursive`
 
 ## Structure
 
-- `server.mjs` — Express server (task/upload/run/status endpoints), the generic bash runner, and the CLI entry
-- `core.mjs` — config loading/tokens, run state, staging, the safe subprocess layer, and the generic pty runner (`node core.mjs CMD...`)
-- `pty_runner.py` — stdlib-only Python pty helper used by the pty runner (for tools like `age` that refuse non-TTY stdin)
+- `server.mjs` — the whole engine in one module: config loading/tokens, run state, staging, the safe subprocess layer, the generic bash runner, the Express server, and the CLI entry
+- `pty_runner.py` — stdlib-only Python pty helper for tools like `age` that refuse non-TTY stdin (invoked directly by `lib.sh`)
 - `lib.sh` — generic, committed bash helpers that tasks call (subcommands + sourceable functions)
 - `static/` — plain HTML/CSS/JS frontend (`index.html`, `app.css`, `app.js`; favicon inlined) — no UI framework
 - `scripts/` — git submodules with the personal automation scripts referenced by the config

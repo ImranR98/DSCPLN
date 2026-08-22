@@ -7,7 +7,8 @@
 set -euo pipefail
 shopt -s nullglob
 
-# Directory containing this file (core.mjs lives next to it, for the pty runner)
+# Directory containing this file (pty_runner.py lives next to it, for the
+# encrypt subcommand)
 LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 log() { echo "$@"; }
@@ -149,10 +150,10 @@ case "${1:-}" in
     ;;
 
   encrypt)
-    # lib.sh encrypt NODE DEST OUTNAME FILE (passphrase in
+    # lib.sh encrypt DEST OUTNAME FILE (passphrase in
     # AGE_PASSPHRASE, set by the task; never on the command line)
     shift
-    node="$1" dest="$2" outname="$3"; shift 3
+    dest="$1" outname="$2"; shift 2
     if [[ $# -ne 1 ]]; then
       log "Multiple files queued — encrypt one file at a time" >&2
       exit 1
@@ -160,10 +161,50 @@ case "${1:-}" in
     mkdir -p "$dest"
     AGE_PASSPHRASE="${AGE_PASSPHRASE:-}" sh -c '
       printf "%s\n%s\n" "$AGE_PASSPHRASE" "$AGE_PASSPHRASE" |
-        "$0" "$1" age --encrypt --passphrase -o "$2" "$3"
-    ' "$node" "$LIB_DIR/core.mjs" "$dest/$outname" "$1"
+        python3 "$0" age --encrypt --passphrase -o "$1" "$2"
+    ' "$LIB_DIR/pty_runner.py" "$dest/$outname" "$1"
     bctl_git_commit "$dest"
     log "Encrypted export → $dest/$outname"
+    ;;
+
+  validate-fresh)
+    # lib.sh validate-fresh DIR [MAX_AGE_SECONDS] — fail unless the newest
+    # subdir (by name) is non-empty and modified within MAX_AGE_SECONDS
+    shift
+    root="$1" max_age="${2:-86400}"
+    [[ -d "$root" ]] || { log "No export directory found at $root" >&2; exit 1; }
+    newest=$(find "$root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -1)
+    [[ -n "$newest" ]] || { log "Export produced no backup directory" >&2; exit 1; }
+    items=$(find "$root/$newest" -mindepth 1 -maxdepth 1 | wc -l)
+    age=$(( $(date +%s) - $(stat -c %Y "$root/$newest") ))
+    if [[ "$items" -eq 0 || "$age" -gt "$max_age" ]]; then
+      log "Export directory $newest is empty or stale — the export did not complete" >&2
+      exit 1
+    fi
+    log "Validated export: $newest ($items items)"
+    ;;
+
+  prune-exports)
+    # lib.sh prune-exports DIR [--keep-newer] — delete all but the newest
+    # export dir; --keep-newer keeps any dir with more files than the newest
+    shift
+    root="${1:-}"; shift
+    keep_newer=0
+    if [[ "${1:-}" == --keep-newer ]]; then keep_newer=1; fi
+    [[ -d "$root" ]] || exit 0
+    mapfile -t dirs < <(find "$root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V)
+    [[ ${#dirs[@]} -ge 2 ]] || exit 0
+    newest="${dirs[-1]}"
+    newest_count=$(find "$root/$newest" -mindepth 1 -maxdepth 1 | wc -l)
+    for d in "${dirs[@]:0:${#dirs[@]}-1}"; do
+      count=$(find "$root/$d" -mindepth 1 -maxdepth 1 | wc -l)
+      if [[ $keep_newer -eq 1 && $count -gt $newest_count ]]; then
+        log "WARNING: previous backup '$d' has MORE files ($count) than the newest ($newest_count). NOT deleted."
+      else
+        rm -rf "$root/$d"
+        log "Deleted old export $d"
+      fi
+    done
     ;;
 
   *)

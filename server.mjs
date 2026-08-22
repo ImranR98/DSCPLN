@@ -1,31 +1,402 @@
 #!/usr/bin/env node
-/* backupctl — Express server + generic bash runner + CLI entry.
+/* backupctl — Express server, generic bash runner, and CLI entry, in one module.
  *
- * Tasks are bash: each task is a `command`/`commands` (usually calling
- * backupctl/lib.sh) executed by the runner with timeouts, process
- * groups, secret redaction, and per-task state recording. Runner options:
- * `uploads:` (dropped files, available as {{uploads}}), `glob:` (drop pattern,
- * or list of patterns), `prompts:` (confirm/secret, redacted), `require:`,
- * `capture:` + `commit_dir:` (output shown in a paste dialog), `args:`
- * (argv form; empty values drop their flag pair), `tool:` (download+extract
- * a CLI if missing, as {{tool_binary}}), `fresh_dir:` (validate the newest
- * export dir is non-empty and fresh), `prune:` (delete older export dirs),
- * `summary_last_line:` (summary = last log line). */
+ * Tasks are bash: each task has a `commands` list (or a single string)
+ * executed by the runner with timeouts, process groups, secret redaction,
+ * and per-task state recording. Runner options: `uploads:` (dropped files,
+ * available as {{uploads}}), `glob:` (drop pattern, or list of patterns),
+ * `prompts:` (confirm/secret, redacted), `require:`, `capture:` +
+ * `commit_dir:` (output shown in a paste dialog), `root:` (availability
+ * badge), `summary_last_line:` (summary = last log line). Everything
+ * service-specific (tool installs, export validation, pruning) lives in the
+ * task's own bash or in lib.sh. */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import readline from 'node:readline';
 import { pathToFileURL } from 'node:url';
 import express from 'express';
 import { minimatch } from 'minimatch';
 
-import * as core from './core.mjs';
-
-const STATIC_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), 'static');
+export const REPO_DIR = path.dirname(new URL(import.meta.url).pathname);
+export const CONFIG_DIR = process.env.BACKUPCTL_CONFIG_DIR ?? path.join(REPO_DIR, 'config');
+export const CONFIG_FILE = path.join(CONFIG_DIR, 'config.mjs');
+export const LIB_PATH = path.join(REPO_DIR, 'lib.sh');
+const STATIC_DIR = path.join(REPO_DIR, 'static');
 const DEFAULT_TIMEOUT = 600;
 const DAY_SECONDS = 86400;
 
-// run plumbing ---------------------------------------------------------------
+// config ---------------------------------------------------------------------
+
+export class ConfigMissingError extends Error {}
+export class ConfigError extends Error {}
+
+export async function loadConfig(configPath = CONFIG_FILE) {
+  const p = configPath instanceof URL ? configPath : path.resolve(configPath);
+  if (!fs.existsSync(p)) {
+    throw new ConfigMissingError(
+      `Missing config file ${p} — create it (see ARCHITECTURE.md for the schema)`
+    );
+  }
+  let mod;
+  try {
+    mod = await import(pathToFileURL(p).href);
+  } catch (e) {
+    throw new ConfigError(`Failed to load ${p}: ${e.message}`);
+  }
+  const data = mod.default ?? {};
+  const tasks = data.tasks ?? [];
+  const local = { ...data };
+  delete local.tasks;
+  local.repo_dir ??= process.env.BACKUPCTL_REPO_DIR ?? REPO_DIR;
+  local.lib ??= LIB_PATH;
+  const seen = new Set();
+  for (const t of tasks) {
+    const name = t.name;
+    if (!name) throw new ConfigError("Every task needs a 'name'");
+    if (!t.state_dir) throw new ConfigError(`Task '${name}' needs a 'state_dir' for its run state`);
+    if (!t.commands) throw new ConfigError(`Task '${name}' needs 'commands' (a bash string or array)`);
+    if (seen.has(name)) throw new ConfigError(`Duplicate task name: '${name}'`);
+    seen.add(name);
+  }
+  return [local, tasks];
+}
+
+export function expand(p) {
+  let s = String(p);
+  s = s.replace(/^~(?=[/]|$)/, os.homedir());
+  s = s.replace(/\$(\w+)|\$\{([^}]+)\}/g, (m, a, b) => process.env[a || b] ?? '');
+  return s;
+}
+
+const TOKEN_RE = /\{\{([a-zA-Z0-9_.]+)\}\}/g;
+
+function lookup(key, local, extra) {
+  if (extra && key in extra) return extra[key];
+  let node = local;
+  for (const part of key.split('.')) {
+    if (node && typeof node === 'object' && part in node) node = node[part];
+    else return undefined;
+  }
+  return node;
+}
+
+/* Replace {{a.b.c}} tokens from local (and per-run extra). Values may
+ * reference other tokens, so resolution loops until stable. A template that
+ * is exactly one token resolves to its typed value (dict/list/int);
+ * embedded tokens are stringified. */
+export function resolve(template, local, extra = {}) {
+  if (typeof template !== 'string') return template;
+  let result = template;
+  for (let i = 0; i < 10; i++) {
+    const next = result.replace(TOKEN_RE, (m, key) => {
+      const value = lookup(key, local, extra);
+      if (value === undefined) return m;
+      const s = typeof value === 'string' ? tilde(value) : String(value);
+      return s;
+    });
+    if (next === result) break;
+    result = next;
+  }
+  const full = /^\{\{([a-zA-Z0-9_.]+)\}\}$/.exec(template);
+  if (full) {
+    const value = lookup(full[1], local, extra);
+    if (value === undefined) return result; // unresolved token: leave the literal template
+    if (typeof value !== 'string') return value;
+    return result;
+  }
+  return result;
+}
+
+/* ~ values must expand here: inside command strings they are usually
+ * quoted, so the shell's tilde expansion never sees them */
+function tilde(value) {
+  return value.replace(/^~(?=[/]|$)/, os.homedir());
+}
+
+// run state + staging --------------------------------------------------------
+
+export const STATE_DIR = process.env.BACKUPCTL_STATE_DIR ?? path.join(os.homedir(), '.backupctl');
+const RUNNING_FILE = path.join(STATE_DIR, 'running.json');
+
+export function slugify(name) {
+  return String(name).replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+export function stateFileFor(task, local) {
+  const raw = task.state_dir;
+  if (!raw) throw new Error(`Task '${task.name}' needs a 'state_dir' for its run state`);
+  const base = expand(resolve(raw, local));
+  return path.join(base, `.backup-state-${slugify(task.name)}.json`);
+}
+
+export function saveTaskState(task, local, ok, summary, output = '') {
+  const file = stateFileFor(task, local);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const data = {
+    task: task.name,
+    ts: Date.now() / 1000,
+    ok,
+    summary,
+    output: output.slice(-20000),
+  };
+  const tmp = file + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 1));
+  fs.renameSync(tmp, file);
+}
+
+export function loadTaskState(task, local) {
+  const file = stateFileFor(task, local);
+  if (!fs.existsSync(file)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+export function markRunning(taskName) {
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  fs.writeFileSync(RUNNING_FILE, JSON.stringify({ task: taskName, ts: Date.now() / 1000 }));
+}
+
+export function clearRunning() {
+  fs.rmSync(RUNNING_FILE, { force: true });
+}
+
+export function runningMarker() {
+  if (!fs.existsSync(RUNNING_FILE)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(RUNNING_FILE, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+export function stagingDir(taskName) {
+  const d = path.join(STATE_DIR, 'staging', slugify(taskName));
+  fs.mkdirSync(d, { recursive: true });
+  return d;
+}
+
+// subprocess layer -----------------------------------------------------------
+
+const ASKPASS_PATH = path.join(STATE_DIR, 'askpass.sh');
+
+function ensureAskpass() {
+  if (!fs.existsSync(ASKPASS_PATH)) {
+    fs.mkdirSync(path.dirname(ASKPASS_PATH), { recursive: true });
+    fs.writeFileSync(ASKPASS_PATH, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  }
+  return ASKPASS_PATH;
+}
+
+// Commands run with stdin closed (interactive prompts fail fast instead of
+// hanging) and SSH forced to use a failing askpass (no password prompts on a
+// hidden terminal).
+export const SAFE_ENV = {
+  ...process.env,
+  SSH_ASKPASS_REQUIRE: 'force',
+  SSH_ASKPASS: ensureAskpass(),
+};
+
+export const PROC_GROUPS = new Set(); // pids of running children, for cancellation
+
+export const TIMEOUT_RC = 124; // exit code returned when a command's deadline expires
+
+export function shellQuote(arg) {
+  const s = String(arg);
+  if (/^[\w@%+=:,./-]+$/.test(s)) return s;
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+function redactText(text, secrets) {
+  for (const secret of secrets) text = text.replaceAll(secret, '***');
+  return text;
+}
+
+export function killpg(pid, log = () => {}) {
+  try {
+    process.kill(-pid, 'SIGTERM');
+  } catch { /* already gone or not permitted */ }
+  setTimeout(() => {
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch { /* already gone */ }
+  }, 1000);
+  log('(killed)');
+}
+
+function spawnSafe(cmd, opts = {}) {
+  const { cwd, shell = false } = opts;
+  const [file, args] = Array.isArray(cmd) ? [cmd[0], cmd.slice(1)] : [cmd, []];
+  return spawn(file, args, {
+    cwd,
+    shell,
+    detached: true,
+    env: SAFE_ENV,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
+/* Run a command (argv list or shell string), streaming output lines into
+ * log(). Returns exit code; timeout kills the process group and returns
+ * TIMEOUT_RC; redact masks secrets in the logged command and output. */
+export function run(cmd, opts = {}) {
+  const { shell = false, cwd, log = () => {}, timeout, redact = [] } = opts;
+  log(`$ ${redactText(shell ? cmd : cmd.map(shellQuote).join(' '), redact)}`);
+  let proc;
+  let errBuf = '';
+  try {
+    proc = spawnSafe(cmd, { cwd, shell });
+    proc.stderr.on('data', (d) => { errBuf += d; });
+    proc.stderr.on('error', () => {});
+  } catch (e) {
+    log(`ERROR: could not start: ${e.message}`);
+    return Promise.resolve(127);
+  }
+  PROC_GROUPS.add(proc.pid);
+  const flushErr = () => {
+    for (const line of errBuf.split(/\r?\n/)) {
+      if (line) log(redactText(line, redact));
+    }
+    errBuf = '';
+  };
+  return new Promise((resolvePromise) => {
+    const rl = readline.createInterface({ input: proc.stdout });
+    rl.on('error', () => {});
+    rl.on('line', (line) => log(redactText(line, redact)));
+    let settled = false;
+    let timedOut = false;
+    let killer = null;
+    if (timeout) {
+      killer = setTimeout(() => {
+        timedOut = true;
+        killpg(proc.pid, log);
+        log('TIMEOUT: command killed');
+      }, timeout * 1000);
+    }
+    proc.on('error', (e) => {
+      if (settled) return;
+      settled = true;
+      log(`ERROR: could not start: ${e.message}`);
+      if (killer) clearTimeout(killer);
+      rl.close();
+      PROC_GROUPS.delete(proc.pid);
+      resolvePromise(127);
+    });
+    proc.on('close', (code, signal) => {
+      if (settled) return;
+      settled = true;
+      if (killer) clearTimeout(killer);
+      rl.close();
+      flushErr();
+      PROC_GROUPS.delete(proc.pid);
+      if (timedOut) return resolvePromise(TIMEOUT_RC);
+      resolvePromise(code ?? (signal ? 128 + (os.constants.signals[signal] ?? 0) : 1));
+    });
+  });
+}
+
+export function sh(cmd, opts = {}) {
+  return run(cmd, { ...opts, shell: true });
+}
+
+/* Run a shell command capturing all output. Returns {rc, out, err}. */
+export function shCapture(cmd, opts = {}) {
+  const { cwd, timeout, redact = [] } = opts;
+  let proc;
+  try {
+    proc = spawnSafe(cmd, { cwd, shell: true });
+  } catch (e) {
+    return Promise.resolve({ rc: 127, out: '', err: String(e) });
+  }
+  PROC_GROUPS.add(proc.pid);
+  return new Promise((resolvePromise) => {
+    let out = '';
+    let err = '';
+    let timedOut = false;
+    let killer = null;
+    let settled = false;
+    if (timeout) {
+      killer = setTimeout(() => {
+        timedOut = true;
+        killpg(proc.pid);
+      }, timeout * 1000);
+    }
+    proc.on('error', (e) => {
+      if (settled) return;
+      settled = true;
+      if (killer) clearTimeout(killer);
+      PROC_GROUPS.delete(proc.pid);
+      resolvePromise({ rc: 127, out, err: String(e) });
+    });
+    proc.stdout.on('data', (d) => { out += d; });
+    proc.stderr.on('data', (d) => { err += d; });
+    proc.stdout.on('error', () => {});
+    proc.stderr.on('error', () => {});
+    proc.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      if (killer) clearTimeout(killer);
+      PROC_GROUPS.delete(proc.pid);
+      out = redactText(out, redact);
+      err = redactText(err, redact);
+      if (timedOut) return resolvePromise({ rc: TIMEOUT_RC, out, err });
+      resolvePromise({ rc: code ?? 1, out, err });
+    });
+  });
+}
+
+export function cancelAll() {
+  for (const pid of [...PROC_GROUPS]) killpg(pid);
+  PROC_GROUPS.clear();
+}
+
+const GIT_TIMEOUT = 300;
+
+export async function gitCommit(dest, message, log = () => {}) {
+  fs.mkdirSync(dest, { recursive: true });
+  if ((await run(['git', 'init', '-q'], { cwd: dest, log, timeout: GIT_TIMEOUT })) !== 0) {
+    throw new Error(`git init failed in ${dest}`);
+  }
+  if ((await run(['git', 'add', '-A', '.', ':(exclude).backup-state-*'], { cwd: dest, log, timeout: GIT_TIMEOUT })) !== 0) {
+    throw new Error(`git add failed in ${dest}`);
+  }
+  const { rc, out, err } = await shCapture(`git commit -q -m ${shellQuote(message)}`, { cwd: dest, timeout: GIT_TIMEOUT });
+  if (rc !== 0 && !(out + err).includes('nothing to commit') && !(out + err).includes('nothing added to commit')) {
+    throw new Error(`git commit failed in ${dest}: ${err.trim()}`);
+  }
+}
+
+export function humanAgo(ts) {
+  const delta = Date.now() / 1000 - ts;
+  if (delta < 3600) return `${Math.floor(delta / 60)} min ago`;
+  if (delta < 86400) return `${Math.floor(delta / 3600)} hr ago`;
+  if (delta < 86400 * 30) return `${Math.floor(delta / 86400)} days ago`;
+  if (delta < 86400 * 365) return `${Math.floor(delta / (86400 * 30))} months ago`;
+  return `${Math.floor(delta / (86400 * 365))} years ago`;
+}
+
+/* Does a path pattern exist? Glob-aware, drives the availability badge. */
+export function pathFound(pattern) {
+  if (/[*?\[]/.test(pattern)) {
+    try {
+      return fs.globSync(pattern).length > 0;
+    } catch {
+      return false;
+    }
+  }
+  try {
+    return fs.statSync(pattern).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+// runner ---------------------------------------------------------------------
 
 function makeLogger() {
   const lines = [];
@@ -36,7 +407,7 @@ function makeLogger() {
 }
 
 function resolveTpl(template, ctx, extra = undefined) {
-  return core.expand(core.resolve(template, ctx.local, extra));
+  return expand(resolve(template, ctx.local, extra));
 }
 
 function timeoutOf(ctx) {
@@ -44,18 +415,14 @@ function timeoutOf(ctx) {
 }
 
 function clearStaging(ctx) {
-  const d = core.stagingDir(ctx.task.name);
+  const d = stagingDir(ctx.task.name);
   fs.rmSync(d, { recursive: true, force: true });
   fs.mkdirSync(d, { recursive: true });
 }
 
-function cleanupTmp(tmp) {
-  fs.rmSync(tmp, { recursive: true, force: true });
-}
-
 function failRun(rc, tmp, timeout) {
-  cleanupTmp(tmp);
-  if (rc === core.TIMEOUT_RC) return [false, `Command timed out after ${timeout}s`];
+  fs.rmSync(tmp, { recursive: true, force: true });
+  if (rc === TIMEOUT_RC) return [false, `Command timed out after ${timeout}s`];
   return [false, `Command failed (exit ${rc})`];
 }
 
@@ -69,46 +436,34 @@ export async function runCommands(ctx) {
     if (!(ctx.extra ?? {})[key]) return [false, `Missing required input: ${key}`];
   }
   const timeout = timeoutOf(ctx);
-  const tmp = path.join(core.stagingDir(task.name), `tmp_${Math.floor(Math.random() * 1_000_000)}`);
+  const tmp = path.join(stagingDir(task.name), `tmp_${Math.floor(Math.random() * 1_000_000)}`);
   const extra = {
-    uploads: ctx.files.map((f) => core.shellQuote(String(f))).join(' '),
+    uploads: ctx.files.map((f) => shellQuote(String(f))).join(' '),
     tmp: String(tmp),
-    node: process.execPath,
     ...Object.fromEntries(Object.entries(ctx.extra ?? {}).map(([k, v]) => [k, String(v)])),
   };
   const redact = Object.values(ctx.extra ?? {}).filter((v) => v).map(String);
-  let [ok, err] = await ensureTool(ctx, extra, timeout);
-  if (!ok) return [false, err];
   const output = [];
   const cwd = resolveTpl(task.cwd ?? '.', ctx);
-  if ('args' in task) {
-    const argv = resolveArgs(task.args, ctx, extra);
-    if (!argv.length) return [false, 'Command args are empty'];
-    const rc = await core.run(argv, { cwd, log: ctx.log, timeout, redact });
-    if (rc !== 0) return failRun(rc, tmp, timeout);
-  } else {
-    for (const cmd of task.commands ?? [task.command]) {
-      const resolved = core.resolve(cmd, ctx.local, extra);
-      let rc;
-      if (capture) {
-        const { rc: r, out, err } = await core.shCapture(resolved, { cwd, timeout, redact });
-        rc = r;
-        const lines = out.split(/\r?\n/);
-        if (lines.at(-1) === '') lines.pop();
-        for (const line of lines) ctx.log(line);
-        if (err.trim()) ctx.log(err.trim());
-        output.push(...lines);
-      } else {
-        rc = await core.sh(resolved, { cwd, log: ctx.log, timeout, redact });
-      }
-      if (rc !== 0) return failRun(rc, tmp, timeout);
+  const cmds = Array.isArray(task.commands) ? task.commands : [task.commands];
+  for (const cmd of cmds) {
+    const resolved = resolve(cmd, ctx.local, extra);
+    let rc;
+    if (capture) {
+      const { rc: r, out, err } = await shCapture(resolved, { cwd, timeout, redact });
+      rc = r;
+      const lines = out.split(/\r?\n/);
+      if (lines.at(-1) === '') lines.pop();
+      for (const line of lines) ctx.log(line);
+      if (err.trim()) ctx.log(err.trim());
+      output.push(...lines);
+    } else {
+      rc = await sh(resolved, { cwd, log: ctx.log, timeout, redact });
     }
+    if (rc !== 0) return failRun(rc, tmp, timeout);
   }
   if (task.uploads) clearStaging(ctx);
-  else cleanupTmp(tmp);
-  [ok, err] = await checkFreshDir(ctx, extra);
-  if (!ok) return [false, err];
-  pruneExports(ctx, extra);
+  else fs.rmSync(tmp, { recursive: true, force: true });
   if (capture) return [true, output.join('\n')];
   if (task.summary_last_line) {
     const last = [...ctx.log.lines].reverse().find((l) => l.trim() && !l.startsWith('$ '));
@@ -117,103 +472,14 @@ export async function runCommands(ctx) {
   return [true, 'Completed'];
 }
 
-export async function ensureTool(ctx, extra, timeout) {
-  // download+extract the task's `tool:` if its binary is missing
-  const tool = ctx.task.tool;
-  if (!tool) return [true, ''];
-  let binary = resolveTpl(tool.binary, ctx, extra);
-  if (!path.isAbsolute(binary)) binary = path.join(resolveTpl(tool.dir, ctx, extra), binary);
-  if (fs.existsSync(binary)) {
-    extra.tool_binary = binary;
-    return [true, ''];
-  }
-  ctx.log(`Downloading ${path.basename(binary)}...`);
-  const toolDir = resolveTpl(tool.dir, ctx, extra);
-  fs.mkdirSync(toolDir, { recursive: true });
-  const archive = path.join(toolDir, 'tool.tar.gz');
-  const steps = [`wget -q ${tool.url} -O ${core.shellQuote(archive)}`];
-  if (tool.extract) {
-    steps.push(
-      `tar xf ${core.shellQuote(archive)} -C ${core.shellQuote(toolDir)}`,
-      `rm ${core.shellQuote(archive)}`
-    );
-  }
-  if (tool.chmod) steps.push(`chmod +x ${core.shellQuote(binary)}`);
-  if ((await core.sh(steps.join(' && '), { log: ctx.log, timeout })) !== 0) {
-    return [false, `Failed to install ${path.basename(binary)}`];
-  }
-  extra.tool_binary = binary;
-  return [true, ''];
-}
-
-export function resolveArgs(args, ctx, extra) {
-  // entries resolving empty (or to an unresolved token) are dropped along
-  // with the flag preceding them (so optional `-t {{totp}}` pairs work)
-  const resolved = [];
-  for (const arg of args) {
-    const value = core.resolve(arg, ctx.local, extra);
-    if (typeof value === 'string' && (!value.trim() || value.includes('{{'))) {
-      resolved.pop();
-      continue;
-    }
-    resolved.push(String(value));
-  }
-  return resolved;
-}
-
-export async function checkFreshDir(ctx, extra) {
-  const template = ctx.task.fresh_dir;
-  if (!template) return [true, ''];
-  const root = resolveTpl(template, ctx, extra);
-  if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
-    return [false, `No export directory found at ${root}`];
-  }
-  const dirs = sortedExportDirs(root);
-  if (!dirs.length) return [false, 'Export produced no backup directory'];
-  const newest = dirs.at(-1);
-  const maxAge = parseInt(ctx.task.fresh_max_age_seconds ?? DAY_SECONDS, 10);
-  const items = fs.readdirSync(newest).length;
-  if (!items || Date.now() / 1000 - fs.statSync(newest).mtimeMs / 1000 > maxAge) {
-    return [false, `Export directory ${path.basename(newest)} is empty or stale — the export did not complete`];
-  }
-  ctx.log(`Validated export: ${path.basename(newest)} (${items} items)`);
-  return [true, ''];
-}
-
-export function pruneExports(ctx, extra) {
-  const cfg = ctx.task.prune;
-  if (!cfg) return;
-  const root = resolveTpl(cfg.dir, ctx, extra);
-  const dirs = sortedExportDirs(root);
-  if (dirs.length < 2) return;
-  const newestCount = fs.readdirSync(dirs.at(-1)).length;
-  for (const d of dirs.slice(0, -1)) {
-    const count = fs.readdirSync(d).length;
-    if (cfg.keep_newer && count > newestCount) {
-      ctx.log(`WARNING: previous backup '${path.basename(d)}' has MORE files (${count}) than the newest (${newestCount}). NOT deleted.`);
-    } else {
-      fs.rmSync(d, { recursive: true, force: true });
-      ctx.log(`Deleted old export ${path.basename(d)}`);
-    }
-  }
-}
-
-export function sortedExportDirs(root) {
-  return fs
-    .readdirSync(root, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => path.join(root, e.name))
-    .sort((a, b) => path.basename(a).localeCompare(path.basename(b), undefined, { numeric: true }));
-}
-
 // task metadata + dispatcher -------------------------------------------------
 
 export function availability(task, local) {
   // tasks with a `root` (e.g. device mounts) are unavailable when missing
   const rootRaw = task.root;
   if (rootRaw) {
-    const pattern = core.expand(core.resolve(rootRaw, local));
-    if (!core.pathFound(pattern)) return [false, 'Source directory not found'];
+    const pattern = expand(resolve(rootRaw, local));
+    if (!pathFound(pattern)) return [false, 'Source directory not found'];
   }
   return [true, ''];
 }
@@ -225,7 +491,7 @@ export function supportsUploads(task) {
 export function uploadPatterns(task, local = null) {
   const globs = task.glob ?? '*';
   let patterns = Array.isArray(globs) ? globs : [globs];
-  if (local !== null) patterns = patterns.map((p) => core.resolve(p, local));
+  if (local !== null) patterns = patterns.map((p) => resolve(p, local));
   return patterns;
 }
 
@@ -250,7 +516,7 @@ export async function runTask(task, local, files, log = null, extra = null) {
     collectLog(`ERROR: ${e.message}`);
     [ok, summary] = [false, String(e.message ?? e)];
   }
-  core.saveTaskState(task, local, ok, summary, lines.join('\n'));
+  saveTaskState(task, local, ok, summary, lines.join('\n'));
   return [ok, summary];
 }
 
@@ -264,13 +530,13 @@ export let TASK_MAP = new Map();
 export async function boot(configPath = undefined) {
   try {
     [LOCAL, TASK_LIST] = configPath
-      ? await core.loadConfig(configPath)
-      : await core.loadConfig();
+      ? await loadConfig(configPath)
+      : await loadConfig();
   } catch (e) {
-    if (e instanceof core.ConfigMissingError) {
+    if (e instanceof ConfigMissingError) {
       console.warn(`WARNING: ${e.message}`);
       MISSING_CONFIG = true;
-    } else if (e instanceof core.ConfigError) {
+    } else if (e instanceof ConfigError) {
       console.error(`config error: ${e.message}`);
       process.exit(1);
     } else {
@@ -285,9 +551,9 @@ export const CURRENT = { name: null, log: [], read: 0, done: null, cancelled: fa
 
 export function queuedCount(name) {
   try {
-    return fs.readdirSync(core.stagingDir(name)).filter((p) => {
+    return fs.readdirSync(stagingDir(name)).filter((p) => {
       try {
-        return fs.statSync(path.join(core.stagingDir(name), p)).isFile();
+        return fs.statSync(path.join(stagingDir(name), p)).isFile();
       } catch {
         return false;
       }
@@ -300,7 +566,7 @@ export function queuedCount(name) {
 export function taskJson(t) {
   const [avail, reason] = availability(t, LOCAL);
   let stateJson = null;
-  const marker = core.runningMarker();
+  const marker = runningMarker();
   if (marker && marker.task === t.name) {
     // a previous run was interrupted (server stopped/crashed mid-task)
     const ts = marker.ts ?? Date.now() / 1000;
@@ -309,10 +575,10 @@ export function taskJson(t) {
       ok: false,
       summary: 'Interrupted',
       output: '',
-      last_run_text: `Interrupted · ${core.humanAgo(ts)}`,
+      last_run_text: `Interrupted · ${humanAgo(ts)}`,
     };
   } else {
-    const rec = core.loadTaskState(t, LOCAL);
+    const rec = loadTaskState(t, LOCAL);
     if (rec) {
       const ok = Boolean(rec.ok);
       stateJson = {
@@ -320,7 +586,7 @@ export function taskJson(t) {
         ok,
         summary: rec.summary ?? '',
         output: rec.output ?? '',
-        last_run_text: `${ok ? 'OK' : 'FAILED'} · ${core.humanAgo(rec.ts)}`,
+        last_run_text: `${ok ? 'OK' : 'FAILED'} · ${humanAgo(rec.ts)}`,
       };
     }
   }
@@ -328,7 +594,7 @@ export function taskJson(t) {
   let pill = 'fail';
   if (stateJson && stateJson.ok) {
     const age = Date.now() / 1000 - stateJson.ts;
-    pill = age < 24 * 3600 ? 'ok' : age <= 7 * 86400 ? 'neutral' : 'fail';
+    pill = age < 24 * 3600 ? 'ok' : age <= 7 * DAY_SECONDS ? 'neutral' : 'fail';
   }
   const running = CURRENT.name === t.name;
   return {
@@ -401,7 +667,7 @@ export function createApp() {
           .status(400)
           .json({ detail: `${filename} does not match the expected pattern(s): ${patterns.join(', ')}` });
       }
-      const staging = core.stagingDir(task.name);
+      const staging = stagingDir(task.name);
       fs.writeFileSync(path.join(staging, filename), req.body);
       res.json({ queued: filename, count: queuedCount(task.name) });
     }
@@ -414,7 +680,7 @@ export function createApp() {
     if (CURRENT.name) return res.status(409).json({ detail: 'Another task is already running' });
     const [avail, reason] = availability(task, LOCAL);
     if (!avail) return res.status(400).json({ detail: reason });
-    const staging = core.stagingDir(taskName);
+    const staging = stagingDir(taskName);
     const files = fs
       .readdirSync(staging)
       .filter((p) => fs.statSync(path.join(staging, p)).isFile())
@@ -426,7 +692,7 @@ export function createApp() {
     CURRENT.read = 0;
     CURRENT.done = null;
     CURRENT.cancelled = false;
-    core.markRunning(taskName);
+    markRunning(taskName);
 
     (async () => {
       let ok = false;
@@ -435,7 +701,7 @@ export function createApp() {
         [ok, summary] = await runTask(task, LOCAL, files, logger, payload);
         if (CURRENT.cancelled) {
           [ok, summary] = [false, 'Cancelled by user'];
-          core.saveTaskState(task, LOCAL, false, summary, logger.text());
+          saveTaskState(task, LOCAL, false, summary, logger.text());
         }
       } finally {
         CURRENT.done = {
@@ -446,7 +712,7 @@ export function createApp() {
         };
         CURRENT.name = null;
         CURRENT.cancelled = false;
-        core.clearRunning();
+        clearRunning();
       }
     })().catch((e) => console.error('worker error:', e));
     res.json({ started: true });
@@ -464,7 +730,7 @@ export function createApp() {
   app.post('/api/cancel', (req, res) => {
     if (!CURRENT.name) return res.status(409).json({ detail: 'No task is running' });
     CURRENT.cancelled = true;
-    core.cancelAll();
+    cancelAll();
     res.json({ cancelled: true });
   });
 
@@ -473,9 +739,9 @@ export function createApp() {
     if (!task) return res.status(404).json({ detail: 'Unknown task' });
     const commitDir = task.commit_dir;
     if (!commitDir) return res.json({ committed: false });
-    const dest = core.expand(core.resolve(commitDir, LOCAL));
+    const dest = expand(resolve(commitDir, LOCAL));
     try {
-      await core.gitCommit(dest, `${task.name} · ${new Date().toLocaleString()}`);
+      await gitCommit(dest, `${task.name} · ${new Date().toLocaleString()}`);
     } catch (e) {
       return res.status(500).json({ detail: `git commit failed: ${e.message}` });
     }

@@ -15,10 +15,7 @@
     "express": "^4.21.2",
     "minimatch": "^10.0.3"
   },
-  "devDependencies": {
-    "yaml": "^2.7.0"
-  },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

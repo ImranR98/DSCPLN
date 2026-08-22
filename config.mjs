@@ -4,7 +4,10 @@
 //
 // Every task is a bash command (or commands list). Simple tasks call
 // backupctl/lib.sh (the built-in {{lib}} token) as a subcommand; anything
-// with logic sources it inside a `bash <<'BASH_SCRIPT'` heredoc. Runner
+// with logic sources it inside a `bash <<'BASH_SCRIPT'` heredoc — wrapped in
+// `bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; ...'` so inner
+// processes that read stdin cannot consume the rest of the script from the
+// heredoc pipe. Runner
 // fields: uploads + glob (drop zone), prompts, require, capture +
 // commit_dir (paste dialog), root (availability badge), summary_last_line,
 // timeout, cwd, note, export_url.
@@ -64,7 +67,7 @@ export default {
           glob: ['*.vcf', '*.ics'],
           export_url: 'https://nextcloud.home.example.com/apps/calendar',
           note: 'Drop the contacts (VCF) and calendar (ICS) exports here.',
-          commands: `bash <<'BASH_SCRIPT'
+          commands: `bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; RC=$?; rm -f "$TMP"; exit $RC' <<'BASH_SCRIPT'
 source '{{lib}}'
 DEST='{{maindir}}/Backups/Manual'
 mkdir -p "$DEST"
@@ -104,7 +107,7 @@ BASH_SCRIPT
           name: 'AntennaPod (Feeds + DB)',
           glob: ['antennapod-feeds-*.opml', 'AntennaPodBackup-*.db'],
           note: 'Drop the AntennaPod feeds OPML and/or DB backup here.',
-          commands: `bash <<'BASH_SCRIPT'
+          commands: `bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; RC=$?; rm -f "$TMP"; exit $RC' <<'BASH_SCRIPT'
 source '{{lib}}'
 DEST='{{maindir}}/Backups/Manual'
 mkdir -p "$DEST"
@@ -312,16 +315,12 @@ BASH_SCRIPT
           uploads: false,
           state_dir: '{{maindir}}/Backups/Archive/WhatsApp-AllMedia',
           root: '{{maindir}}/WhatsApp/Media',
-          require: ['confirmed'],
           note: 'Archives the live WhatsApp folder, then standardizes media into a staging dir and deletes the originals on success.',
-          prompts: [
-            { key: 'confirmed', label: 'Manually copy anything in WA gifs to the video folder, then press OK.', type: 'confirm' },
-          ],
-          commands: `bash <<'BASH_SCRIPT'
+          commands: `bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; RC=$?; rm -f "$TMP"; exit $RC' <<'BASH_SCRIPT'
 source '{{lib}}'
 SRC='{{maindir}}/WhatsApp'
 MEDIA="$SRC/Media"
-OUT='~/Downloads/WAMedia'
+OUT="$HOME/Downloads/WAMedia"
 ARCHIVE='{{maindir}}/Backups/Archive/WhatsApp-AllMedia'
 
 # snapshot the whole live folder first
@@ -440,9 +439,9 @@ BASH_SCRIPT
           state_dir: '{{maindir}}/Media',
           root: '~/deviceSync',
           note: 'Imports and standardizes media from the synced phone folders. Requires phone sync to be running.',
-          commands: `bash <<'BASH_SCRIPT'
+          commands: `bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; RC=$?; rm -f "$TMP"; exit $RC' <<'BASH_SCRIPT'
 source '{{lib}}'
-SRC='~/deviceSync'
+SRC="$HOME/deviceSync"
 import_pair() {
   local src="$1" dest="$2"
   if [[ ! -d "$src" ]]; then
@@ -460,7 +459,7 @@ import_pair "$SRC/ScreenRecs" '{{maindir}}/Media/Screenshots'
 
 # Snapchat: concatenate clips first (parking the originals), then import
 if [[ -d "$SRC/DCIM/Snapchat" ]]; then
-  bash '{{scriptroot}}/mediaConcat/snapsPre.sh' "$SRC/DCIM/Snapchat" '~/Downloads/snaps_original_deletable'
+  bash '{{scriptroot}}/mediaConcat/snapsPre.sh' "$SRC/DCIM/Snapchat" "$HOME/Downloads/snaps_original_deletable"
   import_pair "$SRC/DCIM/Snapchat" '{{maindir}}/Media/Camera'
 fi
 
@@ -479,7 +478,7 @@ BASH_SCRIPT
           state_dir: '{{maindir}}/Media/Camera',
           root: '{{quest_root}}',
           note: 'Imports Quest screenshots and video clips. Requires the Quest to be connected.',
-          commands: `bash <<'BASH_SCRIPT'
+          commands: `bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; RC=$?; rm -f "$TMP"; exit $RC' <<'BASH_SCRIPT'
 source '{{lib}}'
 SRC=$(bctl_first_glob '{{quest_root}}')
 [[ -n "$SRC" ]] || { log "Source directory not found" >&2; exit 1; }

@@ -48,7 +48,7 @@ There are no hard-coded task types — **every task is a `commands` list of bash
 bash '{{lib}}' move --git --rename bookmarks.html '{{maindir}}/Manual' {{uploads}}
 ```
 
-or by sourcing it inside a heredoc for anything with logic (media import with snapshot/standardize/delete-originals, ...). The library's functions (`bctl_extract`, `bctl_rsync`, `bctl_git_commit`, `bctl_process_and_move`, ...) and subcommands (`move`, `copy`, `encrypt`, `ingest`, `validate-fresh`, `prune-exports`) are rc-checked under `set -e`.
+or by sourcing it inside a heredoc for anything with logic (media import with snapshot/standardize/delete-originals, ...). Heredoc commands are wrapped in a temp-file delivery (`bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; ...' <<'BASH_SCRIPT'`), because bash feeds heredoc scripts through a pipe and a child process that reads stdin (e.g. ffmpeg) would otherwise consume the rest of the script. The library's functions (`bctl_extract`, `bctl_rsync`, `bctl_git_commit`, `bctl_process_and_move`, ...) and subcommands (`move`, `copy`, `encrypt`, `ingest`, `validate-fresh`, `prune-exports`) are rc-checked under `set -e`.
 
 | Subcommand | Behavior |
 |---|---|
@@ -94,7 +94,7 @@ The UI is a thin loop: `loadTasks()` fetches `/api/tasks` and rebuilds the card 
 
 - **Commands can't hang or orphan**: per-task timeouts kill the process group → red "timed out"; the Stop button kills all live groups → "Cancelled by user"; a server crash leaves `running.json`, so the pill shows red "Interrupted · ago".
 - **Exit 0 without real work fails the run**: rc-checked commands plus a trailing `validate-fresh` (empty/stale export fails); run-with-uploads refuses zero files.
-- **No silent data loss**: media heredocs delete originals only after every step succeeded (`set -e`) and the confirm prompt was approved (`require: [confirmed]`).
+- **No silent data loss**: media heredocs delete originals only after every step succeeded (`set -e`).
 - **Secrets stay out of logs**: `redact=` masks prompt values in command display and output; the age passphrase travels in env, never argv. State files never churn backup repos (`:(exclude).backup-state-*` in every commit).
 
 ## Dependencies

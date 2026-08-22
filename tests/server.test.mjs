@@ -206,6 +206,23 @@ test('run: commands see TMPDIR under the backupctl temp root', async () => {
   assert.ok(!fs.existsSync(process.env.BACKUPCTL_TMP_DIR)); // wiped when the run ends
 });
 
+test('heredoc tasks survive stdin-eating children (wrapper pattern)', async () => {
+  const t = task('Heredoc Wrap', {
+    group: 'G',
+    summary_last_line: true,
+    commands: `bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; RC=$?; rm -f "$TMP"; exit $RC' <<'BASH_SCRIPT'
+echo one
+cat >/dev/null
+echo two
+BASH_SCRIPT`,
+  });
+  const cfgPath = makeConfig([t]);
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
+  const [ok, summary] = await bctl.runTask(tasks[0], local, []);
+  assert.equal(ok, true, summary);
+  assert.equal(summary, 'two');
+});
+
 test('run: streams lines, redacts secrets, returns rc', async () => {
   const lines = [];
   const rc = await bctl.run(

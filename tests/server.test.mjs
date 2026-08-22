@@ -22,7 +22,11 @@ function writeConfig(name, data) {
 }
 
 function makeConfig(tasks, extraValues = {}) {
-  return writeConfig(`config-${Math.random().toString(36).slice(2)}.mjs`, { maindir, ...extraValues, tasks });
+  return writeConfig(`config-${Math.random().toString(36).slice(2)}.mjs`, {
+    maindir,
+    ...extraValues,
+    groups: [{ name: 'G', tasks }],
+  });
 }
 
 function task(name, fields) {
@@ -80,11 +84,11 @@ async function hasPtyTools() {
 
 // ---- config / tokens / state / subprocess layer ----------------------------
 
-test('loadConfig: validates names, state_dir, commands, duplicates', async () => {
+test('loadConfig: validates groups, tasks, defaults, duplicates', async () => {
   const [local, tasks] = await bctl.loadConfig(
     writeConfig('valid.mjs', {
       maindir: '/tmp',
-      tasks: [{ name: 'a', state_dir: '/tmp/a', commands: 'true' }],
+      groups: [{ name: 'G', tasks: [{ name: 'a', state_dir: '/tmp/a', commands: 'true' }] }],
     })
   );
   assert.equal(local.maindir, '/tmp');
@@ -92,22 +96,58 @@ test('loadConfig: validates names, state_dir, commands, duplicates', async () =>
   assert.ok(local.repo_dir);
   assert.ok(local.lib.endsWith('lib.sh'));
 
+  // defaults merge under each task, task fields win, group attached, order kept
+  const [l2, t2] = await bctl.loadConfig(
+    writeConfig('defs.mjs', {
+      maindir: '/tmp',
+      groups: [
+        {
+          name: 'G1',
+          defaults: { uploads: true, summary_last_line: true },
+          tasks: [
+            { name: 'a', state_dir: '/x', commands: 'true', glob: '*.txt' },
+            { name: 'b', state_dir: '/y', commands: 'true', uploads: false },
+          ],
+        },
+        { name: 'G2', tasks: [{ name: 'c', state_dir: '/z', commands: 'true' }] },
+      ],
+    })
+  );
+  assert.equal(l2.groups, undefined);
+  assert.deepEqual(t2.map((t) => t.name), ['a', 'b', 'c']);
+  assert.deepEqual(t2.map((t) => t.group), ['G1', 'G1', 'G2']);
+  assert.equal(t2[0].uploads, true);
+  assert.equal(t2[0].summary_last_line, true);
+  assert.equal(t2[1].uploads, false);
+  assert.equal(t2[2].uploads, undefined);
+
   await assert.rejects(
-    bctl.loadConfig(writeConfig('nofile.mjs', { tasks: [{ name: 'a' }] })),
-    bctl.ConfigError
+    bctl.loadConfig(writeConfig('nofile.mjs', { groups: [{ name: 'G', tasks: [{ name: 'a' }] }] })),
+    /needs a 'state_dir'/
   );
   await assert.rejects(
-    bctl.loadConfig(writeConfig('nocmd.mjs', { tasks: [{ name: 'a', state_dir: '/x' }] })),
+    bctl.loadConfig(writeConfig('nocmd.mjs', { groups: [{ name: 'G', tasks: [{ name: 'a', state_dir: '/x' }] }] })),
     /needs 'commands'/
   );
   await assert.rejects(
     bctl.loadConfig(writeConfig('dup.mjs', {
-      tasks: [
-        { name: 'a', state_dir: '/x', commands: 'true' },
-        { name: 'a', state_dir: '/y', commands: 'true' },
+      groups: [
+        { name: 'G', tasks: [
+          { name: 'a', state_dir: '/x', commands: 'true' },
+          { name: 'a', state_dir: '/y', commands: 'true' },
+        ]},
       ],
     })),
     /Duplicate task name/
+  );
+  await assert.rejects(
+    bctl.loadConfig(writeConfig('dupgroup.mjs', {
+      groups: [
+        { name: 'G', tasks: [] },
+        { name: 'G', tasks: [] },
+      ],
+    })),
+    /Duplicate group name/
   );
   await assert.rejects(bctl.loadConfig(path.join(SANDBOX, 'absent.mjs')), bctl.ConfigMissingError);
 });
@@ -197,6 +237,22 @@ test('shellQuote', () => {
   assert.equal(bctl.shellQuote(`c'd`), `'c'\\''d'`);
 });
 
+test('globMatch: literal + * patterns', () => {
+  const cases = [
+    ['bitwarden_export_2024.json', 'bitwarden_export_*.json', true],
+    ['bookmarks.html', 'bookmarks_*.html', false],
+    ['archive.zip', '*.zip', true],
+    ['a.tar.gz', '*.tar.gz', true],
+    ['a.zip', '*.tar.gz', false],
+    ['x.txt', 'example.com.txt', false],
+    ['example.com.txt', 'example.com.txt', true],
+    ['mydata~2.zip', 'mydata~*.zip', true],
+  ];
+  for (const [name, pattern, expected] of cases) {
+    assert.equal(bctl.globMatch(name, pattern), expected, `${pattern} vs ${name}`);
+  }
+});
+
 test('gitCommit: excludes state files, tolerates empty commits', async () => {
   const dest = path.join(SANDBOX, 'gitdest');
   await bctl.gitCommit(dest, 'first');
@@ -281,7 +337,7 @@ BASH_SCRIPT`,
   assert.ok(fs.existsSync(path.join(maindir, 'Dest2', 'TODO.ics')));
 });
 
-test('ingest heredoc: extracts, identifies account, names the folder', async () => {
+test('ingest subcommand: extracts, identifies account, names the folder', async () => {
   // GitHub-style: tar.gz containing users_000001.json with a billing login
   const archiveSrc = path.join(SANDBOX, 'ingest-src');
   fs.mkdirSync(archiveSrc);
@@ -296,22 +352,7 @@ test('ingest heredoc: extracts, identifies account, names the folder', async () 
     uploads: true,
     glob: '*.tar.gz',
     summary_last_line: true,
-    commands: `bash <<'BASH_SCRIPT'
-source '{{lib}}'
-FILES=({{uploads}})
-tmp=$(mktemp -d -t bctl_ingest.XXXXXX)
-for f in "\${FILES[@]}"; do
-  bctl_extract "$f" "$tmp"
-done
-suffix=$(cd "$tmp" && cat users_000001.json | jq "(.[] | select(.billing_plan != null)).login" | head -c -2 | tail -c +2 2>/dev/null) || true
-DEST='{{maindir}}/Backups/GitHub'
-[[ -n "$suffix" ]] && DEST="$DEST - $suffix"
-mkdir -p "$DEST"
-bctl_rsync_delete --exclude .git/ "$tmp/" "$DEST"
-rm -rf "$tmp"
-bctl_git_commit "$DEST"
-log "Imported into $DEST"
-BASH_SCRIPT`,
+    commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/GitHub' 'cat users_000001.json | jq "(.[] | select(.billing_plan != null)).login" | head -c -2 | tail -c +2' {{uploads}}`,
   });
   const cfgPath = makeConfig([t]);
   await stage(t.name, 'gh.tar.gz', fs.readFileSync(path.join(SANDBOX, 'gh.tar.gz')));
@@ -320,6 +361,32 @@ BASH_SCRIPT`,
   const [ok, summary] = await bctl.runTask(tasks[0], local, files);
   assert.equal(ok, true, summary);
   assert.ok(fs.existsSync(path.join(maindir, 'Backups', 'GitHub - imranr', 'users_000001.json')));
+});
+
+test('ingest subcommand: awk suffix with escaped fields (Medium-style)', async () => {
+  // <...><h1>UserName</h1> — suffix extraction uses $15/$2 through eval
+  const archiveSrc = path.join(SANDBOX, 'medium-src');
+  fs.mkdirSync(path.join(archiveSrc, 'profile'), { recursive: true });
+  fs.writeFileSync(
+    path.join(archiveSrc, 'profile', 'profile.html'),
+    '<a><b><c><d><e><f><g><h><i><j><k><l><m><n>JohnDoe</n></m></l></k></j></i></h></g></f></e></d></c></b></a>'
+  );
+  const { rc } = await bctl.shCapture(`tar czf ${bctl.shellQuote(path.join(SANDBOX, 'medium.tar.gz'))} -C ${bctl.shellQuote(archiveSrc)} .`);
+  assert.equal(rc, 0);
+  const t = task('Medium Ingest', {
+    group: 'G',
+    uploads: true,
+    glob: '*.tar.gz',
+    summary_last_line: true,
+    commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Medium' 'awk -F\\< "{ print \\$15 }" profile/profile.html | awk -F\\> "{ print \\$2 }" | awk NF | tail -c +2' {{uploads}}`,
+  });
+  const cfgPath = makeConfig([t]);
+  await stage(t.name, 'medium.tar.gz', fs.readFileSync(path.join(SANDBOX, 'medium.tar.gz')));
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
+  const files = [path.join(bctl.stagingDir(t.name), 'medium.tar.gz')];
+  const [ok, summary] = await bctl.runTask(tasks[0], local, files);
+  assert.equal(ok, true, summary);
+  assert.ok(fs.existsSync(path.join(maindir, 'Backups', 'Medium - ohnDoe', 'profile', 'profile.html')));
 });
 
 test('copy subcommand with --git + --pre: sources synced, state excluded', async () => {
@@ -508,6 +575,22 @@ test('validate-fresh: stale newest export fails the run', async () => {
 
 // ---- API-level suites ------------------------------------------------------
 
+test('API: /api/tasks returns groups in config order', async () => {
+  await bootWith(writeConfig('groups-order.mjs', {
+    maindir,
+    groups: [
+      { name: 'Z Group', tasks: [task('Z1', { commands: 'true' })] },
+      { name: 'A Group', tasks: [task('A1', { commands: 'true' }), task('A2', { commands: 'true' })] },
+    ],
+  }));
+  const { req, close } = await api();
+  const res = await req('GET', '/api/tasks');
+  assert.deepEqual(res.json.groups.map((g) => g.name), ['Z Group', 'A Group']);
+  assert.deepEqual(res.json.groups[1].tasks.map((t) => t.name), ['A1', 'A2']);
+  assert.equal(res.json.missing_config, false);
+  await close();
+});
+
 test('API: upload validation, detect scoring + ambiguity, CSRF guard', async () => {
   const t1 = task('Detect A', { group: 'G', uploads: true, glob: 'takeout-*.zip', commands: 'true' });
   const t2 = task('Detect B', { group: 'G', uploads: true, glob: '*.zip', commands: 'true' });
@@ -540,7 +623,7 @@ test('API: upload validation, detect scoring + ambiguity, CSRF guard', async () 
   // wait for run to finish, then GET tasks shows state
   await pollUntil(() => !bctl.CURRENT.name);
   res = await req('GET', '/api/tasks');
-  const ta = res.json.tasks.find((x) => x.name === 'Detect A');
+  const ta = res.json.groups[0].tasks.find((x) => x.name === 'Detect A');
   assert.equal(ta.state.ok, true);
 
   // CSRF: cross-origin POST blocked; same-origin allowed

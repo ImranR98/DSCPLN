@@ -1,6 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>backupctl</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Cstyle%3Erect%7Bfill:%23131a23%7D@media%20(prefers-color-scheme:light)%7Brect%7Bfill:%23ffffff%7D%7D%3C/style%3E%3Crect%20width='32'%20height='32'%20rx='8'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='7.5'%20fill='%23e5484d'/%3E%3C/svg%3E">
+  <style>
+/* backupctl — design system (plain CSS, no frameworks).
+   Follows the device theme: dark by default, light via prefers-color-scheme. */
+
+:root {
+  color-scheme: dark;
+  --bg: #0b0f14;
+  --surface: #131a23;
+  --surface-2: #1a2330;
+  --border: #25303e;
+  --border-strong: #33425a;
+  --text: #e6edf3;
+  --muted: #8b98a5;
+  --accent: #e5484d;
+  --accent-hover: #c93a40;
+  --green: #34d399;
+  --red: #f87171;
+  --amber: #fbbf24;
+  --dropzone-hover: #202b3a;
+  --log-bg: #0a0e13;
+  --overlay: rgba(0, 0, 0, 0.55);
+  --shadow-strong: rgba(0, 0, 0, 0.5);
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #f4f6f8;
+    --surface: #ffffff;
+    --surface-2: #eceff2;
+    --border: #d7dde3;
+    --border-strong: #b6c0ca;
+    --text: #1b2430;
+    --muted: #5d6b7a;
+    --dropzone-hover: #e3e8ec;
+    --log-bg: #f0f2f4;
+    --overlay: rgba(15, 23, 42, 0.25);
+    --shadow-strong: rgba(15, 23, 42, 0.15);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* ---------- top bar ---------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px 24px 0;
+}
+
+.title-wrap { display: flex; align-items: center; gap: 16px; }
+
+.logo-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 14px rgba(229, 72, 77, 0.5);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.app-title { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.app-subtitle { color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+.config-warning {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--red);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+
+.page-wrap { max-width: 1280px; margin: 0 auto; padding: 0 24px 48px; }
+.footer-note { color: var(--muted); font-size: 12px; margin-top: 36px; }
+
+/* ---------- global drop zone ---------- */
+
+.global-drop {
+  background: var(--surface);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-top: 24px;
+}
+
+.global-drop .hint {
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+/* ---------- drop zones ---------- */
+
+.dropzone-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  background: var(--surface-2);
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dropzone-box:hover, .dropzone-box.dragover {
+  border-color: var(--accent);
+  background: var(--dropzone-hover);
+}
+
+.dropzone-box .dropzone-note {
+  pointer-events: none;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  padding: 8px 12px;
+}
+
+#global-dropzone { min-height: 72px; }
+
+/* ---------- category sections ---------- */
+
+.category-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 30px 0 14px;
+}
+
+.category-title { font-size: 16px; font-weight: 700; }
+.category-count { color: var(--muted); font-size: 12px; }
+
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+/* ---------- task cards ---------- */
+
+.task-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.15s ease;
+}
+
+.task-card:hover { border-color: var(--border-strong); }
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.card-title { font-size: 14px; font-weight: 600; line-height: 1.3; }
+
+.card-note { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+
+.card-live {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-live:empty { display: none; }
+
+.pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.pill.ok { color: #0d1f18; background: var(--green); border-color: var(--green); }
+.pill.fail { color: #2a0f0f; background: var(--red); border-color: var(--red); }
+
+.pill.running {
+  color: var(--accent);
+  border-color: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse { 50% { opacity: 0.55; } }
+
+.badge-unavail {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--red);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+
+.queue-chip { font-size: 11px; font-weight: 600; color: var(--amber); }
+
+.card-actions { display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap; align-items: center; }
+
+.card-actions .export-btn { text-decoration: none; }
+
+/* ---------- buttons ---------- */
+
+.btn {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--border);
+}
+.btn-ghost:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+/* ---------- modals ---------- */
+
+.modal-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+
+.modal-sheet {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 16px 48px var(--shadow-strong);
+  padding: 22px;
+  min-width: 380px;
+  max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-title { font-size: 15px; font-weight: 700; }
+
+.modal-buttons { display: flex; gap: 8px; }
+
+.modal-input {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 12px;
+}
+.modal-input:focus { outline: none; border-color: var(--border-strong); }
+
+.log-box {
+  background: var(--log-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ---------- toasts ---------- */
+
+#toasts {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+}
+
+.toast {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px var(--shadow-strong);
+  color: var(--text);
+  font-size: 13px;
+  padding: 10px 14px;
+  animation: slide-in 0.18s ease;
+}
+
+.toast.positive { border-color: var(--green); }
+.toast.negative { border-color: var(--red); }
+.toast.warning { border-color: var(--amber); }
+
+@keyframes slide-in {
+  from { transform: translateX(12px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 900px) {
+  .task-grid { grid-template-columns: 1fr; }
+  .page-wrap, .topbar { padding-left: 14px; padding-right: 14px; }
+  .modal-sheet { min-width: 0; width: 92vw; }
+}
+  </style>
+</head>
+<body>
+  <div id="toasts"></div>
+
+  <div class="topbar">
+    <div class="title-wrap">
+      <span class="logo-dot"></span>
+      <div>
+        <div class="app-title">backupctl</div>
+        <div class="app-subtitle">Config-driven local backups</div>
+      </div>
+    </div>
+    <div id="config-warning" class="config-warning" hidden>
+      Missing config.mjs — create it (see README.md for the schema)
+    </div>
+  </div>
+
+  <div class="page-wrap">
+    <div class="global-drop">
+      <div class="hint">Drop an export file anywhere here — it is detected, you confirm, it runs</div>
+      <div class="dropzone-box" id="global-dropzone" tabindex="0">
+        <span class="dropzone-note">Drop files here or click to browse</span>
+        <input type="file" id="global-file" multiple hidden>
+      </div>
+    </div>
+
+    <div id="page"></div>
+
+    <div class="footer-note">Run state is stored per task in its destination folder (.backup-state-*.json); uploads queue in ~/.backupctl and are deleted after a successful run.</div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <script>
 /* backupctl — vanilla JS frontend */
 
-const STATE = { tasks: [], serverRunning: null, pollTimer: null, pendingQueue: [] };
+const STATE = { tasks: [], groups: [], serverRunning: null, pollTimer: null, pendingQueue: [] };
 
 /** Create an element (tag, optional class, optional text). */
 function el(tag, cls, text) {
@@ -115,28 +526,24 @@ function pickerModal(title, tasks) {
 /** Fetch /api/tasks and re-render the page. */
 async function loadTasks() {
   const data = await api('/api/tasks');
-  STATE.tasks = data.tasks || [];
-  STATE.serverRunning = (data.tasks || []).some((t) => t.running);
+  STATE.groups = data.groups || [];
+  STATE.tasks = STATE.groups.flatMap((g) => g.tasks);
+  STATE.serverRunning = STATE.tasks.some((t) => t.running);
   document.getElementById('config-warning').hidden = !data.missing_config;
   render();
 }
 
-/** Build the grouped card grid from STATE.tasks. */
+/** Build the grouped card grid from STATE.groups (config order). */
 function render() {
   const page = document.getElementById('page');
   page.innerHTML = '';
-  const groups = new Map();
-  for (const t of STATE.tasks) {
-    if (!groups.has(t.group)) groups.set(t.group, []);
-    groups.get(t.group).push(t);
-  }
-  for (const [group, tasks] of groups) {
+  for (const group of STATE.groups) {
     const header = el('div', 'category-header');
-    header.append(el('span', 'category-title', group));
-    header.append(el('span', 'category-count', `${tasks.length} task(s)`));
+    header.append(el('span', 'category-title', group.name));
+    header.append(el('span', 'category-count', `${group.tasks.length} task(s)`));
     page.append(header);
     const grid = el('div', 'task-grid');
-    for (const t of tasks) grid.append(card(t));
+    for (const t of group.tasks) grid.append(card(t));
     page.append(grid);
   }
 }
@@ -395,3 +802,6 @@ function wireGlobalDropzone() {
 
 wireGlobalDropzone();
 loadTasks();
+  </script>
+</body>
+</html>

@@ -18,13 +18,11 @@ import { spawn } from 'node:child_process';
 import readline from 'node:readline';
 import { pathToFileURL } from 'node:url';
 import express from 'express';
-import { minimatch } from 'minimatch';
 
 export const REPO_DIR = path.dirname(new URL(import.meta.url).pathname);
-export const CONFIG_DIR = process.env.BACKUPCTL_CONFIG_DIR ?? path.join(REPO_DIR, 'config');
-export const CONFIG_FILE = path.join(CONFIG_DIR, 'config.mjs');
+export const CONFIG_FILE = process.env.BACKUPCTL_CONFIG_FILE ?? path.join(REPO_DIR, 'config.mjs');
 export const LIB_PATH = path.join(REPO_DIR, 'lib.sh');
-const STATIC_DIR = path.join(REPO_DIR, 'static');
+const INDEX_PATH = path.join(REPO_DIR, 'index.html');
 const DEFAULT_TIMEOUT = 600;
 const DAY_SECONDS = 86400;
 
@@ -37,7 +35,7 @@ export async function loadConfig(configPath = CONFIG_FILE) {
   const p = configPath instanceof URL ? configPath : path.resolve(configPath);
   if (!fs.existsSync(p)) {
     throw new ConfigMissingError(
-      `Missing config file ${p} — create it (see ARCHITECTURE.md for the schema)`
+      `Missing config file ${p} — create it (see README.md for the schema)`
     );
   }
   let mod;
@@ -47,28 +45,40 @@ export async function loadConfig(configPath = CONFIG_FILE) {
     throw new ConfigError(`Failed to load ${p}: ${e.message}`);
   }
   const data = mod.default ?? {};
-  const tasks = data.tasks ?? [];
+  const groups = data.groups ?? [];
   const local = { ...data };
-  delete local.tasks;
+  delete local.groups;
   local.repo_dir ??= process.env.BACKUPCTL_REPO_DIR ?? REPO_DIR;
   local.lib ??= LIB_PATH;
-  const seen = new Set();
-  for (const t of tasks) {
-    const name = t.name;
-    if (!name) throw new ConfigError("Every task needs a 'name'");
-    if (!t.state_dir) throw new ConfigError(`Task '${name}' needs a 'state_dir' for its run state`);
-    if (!t.commands) throw new ConfigError(`Task '${name}' needs 'commands' (a bash string or array)`);
-    if (seen.has(name)) throw new ConfigError(`Duplicate task name: '${name}'`);
-    seen.add(name);
+  if (!Array.isArray(groups)) throw new ConfigError("Config needs a 'groups' array");
+  const tasks = [];
+  const groupSeen = new Set();
+  const taskSeen = new Set();
+  for (const g of groups) {
+    if (!g.name) throw new ConfigError("Every group needs a 'name'");
+    if (groupSeen.has(g.name)) throw new ConfigError(`Duplicate group name: '${g.name}'`);
+    groupSeen.add(g.name);
+    for (const t of g.tasks ?? []) {
+      const merged = { ...g.defaults, ...t, group: g.name };
+      if (!merged.name) throw new ConfigError("Every task needs a 'name'");
+      if (!merged.state_dir) throw new ConfigError(`Task '${merged.name}' needs a 'state_dir' for its run state`);
+      if (!merged.commands) throw new ConfigError(`Task '${merged.name}' needs 'commands' (a bash string or array)`);
+      if (taskSeen.has(merged.name)) throw new ConfigError(`Duplicate task name: '${merged.name}'`);
+      taskSeen.add(merged.name);
+      tasks.push(merged);
+    }
   }
   return [local, tasks];
 }
 
+const TILDE_RE = /^~(?=[/]|$)/;
+
+function tilde(value) {
+  return String(value).replace(TILDE_RE, os.homedir());
+}
+
 export function expand(p) {
-  let s = String(p);
-  s = s.replace(/^~(?=[/]|$)/, os.homedir());
-  s = s.replace(/\$(\w+)|\$\{([^}]+)\}/g, (m, a, b) => process.env[a || b] ?? '');
-  return s;
+  return tilde(p).replace(/\$(\w+)|\$\{([^}]+)\}/g, (m, a, b) => process.env[a || b] ?? '');
 }
 
 const TOKEN_RE = /\{\{([a-zA-Z0-9_.]+)\}\}/g;
@@ -112,9 +122,6 @@ export function resolve(template, local, extra = {}) {
 
 /* ~ values must expand here: inside command strings they are usually
  * quoted, so the shell's tilde expansion never sees them */
-function tilde(value) {
-  return value.replace(/^~(?=[/]|$)/, os.homedir());
-}
 
 // run state + staging --------------------------------------------------------
 
@@ -241,33 +248,35 @@ function spawnSafe(cmd, opts = {}) {
   });
 }
 
-/* Run a command (argv list or shell string), streaming output lines into
- * log(). Returns exit code; timeout kills the process group and returns
- * TIMEOUT_RC; redact masks secrets in the logged command and output. */
+/* Run a command (argv list or shell string). By default output lines are
+ * streamed into log() and the exit code is returned; with `capture: true`
+ * all output is buffered and {rc, out, err} is returned instead. Timeout
+ * kills the process group and returns TIMEOUT_RC; redact masks secrets in
+ * the logged command and output. */
 export function run(cmd, opts = {}) {
-  const { shell = false, cwd, log = () => {}, timeout, redact = [] } = opts;
+  const { shell = false, cwd, log = () => {}, timeout, redact = [], capture = false } = opts;
   log(`$ ${redactText(shell ? cmd : cmd.map(shellQuote).join(' '), redact)}`);
   let proc;
-  let errBuf = '';
+  const outBuf = [];
+  const errBuf = [];
+  const done = (rc) => (capture ? { rc, out: redactText(outBuf.join(''), redact), err: redactText(errBuf.join(''), redact) } : rc);
   try {
     proc = spawnSafe(cmd, { cwd, shell });
-    proc.stderr.on('data', (d) => { errBuf += d; });
-    proc.stderr.on('error', () => {});
   } catch (e) {
     log(`ERROR: could not start: ${e.message}`);
-    return Promise.resolve(127);
+    return Promise.resolve(capture ? { rc: 127, out: '', err: String(e) } : 127);
   }
+  proc.stdout.on('data', (d) => { if (capture) outBuf.push(d); });
+  proc.stderr.on('data', (d) => { errBuf.push(d); });
+  proc.stdout.on('error', () => {});
+  proc.stderr.on('error', () => {});
   PROC_GROUPS.add(proc.pid);
-  const flushErr = () => {
-    for (const line of errBuf.split(/\r?\n/)) {
-      if (line) log(redactText(line, redact));
-    }
-    errBuf = '';
-  };
   return new Promise((resolvePromise) => {
-    const rl = readline.createInterface({ input: proc.stdout });
-    rl.on('error', () => {});
-    rl.on('line', (line) => log(redactText(line, redact)));
+    const rl = capture ? null : readline.createInterface({ input: proc.stdout });
+    if (rl) {
+      rl.on('error', () => {});
+      rl.on('line', (line) => log(redactText(line, redact)));
+    }
     let settled = false;
     let timedOut = false;
     let killer = null;
@@ -283,19 +292,23 @@ export function run(cmd, opts = {}) {
       settled = true;
       log(`ERROR: could not start: ${e.message}`);
       if (killer) clearTimeout(killer);
-      rl.close();
+      rl?.close();
       PROC_GROUPS.delete(proc.pid);
-      resolvePromise(127);
+      resolvePromise(capture ? { rc: 127, out: redactText(outBuf.join(''), redact), err: redactText(errBuf.join(''), redact) } : 127);
     });
     proc.on('close', (code, signal) => {
       if (settled) return;
       settled = true;
       if (killer) clearTimeout(killer);
-      rl.close();
-      flushErr();
+      rl?.close();
       PROC_GROUPS.delete(proc.pid);
-      if (timedOut) return resolvePromise(TIMEOUT_RC);
-      resolvePromise(code ?? (signal ? 128 + (os.constants.signals[signal] ?? 0) : 1));
+      const rc = timedOut ? TIMEOUT_RC : (code ?? (signal ? 128 + (os.constants.signals[signal] ?? 0) : 1));
+      if (!capture) {
+        for (const line of redactText(errBuf.join(''), redact).split(/\r?\n/)) {
+          if (line) log(line);
+        }
+      }
+      resolvePromise(done(rc));
     });
   });
 }
@@ -306,48 +319,7 @@ export function sh(cmd, opts = {}) {
 
 /* Run a shell command capturing all output. Returns {rc, out, err}. */
 export function shCapture(cmd, opts = {}) {
-  const { cwd, timeout, redact = [] } = opts;
-  let proc;
-  try {
-    proc = spawnSafe(cmd, { cwd, shell: true });
-  } catch (e) {
-    return Promise.resolve({ rc: 127, out: '', err: String(e) });
-  }
-  PROC_GROUPS.add(proc.pid);
-  return new Promise((resolvePromise) => {
-    let out = '';
-    let err = '';
-    let timedOut = false;
-    let killer = null;
-    let settled = false;
-    if (timeout) {
-      killer = setTimeout(() => {
-        timedOut = true;
-        killpg(proc.pid);
-      }, timeout * 1000);
-    }
-    proc.on('error', (e) => {
-      if (settled) return;
-      settled = true;
-      if (killer) clearTimeout(killer);
-      PROC_GROUPS.delete(proc.pid);
-      resolvePromise({ rc: 127, out, err: String(e) });
-    });
-    proc.stdout.on('data', (d) => { out += d; });
-    proc.stderr.on('data', (d) => { err += d; });
-    proc.stdout.on('error', () => {});
-    proc.stderr.on('error', () => {});
-    proc.on('close', (code) => {
-      if (settled) return;
-      settled = true;
-      if (killer) clearTimeout(killer);
-      PROC_GROUPS.delete(proc.pid);
-      out = redactText(out, redact);
-      err = redactText(err, redact);
-      if (timedOut) return resolvePromise({ rc: TIMEOUT_RC, out, err });
-      resolvePromise({ rc: code ?? 1, out, err });
-    });
-  });
+  return run(cmd, { ...opts, shell: true, capture: true });
 }
 
 export function cancelAll() {
@@ -499,6 +471,18 @@ export function matchScore(pattern) {
   return [...pattern].filter((c) => !'*?'.includes(c)).length;
 }
 
+/* Glob match for the simple patterns used in config (literal chars plus
+ * `*`/`?`); a full glob library is not needed. */
+export function globMatch(name, pattern) {
+  let re = '';
+  for (const ch of String(pattern)) {
+    if (ch === '*') re += '.*';
+    else if (ch === '?') re += '.';
+    else re += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${re}$`).test(String(name));
+}
+
 export async function runTask(task, local, files, log = null, extra = null) {
   const lines = [];
   const sink = log ?? (() => {});
@@ -641,7 +625,7 @@ export function createApp() {
     for (const t of TASK_LIST) {
       if (!supportsUploads(t)) continue;
       for (const p of uploadPatterns(t, LOCAL)) {
-        if (minimatch(name, p)) candidates.push({ task: t.name, score: matchScore(p) });
+        if (globMatch(name, p)) candidates.push({ task: t.name, score: matchScore(p) });
       }
     }
     if (!candidates.length) return res.json({ result: null });
@@ -651,7 +635,11 @@ export function createApp() {
   });
 
   app.get('/api/tasks', (req, res) => {
-    res.json({ tasks: TASK_LIST.map(taskJson), missing_config: MISSING_CONFIG });
+    const names = [...new Set(TASK_LIST.map((t) => t.group))];
+    res.json({
+      groups: names.map((name) => ({ name, tasks: TASK_LIST.filter((t) => t.group === name).map(taskJson) })),
+      missing_config: MISSING_CONFIG,
+    });
   });
 
   app.post(
@@ -662,7 +650,7 @@ export function createApp() {
       if (!task || !supportsUploads(task)) return res.status(404).json({ detail: 'Unknown task' });
       const filename = path.basename(String(req.query.name ?? ''));
       const patterns = uploadPatterns(task, LOCAL);
-      if (!patterns.some((p) => minimatch(filename, p))) {
+      if (!patterns.some((p) => globMatch(filename, p))) {
         return res
           .status(400)
           .json({ detail: `${filename} does not match the expected pattern(s): ${patterns.join(', ')}` });
@@ -749,9 +737,8 @@ export function createApp() {
   });
 
   app.get('/', (req, res) => {
-    res.sendFile(path.join(STATIC_DIR, 'index.html'));
+    res.sendFile(INDEX_PATH);
   });
-  app.use('/static', express.static(STATIC_DIR));
 
   return app;
 }

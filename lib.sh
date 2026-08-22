@@ -167,6 +167,30 @@ case "${1:-}" in
     log "Encrypted export → $dest/$outname"
     ;;
 
+  ingest)
+    # lib.sh ingest DEST SUFFIX_CMD FILE... — extract every archive into a
+    # temp dir, derive an account suffix (SUFFIX_CMD runs inside the temp
+    # dir), sync everything into DEST (or "DEST - <suffix>"), git commit.
+    shift
+    dest="$1" suffix_cmd="$2"; shift 2
+    [[ $# -ge 1 ]] || { log "ingest: no files queued" >&2; exit 1; }
+    tmp=$(mktemp -d -t bctl_ingest.XXXXXX)
+    for f in "$@"; do
+      log "Extracting $(basename "$f")..."
+      bctl_extract "$f" "$tmp"
+    done
+    suffix=""
+    if [[ -n "$suffix_cmd" ]]; then
+      suffix=$(cd "$tmp" && eval "$suffix_cmd" 2>/dev/null) || true
+    fi
+    [[ -n "$suffix" ]] && dest="$dest - $suffix"
+    mkdir -p "$dest"
+    bctl_rsync_delete --exclude .git/ "$tmp/" "$dest"
+    rm -rf "$tmp"
+    bctl_git_commit "$dest"
+    log "Imported into $dest"
+    ;;
+
   validate-fresh)
     # lib.sh validate-fresh DIR [MAX_AGE_SECONDS] — fail unless the newest
     # subdir (by name) is non-empty and modified within MAX_AGE_SECONDS

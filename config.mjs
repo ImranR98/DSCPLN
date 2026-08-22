@@ -246,7 +246,7 @@ BASH_SCRIPT
           glob: 'TikTok_Data*.zip',
           state_dir: '{{maindir}}/Backups/TikTok',
           note: 'Drop the TikTok data export zip here.',
-          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/TikTok' 'grep -Eo "userName\\" : \\".*\\"" user_data*.json | tail -c +13 | head -c -2' {{uploads}}`,
+          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/TikTok' "grep -oP '(?<=\\\"userName\\\": \\\")([^\\\"]+)' user_data*.json | head -1" {{uploads}}`,
         },
 
         // Reddit data export; folder named after the account.
@@ -378,7 +378,10 @@ BASH_SCRIPT
           uploads: true,
           glob: '*.pdf',
           note: 'Drop the downloaded statement PDFs here.',
-          commands: '{{scriptroot}}/BrokeETL/resultHelpers/filterDirect.sh {{maindir}}/Documents/Banking/eStatements {{uploads}}',
+          commands: [
+            'npm i --prefix \'{{scriptroot}}/BrokeETL\' >/dev/null',
+            '{{scriptroot}}/BrokeETL/resultHelpers/filterDirect.sh {{maindir}}/Documents/Banking/eStatements {{uploads}}',
+          ],
         },
 
         // Parse the newest transaction notes into Balance.xlsx, paste the output,

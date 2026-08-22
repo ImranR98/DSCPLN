@@ -183,6 +183,11 @@ case "${1:-}" in
     suffix=""
     if [[ -n "$suffix_cmd" ]]; then
       suffix=$(cd "$tmp" && eval "$suffix_cmd" 2>/dev/null) || true
+      if [[ -z "$suffix" ]]; then
+        log "Suffix command produced no account name — the export format may have changed" >&2
+        rm -rf "$tmp"
+        exit 1
+      fi
     fi
     [[ -n "$suffix" ]] && dest="$dest/$suffix"
     mkdir -p "$dest"

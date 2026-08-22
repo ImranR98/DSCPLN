@@ -403,6 +403,30 @@ test('ingest subcommand: awk suffix with escaped fields (Medium-style)', async (
   assert.ok(fs.existsSync(path.join(maindir, 'Backups', 'Medium', 'ohnDoe', 'profile', 'profile.html')));
 });
 
+test('ingest subcommand: empty suffix fails the run instead of syncing into DEST', async () => {
+  const archiveSrc = path.join(SANDBOX, 'bad-src');
+  fs.mkdirSync(archiveSrc);
+  fs.writeFileSync(path.join(archiveSrc, 'user_data_tiktok.json'), JSON.stringify({ a: 1 }));
+  const { rc } = await bctl.shCapture(`tar czf ${bctl.shellQuote(path.join(SANDBOX, 'bad.tar.gz'))} -C ${bctl.shellQuote(archiveSrc)} .`);
+  assert.equal(rc, 0);
+  const t = task('Bad Ingest', {
+    group: 'G',
+    uploads: true,
+    glob: '*.tar.gz',
+    summary_last_line: true,
+    commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/TikTok' "grep -oP '(?<=\\\"userName\\\": \\\")([^\\\"]+)' user_data*.json | head -1" {{uploads}}`,
+  });
+  const cfgPath = makeConfig([t]);
+  await stage(t.name, 'bad.tar.gz', fs.readFileSync(path.join(SANDBOX, 'bad.tar.gz')));
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
+  const files = [path.join(bctl.stagingDir(t.name), 'bad.tar.gz')];
+  const [ok] = await bctl.runTask(tasks[0], local, files);
+  assert.equal(ok, false);
+  const state = bctl.loadTaskState(tasks[0], local);
+  assert.match(state.output, /no account name/);
+  assert.ok(!fs.existsSync(path.join(maindir, 'Backups', 'TikTok')), 'nothing synced into DEST');
+});
+
 test('copy subcommand with --git + --pre: sources synced, state excluded', async () => {
   const src1 = path.join(SANDBOX, 'src1');
   fs.mkdirSync(src1);

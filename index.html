@@ -640,7 +640,7 @@ function uploadFiles(task, fileList) {
 async function handleGlobalFiles(fileList) {
   const byTask = new Map(); // task name -> {task, files: []}
   for (const file of Array.from(fileList)) {
-    const res = await api(`/api/detect?name=${encodeURIComponent(file.name)}`);
+    const res = await api(`/api/detect?name=${encodeURIComponent(file.name)}`, { method: 'POST' });
     const r = res.result;
     if (!r) {
       toast(`No task matches ${file.name} — drop it onto the matching card instead`, 'warning');

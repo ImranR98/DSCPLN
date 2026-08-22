@@ -21,7 +21,7 @@ A **drop zone at the top** detects what kind of export you're uploading from the
 - a **Run** button (disabled if the task is unavailable, e.g. its source directory is missing) — becomes a **Stop** button while running (kills the task's processes)
 - a **Log** button showing the last run's output; the last log line also streams under the card title while a task runs
 - a **Generate Export** button opening the service's export page in a new tab, for tasks whose config sets `export_url:` (e.g. Google Takeout, Instagram, Bitwarden)
-- a status line with the last run time and result — stored per task as `.backup-state-<task>.json` in the task's destination directory (`state_dir:` in config, defaulting to `dest:`; excluded from git commits)
+- a status line with the last run time and result — stored per task as `.backup-state-<task>.json` in the task's `state_dir:` directory (excluded from git commits)
 
 Every task runs with a timeout (default 10 min, overridable per task via `timeout:` in config). Interactive steps are handled in the GUI: passphrase prompts for encrypted exports, password + TOTP for ProtonMail, confirmation dialogs for everything else. Runs interrupted by a server crash show as "Interrupted" instead of a false success.
 
@@ -29,7 +29,7 @@ Every task runs with a timeout (default 10 min, overridable per task via `timeou
 
 - `config/config.yaml` — your personal file (committed): machine-specific values at the top level (`backup_root`, `sync_dir`, hosts, emails, script paths...) plus the `tasks:` list. Add a task by adding an entry; the menu, categories, and drop-zone validation update automatically.
 
-Placeholders like `{{backup_root}}` or `{{hosts.gaming_pc.host}}` are resolved from the same file's top-level values at run time; values may reference other tokens. Built-in tokens: `{{repo_dir}}` (this repository's root, env-overridable via `BACKUPCTL_REPO_DIR`) and `{{lib}}` (the packaged `backupctl/lib.sh`). Every task needs either `dest:` or `state_dir:` — run state is stored there as `.backup-state-<task>.json`.
+Placeholders like `{{backup_root}}` or `{{hosts.gaming_pc.host}}` are resolved from the same file's top-level values at run time; values may reference other tokens. Built-in tokens: `{{repo_dir}}` (this repository's root, env-overridable via `BACKUPCTL_REPO_DIR`) and `{{lib}}` (the packaged `backupctl/lib.sh`). Every task needs `state_dir:` — run state is stored there as `.backup-state-<task>.json`.
 
 **Personal scripts live as git submodules** under `scripts/` in this repo. Tasks that need one (e.g. a Balance-format parser) reference it via the `{{scriptroot}}` token — see `config/config.yaml` for real examples.
 

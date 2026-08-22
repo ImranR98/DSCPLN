@@ -77,7 +77,7 @@ pyproject.toml         Package metadata, deps, `backupctl` + `backupctl-pty` ent
 
 ### Task fields
 
-Common: `name`, `group` (card category), `note` (help text, shown inside the drop zone for upload tasks), `timeout` (seconds, default 600), `dest` / `state_dir` (run state location; `state_dir` falls back to `dest`; boot fails loudly if neither), `prompts`, `export_url` (optional; shows a "Generate Export" button on the card that opens the service's export page).
+Common: `name`, `group` (card category), `note` (help text, shown inside the drop zone for upload tasks), `timeout` (seconds, default 600), `state_dir` (where the run state `.backup-state-<task>.json` lives; boot fails loudly if missing), `prompts`, `export_url` (optional; shows a "Generate Export" button on the card that opens the service's export page).
 
 Runner: `command` / `commands` (bash; the only required field), `cwd`, `args` (argv form; empty values drop their flag pair), `uploads: true` + `glob` (drop zone; glob may be a list of patterns), `require: [key...]` (fail unless each prompt key has a value), `capture: true` + `commit_dir` (output becomes the summary, shown in a copy/paste dialog whose Done button git-commits `commit_dir`), `tool:` (download+extract a CLI if missing, exposed as `{{tool_binary}}`), `fresh_dir:` (fail unless the newest export dir is non-empty and fresh), `prune:` (delete older export dirs, `keep_newer` keeps any larger than the newest), `root:` (source directory the card requires; glob-aware, drives the availability badge), `summary_last_line: true` (card summary = last non-command log line).
 
@@ -181,7 +181,7 @@ User clicks Run / confirms batch
       → write running.json → spawn worker thread
   → worker: run_task → token resolution → the task's bash command(s)
       (core.py runs every command with timeout/pgid/env safety)
-      → fresh_dir/prune validation → save_task_state(dest-dir file)
+      → fresh_dir/prune validation → save_task_state(state_dir file)
       → cancelled? record "Cancelled by user"
       → publish done, clear slot + marker
   → JS poll loop: live log line on card → completion → toast → refresh

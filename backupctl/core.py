@@ -37,32 +37,17 @@ def load_config(path=None):
         name = t.get("name")
         if not name:
             raise ValueError("Every task needs a 'name'")
-        if not (t.get("state_dir") or t.get("dest")):
-            raise ValueError(f"Task '{name}' needs a 'dest' or 'state_dir' for its run state")
+        if not t.get("state_dir"):
+            raise ValueError(f"Task '{name}' needs a 'state_dir' for its run state")
         if name in seen:
             raise ValueError(f"Duplicate task name: '{name}'")
         seen.add(name)
     return local, tasks
 
-
 def expand(path):
     return os.path.expanduser(os.path.expandvars(str(path)))
 
-
 _TOKEN_RE = re.compile(r"\{\{([a-zA-Z0-9_.]+)\}\}")
-
-
-def _lookup(key, local, extra):
-    if key in extra:
-        return extra[key]
-    node = local
-    for part in key.split("."):
-        if isinstance(node, dict) and part in node:
-            node = node[part]
-        else:
-            return None
-    return node
-
 
 def resolve(template, local, extra=None):
     """Replace {{a.b.c}} tokens from local (and per-run extra). Values may
@@ -72,6 +57,17 @@ def resolve(template, local, extra=None):
     if not isinstance(template, str):
         return template
     extra = extra or {}
+
+    def _lookup(key, local, extra):
+        if key in extra:
+            return extra[key]
+        node = local
+        for part in key.split("."):
+            if isinstance(node, dict) and part in node:
+                node = node[part]
+            else:
+                return None
+        return node
 
     def repl(m):
         value = _lookup(m.group(1), local, extra)
@@ -99,24 +95,20 @@ def resolve(template, local, extra=None):
         return result
     return result
 
-
 # run state + staging --------------------------------------------------------
 
 STATE_DIR = Path.home() / ".backupctl"
 RUNNING_FILE = STATE_DIR / "running.json"
 
-
 def slugify(name):
     return "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
 
-
 def state_file_for(task, local):
-    raw = task.get("state_dir") or task.get("dest")
+    raw = task.get("state_dir")
     if not raw:
-        raise RuntimeError(f"Task '{task['name']}' needs a 'dest' or 'state_dir' for its run state")
+        raise RuntimeError(f"Task '{task['name']}' needs a 'state_dir' for its run state")
     base = Path(expand(resolve(raw, local)))
     return base / f".backup-state-{slugify(task['name'])}.json"
-
 
 def save_task_state(task, local, ok, summary, output=""):
     path = state_file_for(task, local)
@@ -132,7 +124,6 @@ def save_task_state(task, local, ok, summary, output=""):
     tmp.write_text(json.dumps(data, indent=1))
     tmp.replace(path)
 
-
 def load_task_state(task, local):
     path = state_file_for(task, local)
     if not path.exists():
@@ -142,15 +133,12 @@ def load_task_state(task, local):
     except Exception:
         return None
 
-
 def mark_running(task_name):
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     RUNNING_FILE.write_text(json.dumps({"task": task_name, "ts": time.time()}))
 
-
 def clear_running():
     RUNNING_FILE.unlink(missing_ok=True)
-
 
 def running_marker():
     if RUNNING_FILE.exists():
@@ -160,13 +148,11 @@ def running_marker():
             return None
     return None
 
-
 def staging_dir(task_name):
     safe = slugify(task_name)
     d = STATE_DIR / "staging" / safe
     d.mkdir(parents=True, exist_ok=True)
     return d
-
 
 # subprocess layer -----------------------------------------------------------
 
@@ -177,7 +163,6 @@ def _ensure_askpass():
         path.write_text("#!/bin/sh\nexit 1\n")
         path.chmod(0o755)
     return path
-
 
 ASKPASS = _ensure_askpass()
 

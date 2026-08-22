@@ -616,6 +616,9 @@ export function createApp() {
     next();
   });
 
+  // uploads are parsed as raw bytes BEFORE express.json runs, so JSON
+  // uploads (content-type: application/json) are never parsed into objects
+  app.use('/api/upload', express.raw({ type: () => true, limit: '2gb' }));
   app.use(express.json({ limit: '1mb' }));
 
   // most-specific pattern wins; ties listed as `ambiguous`
@@ -642,24 +645,20 @@ export function createApp() {
     });
   });
 
-  app.post(
-    '/api/upload/:taskName',
-    express.raw({ type: () => true, limit: '2gb' }),
-    (req, res) => {
-      const task = TASK_MAP.get(req.params.taskName);
-      if (!task || !supportsUploads(task)) return res.status(404).json({ detail: 'Unknown task' });
-      const filename = path.basename(String(req.query.name ?? ''));
-      const patterns = uploadPatterns(task, LOCAL);
-      if (!patterns.some((p) => globMatch(filename, p))) {
-        return res
-          .status(400)
-          .json({ detail: `${filename} does not match the expected pattern(s): ${patterns.join(', ')}` });
-      }
-      const staging = stagingDir(task.name);
-      fs.writeFileSync(path.join(staging, filename), req.body);
-      res.json({ queued: filename, count: queuedCount(task.name) });
+  app.post('/api/upload/:taskName', (req, res) => {
+    const task = TASK_MAP.get(req.params.taskName);
+    if (!task || !supportsUploads(task)) return res.status(404).json({ detail: 'Unknown task' });
+    const filename = path.basename(String(req.query.name ?? ''));
+    const patterns = uploadPatterns(task, LOCAL);
+    if (!patterns.some((p) => globMatch(filename, p))) {
+      return res
+        .status(400)
+        .json({ detail: `${filename} does not match the expected pattern(s): ${patterns.join(', ')}` });
     }
-  );
+    const staging = stagingDir(task.name);
+    fs.writeFileSync(path.join(staging, filename), req.body);
+    res.json({ queued: filename, count: queuedCount(task.name) });
+  });
 
   app.post('/api/run/:taskName', (req, res) => {
     const taskName = req.params.taskName;

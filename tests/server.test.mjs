@@ -635,6 +635,21 @@ test('API: upload validation, detect scoring + ambiguity, CSRF guard', async () 
   await close();
 });
 
+test('API: upload with JSON content-type stores raw bytes, not a parsed object', async () => {
+  const t = task('Json Upload', { uploads: true, glob: '*.json', commands: 'true' });
+  await bootWith(makeConfig([t]));
+  const { req, close } = await api();
+  const body = '{"items": [1, 2, 3]}';
+  const res = await req('POST', '/api/upload/Json%20Upload?name=export.json', body, true, {
+    'content-type': 'application/json',
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.json.queued, 'export.json');
+  const staged = fs.readFileSync(path.join(bctl.stagingDir('Json Upload'), 'export.json'), 'utf8');
+  assert.equal(staged, body);
+  await close();
+});
+
 test('API: run/cancel flow kills the task', async () => {
   const t = task('Cancel Me', { group: 'G', timeout: 300, commands: 'sleep 100' });
   await bootWith(makeConfig([t]));

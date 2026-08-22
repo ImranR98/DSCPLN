@@ -7,8 +7,6 @@
   <title>backupctl</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Cstyle%3Erect%7Bfill:%23131a23%7D@media%20(prefers-color-scheme:light)%7Brect%7Bfill:%23ffffff%7D%7D%3C/style%3E%3Crect%20width='32'%20height='32'%20rx='8'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='7.5'%20fill='%23e5484d'/%3E%3C/svg%3E">
   <style>
-/* backupctl — design system (plain CSS, no frameworks).
-   Follows the device theme: dark by default, light via prefers-color-scheme. */
 
 :root {
   color-scheme: dark;
@@ -62,8 +60,6 @@ html, body {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
-/* ---------- top bar ---------- */
-
 .topbar {
   display: flex;
   align-items: center;
@@ -102,8 +98,6 @@ html, body {
 .page-wrap { max-width: 1280px; margin: 0 auto; padding: 0 24px 48px; }
 .footer-note { color: var(--muted); font-size: 12px; margin-top: 36px; }
 
-/* ---------- global drop zone ---------- */
-
 .global-drop {
   background: var(--surface);
   border: 2px dashed var(--border);
@@ -118,8 +112,6 @@ html, body {
   font-size: 14px;
   margin-bottom: 12px;
 }
-
-/* ---------- drop zones ---------- */
 
 .dropzone-box {
   position: relative;
@@ -150,8 +142,6 @@ html, body {
 
 #global-dropzone { min-height: 72px; }
 
-/* ---------- category sections ---------- */
-
 .category-header {
   display: flex;
   align-items: baseline;
@@ -167,8 +157,6 @@ html, body {
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 16px;
 }
-
-/* ---------- task cards ---------- */
 
 .task-card {
   background: var(--surface);
@@ -242,8 +230,6 @@ html, body {
 
 .card-actions .export-btn { text-decoration: none; }
 
-/* ---------- buttons ---------- */
-
 .btn {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -270,8 +256,6 @@ html, body {
   border-color: var(--border-strong);
   background: var(--surface-2);
 }
-
-/* ---------- modals ---------- */
 
 .modal-fields {
   display: flex;
@@ -334,8 +318,6 @@ html, body {
   word-break: break-all;
 }
 
-/* ---------- toasts ---------- */
-
 #toasts {
   position: fixed;
   top: 16px;
@@ -366,8 +348,6 @@ html, body {
   from { transform: translateX(12px); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
-
-/* ---------- responsive ---------- */
 
 @media (max-width: 900px) {
   .task-grid { grid-template-columns: 1fr; }
@@ -409,11 +389,9 @@ html, body {
   <div id="modal-root"></div>
 
   <script>
-/* backupctl — vanilla JS frontend */
 
 const STATE = { tasks: [], groups: [], serverRunning: null, pollTimer: null, pendingQueue: [] };
 
-/** Create an element (tag, optional class, optional text). */
 function el(tag, cls, text) {
   const node = document.createElement(tag);
   if (cls) node.className = cls;
@@ -421,7 +399,6 @@ function el(tag, cls, text) {
   return node;
 }
 
-/** fetch JSON from the API; failures surface as {error}. */
 async function api(path, options = {}) {
   const res = await fetch(path, options);
   const data = await res.json().catch(() => ({}));
@@ -432,18 +409,12 @@ async function api(path, options = {}) {
   return data;
 }
 
-/* ---------------- toasts ---------------- */
-
-/** Show a transient toast (type: positive/negative/warning). */
 function toast(message, type = 'positive') {
   const node = el('div', `toast ${type}`, message);
   document.getElementById('toasts').append(node);
   setTimeout(() => node.remove(), 5000);
 }
 
-/* ---------------- modals ---------------- */
-
-/** Open a modal (title, optional body node, buttons); returns the overlay. */
 function openModal({ title, body, buttons }) {
   const overlay = el('div', 'modal-overlay');
   const sheet = el('div', 'modal-sheet');
@@ -462,7 +433,6 @@ function openModal({ title, body, buttons }) {
   return overlay;
 }
 
-/** Promise modal: resolves true on submit, false on cancel. */
 function confirmModal(title, submitLabel = 'Run') {
   return new Promise((resolve) => {
     openModal({
@@ -475,7 +445,6 @@ function confirmModal(title, submitLabel = 'Run') {
   });
 }
 
-/** Promise modal with password fields; resolves the values array or null. */
 function fieldsModal(title, fields, submitLabel = 'Run') {
   return new Promise((resolve) => {
     const body = el('div', 'modal-fields');
@@ -499,7 +468,6 @@ function fieldsModal(title, fields, submitLabel = 'Run') {
   });
 }
 
-/** Promise modal listing tasks; resolves the picked task or null. */
 function pickerModal(title, tasks) {
   return new Promise((resolve) => {
     let overlay = null;
@@ -521,9 +489,6 @@ function pickerModal(title, tasks) {
   });
 }
 
-/* ---------------- data ---------------- */
-
-/** Fetch /api/tasks and re-render the page. */
 async function loadTasks() {
   const data = await api('/api/tasks');
   STATE.groups = data.groups || [];
@@ -533,7 +498,6 @@ async function loadTasks() {
   render();
 }
 
-/** Build the grouped card grid from STATE.groups (config order). */
 function render() {
   const page = document.getElementById('page');
   page.innerHTML = '';
@@ -548,7 +512,6 @@ function render() {
   }
 }
 
-/** Build one task card element from its JSON. */
 function card(t) {
   const pillText = t.running ? 'Running…' : (t.state ? t.state.last_run_text : 'Never run');
   const c = el('div', 'task-card');
@@ -599,9 +562,6 @@ function card(t) {
   return c;
 }
 
-/* ---------------- drop zone wiring ---------------- */
-
-/** Wire a drop zone + hidden input to a handler receiving a FileList. */
 function wireDropzone(zone, input, handler) {
   zone.onclick = () => input.click();
   zone.ondragover = (e) => { e.preventDefault(); zone.classList.add('dragover'); };
@@ -614,9 +574,6 @@ function wireDropzone(zone, input, handler) {
   input.onchange = () => { handler(input.files); input.value = ''; };
 }
 
-/* ---------------- uploads ---------------- */
-
-/** POST one file into a task's staging. */
 async function uploadToTask(task, file) {
   const res = await api(`/api/upload/${encodeURIComponent(task.name)}?name=${encodeURIComponent(file.name)}`, {
     method: 'POST',
@@ -627,7 +584,6 @@ async function uploadToTask(task, file) {
   return true;
 }
 
-/** Upload a FileList dropped onto a task card. */
 async function uploadFiles(task, fileList) {
   for (const file of fileList) {
     await uploadToTask(task, file); // the server validates the pattern (400 -> toast)
@@ -635,9 +591,6 @@ async function uploadFiles(task, fileList) {
   await loadTasks();
 }
 
-/* ---------------- global drop: auto-detect, batch confirm, run all ---------------- */
-
-/** Global drop: detect each file server-side, batch-confirm, run sequentially. */
 async function handleGlobalFiles(fileList) {
   const byTask = new Map(); // task name -> {task, files: []}
   for (const file of Array.from(fileList)) {
@@ -687,9 +640,6 @@ async function handleGlobalFiles(fileList) {
   if (firstTask) runTask(firstTask, { skipGenericConfirm: true });
 }
 
-/* ---------------- running ---------------- */
-
-/** Render the task's prompts, POST /api/run, start polling. */
 async function runTask(task, opts = {}) {
   const extra = {};
   const prompts = task.prompts || [];
@@ -718,14 +668,12 @@ async function runTask(task, opts = {}) {
   startPolling(task);
 }
 
-/** Stop the running task and clear the batch queue. */
 async function cancelRun() {
   STATE.pendingQueue = [];
   const res = await api('/api/cancel', { method: 'POST' });
   toast(res.error || 'Stopping the task…', res.error ? 'negative' : 'warning');
 }
 
-/** Poll /api/status while running; on completion toast, paste dialog, next batch task. */
 function startPolling(task) {
   STATE.pollTimer = setInterval(async () => {
     const s = await api('/api/status');
@@ -749,23 +697,18 @@ function startPolling(task) {
   }, 700);
 }
 
-/* ---------------- dialogs for results ---------------- */
-
-/** Modal showing text in a monospace box with buttons. */
 function resultModal(title, text, buttons) {
   const pre = el('pre', 'log-box');
   pre.textContent = text;
   openModal({ title, body: pre, buttons });
 }
 
-/** Show the task's last-run log. */
 function openLog(task) {
   resultModal(`${task.name} — log`, task.state && task.state.output ? task.state.output : '(no log recorded yet)', [
     { label: 'Close', cls: 'btn-ghost', onClick: (o) => o.remove() },
   ]);
 }
 
-/** Show captured output with Copy and Done (commit) buttons. */
 function openPaste(name, output) {
   resultModal(`${name} — output to paste`, output, [
     {
@@ -787,9 +730,6 @@ function openPaste(name, output) {
   ]);
 }
 
-/* ---------------- global drop zone wiring ---------------- */
-
-/** Wire the top drop zone to click/drop handling. */
 function wireGlobalDropzone() {
   wireDropzone(
     document.getElementById('global-dropzone'),
@@ -797,8 +737,6 @@ function wireGlobalDropzone() {
     handleGlobalFiles,
   );
 }
-
-/* ---------------- boot ---------------- */
 
 wireGlobalDropzone();
 loadTasks();

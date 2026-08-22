@@ -65,78 +65,37 @@ Service-specific concerns — installing a CLI, validating an export is fresh, p
 
 ## Server (`server.mjs`)
 
-The whole engine in one module: config loading/tokens, run state, staging, the safe subprocess layer, the generic bash runner, the Express server, and the CLI entry. Config is loaded once at boot (edit → restart); no hot reload. Module state:
+The whole engine in one module: config loading/tokens, run state, staging, the safe subprocess layer, the generic bash runner, the Express server, and the CLI entry. Config is loaded once at boot (edit → restart); no hot reload.
 
-```
-CURRENT = {name, log, read, done, cancelled}   # run slot (a plain object)
-LOCAL, TASK_LIST                               # from load_config()
-```
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /api/tasks` | `groups` in config order: per group, its task definitions — availability + reason, queued count, last-run state (or *Interrupted* if `running.json` mentions the task), per-task `running`/`live`/`pill` — plus `missing_config` |
-| `POST /api/detect?name=` | Returns the upload task a filename belongs to (most-specific pattern wins, ties listed as `ambiguous`) — the frontend does no matching itself |
-| `POST /api/upload/{task}?name=` | Raw request body saved to `staging/<task>/<name>` after glob validation (400 on mismatch) |
-| `POST /api/run/{task}` | Body: JSON `extra` (`password`, `totp`, `confirmed`). Refuses when the slot is busy (409) or the task is unavailable. Snapshots the staging file list, writes the `running.json` marker, starts an async worker |
-| `GET /api/status` | `running` task name, newly appended log lines, one-shot `done` result |
-| `POST /api/cancel` | Marks the run cancelled and kills all registered child process groups; the worker then records `Cancelled by user` |
-| `POST /api/paste_done/{task}` | Runs `git_commit` on the task's `commit_dir` (the "Done" button in the paste dialog) |
-
-POSTs to `/api/*` are guarded by a CSRF check (cross-origin requests are rejected). The worker is the run slot: `await run_task(...)`; if `cancelled` was set, the result is overwritten with `Cancelled by user`; `done` is published and the slot + running marker are cleared in `finally`. No threads — the event loop is the worker pool, and a single slot object serializes runs.
-
-### Runner
+**API surface**: `GET /api/tasks` (groups in config order — availability + reason, queued count, last-run state or *Interrupted*, per-task `running`/`live`/`pill`, plus `missing_config`); `POST /api/detect?name=` (most-specific pattern wins, ties listed as `ambiguous` — the frontend does no matching itself); `POST /api/upload/{task}?name=` (raw body saved to `staging/<task>/<name>` after glob validation, 400 on mismatch); `POST /api/run/{task}` (JSON `extra`; 409 when busy, 400 when unavailable; snapshots staging, writes `running.json`, starts the async worker); `GET /api/status` (`running` name, new log lines, one-shot `done`); `POST /api/cancel` (marks cancelled and kills all registered process groups); `POST /api/paste_done/{task}` (git-commits the task's `commit_dir`). POSTs to `/api/*` are guarded by a CSRF check. The worker is the run slot: `await run_task(...)`; if `cancelled` was set, the result is overwritten with `Cancelled by user`; `done` is published and the slot + running marker are cleared in `finally`. No threads — the event loop is the worker pool, and a single slot object serializes runs.
 
 `run_task(task, local, files, log, extra)` wraps the single execution path: builds a ctx, resolves tokens, checks `uploads`/`require`, runs each `commands` entry (token-resolved, per-command timeout, redacted), then clears staging (upload tasks) or the `{{tmp}}` dir, and records run state — so **state is recorded exactly once, on both success and failure**. The loop stops at the first failing command, which is what makes trailing `validate-fresh`/`prune-exports` steps honest. With `capture:` the captured output is the summary; with `summary_last_line:` the summary is the last non-command log line; otherwise "Completed".
 
-### Process safety
+**Process safety** (every subprocess goes through `run()` / `sh()` / `shCapture()`):
 
-Every subprocess goes through `run()` / `sh()` / `shCapture()`:
-
-- **`detached: true`** — each command gets its own session/process group.
-- **Timeouts** — a timer kills the whole group (`SIGTERM`, then `SIGKILL` 1s later via `process.kill(-pid)`) and the call returns 124 (task reports "timed out").
-- **`stdin: 'ignore'`** — interactive prompts fail fast instead of hanging.
-- **`SSH_ASKPASS_REQUIRE=force` + a failing askpass script** (generated at `~/.backupctl/askpass.sh`) — ssh can never prompt for a password on a hidden terminal.
-- **`PROC_GROUPS` registry + `cancel_all()`** — the Stop button kills every live child process group.
-- **`redact=[...]`** — secrets are masked in both the logged command line and the streamed output (every prompt value is redacted). Output is streamed line-by-line through `readline`; stderr is buffered and flushed at process close (so nothing is lost to the pipe race), then redacted the same way.
-- **PTY via `pty_runner.py`** — for tools that refuse non-TTY stdin (e.g. `age --passphrase`): `lib.sh`'s `encrypt` subcommand pipes the passphrase into `python3 pty_runner.py age ...` directly. Node has no stdlib pty API and native addons are off the table, so the pty work lives in a stdlib-only Python helper (`pty.fork` + `os.execvp`) that allocates the pseudo-terminal, forwards piped stdin line by line (paced so prompt loops that switch the terminal to raw mode between reads never lose input), strips terminal control sequences, and exits with the child's status. Secrets travel in stdin from env vars, never on a command line. Requires `python3` — already a dependency of the personal scripts.
+- Each command gets its own process group (`detached: true`); a timer kills the whole group (`SIGTERM`, then `SIGKILL` via `process.kill(-pid)`) on timeout and the call returns 124 ("timed out"). The Stop button kills every group in the `PROC_GROUPS` registry.
+- `stdin: 'ignore'` makes interactive prompts fail fast, `SSH_ASKPASS_REQUIRE=force` + a failing askpass script means ssh can never prompt for a password, and `redact=[...]` masks every prompt value in the logged command line and the streamed output.
+- **PTY via `pty_runner.py`** — for tools that refuse non-TTY stdin (e.g. `age --passphrase`): `lib.sh`'s `encrypt` subcommand pipes the passphrase into `python3 pty_runner.py age ...` directly. The stdlib-only helper (`pty.fork` + `os.execvp`) allocates the pseudo-terminal, forwards piped stdin line by line, strips terminal control sequences, and exits with the child's status. Secrets travel in stdin from env vars, never on a command line. Requires `python3` — already a dependency of the personal scripts.
 
 ### State
 
 - **Run state lives with the data**: `<state_dir>/.backup-state-<slug>.json` — `{task, ts, ok, summary, output}` (output capped at 20k chars). Written atomically (tmp + rename).
 - **Git hygiene**: `git_commit()` and `bctl_git_commit` stage with `git add -A . ':(exclude).backup-state-*'`, so state files never enter backup repos (and "nothing added to commit" is tolerated).
-- **`running.json`** (app state dir, `~/.backupctl` or `BACKUPCTL_STATE_DIR`) marks an in-flight task; `task_json` reports such a task as red `Interrupted · <ago>` after a server crash.
+- **`running.json`** (app state dir, `~/.backupctl` or `BACKUPCTL_STATE_DIR`) marks an in-flight task; after a server crash such a task shows as red `Interrupted · <ago>`.
 - **`staging/<task>/`** holds dropped-but-unprocessed uploads; cleared after a successful run.
 
 ## Frontend (`index.html`)
 
-One self-contained file: plain HTML + one inline CSS design system (dark by default, light via `prefers-color-scheme`) + ~400 lines of vanilla JS. No build step, no framework. Structure: topbar (logo, title, config-missing warning) → global drop zone → `#page` container (groups + cards rendered by JS) → footer note → `#modal-root` and `#toasts`.
+One self-contained file: plain HTML + one inline CSS design system (dark by default, light via `prefers-color-scheme`) + ~400 lines of vanilla JS. No build step, no framework. Structure: topbar → global drop zone → `#page` container (groups + cards rendered by JS) → footer → `#modal-root` and `#toasts`.
 
-| JS function | Role |
-|---|---|
-| `el/api/toast` | DOM helper, fetch wrapper (errors as `{error}`), toast stack |
-| `openModal/confirmModal/fieldsModal/pickerModal` | Generic modal system; the last three return Promises so flows read like `await confirmModal(...)` |
-| `loadTasks/render/card` | Fetch `/api/tasks` (groups in config order), build each card (pill, live-log line, availability badge, note, drop zone + hidden file input, queue chip, Run/Log buttons, and a "Generate Export" link when `export_url` is set) |
-| (server) `pill` | Single staleness policy served to the UI: running → ok(<24h) → neutral(≤7d) → fail; the frontend just renders the class |
-| `uploadFiles` | Per-card drop handling; validation happens server-side (400 → toast) |
-| `handleGlobalFiles` | Global drop flow: detect each file server-side (ties → picker modal), upload to each task's staging, one batch confirm, then run sequentially (`STATE.pendingQueue`) |
-| `runTask(task, opts)` | Renders the task's `prompts:` (confirm/secret) generically — no task-type branches — then POSTs `/api/run` and starts polling. Prompt-less non-upload tasks get the generic confirm (skippable via `opts.skipGenericConfirm` for batch runs) |
-| `cancelRun` | Stop button: kills processes and clears the pending batch queue |
-| `startPolling` | 700 ms polling of `/api/status`; while running it simply re-renders from `/api/tasks` (the server reports per-task `running`/`live`/`pill`), and on completion toasts the result, opens the paste dialog, and auto-starts the next pending batch task. The frontend holds no imperative DOM refs |
-| `openLog/openPaste` | Monospace log modal; paste modal with Copy + Done (Done POSTs `/api/paste_done`) |
+The UI is a thin loop: `loadTasks()` fetches `/api/tasks` and rebuilds the card grid (pill, live-log line, availability badge, drop zone, queue chip, Run/Log buttons, Generate Export link); `handleGlobalFiles()` detects files server-side (ties → picker modal), uploads each to its task's staging, batch-confirms, then runs sequentially through `STATE.pendingQueue`; `runTask()` renders the task's `prompts:` generically (no task-type branches) and POSTs `/api/run`; `startPolling()` polls `/api/status` every 700 ms and re-renders from `/api/tasks` (the server reports per-task `running`/`live`/`pill`), toasting the result, opening the paste dialog, and auto-starting the next batch task. The frontend holds no imperative DOM refs.
 
 ## Failure & honesty guarantees
 
-| Failure mode | Guarantee |
-|---|---|
-| Command hangs (prompt, network, deadlock) | Per-task timeout (default 10 min) kills the process group → red "timed out" |
-| User wants out | Stop button kills all live process groups → "Cancelled by user" |
-| Server dies mid-run | `running.json` survives → pill shows red "Interrupted · ago" |
-| Command exits 0 but did nothing | a trailing `validate-fresh` command (rc-checked) fails the run when the actual export is empty or stale |
-| rsync/unzip failure swallowed | rc checked in the lib and every run command; any failure fails the run |
-| Uploaded files ignored | run-with-uploads refuses zero files |
-| Originals deleted prematurely | media heredocs delete only after every step succeeded (`set -e`) and the confirm prompt was approved (`require: [confirmed]`) |
-| Secrets in logs | `redact=` masks passwords/TOTP in command display and output; the age passphrase travels in an env var, never argv |
-| State files churning git repos | `:(exclude).backup-state-*` pathspec in every commit |
+- **Commands can't hang or orphan**: per-task timeouts kill the process group → red "timed out"; the Stop button kills all live groups → "Cancelled by user"; a server crash leaves `running.json`, so the pill shows red "Interrupted · ago".
+- **Exit 0 without real work fails the run**: rc-checked commands plus a trailing `validate-fresh` (empty/stale export fails); run-with-uploads refuses zero files.
+- **No silent data loss**: media heredocs delete originals only after every step succeeded (`set -e`) and the confirm prompt was approved (`require: [confirmed]`).
+- **Secrets stay out of logs**: `redact=` masks prompt values in command display and output; the age passphrase travels in env, never argv. State files never churn backup repos (`:(exclude).backup-state-*` in every commit).
 
 ## Dependencies
 
@@ -158,14 +117,3 @@ One self-contained file: plain HTML + one inline CSS design system (dark by defa
 - `scripts/` — git submodules with the personal automation scripts referenced by the config
 - `config.mjs` — the committed personal config (values + groups of tasks)
 - `tests/` — `node:test` sandbox suites (`npm test`)
-
-## Key design decisions (and why)
-
-1. **Plain HTML/CSS/JS instead of a UI framework** — no cascade layers, no runtime-injected component CSS, no custom elements: every style rule is fully deterministic. One self-contained `index.html`; no static asset serving at all.
-2. **One committed personal config** — the repo is a personal tool; this README is the schema reference. The config is a JS module: values are real JS (numbers, objects, multi-line template literals for heredocs), comments stay.
-3. **State next to the data** — each task's last-run record lives in its destination folder (`.backup-state-<task>.json`), consistent with data ownership, and excluded from git.
-4. **No task types — Node runs bash, bash does the work** — the engine is a generic runner (tokens, timeouts, pgids, redaction, state, prompts) plus a small rc-checked bash library. Everything service-specific is a bash command in the config; no kind registry to maintain, and no engine fields for one-off needs (tool installs, freshness checks, pruning are config bash + `lib.sh` subcommands).
-5. **One JS module** — `server.mjs` holds the engine, the server, and the CLI. No hot config reload: edit config → restart. The async event loop replaces a worker-thread design outright.
-6. **Subprocess process groups + timeouts** — the UI can never get stuck in a silent "Running" state.
-7. **A generic pty helper instead of a special-cased encryptor** — any tool that insists on a terminal (`age -p`, `ssh-add`, ...) is driven the same way: pipe input in, stream output out, secrets off argv. `lib.sh` invokes the stdlib-only `pty_runner.py` directly, so there are no native Node addons to rebuild and no extra system packages.
-8. **Success = verified side effects** — exit codes plus post-run validation commands (`validate-fresh`), not just "the command returned".

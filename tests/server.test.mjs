@@ -8,6 +8,7 @@ import path from 'node:path';
 // STATE_DIR / askpass paths point at the sandbox.
 const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'bctl-'));
 process.env.BACKUPCTL_STATE_DIR = path.join(SANDBOX, 'state');
+process.env.BACKUPCTL_TMP_DIR = path.join(SANDBOX, 'tmp-root');
 
 const bctl = await import('../server.mjs');
 
@@ -173,7 +174,7 @@ test('resolve: nested lookup, typed values, loops, tildes', () => {
   assert.equal(bctl.resolve('{{uploads}}', local, extra), 'a b');
 });
 
-test('slugify + state file round-trip (atomic, capped output)', () => {
+test('slugify + state file round-trip (atomic, full output preserved)', () => {
   const local = { maindir: path.join(SANDBOX, 'data') };
   const t = { name: 'Test Task!', state_dir: '{{maindir}}/Dest' };
   assert.equal(bctl.slugify('Test Task!'), 'Test_Task_');
@@ -181,7 +182,7 @@ test('slugify + state file round-trip (atomic, capped output)', () => {
   const rec = bctl.loadTaskState(t, local);
   assert.equal(rec.ok, true);
   assert.equal(rec.summary, 'summary');
-  assert.equal(rec.output.length, 20000);
+  assert.equal(rec.output.length, 25000);
   assert.ok(fs.existsSync(path.join(SANDBOX, 'data/Dest', '.backup-state-Test_Task_.json')));
 });
 
@@ -195,6 +196,16 @@ test('running marker + staging', () => {
   assert.ok(fs.existsSync(d));
 });
 
+test('run: commands see TMPDIR under the backupctl temp root', async () => {
+  const t = task('Tmpdir Test', { capture: true, commands: 'echo $TMPDIR' });
+  const cfgPath = makeConfig([t]);
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
+  const [ok, summary] = await bctl.runTask(tasks[0], local, []);
+  assert.equal(ok, true, summary);
+  assert.equal(summary.trim(), process.env.BACKUPCTL_TMP_DIR);
+  assert.ok(!fs.existsSync(process.env.BACKUPCTL_TMP_DIR)); // wiped when the run ends
+});
+
 test('run: streams lines, redacts secrets, returns rc', async () => {
   const lines = [];
   const rc = await bctl.run(
@@ -205,6 +216,33 @@ test('run: streams lines, redacts secrets, returns rc', async () => {
   assert.ok(lines.some((l) => l.includes('$ ')));
   assert.ok(lines.some((l) => l.includes('*** out')));
   assert.ok(!lines.some((l) => l.includes('secret123')));
+});
+
+test('run: progress (\r) updates and trailing partial lines are kept', async () => {
+  const lines = [];
+  const rc = await bctl.run(
+    ['bash', '-c', `printf 'downloading 10%%\rdownloading 50%%\rdone\nno-newline-tail'`],
+    { log: (l) => lines.push(l) }
+  );
+  assert.equal(rc, 0);
+  assert.ok(lines.includes('downloading 10%'));
+  assert.ok(lines.includes('downloading 50%'));
+  assert.ok(lines.includes('done'));
+  assert.ok(lines.includes('no-newline-tail'));
+});
+
+test('run: blank lines and stderr are preserved', async () => {
+  const lines = [];
+  const rc = await bctl.run(
+    ['bash', '-c', `printf 'a\n\nb\n'; echo err-line >&2; echo done >&2`],
+    { log: (l) => lines.push(l) }
+  );
+  assert.equal(rc, 0);
+  assert.ok(lines.includes('a'));
+  assert.ok(lines.includes(''));
+  assert.ok(lines.includes('b'));
+  assert.ok(lines.includes('err-line'));
+  assert.ok(lines.includes('done'));
 });
 
 test('run: timeout kills the process group and returns 124', async () => {
@@ -685,6 +723,37 @@ test('API: upload with JSON content-type stores raw bytes, not a parsed object',
   assert.equal(res.json.queued, 'export.json');
   const staged = fs.readFileSync(path.join(bctl.stagingDir('Json Upload'), 'export.json'), 'utf8');
   assert.equal(staged, body);
+  await close();
+});
+
+test('API: chunked uploads append and assemble in order, .part excluded from runs', async () => {
+  const t = task('Chunk Upload', { uploads: true, glob: '*.zip', commands: 'true' });
+  await bootWith(makeConfig([t]));
+  const { req, close } = await api();
+
+  let res = await req('POST', '/api/upload/Chunk%20Upload?name=big.zip&chunk=0&total=3', 'AAA', true);
+  assert.equal(res.status, 200);
+  res = await req('POST', '/api/upload/Chunk%20Upload?name=big.zip&chunk=1&total=3', 'BBB', true);
+  assert.equal(res.status, 200);
+  assert.ok(fs.existsSync(path.join(bctl.stagingDir('Chunk Upload'), 'big.zip.part')));
+  res = await req('POST', '/api/upload/Chunk%20Upload?name=big.zip&chunk=2&total=3', 'CCC', true);
+  assert.equal(res.status, 200);
+  assert.equal(fs.readFileSync(path.join(bctl.stagingDir('Chunk Upload'), 'big.zip'), 'utf8'), 'AAABBBCCC');
+  assert.ok(!fs.existsSync(path.join(bctl.stagingDir('Chunk Upload'), 'big.zip.part')));
+
+  // a leftover .part file is never picked up by a run
+  fs.writeFileSync(path.join(bctl.stagingDir('Chunk Upload'), 'other.zip.part'), 'junk');
+  res = await req('POST', '/api/run/Chunk%20Upload', {});
+  assert.equal(res.status, 200);
+  await pollUntil(() => !bctl.CURRENT.name);
+  res = await req('GET', '/api/tasks');
+  const tj = res.json.groups[0].tasks.find((x) => x.name === 'Chunk Upload');
+  assert.equal(tj.state.ok, true);
+
+  res = await req('POST', '/api/upload/Chunk%20Upload?name=big.zip&chunk=5&total=3', 'X', true);
+  assert.equal(res.status, 400);
+  res = await req('POST', '/api/upload/Chunk%20Upload?name=big.zip&chunk=abc&total=3', 'X', true);
+  assert.equal(res.status, 400);
   await close();
 });
 

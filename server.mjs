@@ -15,7 +15,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import readline from 'node:readline';
 import { pathToFileURL } from 'node:url';
 import express from 'express';
 
@@ -147,7 +146,7 @@ export function saveTaskState(task, local, ok, summary, output = '') {
     ts: Date.now() / 1000,
     ok,
     summary,
-    output: output.slice(-20000),
+    output,
   };
   const tmp = file + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(data, null, 1));
@@ -186,6 +185,12 @@ export function stagingDir(taskName) {
   const d = path.join(STATE_DIR, 'staging', slugify(taskName));
   fs.mkdirSync(d, { recursive: true });
   return d;
+}
+
+/* Run commands get TMPDIR here: the real filesystem (not a small/quota'd
+ * /tmp tmpfs). Created per run and wiped when the run ends. */
+export function tmpRoot() {
+  return process.env.BACKUPCTL_TMP_DIR ?? path.join(os.homedir(), 'Downloads', 'backupctl-tmp');
 }
 
 // subprocess layer -----------------------------------------------------------
@@ -237,13 +242,13 @@ export function killpg(pid, log = () => {}) {
 }
 
 function spawnSafe(cmd, opts = {}) {
-  const { cwd, shell = false } = opts;
+  const { cwd, shell = false, env = {} } = opts;
   const [file, args] = Array.isArray(cmd) ? [cmd[0], cmd.slice(1)] : [cmd, []];
   return spawn(file, args, {
     cwd,
     shell,
     detached: true,
-    env: SAFE_ENV,
+    env: { ...SAFE_ENV, ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
@@ -254,29 +259,39 @@ function spawnSafe(cmd, opts = {}) {
  * kills the process group and returns TIMEOUT_RC; redact masks secrets in
  * the logged command and output. */
 export function run(cmd, opts = {}) {
-  const { shell = false, cwd, log = () => {}, timeout, redact = [], capture = false } = opts;
+  const { shell = false, cwd, log = () => {}, timeout, redact = [], capture = false, env = {} } = opts;
   log(`$ ${redactText(shell ? cmd : cmd.map(shellQuote).join(' '), redact)}`);
   let proc;
   const outBuf = [];
   const errBuf = [];
   const done = (rc) => (capture ? { rc, out: redactText(outBuf.join(''), redact), err: redactText(errBuf.join(''), redact) } : rc);
   try {
-    proc = spawnSafe(cmd, { cwd, shell });
+    proc = spawnSafe(cmd, { cwd, shell, env });
   } catch (e) {
     log(`ERROR: could not start: ${e.message}`);
     return Promise.resolve(capture ? { rc: 127, out: '', err: String(e) } : 127);
   }
-  proc.stdout.on('data', (d) => { if (capture) outBuf.push(d); });
-  proc.stderr.on('data', (d) => { errBuf.push(d); });
   proc.stdout.on('error', () => {});
   proc.stderr.on('error', () => {});
-  PROC_GROUPS.add(proc.pid);
-  return new Promise((resolvePromise) => {
-    const rl = capture ? null : readline.createInterface({ input: proc.stdout });
-    if (rl) {
-      rl.on('error', () => {});
-      rl.on('line', (line) => log(redactText(line, redact)));
+  proc.stdout.on('data', (d) => {
+    if (capture) {
+      outBuf.push(d);
+      return;
     }
+    // terminal-faithful line splitting: '\r' (progress updates) and '\n'
+    // both end a line; the trailing partial line is flushed on close
+    outTail += d;
+    let idx;
+    while ((idx = outTail.search(/[\r\n]/)) !== -1) {
+      log(redactText(outTail.slice(0, idx), redact));
+      const skip = outTail[idx] === '\r' && outTail[idx + 1] === '\n' ? 2 : 1;
+      outTail = outTail.slice(idx + skip);
+    }
+  });
+  proc.stderr.on('data', (d) => { errBuf.push(d); });
+  PROC_GROUPS.add(proc.pid);
+  let outTail = '';
+  return new Promise((resolvePromise) => {
     let settled = false;
     let timedOut = false;
     let killer = null;
@@ -292,7 +307,6 @@ export function run(cmd, opts = {}) {
       settled = true;
       log(`ERROR: could not start: ${e.message}`);
       if (killer) clearTimeout(killer);
-      rl?.close();
       PROC_GROUPS.delete(proc.pid);
       resolvePromise(capture ? { rc: 127, out: redactText(outBuf.join(''), redact), err: redactText(errBuf.join(''), redact) } : 127);
     });
@@ -300,13 +314,14 @@ export function run(cmd, opts = {}) {
       if (settled) return;
       settled = true;
       if (killer) clearTimeout(killer);
-      rl?.close();
       PROC_GROUPS.delete(proc.pid);
       const rc = timedOut ? TIMEOUT_RC : (code ?? (signal ? 128 + (os.constants.signals[signal] ?? 0) : 1));
       if (!capture) {
-        for (const line of redactText(errBuf.join(''), redact).split(/\r?\n/)) {
-          if (line) log(line);
-        }
+        if (outTail) log(redactText(outTail, redact));
+        // stderr is buffered and flushed here (nothing is lost to the pipe race)
+        const parts = redactText(errBuf.join(''), redact).split(/\r?\n/);
+        if (parts.at(-1) === '') parts.pop();
+        for (const line of parts) log(line);
       }
       resolvePromise(done(rc));
     });
@@ -417,12 +432,17 @@ export async function runCommands(ctx) {
   const redact = Object.values(ctx.extra ?? {}).filter((v) => v).map(String);
   const output = [];
   const cwd = resolveTpl(task.cwd ?? '.', ctx);
+  // temp files land on the real filesystem, not /tmp: some /tmp mounts are
+  // small tmpfs disks (ingest extractions can be tens of GB)
+  const tmpRootPath = tmpRoot();
+  fs.mkdirSync(tmpRootPath, { recursive: true });
+  const env = { TMPDIR: tmpRootPath };
   const cmds = Array.isArray(task.commands) ? task.commands : [task.commands];
   for (const cmd of cmds) {
     const resolved = resolve(cmd, ctx.local, extra);
     let rc;
     if (capture) {
-      const { rc: r, out, err } = await shCapture(resolved, { cwd, timeout, redact });
+      const { rc: r, out, err } = await shCapture(resolved, { cwd, timeout, redact, env });
       rc = r;
       const lines = out.split(/\r?\n/);
       if (lines.at(-1) === '') lines.pop();
@@ -430,7 +450,7 @@ export async function runCommands(ctx) {
       if (err.trim()) ctx.log(err.trim());
       output.push(...lines);
     } else {
-      rc = await sh(resolved, { cwd, log: ctx.log, timeout, redact });
+      rc = await sh(resolved, { cwd, log: ctx.log, timeout, redact, env });
     }
     if (rc !== 0) return failRun(rc, tmp, timeout);
   }
@@ -500,6 +520,7 @@ export async function runTask(task, local, files, log = null, extra = null) {
     [ok, summary] = [false, String(e.message ?? e)];
   } finally {
     if (task.uploads) clearStaging(ctx);
+    fs.rmSync(tmpRoot(), { recursive: true, force: true });
   }
   saveTaskState(task, local, ok, summary, lines.join('\n'));
   return [ok, summary];
@@ -642,7 +663,19 @@ export function createApp() {
         .json({ detail: `${filename} does not match the expected pattern(s): ${patterns.join(', ')}` });
     }
     const staging = stagingDir(task.name);
-    fs.writeFileSync(path.join(staging, filename), req.body);
+    const finalPath = path.join(staging, filename);
+    if (req.query.chunk != null) {
+      const chunk = parseInt(req.query.chunk, 10);
+      const total = parseInt(req.query.total, 10);
+      if (!Number.isInteger(chunk) || chunk < 0 || !Number.isInteger(total) || total <= 0 || chunk >= total) {
+        return res.status(400).json({ detail: 'Invalid chunk parameters' });
+      }
+      const partPath = finalPath + '.part';
+      fs.appendFileSync(partPath, req.body);
+      if (chunk === total - 1) fs.renameSync(partPath, finalPath);
+      return res.json({ queued: filename });
+    }
+    fs.writeFileSync(finalPath, req.body);
     res.json({ queued: filename });
   });
 
@@ -656,7 +689,7 @@ export function createApp() {
     const staging = stagingDir(taskName);
     const files = fs
       .readdirSync(staging)
-      .filter((p) => fs.statSync(path.join(staging, p)).isFile())
+      .filter((p) => !p.endsWith('.part') && fs.statSync(path.join(staging, p)).isFile())
       .map((p) => path.join(staging, p));
     const payload = req.body ?? {};
     const logger = makeLogger();

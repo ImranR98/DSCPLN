@@ -360,6 +360,23 @@ html, body {
   max-width: 360px;
 }
 
+#upload-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--surface-2);
+  z-index: 300;
+}
+
+#upload-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.15s ease;
+}
+
 .toast {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -388,6 +405,7 @@ html, body {
   </style>
 </head>
 <body>
+  <div id="upload-progress" hidden><div id="upload-progress-fill"></div></div>
   <div id="toasts"></div>
 
   <div class="topbar">
@@ -421,7 +439,7 @@ html, body {
 
   <script>
 
-const STATE = { tasks: [], groups: [], serverRunning: null, pollTimer: null, pendingQueue: [], queues: {} };
+const STATE = { tasks: [], groups: [], serverRunning: null, pollTimer: null, pendingQueue: [], queues: {}, uploadingTask: null, uploadAbort: null };
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -545,14 +563,18 @@ function render() {
 }
 
 function card(t) {
-  const pillText = t.running ? 'Running…' : (t.state ? t.state.last_run_text : 'Never run');
+  const isRunning = t.running || STATE.uploadingTask === t.name;
+  const anyRunning = STATE.serverRunning || STATE.uploadingTask;
+  const pillText = isRunning ? 'Running…' : (t.state ? t.state.last_run_text : 'Never run');
+  const pillClass = isRunning ? 'running' : t.pill;
+  const liveText = t.running ? t.live : (STATE.uploadingTask === t.name ? 'Uploading…' : '');
   const c = el('div', 'task-card');
   c.innerHTML = `
     <div class="card-head">
       <span class="card-title"></span>
-      <span class="pill ${t.pill}">${pillText}</span>
+      <span class="pill ${pillClass}">${pillText}</span>
     </div>
-    ${t.running && t.live ? `<div class="card-live"></div>` : ''}
+    ${isRunning && liveText ? `<div class="card-live"></div>` : ''}
     ${!t.avail ? `<span class="badge-unavail"></span>` : ''}
     ${t.uploads
       ? `<div class="dropzone-box" tabindex="0"><span class="dropzone-note"></span><input type="file" multiple hidden></div>
@@ -560,12 +582,12 @@ function card(t) {
       : t.note ? `<div class="card-note"></div>` : ''}
     <div class="card-actions">
       ${t.export_url ? '<a class="btn btn-ghost export-btn" target="_blank" rel="noopener"></a>' : ''}
-      <button class="btn ${t.running ? 'btn-ghost' : 'btn-primary'} run-btn"></button>
+      <button class="btn ${isRunning ? 'btn-ghost' : 'btn-primary'} run-btn"></button>
       <button class="btn btn-ghost log-btn">Log</button>
     </div>`;
   c.querySelector('.card-title').textContent = t.name;
   const live = c.querySelector('.card-live');
-  if (live) live.textContent = t.live;
+  if (live) live.textContent = liveText;
   const unavail = c.querySelector('.badge-unavail');
   if (unavail) unavail.textContent = t.avail_reason;
   if (t.uploads) {
@@ -577,9 +599,9 @@ function card(t) {
   }
   const runBtn = c.querySelector('.run-btn');
   const logBtn = c.querySelector('.log-btn');
-  runBtn.textContent = t.running ? 'Stop' : 'Run';
-  runBtn.disabled = !t.running && (!t.avail || STATE.serverRunning);
-  runBtn.onclick = t.running ? cancelRun : () => runTask(t);
+  runBtn.textContent = isRunning ? 'Stop' : 'Run';
+  runBtn.disabled = !isRunning && (!t.avail || anyRunning);
+  runBtn.onclick = isRunning ? cancelRun : () => runTask(t);
   logBtn.onclick = () => openLog(t);
   const exportBtn = c.querySelector('.export-btn');
   if (exportBtn) {
@@ -619,13 +641,47 @@ function wireDropzone(zone, input, handler) {
   input.onchange = () => { handler(input.files); input.value = ''; };
 }
 
-async function uploadToTask(task, file) {
-  const res = await api(`/api/upload/${encodeURIComponent(task.name)}?name=${encodeURIComponent(file.name)}`, {
-    method: 'POST',
-    body: file,
+const CHUNK_SIZE = 256 * 1024 * 1024;
+
+function uploadChunk(task, name, body, chunk, total, onProgress) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/upload/${encodeURIComponent(task.name)}?name=${encodeURIComponent(name)}&chunk=${chunk}&total=${total}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText || '{}'); } catch { /* ignore */ }
+      if (xhr.status >= 400) {
+        toast(data.detail || `HTTP ${xhr.status}`, 'warning');
+        resolve(false);
+      } else {
+        resolve(true);
+      }
+    };
+    xhr.onabort = () => resolve(false);
+    xhr.onerror = () => {
+      toast(`Upload of ${name} failed`, 'warning');
+      resolve(false);
+    };
+    STATE.uploadAbort = xhr;
+    xhr.send(body);
   });
-  if (res.error) { toast(res.error, 'warning'); return false; }
-  return true;
+}
+
+function uploadToTask(task, file, onProgress = () => {}) {
+  if (file.size <= CHUNK_SIZE) {
+    return uploadChunk(task, file.name, file, 0, 1, onProgress);
+  }
+  const total = Math.ceil(file.size / CHUNK_SIZE);
+  const step = async (i) => {
+    const body = file.slice(i * CHUNK_SIZE, Math.min(file.size, (i + 1) * CHUNK_SIZE));
+    const ok = await uploadChunk(task, file.name, body, i, total, (frac) => onProgress((i + frac) / total));
+    if (!ok || i === total - 1) return ok;
+    return step(i + 1);
+  };
+  return step(0);
 }
 
 function queueFiles(task, fileList) {
@@ -705,8 +761,26 @@ async function runTask(task, opts = {}) {
     return;
   }
   if (task.uploads) {
-    for (const file of files) {
-      if (!(await uploadToTask(task, file))) return;
+    const bar = document.getElementById('upload-progress');
+    const fill = document.getElementById('upload-progress-fill');
+    let done = 0;
+    bar.hidden = false;
+    fill.style.width = '0%';
+    STATE.uploadingTask = task.name;
+    render();
+    try {
+      for (const file of files) {
+        const ok = await uploadToTask(task, file, (frac) => {
+          fill.style.width = `${(((done + frac) / files.length) * 100).toFixed(1)}%`;
+        });
+        if (!ok) return;
+        done += 1;
+        fill.style.width = `${((done / files.length) * 100).toFixed(1)}%`;
+      }
+    } finally {
+      bar.hidden = true;
+      STATE.uploadingTask = null;
+      render();
     }
   }
   const res = await api(`/api/run/${encodeURIComponent(task.name)}`, {
@@ -721,6 +795,13 @@ async function runTask(task, opts = {}) {
 
 async function cancelRun() {
   STATE.pendingQueue = [];
+  if (STATE.uploadingTask) {
+    STATE.uploadingTask = null;
+    if (STATE.uploadAbort) STATE.uploadAbort.abort();
+    render();
+    toast('Upload cancelled', 'warning');
+    return;
+  }
   const res = await api('/api/cancel', { method: 'POST' });
   toast(res.error || 'Stopping the task…', res.error ? 'negative' : 'warning');
 }

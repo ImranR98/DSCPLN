@@ -169,15 +169,15 @@ BASH_SCRIPT
       name: 'Social Media',
       defaults: { uploads: true, summary_last_line: true },
       tasks: [
-        // GitHub data export; repositories/releases stripped, folder named after
-        // the account.
+        // GitHub data export; repositories, releases, and attachments stripped,
+        // folder named after the account.
         {
           name: 'GitHub (no repos/releases)',
           glob: '*.tar.gz',
           state_dir: '{{maindir}}/Backups/GitHub',
           export_url: 'https://github.com/settings/admin',
           note: 'Drop the GitHub data export archive here (repositories and releases are stripped).',
-          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/GitHub' 'rm -rf repositories releases; cat users_000001.json | jq "(.[] | select(.billing_plan != null)).login" | head -c -2 | tail -c +2' {{uploads}}`,
+          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/GitHub' 'rm -rf repositories releases attachments; cat users_000001.json | jq "(.[] | select(.billing_plan != null)).login" | head -c -2 | tail -c +2' {{uploads}}`,
         },
 
         // Medium data export; folder named after the account.

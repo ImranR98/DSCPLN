@@ -404,7 +404,9 @@ BASH_SCRIPT
           capture: true,
           note: 'Paste the results into Balance.xlsx, remembering to skip duplicates.',
           commands: [
-            'python main.py > {{tmp}}',
+            '[ -f \'{{scriptroot}}/Wealthsimpleton/venv/bin/activate\' ] || python3 -m venv \'{{scriptroot}}/Wealthsimpleton/venv\'',
+            'source \'{{scriptroot}}/Wealthsimpleton/venv/bin/activate\' && pip install --upgrade -r \'{{scriptroot}}/Wealthsimpleton/requirements.txt\' >/dev/null',
+            'source \'{{scriptroot}}/Wealthsimpleton/venv/bin/activate\' && python main.py > {{tmp}}',
             'node myResultParser.js {{tmp}}',
           ],
         },

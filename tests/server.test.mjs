@@ -31,7 +31,7 @@ function makeConfig(tasks, extraValues = {}) {
 }
 
 function task(name, fields) {
-  return { name, state_dir: '{{maindir}}/State/' + name, timeout: 60, ...fields };
+  return { name, state_dir: '{{maindir}}/State/' + name, ...fields };
 }
 
 async function bootWith(configPath) {
@@ -188,22 +188,23 @@ test('slugify + state file round-trip (atomic, full output preserved)', () => {
 
 test('running marker + staging', () => {
   bctl.markRunning('task-x');
-  assert.equal(bctl.runningMarker().task, 'task-x');
-  bctl.clearRunning();
+  assert.equal(bctl.runningMarker().find((m) => m.task === 'task-x').task, 'task-x');
+  bctl.clearRunning('task-x');
   assert.equal(bctl.runningMarker(), null);
   const d = bctl.stagingDir('Task With Spaces');
   assert.ok(d.endsWith('Task_With_Spaces'));
   assert.ok(fs.existsSync(d));
 });
 
-test('run: commands see TMPDIR under the backupctl temp root', async () => {
+test('run: commands see a per-run TMPDIR subdir, wiped when the run ends', async () => {
   const t = task('Tmpdir Test', { capture: true, commands: 'echo $TMPDIR' });
   const cfgPath = makeConfig([t]);
   const [local, tasks] = await bctl.loadConfig(cfgPath);
   const [ok, summary] = await bctl.runTask(tasks[0], local, []);
   assert.equal(ok, true, summary);
-  assert.equal(summary.trim(), process.env.BACKUPCTL_TMP_DIR);
-  assert.ok(!fs.existsSync(process.env.BACKUPCTL_TMP_DIR)); // wiped when the run ends
+  const tmpdir = summary.trim();
+  assert.ok(tmpdir.startsWith(process.env.BACKUPCTL_TMP_DIR + path.sep));
+  assert.ok(!fs.existsSync(tmpdir)); // wiped when the run ends
 });
 
 test('heredoc tasks survive stdin-eating children (wrapper pattern)', async () => {
@@ -260,16 +261,6 @@ test('run: blank lines and stderr are preserved', async () => {
   assert.ok(lines.includes('b'));
   assert.ok(lines.includes('err-line'));
   assert.ok(lines.includes('done'));
-});
-
-test('run: timeout kills the process group and returns 124', async () => {
-  const lines = [];
-  const rc = await bctl.run(['bash', '-c', 'sleep 100'], {
-    log: (l) => lines.push(l),
-    timeout: 1,
-  });
-  assert.equal(rc, bctl.TIMEOUT_RC);
-  assert.ok(lines.some((l) => l.includes('TIMEOUT: command killed')));
 });
 
 test('shCapture: captures output and redacts', async () => {
@@ -574,13 +565,6 @@ test('summary_last_line: last non-command log line', async () => {
   assert.equal(summary, 'lastline');
 });
 
-test('timeout: hangs are killed and reported', async () => {
-  const t = task('Slow', { group: 'G', timeout: 1, commands: 'sleep 100' });
-  const [ok, summary] = await bctl.runTask(t, { maindir }, []);
-  assert.equal(ok, false);
-  assert.equal(summary, 'Command timed out after 1s');
-});
-
 test('redaction: secret in command output is masked, state output too', async () => {
   const t = task('Redact', {
     group: 'G',
@@ -714,7 +698,7 @@ test('API: upload validation, detect scoring + ambiguity, CSRF guard', async () 
   res = await req('POST', '/api/run/Detect%20A', {});
   assert.equal(res.status, 200);
   // wait for run to finish, then GET tasks shows state
-  await pollUntil(() => !bctl.CURRENT.name);
+  await pollUntil(() => !bctl.RUNS.has('Detect A'));
   res = await req('GET', '/api/tasks');
   const ta = res.json.groups[0].tasks.find((x) => x.name === 'Detect A');
   assert.equal(ta.state.ok, true);
@@ -724,7 +708,7 @@ test('API: upload validation, detect scoring + ambiguity, CSRF guard', async () 
   assert.equal(res.status, 403);
   res = await req('POST', '/api/run/Detect%20A', {}, false, { origin: base });
   assert.equal(res.status, 200);
-  await pollUntil(() => !bctl.CURRENT.name);
+  await pollUntil(() => !bctl.RUNS.has('Detect A'));
   await close();
 });
 
@@ -762,7 +746,7 @@ test('API: chunked uploads append and assemble in order, .part excluded from run
   fs.writeFileSync(path.join(bctl.stagingDir('Chunk Upload'), 'other.zip.part'), 'junk');
   res = await req('POST', '/api/run/Chunk%20Upload', {});
   assert.equal(res.status, 200);
-  await pollUntil(() => !bctl.CURRENT.name);
+  await pollUntil(() => !bctl.RUNS.has('Chunk Upload'));
   res = await req('GET', '/api/tasks');
   const tj = res.json.groups[0].tasks.find((x) => x.name === 'Chunk Upload');
   assert.equal(tj.state.ok, true);
@@ -775,22 +759,93 @@ test('API: chunked uploads append and assemble in order, .part excluded from run
 });
 
 test('API: run/cancel flow kills the task', async () => {
-  const t = task('Cancel Me', { group: 'G', timeout: 300, commands: 'sleep 100' });
+  const t = task('Cancel Me', { group: 'G', commands: 'sleep 100' });
   await bootWith(makeConfig([t]));
   const { req, close } = await api();
   let res = await req('POST', '/api/run/Cancel%20Me', {});
   assert.equal(res.status, 200);
-  assert.equal(bctl.CURRENT.name, 'Cancel Me');
-  // concurrent run refused
+  assert.ok(bctl.RUNS.has('Cancel Me'));
+  // concurrent same-task run refused
   res = await req('POST', '/api/run/Cancel%20Me', {});
   assert.equal(res.status, 409);
   // cancel
-  res = await req('POST', '/api/cancel');
+  bctl.DONE.length = 0;
+  res = await req('POST', '/api/cancel', { task: 'Cancel Me' });
   assert.equal(res.status, 200);
-  await pollUntil(() => bctl.CURRENT.done !== null, 8000);
-  assert.equal(bctl.CURRENT.done.ok, false);
-  assert.equal(bctl.CURRENT.done.summary, 'Cancelled by user');
+  await pollUntil(() => !bctl.RUNS.has('Cancel Me'), 8000);
+  const done = bctl.DONE.splice(0);
+  assert.equal(done.length, 1);
+  assert.equal(done[0].ok, false);
+  assert.equal(done[0].summary, 'Cancelled by user');
   await close();
+});
+
+test('API: distinct tasks run in parallel', async () => {
+  const t1 = task('Para A', { group: 'G', commands: 'sleep 2' });
+  const t2 = task('Para B', { group: 'G', commands: 'sleep 2' });
+  await bootWith(makeConfig([t1, t2]));
+  const { req, close } = await api();
+  bctl.DONE.length = 0;
+  let res = await req('POST', '/api/run/Para%20A', {});
+  assert.equal(res.status, 200);
+  res = await req('POST', '/api/run/Para%20B', {});
+  assert.equal(res.status, 200);
+  assert.ok(bctl.RUNS.has('Para A'));
+  assert.ok(bctl.RUNS.has('Para B'));
+  await pollUntil(() => !bctl.RUNS.has('Para A') && !bctl.RUNS.has('Para B'), 8000);
+  assert.equal(bctl.DONE.splice(0).length, 2);
+  await close();
+});
+
+test('API: cancel kills only the targeted run', async () => {
+  const t1 = task('Kill A', { group: 'G', commands: 'sleep 30' });
+  const t2 = task('Kill B', { group: 'G', commands: 'sleep 2' });
+  await bootWith(makeConfig([t1, t2]));
+  const { req, close } = await api();
+  bctl.DONE.length = 0;
+  await req('POST', '/api/run/Kill%20A', {});
+  await req('POST', '/api/run/Kill%20B', {});
+  let res = await req('POST', '/api/cancel', { task: 'Kill A' });
+  assert.equal(res.status, 200);
+  await pollUntil(() => !bctl.RUNS.has('Kill A'), 8000);
+  assert.ok(bctl.RUNS.has('Kill B')); // the other run is untouched
+  await pollUntil(() => !bctl.RUNS.has('Kill B'), 8000);
+  const done = bctl.DONE.splice(0);
+  assert.equal(done.find((d) => d.task === 'Kill A').summary, 'Cancelled by user');
+  assert.equal(done.find((d) => d.task === 'Kill B').ok, true);
+  await close();
+});
+
+test('API: same serial_key tasks run sequentially', async () => {
+  const t1 = task('Serial A', { group: 'G', serial_key: 'shared', commands: 'sleep 1' });
+  const t2 = task('Serial B', { group: 'G', serial_key: 'shared', commands: 'sleep 1' });
+  await bootWith(makeConfig([t1, t2]));
+  const { req, close } = await api();
+  bctl.DONE.length = 0;
+  let res = await req('POST', '/api/run/Serial%20A', {});
+  assert.equal(res.status, 200);
+  assert.equal(res.json.queued, undefined);
+  res = await req('POST', '/api/run/Serial%20B', {});
+  assert.equal(res.status, 200);
+  assert.equal(res.json.queued, true);
+  assert.ok(!bctl.RUNS.has('Serial B')); // queued, not running
+  // B starts only after A finishes; B's done arrives after
+  await pollUntil(() => !bctl.RUNS.has('Serial A'), 8000);
+  await pollUntil(() => bctl.RUNS.has('Serial B'), 8000);
+  await pollUntil(() => !bctl.RUNS.has('Serial B'), 8000);
+  assert.equal(bctl.DONE.splice(0).length, 2);
+  await close();
+});
+
+test('running marker: multiple in-flight tasks, per-task clearing', async () => {
+  bctl.markRunning('m1');
+  bctl.markRunning('m2');
+  bctl.markRunning('m1');
+  assert.deepEqual(bctl.runningMarker().map((m) => m.task), ['m2', 'm1']);
+  bctl.clearRunning('m1');
+  assert.deepEqual(bctl.runningMarker().map((m) => m.task), ['m2']);
+  bctl.clearRunning('m2');
+  assert.equal(bctl.runningMarker(), null);
 });
 
 test('API: paste_done commits the capture dir', async () => {
@@ -799,7 +854,7 @@ test('API: paste_done commits the capture dir', async () => {
   await bootWith(makeConfig([t]));
   const { req, close } = await api();
   let res = await req('POST', '/api/run/Paste', {});
-  await pollUntil(() => bctl.CURRENT.done !== null);
+  await pollUntil(() => !bctl.RUNS.has('Paste'));
   fs.mkdirSync(commitDir, { recursive: true });
   fs.writeFileSync(path.join(commitDir, 'data.txt'), 'x');
   res = await req('POST', '/api/paste_done/Paste', {});

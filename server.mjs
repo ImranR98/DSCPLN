@@ -2,14 +2,16 @@
 /* backupctl — Express server, generic bash runner, and CLI entry, in one module.
  *
  * Tasks are bash: each task has a `commands` list (or a single string)
- * executed by the runner with timeouts, process groups, secret redaction,
- * and per-task state recording. Runner options: `uploads:` (dropped files,
- * available as {{uploads}}), `glob:` (drop pattern, or list of patterns),
- * `prompts:` (confirm/secret, redacted), `require:`, `capture:` +
- * `commit_dir:` (output shown in a paste dialog), `root:` (availability
- * badge), `summary_last_line:` (summary = last log line). Everything
- * service-specific (tool installs, export validation, pruning) lives in the
- * task's own bash or in lib.sh. */
+ * executed by the runner with process groups, secret redaction, and
+ * per-task state recording. Multiple tasks can run in parallel; tasks with
+ * the same `serial_key:` run one at a time. There are no automatic
+ * timeouts — a run goes until it finishes or the user cancels it. Runner
+ * options: `uploads:` (dropped files, available as {{uploads}}), `glob:`
+ * (drop pattern, or list of patterns), `prompts:` (confirm/secret,
+ * redacted), `require:`, `capture:` + `commit_dir:` (output shown in a
+ * paste dialog), `root:` (availability badge), `summary_last_line:`
+ * (summary = last log line). Everything service-specific (tool installs,
+ * export validation, pruning) lives in the task's own bash or in lib.sh. */
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -22,7 +24,6 @@ export const REPO_DIR = path.dirname(new URL(import.meta.url).pathname);
 export const CONFIG_FILE = process.env.BACKUPCTL_CONFIG_FILE ?? path.join(REPO_DIR, 'config.mjs');
 export const LIB_PATH = path.join(REPO_DIR, 'lib.sh');
 const INDEX_PATH = path.join(REPO_DIR, 'index.html');
-const DEFAULT_TIMEOUT = 600;
 const DAY_SECONDS = 86400;
 
 // config ---------------------------------------------------------------------
@@ -164,18 +165,23 @@ export function loadTaskState(task, local) {
 }
 
 export function markRunning(taskName) {
+  const list = (runningMarker() ?? []).filter((m) => m.task !== taskName);
+  list.push({ task: taskName, ts: Date.now() / 1000 });
   fs.mkdirSync(STATE_DIR, { recursive: true });
-  fs.writeFileSync(RUNNING_FILE, JSON.stringify({ task: taskName, ts: Date.now() / 1000 }));
+  fs.writeFileSync(RUNNING_FILE, JSON.stringify(list));
 }
 
-export function clearRunning() {
-  fs.rmSync(RUNNING_FILE, { force: true });
+export function clearRunning(taskName) {
+  const list = (runningMarker() ?? []).filter((m) => m.task !== taskName);
+  if (list.length) fs.writeFileSync(RUNNING_FILE, JSON.stringify(list));
+  else fs.rmSync(RUNNING_FILE, { force: true });
 }
 
 export function runningMarker() {
   if (!fs.existsSync(RUNNING_FILE)) return null;
   try {
-    return JSON.parse(fs.readFileSync(RUNNING_FILE, 'utf8'));
+    const data = JSON.parse(fs.readFileSync(RUNNING_FILE, 'utf8'));
+    return Array.isArray(data) ? data : null;
   } catch {
     return null;
   }
@@ -187,8 +193,8 @@ export function stagingDir(taskName) {
   return d;
 }
 
-/* Run commands get TMPDIR here: the real filesystem (not a small/quota'd
- * /tmp tmpfs). Created per run and wiped when the run ends. */
+/* Run commands get TMPDIR here (a per-run subdir): the real filesystem,
+ * not a small/quota'd /tmp tmpfs. Each run's subdir is wiped when it ends. */
 export function tmpRoot() {
   return process.env.BACKUPCTL_TMP_DIR ?? path.join(os.homedir(), 'Downloads', 'backupctl-tmp');
 }
@@ -213,10 +219,6 @@ export const SAFE_ENV = {
   SSH_ASKPASS_REQUIRE: 'force',
   SSH_ASKPASS: ensureAskpass(),
 };
-
-export const PROC_GROUPS = new Set(); // pids of running children, for cancellation
-
-export const TIMEOUT_RC = 124; // exit code returned when a command's deadline expires
 
 export function shellQuote(arg) {
   const s = String(arg);
@@ -255,11 +257,13 @@ function spawnSafe(cmd, opts = {}) {
 
 /* Run a command (argv list or shell string). By default output lines are
  * streamed into log() and the exit code is returned; with `capture: true`
- * all output is buffered and {rc, out, err} is returned instead. Timeout
- * kills the process group and returns TIMEOUT_RC; redact masks secrets in
- * the logged command and output. */
+ * all output is buffered and {rc, out, err} is returned instead. Spawned
+ * pids are registered in `groups` (default: a throwaway set) so a
+ * per-run cancel can kill exactly this run's process groups; redact masks
+ * secrets in the logged command and output. No automatic timeout — runs
+ * end when the command exits or is cancelled. */
 export function run(cmd, opts = {}) {
-  const { shell = false, cwd, log = () => {}, timeout, redact = [], capture = false, env = {} } = opts;
+  const { shell = false, cwd, log = () => {}, redact = [], capture = false, env = {}, groups = new Set() } = opts;
   log(`$ ${redactText(shell ? cmd : cmd.map(shellQuote).join(' '), redact)}`);
   let proc;
   const outBuf = [];
@@ -289,33 +293,22 @@ export function run(cmd, opts = {}) {
     }
   });
   proc.stderr.on('data', (d) => { errBuf.push(d); });
-  PROC_GROUPS.add(proc.pid);
+  groups.add(proc.pid);
   let outTail = '';
   return new Promise((resolvePromise) => {
     let settled = false;
-    let timedOut = false;
-    let killer = null;
-    if (timeout) {
-      killer = setTimeout(() => {
-        timedOut = true;
-        killpg(proc.pid, log);
-        log('TIMEOUT: command killed');
-      }, timeout * 1000);
-    }
     proc.on('error', (e) => {
       if (settled) return;
       settled = true;
       log(`ERROR: could not start: ${e.message}`);
-      if (killer) clearTimeout(killer);
-      PROC_GROUPS.delete(proc.pid);
+      groups.delete(proc.pid);
       resolvePromise(capture ? { rc: 127, out: redactText(outBuf.join(''), redact), err: redactText(errBuf.join(''), redact) } : 127);
     });
     proc.on('close', (code, signal) => {
       if (settled) return;
       settled = true;
-      if (killer) clearTimeout(killer);
-      PROC_GROUPS.delete(proc.pid);
-      const rc = timedOut ? TIMEOUT_RC : (code ?? (signal ? 128 + (os.constants.signals[signal] ?? 0) : 1));
+      groups.delete(proc.pid);
+      const rc = code ?? (signal ? 128 + (os.constants.signals[signal] ?? 0) : 1);
       if (!capture) {
         if (outTail) log(redactText(outTail, redact));
         // stderr is buffered and flushed here (nothing is lost to the pipe race)
@@ -337,22 +330,15 @@ export function shCapture(cmd, opts = {}) {
   return run(cmd, { ...opts, shell: true, capture: true });
 }
 
-export function cancelAll() {
-  for (const pid of [...PROC_GROUPS]) killpg(pid);
-  PROC_GROUPS.clear();
-}
-
-const GIT_TIMEOUT = 300;
-
 export async function gitCommit(dest, message, log = () => {}) {
   fs.mkdirSync(dest, { recursive: true });
-  if ((await run(['git', 'init', '-q'], { cwd: dest, log, timeout: GIT_TIMEOUT })) !== 0) {
+  if ((await run(['git', 'init', '-q'], { cwd: dest, log })) !== 0) {
     throw new Error(`git init failed in ${dest}`);
   }
-  if ((await run(['git', 'add', '-A', '.', ':(exclude).backup-state-*'], { cwd: dest, log, timeout: GIT_TIMEOUT })) !== 0) {
+  if ((await run(['git', 'add', '-A', '.', ':(exclude).backup-state-*'], { cwd: dest, log })) !== 0) {
     throw new Error(`git add failed in ${dest}`);
   }
-  const { rc, out, err } = await shCapture(`git commit -q -m ${shellQuote(message)}`, { cwd: dest, timeout: GIT_TIMEOUT });
+  const { rc, out, err } = await shCapture(`git commit -q -m ${shellQuote(message)}`, { cwd: dest });
   if (rc !== 0 && !(out + err).includes('nothing to commit') && !(out + err).includes('nothing added to commit')) {
     throw new Error(`git commit failed in ${dest}: ${err.trim()}`);
   }
@@ -397,19 +383,14 @@ function resolveTpl(template, ctx, extra = undefined) {
   return expand(resolve(template, ctx.local, extra));
 }
 
-function timeoutOf(ctx) {
-  return parseInt(ctx.task.timeout ?? DEFAULT_TIMEOUT, 10);
-}
-
 function clearStaging(ctx) {
   const d = stagingDir(ctx.task.name);
   fs.rmSync(d, { recursive: true, force: true });
   fs.mkdirSync(d, { recursive: true });
 }
 
-function failRun(rc, tmp, timeout) {
+function failRun(rc, tmp) {
   fs.rmSync(tmp, { recursive: true, force: true });
-  if (rc === TIMEOUT_RC) return [false, `Command timed out after ${timeout}s`];
   return [false, `Command failed (exit ${rc})`];
 }
 
@@ -422,7 +403,6 @@ export async function runCommands(ctx) {
   for (const key of task.require ?? []) {
     if (!(ctx.extra ?? {})[key]) return [false, `Missing required input: ${key}`];
   }
-  const timeout = timeoutOf(ctx);
   const tmp = path.join(stagingDir(task.name), `tmp_${Math.floor(Math.random() * 1_000_000)}`);
   const extra = {
     uploads: ctx.files.map((f) => shellQuote(String(f))).join(' '),
@@ -432,17 +412,14 @@ export async function runCommands(ctx) {
   const redact = Object.values(ctx.extra ?? {}).filter((v) => v).map(String);
   const output = [];
   const cwd = resolveTpl(task.cwd ?? '.', ctx);
-  // temp files land on the real filesystem, not /tmp: some /tmp mounts are
-  // small tmpfs disks (ingest extractions can be tens of GB)
-  const tmpRootPath = tmpRoot();
-  fs.mkdirSync(tmpRootPath, { recursive: true });
-  const env = { TMPDIR: tmpRootPath };
+  const groups = ctx.groups ?? new Set();
+  const env = { TMPDIR: ctx.tmpdir };
   const cmds = Array.isArray(task.commands) ? task.commands : [task.commands];
   for (const cmd of cmds) {
     const resolved = resolve(cmd, ctx.local, extra);
     let rc;
     if (capture) {
-      const { rc: r, out, err } = await shCapture(resolved, { cwd, timeout, redact, env });
+      const { rc: r, out, err } = await shCapture(resolved, { cwd, redact, env, groups });
       rc = r;
       const lines = out.split(/\r?\n/);
       if (lines.at(-1) === '') lines.pop();
@@ -450,9 +427,9 @@ export async function runCommands(ctx) {
       if (err.trim()) ctx.log(err.trim());
       output.push(...lines);
     } else {
-      rc = await sh(resolved, { cwd, log: ctx.log, timeout, redact, env });
+      rc = await sh(resolved, { cwd, log: ctx.log, redact, env, groups });
     }
-    if (rc !== 0) return failRun(rc, tmp, timeout);
+    if (rc !== 0) return failRun(rc, tmp);
   }
   fs.rmSync(tmp, { recursive: true, force: true });
   if (capture) return [true, output.join('\n')];
@@ -502,7 +479,7 @@ export function globMatch(name, pattern) {
   return new RegExp(`^${re}$`).test(String(name));
 }
 
-export async function runTask(task, local, files, log = null, extra = null) {
+export async function runTask(task, local, files, log = null, extra = null, opts = {}) {
   const lines = [];
   const sink = log ?? (() => {});
   const collectLog = (line) => {
@@ -510,7 +487,14 @@ export async function runTask(task, local, files, log = null, extra = null) {
     sink(line);
   };
   collectLog.lines = lines;
-  const ctx = { task, local, files, log: collectLog, extra: extra ?? {} };
+  const groups = opts.groups ?? new Set();
+  let tmpdir = opts.tmpdir;
+  if (!tmpdir) {
+    fs.mkdirSync(tmpRoot(), { recursive: true });
+    tmpdir = fs.mkdtempSync(path.join(tmpRoot(), `${slugify(task.name)}-`));
+  }
+  fs.mkdirSync(tmpdir, { recursive: true });
+  const ctx = { task, local, files, log: collectLog, extra: extra ?? {}, groups, tmpdir };
   let ok;
   let summary;
   try {
@@ -520,7 +504,7 @@ export async function runTask(task, local, files, log = null, extra = null) {
     [ok, summary] = [false, String(e.message ?? e)];
   } finally {
     if (task.uploads) clearStaging(ctx);
-    fs.rmSync(tmpRoot(), { recursive: true, force: true });
+    fs.rmSync(tmpdir, { recursive: true, force: true });
   }
   saveTaskState(task, local, ok, summary, lines.join('\n'));
   return [ok, summary];
@@ -552,14 +536,74 @@ export async function boot(configPath = undefined) {
   TASK_MAP = new Map(TASK_LIST.map((t) => [t.name, t]));
 }
 
-// run slot: single task at a time
-export const CURRENT = { name: null, log: [], read: 0, done: null, cancelled: false };
+// run slots: any number of tasks can run in parallel; tasks sharing a
+// `serial_key` are queued and run one at a time (FIFO per key).
+export const RUNS = new Map(); // taskName -> { task, log, read, cancelled, groups: Set, ts, tmpdir }
+export const DONE = []; // completed runs awaiting delivery to /api/status
+const SERIAL_QUEUES = new Map(); // serial_key -> [{ taskName, payload }]
+
+function serialKeyHeld(key) {
+  if (!key) return false;
+  for (const rec of RUNS.values()) {
+    if (TASK_MAP.get(rec.task)?.serial_key === key) return true;
+  }
+  return false;
+}
+
+function drainSerialQueue(key) {
+  if (!key || serialKeyHeld(key)) return;
+  const next = SERIAL_QUEUES.get(key)?.shift();
+  if (!next) return;
+  startRun(next.taskName, next.payload);
+}
+
+export function isQueued(taskName, serialKey) {
+  return Boolean(serialKey && (SERIAL_QUEUES.get(serialKey) ?? []).some((q) => q.taskName === taskName));
+}
+
+function startRun(taskName, payload = {}) {
+  const task = TASK_MAP.get(taskName);
+  const staging = stagingDir(taskName);
+  const files = fs
+    .readdirSync(staging)
+    .filter((p) => !p.endsWith('.part') && fs.statSync(path.join(staging, p)).isFile())
+    .map((p) => path.join(staging, p));
+  const logger = makeLogger();
+  const rec = {
+    task: taskName,
+    log: logger.lines,
+    read: 0,
+    cancelled: false,
+    groups: new Set(),
+    ts: Date.now() / 1000,
+    tmpdir: path.join(tmpRoot(), `${slugify(taskName)}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`),
+  };
+  RUNS.set(taskName, rec);
+  markRunning(taskName);
+
+  (async () => {
+    let ok = false;
+    let summary = 'Internal error';
+    try {
+      [ok, summary] = await runTask(task, LOCAL, files, logger, payload, { groups: rec.groups, tmpdir: rec.tmpdir });
+      if (rec.cancelled) {
+        [ok, summary] = [false, 'Cancelled by user'];
+        saveTaskState(task, LOCAL, false, summary, logger.text());
+      }
+    } finally {
+      RUNS.delete(taskName);
+      clearRunning(taskName);
+      DONE.push({ task: taskName, ok, summary, paste: Boolean(task.capture) });
+      drainSerialQueue(task.serial_key);
+    }
+  })().catch((e) => console.error('worker error:', e));
+}
 
 export function taskJson(t) {
   const [avail, reason] = availability(t, LOCAL);
   let stateJson = null;
-  const marker = runningMarker();
-  if (marker && marker.task === t.name) {
+  const marker = runningMarker()?.find((m) => m.task === t.name);
+  if (marker && !RUNS.has(t.name)) {
     // a previous run was interrupted (server stopped/crashed mid-task)
     const ts = marker.ts ?? Date.now() / 1000;
     stateJson = {
@@ -588,7 +632,9 @@ export function taskJson(t) {
     const age = Date.now() / 1000 - stateJson.ts;
     pill = age < 24 * 3600 ? 'ok' : age <= 7 * DAY_SECONDS ? 'neutral' : 'fail';
   }
-  const running = CURRENT.name === t.name;
+  const run = RUNS.get(t.name);
+  const running = Boolean(run);
+  const queued = isQueued(t.name, t.serial_key);
   return {
     name: t.name,
     group: t.group,
@@ -598,10 +644,12 @@ export function taskJson(t) {
     export_url: t.export_url,
     avail,
     avail_reason: reason,
+    queued,
     state: stateJson,
     pill: running ? 'running' : pill,
     running,
-    live: running && CURRENT.log.length ? CURRENT.log.at(-1).slice(0, 120) : '',
+    started: running ? run.ts : null,
+    live: running && run.log.length ? run.log.at(-1).slice(0, 120) : '',
   };
 }
 
@@ -683,61 +731,46 @@ export function createApp() {
     const taskName = req.params.taskName;
     const task = TASK_MAP.get(taskName);
     if (!task) return res.status(404).json({ detail: 'Unknown task' });
-    if (CURRENT.name) return res.status(409).json({ detail: 'Another task is already running' });
+    if (RUNS.has(taskName)) return res.status(409).json({ detail: 'This task is already running' });
+    if (serialKeyHeld(task.serial_key)) {
+      if (isQueued(taskName, task.serial_key)) return res.json({ started: true, queued: true });
+      const q = SERIAL_QUEUES.get(task.serial_key) ?? [];
+      q.push({ taskName, payload: req.body ?? {} });
+      SERIAL_QUEUES.set(task.serial_key, q);
+      return res.json({ started: true, queued: true });
+    }
     const [avail, reason] = availability(task, LOCAL);
     if (!avail) return res.status(400).json({ detail: reason });
-    const staging = stagingDir(taskName);
-    const files = fs
-      .readdirSync(staging)
-      .filter((p) => !p.endsWith('.part') && fs.statSync(path.join(staging, p)).isFile())
-      .map((p) => path.join(staging, p));
-    const payload = req.body ?? {};
-    const logger = makeLogger();
-    CURRENT.name = taskName;
-    CURRENT.log = logger.lines;
-    CURRENT.read = 0;
-    CURRENT.done = null;
-    CURRENT.cancelled = false;
-    markRunning(taskName);
-
-    (async () => {
-      let ok = false;
-      let summary = 'Internal error';
-      try {
-        [ok, summary] = await runTask(task, LOCAL, files, logger, payload);
-        if (CURRENT.cancelled) {
-          [ok, summary] = [false, 'Cancelled by user'];
-          saveTaskState(task, LOCAL, false, summary, logger.text());
-        }
-      } finally {
-        CURRENT.done = {
-          task: taskName,
-          ok,
-          summary,
-          paste: Boolean(task.capture),
-        };
-        CURRENT.name = null;
-        CURRENT.cancelled = false;
-        clearRunning();
-      }
-    })().catch((e) => console.error('worker error:', e));
+    startRun(taskName, req.body ?? {});
     res.json({ started: true });
   });
 
   app.get('/api/status', (req, res) => {
-    const log = CURRENT.log;
-    const newLines = log.slice(CURRENT.read);
-    CURRENT.read = log.length;
-    const done = CURRENT.done;
-    CURRENT.done = null;
-    res.json({ running: CURRENT.name, log: newLines, done });
+    const runs = [];
+    for (const [taskName, rec] of RUNS) {
+      const newLines = rec.log.slice(rec.read);
+      rec.read = rec.log.length;
+      runs.push({ task: taskName, log: newLines });
+    }
+    res.json({ runs, done: DONE.splice(0) });
   });
 
   app.post('/api/cancel', (req, res) => {
-    if (!CURRENT.name) return res.status(409).json({ detail: 'No task is running' });
-    CURRENT.cancelled = true;
-    cancelAll();
-    res.json({ cancelled: true });
+    const taskName = req.body?.task;
+    if (!taskName) return res.status(409).json({ detail: 'No task specified' });
+    const rec = RUNS.get(taskName);
+    if (rec) {
+      rec.cancelled = true;
+      for (const pid of [...rec.groups]) killpg(pid);
+      return res.json({ cancelled: true });
+    }
+    const task = TASK_MAP.get(taskName);
+    const q = task?.serial_key ? SERIAL_QUEUES.get(task.serial_key) : null;
+    if (q?.some((e) => e.taskName === taskName)) {
+      SERIAL_QUEUES.set(task.serial_key, q.filter((e) => e.taskName !== taskName));
+      return res.json({ cancelled: true, queued: true });
+    }
+    res.status(409).json({ detail: 'Task is not running' });
   });
 
   app.post('/api/paste_done/:taskName', async (req, res) => {

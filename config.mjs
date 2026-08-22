@@ -10,7 +10,7 @@
 // heredoc pipe. Runner
 // fields: uploads + glob (drop zone), prompts, require, capture +
 // commit_dir (paste dialog), root (availability badge), summary_last_line,
-// timeout, cwd, note, export_url.
+// serial_key (runs one-at-a-time with same-key tasks), cwd, note, export_url.
 // Per-run tokens: {{uploads}}, {{tmp}}, plus one per prompt key.
 // A group's `defaults` apply to every task in it (task fields override).
 
@@ -42,14 +42,16 @@ export default {
   // ---- groups (display order = array order) ----------------------------------
 
   groups: [
+
     {
-      name: 'Apps & Accounts',
-      defaults: { uploads: true, summary_last_line: true, state_dir: '{{maindir}}/Backups/Manual' },
+      name: 'Authentication',
       tasks: [
         // Drop the Bitwarden JSON export; encrypt it with a prompted passphrase
         // (AGE_PASSPHRASE env, piped through the generic pty runner) and commit.
         {
           name: "Bitwarden (encrypted with 'age')",
+          uploads: true,
+          summary_last_line: true,
           glob: 'bitwarden_export_*.json',
           state_dir: '{{maindir}}/Backups/Bitwarden',
           export_url: 'https://vault.bitwarden.com/#/tools/export',
@@ -61,216 +63,92 @@ export default {
           commands: "AGE_PASSPHRASE='{{password}}' bash '{{lib}}' encrypt '{{maindir}}/Backups/Bitwarden' bitwarden.json {{uploads}}",
         },
 
-        // Drop the contacts (VCF) and calendar (ICS) exports; rename each by pattern.
-        {
-          name: 'Contacts + Calendar (VCF+ICS)',
-          glob: ['*.vcf', '*.ics'],
-          export_url: 'https://nextcloud.home.example.com/apps/calendar',
-          note: 'Drop the contacts (VCF) and calendar (ICS) exports here.',
-          commands: `bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; RC=$?; rm -f "$TMP"; exit $RC' <<'BASH_SCRIPT'
-source '{{lib}}'
-DEST='{{maindir}}/Backups/Manual'
-mkdir -p "$DEST"
-for f in {{uploads}}; do
-  case "$(basename "$f")" in
-    contacts-*.vcf) mv "$f" "$DEST/My Contacts.vcf" ;;
-    todo-*.ics) mv "$f" "$DEST/TODO.ics" ;;
-    regular-or-long-term-*.ics) mv "$f" "$DEST/Regular.ics" ;;
-    personal-*.ics) mv "$f" "$DEST/Events.ics" ;;
-    *) mv "$f" "$DEST/$(basename "$f")" ;;
-  esac
-done
-bctl_git_commit "$DEST"
-log "Files → $DEST"
-BASH_SCRIPT
-`,
-        },
-
-        // Browser bookmarks export -> bookmarks.html.
-        {
-          name: 'Bookmarks',
-          glob: 'bookmarks_*.html',
-          note: 'Drop the browser bookmarks export (HTML) here.',
-          commands: "bash '{{lib}}' move --git --rename bookmarks.html '{{maindir}}/Backups/Manual' {{uploads}}",
-        },
-
-        // Obtainium app list export -> Obtainium.json.
-        {
-          name: 'Obtainium Apps',
-          glob: 'obtainium-export-*.json',
-          note: 'Drop the Obtainium app list export (JSON) here.',
-          commands: "bash '{{lib}}' move --git --rename Obtainium.json '{{maindir}}/Backups/Manual' {{uploads}}",
-        },
-
-        // AntennaPod feeds (OPML) and/or DB backup, renamed per pattern.
-        {
-          name: 'AntennaPod (Feeds + DB)',
-          glob: ['antennapod-feeds-*.opml', 'AntennaPodBackup-*.db'],
-          note: 'Drop the AntennaPod feeds OPML and/or DB backup here.',
-          commands: `bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; RC=$?; rm -f "$TMP"; exit $RC' <<'BASH_SCRIPT'
-source '{{lib}}'
-DEST='{{maindir}}/Backups/Manual'
-mkdir -p "$DEST"
-for f in {{uploads}}; do
-  case "$(basename "$f")" in
-    antennapod-feeds-*.opml) mv "$f" "$DEST/Podcasts.opml" ;;
-    AntennaPodBackup-*.db) mv "$f" "$DEST/AntennaPod.opml" ;;
-  esac
-done
-bctl_git_commit "$DEST"
-log "Files → $DEST"
-BASH_SCRIPT
-`,
-        },
-
-        // Read You RSS feeds export -> RSS.opml.
-        {
-          name: 'RSS (Read You)',
-          glob: 'Read-You-*.opml',
-          note: 'Drop the Read You feeds export (OPML) here.',
-          commands: "bash '{{lib}}' move --git --rename RSS.opml '{{maindir}}/Backups/Manual' {{uploads}}",
-        },
-
         // Aegis 2FA vault export -> aegis-export.json.
         {
           name: 'Aegis 2FA',
+          serial_key: 'manual',
+          uploads: true,
+          summary_last_line: true,
+          state_dir: '{{maindir}}/Backups/Manual',
           glob: 'aegis-*.json',
           note: 'Drop the Aegis 2FA backup export (JSON) here.',
           commands: "bash '{{lib}}' move --git --rename aegis-export.json '{{maindir}}/Backups/Manual' {{uploads}}",
         },
+      ],
+    },
 
-        // ntfy subscriptions export -> ntfy-subscriptions.json.
-        {
-          name: 'NTFY Subscriptions',
-          glob: 'ntfy-*.json',
-          note: 'Drop the ntfy subscriptions export (JSON) here.',
-          commands: "bash '{{lib}}' move --git --rename ntfy-subscriptions.json '{{maindir}}/Backups/Manual' {{uploads}}",
-        },
-
+    {
+      name: 'Infrastructure',
+      tasks: [
         // DNS zone file (example.com.txt), kept under its own name.
         {
           name: 'example.com DNS Records',
+          serial_key: 'manual',
+          uploads: true,
+          summary_last_line: true,
+          state_dir: '{{maindir}}/Backups/Manual',
           glob: 'example.com.txt',
           export_url: 'https://dash.cloudflare.com/00000000000000000000000000000000/example.com/dns/records',
           note: 'Drop the DNS entries export here.',
           commands: "bash '{{lib}}' move --git --rename 'example.com.txt' '{{maindir}}/Backups/Manual' {{uploads}}",
         },
 
-        // Presto transit usage reports, kept under their own names.
+        // Back up config files, SSH keys, and shell history from this PC into git
+        // (dconf dump first, cleanup after).
         {
-          name: 'Presto Transit Usage Report',
-          glob: 'transit_usage_report.csv',
-          state_dir: '{{maindir}}/Backups/Archive/Presto Transit Usage Reports',
-          export_url: 'https://www.prestocard.ca/en/dashboard/transit-usage-report',
-          note: 'Drop the transit_usage_report.csv file(s) here.',
-          commands: "bash '{{lib}}' move --git '{{maindir}}/Backups/Archive/Presto Transit Usage Reports' {{uploads}}",
+          name: 'PC Files',
+          state_dir: '{{maindir}}/Backups/PC Files',
+          summary_last_line: true,
+          note: 'Backs up config files, SSH keys, and shell history from this PC into git.',
+          commands: "bash '{{lib}}' copy --git --pre 'dconf dump /org/gnome/shell/extensions/ > ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf' --post 'rm ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf' '{{maindir}}/Backups/PC Files' ~/.bashrc.d ~/.bash_history ~/.config/mimeapps.list ~/.ssh ~/.gnupg ~/.config/autostart ~/.local/share/applications ~/.config/gtk-3.0/bookmarks ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf",
+        },
+
+        // Pull compose state from the infra hosts via infra.sh.
+        {
+          name: 'Infra Compose State',
+          state_dir: '{{maindir}}/Infra',
+          note: 'Pulls compose state from the infra hosts via infra.sh.',
+          commands: [
+            '{{maindir}}/Infra/infra.sh pc compose backup-state root@{{hosts.vps0.host}}:/root/Infra vps0',
+            '{{maindir}}/Infra/infra.sh pc compose backup-state {{hosts.srv0.user}}@{{hosts.srv0.host}}:{{hosts.srv0.infra_path}} srv0',
+          ],
+        },
+
+        // Obtainium app list export -> Obtainium.json.
+        {
+          name: 'Obtainium Apps',
+          serial_key: 'manual',
+          uploads: true,
+          summary_last_line: true,
+          state_dir: '{{maindir}}/Backups/Manual',
+          glob: 'obtainium-export-*.json',
+          note: 'Drop the Obtainium app list export (JSON) here.',
+          commands: "bash '{{lib}}' move --git --rename Obtainium.json '{{maindir}}/Backups/Manual' {{uploads}}",
+        },
+
+        // ntfy subscriptions export -> ntfy-subscriptions.json.
+        {
+          name: 'Ntfy Subscriptions',
+          serial_key: 'manual',
+          uploads: true,
+          summary_last_line: true,
+          state_dir: '{{maindir}}/Backups/Manual',
+          glob: 'ntfy-*.json',
+          note: 'Drop the ntfy subscriptions export (JSON) here.',
+          commands: "bash '{{lib}}' move --git --rename ntfy-subscriptions.json '{{maindir}}/Backups/Manual' {{uploads}}",
         },
       ],
     },
 
     {
-      name: 'Social Media',
-      defaults: { uploads: true, summary_last_line: true },
-      tasks: [
-        // GitHub data export; repositories, releases, and attachments stripped,
-        // folder named after the account.
-        {
-          name: 'GitHub (no repos/releases)',
-          glob: '*.tar.gz',
-          state_dir: '{{maindir}}/Backups/GitHub',
-          export_url: 'https://github.com/settings/admin',
-          note: 'Drop the GitHub data export archive here (repositories and releases are stripped).',
-          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/GitHub' 'rm -rf repositories releases attachments; cat users_000001.json | jq "(.[] | select(.billing_plan != null)).login" | head -c -2 | tail -c +2' {{uploads}}`,
-        },
-
-        // Medium data export; folder named after the account.
-        {
-          name: 'Medium',
-          glob: 'medium-export-*.zip',
-          state_dir: '{{maindir}}/Backups/Medium',
-          export_url: 'https://medium.com/me/settings/security',
-          note: 'Drop the Medium data export zip here.',
-          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Medium' 'awk -F\\< "{ print \\$15 }" profile/profile.html | awk -F\\> "{ print \\$2 }" | awk NF | tail -c +2' {{uploads}}`,
-        },
-
-        // Instagram data export; folder named after the account.
-        {
-          name: 'Instagram',
-          glob: 'instagram-*.zip',
-          state_dir: '{{maindir}}/Backups/Instagram',
-          export_url: 'https://accountscenter.instagram.com/info_and_permissions/dyi/?entry_point=deeplink_screen',
-          note: 'Drop the Instagram data export zip here.',
-          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Instagram' 'cat personal_information/personal_information/personal_information.json | jq ".profile_user[0].string_map_data.Username.value" | head -c -2 | tail -c +2' {{uploads}}`,
-        },
-
-        // Snapchat data export; folder named after the account.
-        {
-          name: 'Snapchat',
-          glob: 'mydata~*.zip',
-          state_dir: '{{maindir}}/Backups/Snapchat',
-          export_url: 'https://accounts.snapchat.com/accounts/downloadmydata',
-          note: 'Drop the Snapchat data export zip here.',
-          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Snapchat' 'grep -i username json/account.json | awk -F\\" "{print \\$4}"' {{uploads}}`,
-        },
-
-        // Google Takeout; folder named after the account email.
-        {
-          name: 'Google',
-          glob: 'takeout-*.zip',
-          state_dir: '{{maindir}}/Backups/Google',
-          export_url: 'https://takeout.google.com',
-          note: 'Drop the Google Takeout zip here.',
-          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Google' 'grep -Eo ": \\".*@.*\\"" Takeout/Profile/Profile.json | head -1 | tail -c +4 | head -c -2' {{uploads}}`,
-        },
-
-        // Twitter/X data export; folder named after the account.
-        {
-          name: 'Twitter',
-          glob: 'twitter*.zip',
-          state_dir: '{{maindir}}/Backups/Twitter',
-          export_url: 'https://twitter.com/i/flow/verify_account_ownership',
-          note: 'Drop the Twitter/X data export zip here.',
-          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Twitter' 'grep -Eo "accountId\\" : \\".*\\"" data/account.js | tail -c +15 | head -c -2' {{uploads}}`,
-        },
-
-        // Mastodon archive; folder named after the account handle.
-        {
-          name: 'Mastodon',
-          glob: 'archive-*.zip',
-          state_dir: '{{maindir}}/Backups/Mastodon',
-          export_url: 'https://freeradical.zone/settings/export',
-          note: 'Drop the Mastodon archive zip here.',
-          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Mastodon' 'jq -r ".id" actor.json | sed "s|https*://||; s|/|_|g; s|:|_|g; s|[?&=]|_|g; s|[^a-zA-Z0-9._-]|_|g"' {{uploads}}`,
-        },
-
-        // TikTok data export; folder named after the account.
-        {
-          name: 'TikTok',
-          glob: 'TikTok_Data*.zip',
-          state_dir: '{{maindir}}/Backups/TikTok',
-          note: 'Drop the TikTok data export zip here.',
-          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/TikTok' "grep -oP '(?<=\\\"userName\\\": \\\")([^\\\"]+)' user_data*.json | head -1" {{uploads}}`,
-        },
-
-        // Reddit data export; folder named after the account.
-        {
-          name: 'Reddit',
-          glob: 'export_*.zip',
-          state_dir: '{{maindir}}/Backups/Reddit',
-          export_url: 'https://www.reddit.com/settings/data-request',
-          note: 'Drop the Reddit data export zip here.',
-          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Reddit' 'grep "account name," statistics.csv | tail -c +14 | head -c -2' {{uploads}}`,
-        },
-      ],
-    },
-
-    {
-      name: 'Chats',
-      defaults: { uploads: true, summary_last_line: true },
+      name: 'Communications',
       tasks: [
         // Cheogram (XMPP) backup.
         {
           name: 'Cheogram (CEB)',
+          serial_key: 'manual',
+          uploads: true,
+          summary_last_line: true,
           glob: '*.ceb',
           state_dir: '{{maindir}}/Backups/Manual',
           note: 'Drop the Cheogram export (CEB) here. Do NOT FORGET to re-enable your Cheogram account: the backup process disables all active accounts.',
@@ -281,6 +159,9 @@ BASH_SCRIPT
         // metadata) from the backup folder; stored under those names.
         {
           name: 'Molly (Signal)',
+          serial_key: 'manual',
+          uploads: true,
+          summary_last_line: true,
           glob: ['files', 'main', 'metadata'],
           state_dir: '{{maindir}}/Backups/Manual',
           note: 'Select the files, main, and metadata files from the Molly (Signal) backup folder.',
@@ -290,20 +171,12 @@ BASH_SCRIPT
         // Drop WhatsApp chat zips; they are merged into the cumulative TXT backup.
         {
           name: 'WhatsApp TXT',
+          uploads: true,
           glob: '*.zip',
           state_dir: '{{maindir}}/Backups/WhatsApp TXT',
           summary_last_line: false,
           note: 'Drop archive.zip or WhatsApp chat zips here; they will be merged into the cumulative backup.',
           commands: 'mkdir -p "{{maindir}}/Backups/WhatsApp TXT" && rm -rf "{{tmp}}" && mkdir -p "{{tmp}}" && unzip -oq {{uploads}} -d "{{tmp}}" && for z in "{{tmp}}"/*.zip; do [ -f "$z" ] || continue; unzip -oq "$z" -d "{{tmp}}"; rm -f "$z"; done && rm -f "{{tmp}}"/*.vcf && node \'{{scriptroot}}/WhatsAppTXT/WhatsAppTXT.js\' "{{maindir}}/Backups/WhatsApp TXT" "{{tmp}}"',
-        },
-
-        // Qwen chat exports, kept under their own names.
-        {
-          name: 'Qwen Chats',
-          glob: 'chat-export-*.json',
-          state_dir: '{{maindir}}/Backups/Qwen Chat',
-          note: 'Drop the chat-export-*.json file(s) here.',
-          commands: "bash '{{lib}}' move --git '{{maindir}}/Backups/Qwen Chat' {{uploads}}",
         },
 
         // Archive the live WhatsApp folder: snapshot it, standardize the media
@@ -312,6 +185,7 @@ BASH_SCRIPT
         // succeeded; the confirm prompt is required before anything is deleted.
         {
           name: 'WhatsApp',
+          summary_last_line: true,
           uploads: false,
           state_dir: '{{maindir}}/Backups/Archive/WhatsApp-AllMedia',
           root: '{{maindir}}/WhatsApp/Media',
@@ -364,6 +238,32 @@ log "Import completed; originals deleted"
 BASH_SCRIPT
 `,
         },
+
+        // Export the ProtonMail mailbox. Password + TOTP prompted. The CLI is
+        // downloaded on first use; the export is validated (validate-fresh)
+        // before being reported successful, and old exports are pruned after.
+        {
+          name: 'ProtonMail',
+          state_dir: '{{maindir}}/Backups/Email',
+          require: ['password'],
+          note: 'Exports your ProtonMail mailbox. You will be asked for your password and TOTP code (if 2FA is enabled). The export is validated before being reported as successful.',
+          prompts: [
+            { key: 'password', label: 'Password', type: 'secret' },
+            { key: 'totp', label: 'TOTP code (if 2FA is enabled)', type: 'secret' },
+          ],
+          commands: [
+            `[ -x ~/proton-mail-export-cli-linux_x86_64/proton-mail-export-cli ] || {
+  wget -q https://proton.me/download/export-tool/proton-mail-export-cli-linux_x86_64.tar.gz -O /tmp/proton-export.tar.gz &&
+  mkdir -p ~/proton-mail-export-cli-linux_x86_64 &&
+  tar xf /tmp/proton-export.tar.gz -C ~/proton-mail-export-cli-linux_x86_64 &&
+  rm -f /tmp/proton-export.tar.gz &&
+  chmod +x ~/proton-mail-export-cli-linux_x86_64/proton-mail-export-cli
+}`,
+            'EXTRA=(); [ -n "{{totp}}" ] && EXTRA=(-t "{{totp}}"); ~/proton-mail-export-cli-linux_x86_64/proton-mail-export-cli -k -o backup -d "{{maindir}}/Backups/Email" -u "{{protonmail_email}}" -p "{{password}}" "${EXTRA[@]}"',
+            "bash '{{lib}}' validate-fresh '{{maindir}}/Backups/Email/{{protonmail_email}}'",
+            "bash '{{lib}}' prune-exports '{{maindir}}/Backups/Email/{{protonmail_email}}' --keep-newer",
+          ],
+        },
       ],
     },
 
@@ -372,7 +272,7 @@ BASH_SCRIPT
       tasks: [
         // Drop bank statement PDFs; they are renamed and filed by the parser script.
         {
-          name: 'Bank Statements + Balance Extras',
+          name: 'Bank Statements',
           state_dir: '{{maindir}}/Documents/Banking/eStatements',
           uploads: true,
           glob: '*.pdf',
@@ -417,7 +317,6 @@ BASH_SCRIPT
         {
           name: 'Instacart Orders',
           state_dir: '{{maindir}}/Backups/Instacart',
-          timeout: 900,
           note: 'Scrapes recent Instacart order history and delivery images.',
           commands: [
             '[ -f \'{{scriptroot}}/InstacartFlation/venv/bin/activate\' ] || python3 -m venv \'{{scriptroot}}/InstacartFlation/venv\'',
@@ -429,13 +328,13 @@ BASH_SCRIPT
     },
 
     {
-      name: 'Devices',
-      defaults: { summary_last_line: true },
+      name: 'Media and Files',
       tasks: [
         // Import and standardize media from the synced phone folders (requires
         // phone sync to be running).
         {
           name: 'Media Import',
+          summary_last_line: true,
           state_dir: '{{maindir}}/Media',
           root: '~/deviceSync',
           note: 'Imports and standardizes media from the synced phone folders. Requires phone sync to be running.',
@@ -472,9 +371,34 @@ BASH_SCRIPT
 `,
         },
 
+        // Run the backup script on bigpc over SSH and pull the results down.
+        {
+          name: 'Wine Game Save Files',
+          state_dir: '{{maindir}}/Backups/Game Save Files',
+          note: 'Runs the backup script on bigpc over SSH and pulls the results down.',
+          commands: [
+            'ssh -o BatchMode=yes {{hosts.bigpc.user}}@{{hosts.bigpc.host}} "mkdir -p /tmp/gamehomebak"',
+            'rsync -aq -e "ssh -o BatchMode=yes" "{{scriptroot}}/WineGameSaveBackup/BackupGamingWinePrefixes.sh" {{hosts.bigpc.user}}@{{hosts.bigpc.host}}:/tmp/gamehomebak/',
+            'ssh -o BatchMode=yes {{hosts.bigpc.user}}@{{hosts.bigpc.host}} "cd /tmp/gamehomebak && bash ./BackupGamingWinePrefixes.sh ~/Games/Installs/Synced /home/{{hosts.bigpc.user}}/Downloads/gamehomebak_out"',
+            'ssh -o BatchMode=yes {{hosts.bigpc.user}}@{{hosts.bigpc.host}} "cd /tmp/gamehomebak && bash ./BackupGamingWinePrefixes.sh ~/Games/Installs/Unsynced /home/{{hosts.bigpc.user}}/Downloads/gamehomebak_out"',
+            'rsync -aq -e "ssh -o BatchMode=yes" {{hosts.bigpc.user}}@{{hosts.bigpc.host}}:/home/{{hosts.bigpc.user}}/Downloads/gamehomebak_out/ "{{maindir}}/Backups/Game Save Files"',
+            'ssh -o BatchMode=yes {{hosts.bigpc.user}}@{{hosts.bigpc.host}} "rm -rf /tmp/gamehomebak /home/{{hosts.bigpc.user}}/Downloads/gamehomebak_out"',
+          ],
+        },
+
+        // Download YouTube Music playlists into the music folder.
+        {
+          name: 'Music (YouTube Music Download)',
+          state_dir: '{{maindir}}/Media/Music',
+          cwd: '{{scriptroot}}/YTMusicDL',
+          note: 'Downloads YouTube Music playlists into the music folder.',
+          commands: 'if [ ! -f ./venv/bin/activate ]; then python -m venv venv; fi\nsource ./venv/bin/activate\npip install --upgrade -r requirements.txt\npython ytmusic_dl.py --dir {{maindir}}/Media/Music\nbash validate_m3u8s.sh {{maindir}}/Media/Music\n',
+        },
+
         // Import Quest screenshots and video clips (requires the Quest connected).
         {
           name: 'Quest Media',
+          summary_last_line: true,
           state_dir: '{{maindir}}/Media/Camera',
           root: '{{quest_root}}',
           note: 'Imports Quest screenshots and video clips. Requires the Quest to be connected.',
@@ -502,6 +426,7 @@ BASH_SCRIPT
         // Copy ModData, ModsBeforeFriday, and Android from the connected Quest.
         {
           name: 'Quest Files',
+          summary_last_line: true,
           state_dir: '{{maindir}}/Backups/Meta_Quest',
           root: '{{quest_root}}',
           note: 'Copies ModData, ModsBeforeFriday, and Android from the connected Quest.',
@@ -511,86 +436,223 @@ BASH_SCRIPT
     },
 
     {
-      name: 'System Backups',
+      name: 'Information',
       tasks: [
-        // Back up config files, SSH keys, and shell history from this PC into git
-        // (dconf dump first, cleanup after).
+        // Drop the contacts (VCF) and calendar (ICS) exports; rename each by pattern.
         {
-          name: 'PC Files',
-          state_dir: '{{maindir}}/Backups/PC Files',
+          name: 'Contacts + Calendar (VCF+ICS)',
+          serial_key: 'manual',
+          uploads: true,
           summary_last_line: true,
-          note: 'Backs up config files, SSH keys, and shell history from this PC into git.',
-          commands: "bash '{{lib}}' copy --git --pre 'dconf dump /org/gnome/shell/extensions/ > ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf' --post 'rm ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf' '{{maindir}}/Backups/PC Files' ~/.bashrc.d ~/.bash_history ~/.config/mimeapps.list ~/.ssh ~/.gnupg ~/.config/autostart ~/.local/share/applications ~/.config/gtk-3.0/bookmarks ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf",
+          state_dir: '{{maindir}}/Backups/Manual',
+          glob: ['*.vcf', '*.ics'],
+          export_url: 'https://nextcloud.home.example.com/apps/calendar',
+          note: 'Drop the contacts (VCF) and calendar (ICS) exports here.',
+          commands: `bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; RC=$?; rm -f "$TMP"; exit $RC' <<'BASH_SCRIPT'
+source '{{lib}}'
+DEST='{{maindir}}/Backups/Manual'
+mkdir -p "$DEST"
+for f in {{uploads}}; do
+  case "$(basename "$f")" in
+    contacts-*.vcf) mv "$f" "$DEST/My Contacts.vcf" ;;
+    todo-*.ics) mv "$f" "$DEST/TODO.ics" ;;
+    regular-or-long-term-*.ics) mv "$f" "$DEST/Regular.ics" ;;
+    personal-*.ics) mv "$f" "$DEST/Events.ics" ;;
+    *) mv "$f" "$DEST/$(basename "$f")" ;;
+  esac
+done
+bctl_git_commit "$DEST"
+log "Files → $DEST"
+BASH_SCRIPT
+`,
         },
 
-        // Pull compose state from the infra hosts via infra.sh.
+        // Browser bookmarks export -> bookmarks.html.
         {
-          name: 'Infra Compose State',
-          state_dir: '{{maindir}}/Infra',
-          note: 'Pulls compose state from the infra hosts via infra.sh.',
-          commands: [
-            '{{maindir}}/Infra/infra.sh pc compose backup-state root@{{hosts.vps0.host}}:/root/Infra vps0',
-            '{{maindir}}/Infra/infra.sh pc compose backup-state {{hosts.srv0.user}}@{{hosts.srv0.host}}:{{hosts.srv0.infra_path}} srv0',
-          ],
+          name: 'Bookmarks',
+          serial_key: 'manual',
+          uploads: true,
+          summary_last_line: true,
+          state_dir: '{{maindir}}/Backups/Manual',
+          glob: 'bookmarks_*.html',
+          note: 'Drop the browser bookmarks export (HTML) here.',
+          commands: "bash '{{lib}}' move --git --rename bookmarks.html '{{maindir}}/Backups/Manual' {{uploads}}",
         },
 
-        // Run the backup script on bigpc over SSH and pull the results down.
+        // AntennaPod feeds (OPML) and/or DB backup, renamed per pattern.
         {
-          name: 'Wine Game Save Files',
-          state_dir: '{{maindir}}/Backups/Game Save Files',
-          note: 'Runs the backup script on bigpc over SSH and pulls the results down.',
-          commands: [
-            'ssh -o BatchMode=yes {{hosts.bigpc.user}}@{{hosts.bigpc.host}} "mkdir -p /tmp/gamehomebak"',
-            'rsync -aq -e "ssh -o BatchMode=yes" "{{scriptroot}}/WineGameSaveBackup/BackupGamingWinePrefixes.sh" {{hosts.bigpc.user}}@{{hosts.bigpc.host}}:/tmp/gamehomebak/',
-            'ssh -o BatchMode=yes {{hosts.bigpc.user}}@{{hosts.bigpc.host}} "cd /tmp/gamehomebak && bash ./BackupGamingWinePrefixes.sh ~/Games/Installs/Synced /home/{{hosts.bigpc.user}}/Downloads/gamehomebak_out"',
-            'ssh -o BatchMode=yes {{hosts.bigpc.user}}@{{hosts.bigpc.host}} "cd /tmp/gamehomebak && bash ./BackupGamingWinePrefixes.sh ~/Games/Installs/Unsynced /home/{{hosts.bigpc.user}}/Downloads/gamehomebak_out"',
-            'rsync -aq -e "ssh -o BatchMode=yes" {{hosts.bigpc.user}}@{{hosts.bigpc.host}}:/home/{{hosts.bigpc.user}}/Downloads/gamehomebak_out/ "{{maindir}}/Backups/Game Save Files"',
-            'ssh -o BatchMode=yes {{hosts.bigpc.user}}@{{hosts.bigpc.host}} "rm -rf /tmp/gamehomebak /home/{{hosts.bigpc.user}}/Downloads/gamehomebak_out"',
-          ],
+          name: 'AntennaPod (Feeds + DB)',
+          serial_key: 'manual',
+          uploads: true,
+          summary_last_line: true,
+          state_dir: '{{maindir}}/Backups/Manual',
+          glob: ['antennapod-feeds-*.opml', 'AntennaPodBackup-*.db'],
+          note: 'Drop the AntennaPod feeds OPML and/or DB backup here.',
+          commands: `bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; RC=$?; rm -f "$TMP"; exit $RC' <<'BASH_SCRIPT'
+source '{{lib}}'
+DEST='{{maindir}}/Backups/Manual'
+mkdir -p "$DEST"
+for f in {{uploads}}; do
+  case "$(basename "$f")" in
+    antennapod-feeds-*.opml) mv "$f" "$DEST/Podcasts.opml" ;;
+    AntennaPodBackup-*.db) mv "$f" "$DEST/AntennaPod.opml" ;;
+  esac
+done
+bctl_git_commit "$DEST"
+log "Files → $DEST"
+BASH_SCRIPT
+`,
+        },
+
+        // Read You RSS feeds export -> RSS.opml.
+        {
+          name: 'RSS (Read You)',
+          uploads: true,
+          summary_last_line: true,
+          state_dir: '{{maindir}}/Backups/Manual',
+          glob: 'Read-You-*.opml',
+          note: 'Drop the Read You feeds export (OPML) here.',
+          commands: "bash '{{lib}}' move --git --rename RSS.opml '{{maindir}}/Backups/Manual' {{uploads}}",
+        },
+
+        // Presto transit usage reports, kept under their own names.
+        {
+          name: 'Presto Transit Usage Report',
+          uploads: true,
+          summary_last_line: true,
+          glob: 'transit_usage_report.csv',
+          state_dir: '{{maindir}}/Backups/Archive/Presto Transit Usage Reports',
+          export_url: 'https://www.prestocard.ca/en/dashboard/transit-usage-report',
+          note: 'Drop the transit_usage_report.csv file(s) here.',
+          commands: "bash '{{lib}}' move --git '{{maindir}}/Backups/Archive/Presto Transit Usage Reports' {{uploads}}",
+        },
+
+        // GitHub data export; repositories, releases, and attachments stripped,
+        // folder named after the account.
+        {
+          name: 'GitHub (no repos/releases)',
+          uploads: true,
+          summary_last_line: true,
+          glob: '*.tar.gz',
+          state_dir: '{{maindir}}/Backups/GitHub',
+          export_url: 'https://github.com/settings/admin',
+          note: 'Drop the GitHub data export archive here (repositories and releases are stripped).',
+          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/GitHub' 'rm -rf repositories releases attachments; cat users_000001.json | jq "(.[] | select(.billing_plan != null)).login" | head -c -2 | tail -c +2' {{uploads}}`,
+        },
+
+        // Google Takeout; folder named after the account email.
+        {
+          name: 'Google',
+          uploads: true,
+          summary_last_line: true,
+          glob: 'takeout-*.zip',
+          state_dir: '{{maindir}}/Backups/Google',
+          export_url: 'https://takeout.google.com',
+          note: 'Drop the Google Takeout zip here.',
+          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Google' 'grep -Eo ": \\".*@.*\\"" Takeout/Profile/Profile.json | head -1 | tail -c +4 | head -c -2' {{uploads}}`,
+        },
+
+        // Qwen chat exports, kept under their own names.
+        {
+          name: 'Qwen Chats',
+          uploads: true,
+          summary_last_line: true,
+          glob: 'chat-export-*.json',
+          state_dir: '{{maindir}}/Backups/Qwen Chat',
+          note: 'Drop the chat-export-*.json file(s) here.',
+          commands: "bash '{{lib}}' move --git '{{maindir}}/Backups/Qwen Chat' {{uploads}}",
         },
       ],
     },
 
     {
-      name: 'Tools',
+      name: 'Social Media',
       tasks: [
-        // Download YouTube Music playlists into the music folder.
+        // Medium data export; folder named after the account.
         {
-          name: 'Music (YouTube Music Download)',
-          state_dir: '{{maindir}}/Media/Music',
-          timeout: 1800,
-          cwd: '{{scriptroot}}/YTMusicDL',
-          note: 'Downloads YouTube Music playlists into the music folder.',
-          commands: 'if [ ! -f ./venv/bin/activate ]; then python -m venv venv; fi\nsource ./venv/bin/activate\npip install --upgrade -r requirements.txt\npython ytmusic_dl.py --dir {{maindir}}/Media/Music\nbash validate_m3u8s.sh {{maindir}}/Media/Music\n',
+          name: 'Medium',
+          uploads: true,
+          summary_last_line: true,
+          glob: 'medium-export-*.zip',
+          state_dir: '{{maindir}}/Backups/Medium',
+          export_url: 'https://medium.com/me/settings/security',
+          note: 'Drop the Medium data export zip here.',
+          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Medium' 'awk -F\\< "{ print \\$15 }" profile/profile.html | awk -F\\> "{ print \\$2 }" | awk NF | tail -c +2' {{uploads}}`,
         },
 
-        // Export the ProtonMail mailbox. Password + TOTP prompted. The CLI is
-        // downloaded on first use; the export is validated (validate-fresh)
-        // before being reported successful, and old exports are pruned after.
+        // Instagram data export; folder named after the account.
         {
-          name: 'ProtonMail',
-          state_dir: '{{maindir}}/Backups/Email',
-          timeout: 1800,
-          require: ['password'],
-          note: 'Exports your ProtonMail mailbox. You will be asked for your password and TOTP code (if 2FA is enabled). The export is validated before being reported as successful.',
-          prompts: [
-            { key: 'password', label: 'Password', type: 'secret' },
-            { key: 'totp', label: 'TOTP code (if 2FA is enabled)', type: 'secret' },
-          ],
-          commands: [
-            `[ -x ~/proton-mail-export-cli-linux_x86_64/proton-mail-export-cli ] || {
-  wget -q https://proton.me/download/export-tool/proton-mail-export-cli-linux_x86_64.tar.gz -O /tmp/proton-export.tar.gz &&
-  mkdir -p ~/proton-mail-export-cli-linux_x86_64 &&
-  tar xf /tmp/proton-export.tar.gz -C ~/proton-mail-export-cli-linux_x86_64 &&
-  rm -f /tmp/proton-export.tar.gz &&
-  chmod +x ~/proton-mail-export-cli-linux_x86_64/proton-mail-export-cli
-}`,
-            'EXTRA=(); [ -n "{{totp}}" ] && EXTRA=(-t "{{totp}}"); ~/proton-mail-export-cli-linux_x86_64/proton-mail-export-cli -k -o backup -d "{{maindir}}/Backups/Email" -u "{{protonmail_email}}" -p "{{password}}" "${EXTRA[@]}"',
-            "bash '{{lib}}' validate-fresh '{{maindir}}/Backups/Email/{{protonmail_email}}'",
-            "bash '{{lib}}' prune-exports '{{maindir}}/Backups/Email/{{protonmail_email}}' --keep-newer",
-          ],
+          name: 'Instagram',
+          uploads: true,
+          summary_last_line: true,
+          glob: 'instagram-*.zip',
+          state_dir: '{{maindir}}/Backups/Instagram',
+          export_url: 'https://accountscenter.instagram.com/info_and_permissions/dyi/?entry_point=deeplink_screen',
+          note: 'Drop the Instagram data export zip here.',
+          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Instagram' 'cat personal_information/personal_information/personal_information.json | jq ".profile_user[0].string_map_data.Username.value" | head -c -2 | tail -c +2' {{uploads}}`,
+        },
+
+        // Snapchat data export; folder named after the account.
+        {
+          name: 'Snapchat',
+          uploads: true,
+          summary_last_line: true,
+          glob: 'mydata~*.zip',
+          state_dir: '{{maindir}}/Backups/Snapchat',
+          export_url: 'https://accounts.snapchat.com/accounts/downloadmydata',
+          note: 'Drop the Snapchat data export zip here.',
+          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Snapchat' 'grep -i username json/account.json | awk -F\\" "{print \\$4}"' {{uploads}}`,
+        },
+
+        // Twitter/X data export; folder named after the account.
+        {
+          name: 'Twitter',
+          uploads: true,
+          summary_last_line: true,
+          glob: 'twitter*.zip',
+          state_dir: '{{maindir}}/Backups/Twitter',
+          export_url: 'https://twitter.com/i/flow/verify_account_ownership',
+          note: 'Drop the Twitter/X data export zip here.',
+          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Twitter' 'grep -Eo "accountId\\" : \\".*\\"" data/account.js | tail -c +15 | head -c -2' {{uploads}}`,
+        },
+
+        // Mastodon archive; folder named after the account handle.
+        {
+          name: 'Mastodon',
+          uploads: true,
+          summary_last_line: true,
+          glob: 'archive-*.zip',
+          state_dir: '{{maindir}}/Backups/Mastodon',
+          export_url: 'https://freeradical.zone/settings/export',
+          note: 'Drop the Mastodon archive zip here.',
+          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Mastodon' 'jq -r ".id" actor.json | sed "s|https*://||; s|/|_|g; s|:|_|g; s|[?&=]|_|g; s|[^a-zA-Z0-9._-]|_|g"' {{uploads}}`,
+        },
+
+        // TikTok data export; folder named after the account.
+        {
+          name: 'TikTok',
+          uploads: true,
+          summary_last_line: true,
+          glob: 'TikTok_Data*.zip',
+          state_dir: '{{maindir}}/Backups/TikTok',
+          note: 'Drop the TikTok data export zip here.',
+          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/TikTok' "grep -oP '(?<=\\\"userName\\\": \\\")([^\\\"]+)' user_data*.json | head -1" {{uploads}}`,
+        },
+
+        // Reddit data export; folder named after the account.
+        {
+          name: 'Reddit',
+          uploads: true,
+          summary_last_line: true,
+          glob: 'export_*.zip',
+          state_dir: '{{maindir}}/Backups/Reddit',
+          export_url: 'https://www.reddit.com/settings/data-request',
+          note: 'Drop the Reddit data export zip here.',
+          commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/Reddit' 'grep "account name," statistics.csv | tail -c +14 | head -c -2' {{uploads}}`,
         },
       ],
     },
+
   ],
 };
+

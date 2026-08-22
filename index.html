@@ -242,9 +242,9 @@ html, body {
 }
 
 .queue-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  min-width: 0;
 }
 
 .queue-remove {
@@ -360,17 +360,14 @@ html, body {
   max-width: 360px;
 }
 
-#upload-progress {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
+.upload-bar {
+  height: 4px;
   background: var(--surface-2);
-  z-index: 300;
+  border-radius: 999px;
+  overflow: hidden;
 }
 
-#upload-progress-fill {
+.upload-fill {
   height: 100%;
   width: 0;
   background: var(--accent);
@@ -386,6 +383,8 @@ html, body {
   font-size: 13px;
   padding: 10px 14px;
   animation: slide-in 0.18s ease;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .toast.positive { border-color: var(--green); }
@@ -405,7 +404,6 @@ html, body {
   </style>
 </head>
 <body>
-  <div id="upload-progress" hidden><div id="upload-progress-fill"></div></div>
   <div id="toasts"></div>
 
   <div class="topbar">
@@ -438,8 +436,7 @@ html, body {
   <div id="modal-root"></div>
 
   <script>
-
-const STATE = { tasks: [], groups: [], serverRunning: null, pollTimer: null, pendingQueue: [], queues: {}, uploadingTask: null, uploadAbort: null };
+const STATE = { tasks: [], groups: [], queues: {}, uploading: new Map(), uploadAborts: new Map(), liveLogs: new Map(), openLogRef: null, activity: false };
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -461,7 +458,7 @@ async function api(path, options = {}) {
 function toast(message, type = 'positive') {
   const node = el('div', `toast ${type}`, message);
   document.getElementById('toasts').append(node);
-  setTimeout(() => node.remove(), 5000);
+  setTimeout(() => node.remove(), 15000);
 }
 
 function openModal({ title, body, buttons }) {
@@ -539,11 +536,20 @@ function pickerModal(title, tasks) {
   });
 }
 
+function formatElapsed(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(s).padStart(2, '0');
+  return h ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+}
+
 async function loadTasks() {
   const data = await api('/api/tasks');
   STATE.groups = data.groups || [];
   STATE.tasks = STATE.groups.flatMap((g) => g.tasks);
-  STATE.serverRunning = STATE.tasks.some((t) => t.running);
   document.getElementById('config-warning').hidden = !data.missing_config;
   render();
 }
@@ -563,18 +569,35 @@ function render() {
 }
 
 function card(t) {
-  const isRunning = t.running || STATE.uploadingTask === t.name;
-  const anyRunning = STATE.serverRunning || STATE.uploadingTask;
-  const pillText = isRunning ? 'Running…' : (t.state ? t.state.last_run_text : 'Never run');
-  const pillClass = isRunning ? 'running' : t.pill;
-  const liveText = t.running ? t.live : (STATE.uploadingTask === t.name ? 'Uploading…' : '');
+  const isRunning = t.running;
+  const isUploading = STATE.uploading.has(t.name);
+  const isQueued = t.queued;
+  const busy = isRunning || isUploading || isQueued;
+  let pillText;
+  let pillClass;
+  if (isRunning) {
+    pillText = `Running · ${formatElapsed(Date.now() / 1000 - (t.started ?? Date.now() / 1000))}`;
+    pillClass = 'running';
+  } else if (isUploading) {
+    pillText = `Uploading… ${Math.round(STATE.uploading.get(t.name))}%`;
+    pillClass = 'running';
+  } else if (isQueued) {
+    pillText = 'Queued…';
+    pillClass = 'neutral';
+  } else {
+    pillText = t.state ? t.state.last_run_text : 'Never run';
+    pillClass = t.pill;
+  }
+  const liveText = isRunning ? t.live : '';
   const c = el('div', 'task-card');
+  c.dataset.task = t.name;
   c.innerHTML = `
     <div class="card-head">
       <span class="card-title"></span>
       <span class="pill ${pillClass}">${pillText}</span>
     </div>
-    ${isRunning && liveText ? `<div class="card-live"></div>` : ''}
+    ${liveText ? `<div class="card-live"></div>` : ''}
+    ${isUploading ? `<div class="upload-bar"><div class="upload-fill"></div></div>` : ''}
     ${!t.avail ? `<span class="badge-unavail"></span>` : ''}
     ${t.uploads
       ? `<div class="dropzone-box" tabindex="0"><span class="dropzone-note"></span><input type="file" multiple hidden></div>
@@ -582,12 +605,14 @@ function card(t) {
       : t.note ? `<div class="card-note"></div>` : ''}
     <div class="card-actions">
       ${t.export_url ? '<a class="btn btn-ghost export-btn" target="_blank" rel="noopener"></a>' : ''}
-      <button class="btn ${isRunning ? 'btn-ghost' : 'btn-primary'} run-btn"></button>
+      <button class="btn ${busy ? 'btn-ghost' : 'btn-primary'} run-btn"></button>
       <button class="btn btn-ghost log-btn">Log</button>
     </div>`;
   c.querySelector('.card-title').textContent = t.name;
   const live = c.querySelector('.card-live');
   if (live) live.textContent = liveText;
+  const fill = c.querySelector('.upload-fill');
+  if (fill) fill.style.width = `${Math.round(STATE.uploading.get(t.name) ?? 0)}%`;
   const unavail = c.querySelector('.badge-unavail');
   if (unavail) unavail.textContent = t.avail_reason;
   if (t.uploads) {
@@ -599,9 +624,9 @@ function card(t) {
   }
   const runBtn = c.querySelector('.run-btn');
   const logBtn = c.querySelector('.log-btn');
-  runBtn.textContent = isRunning ? 'Stop' : 'Run';
-  runBtn.disabled = !isRunning && (!t.avail || anyRunning);
-  runBtn.onclick = isRunning ? cancelRun : () => runTask(t);
+  runBtn.textContent = busy ? 'Stop' : 'Run';
+  runBtn.disabled = !busy && !t.avail;
+  runBtn.onclick = busy ? () => cancelRun(t.name) : () => runTask(t);
   logBtn.onclick = () => openLog(t);
   const exportBtn = c.querySelector('.export-btn');
   if (exportBtn) {
@@ -665,7 +690,7 @@ function uploadChunk(task, name, body, chunk, total, onProgress) {
       toast(`Upload of ${name} failed`, 'warning');
       resolve(false);
     };
-    STATE.uploadAbort = xhr;
+    STATE.uploadAborts.set(task.name, xhr);
     xhr.send(body);
   });
 }
@@ -720,20 +745,13 @@ async function handleGlobalFiles(fileList) {
 
   for (const { task, files } of entries) queueFiles(task, files);
 
-  if (STATE.serverRunning) {
-    toast(`Held ${entries.length} task(s) — a task is already running`, 'warning');
-    return;
-  }
   const body = el('div', 'modal-fields');
   for (const { task, files } of entries) {
     body.append(el('div', null, `${task.name} (${files.length} file${files.length > 1 ? 's' : ''})`));
   }
   const ok = await confirmModal('Detected — run all now?', 'Run', body);
   if (!ok) return;
-  STATE.pendingQueue = entries.map((e) => e.task.name);
-  const first = STATE.pendingQueue.shift();
-  const firstTask = STATE.tasks.find((t) => t.name === first);
-  if (firstTask) runTask(firstTask, { skipGenericConfirm: true });
+  for (const { task } of entries) runTask(task, { skipGenericConfirm: true });
 }
 
 async function runTask(task, opts = {}) {
@@ -761,25 +779,24 @@ async function runTask(task, opts = {}) {
     return;
   }
   if (task.uploads) {
-    const bar = document.getElementById('upload-progress');
-    const fill = document.getElementById('upload-progress-fill');
-    let done = 0;
-    bar.hidden = false;
-    fill.style.width = '0%';
-    STATE.uploadingTask = task.name;
+    STATE.uploading.set(task.name, 0);
     render();
     try {
+      let done = 0;
       for (const file of files) {
         const ok = await uploadToTask(task, file, (frac) => {
-          fill.style.width = `${(((done + frac) / files.length) * 100).toFixed(1)}%`;
+          const pct = ((done + frac) / files.length) * 100;
+          STATE.uploading.set(task.name, pct);
+          const fill = document.querySelector(`.task-card[data-task="${CSS.escape(task.name)}"] .upload-fill`);
+          if (fill) fill.style.width = `${pct.toFixed(1)}%`;
         });
         if (!ok) return;
         done += 1;
-        fill.style.width = `${((done / files.length) * 100).toFixed(1)}%`;
+        STATE.uploading.set(task.name, (done / files.length) * 100);
       }
     } finally {
-      bar.hidden = true;
-      STATE.uploadingTask = null;
+      STATE.uploading.delete(task.name);
+      STATE.uploadAborts.delete(task.name);
       render();
     }
   }
@@ -790,43 +807,54 @@ async function runTask(task, opts = {}) {
   });
   if (res.error) { toast(res.error, 'warning'); return; }
   if (task.uploads) delete STATE.queues[task.name];
-  startPolling(task);
+  STATE.liveLogs.set(task.name, []);
+  if (res.queued) toast(`${task.name} queued — another task sharing its destination is running`, 'warning');
+  render();
 }
 
-async function cancelRun() {
-  STATE.pendingQueue = [];
-  if (STATE.uploadingTask) {
-    STATE.uploadingTask = null;
-    if (STATE.uploadAbort) STATE.uploadAbort.abort();
+async function cancelRun(taskName) {
+  if (STATE.uploading.has(taskName)) {
+    STATE.uploading.delete(taskName);
+    STATE.uploadAborts.get(taskName)?.abort();
+    STATE.uploadAborts.delete(taskName);
     render();
     toast('Upload cancelled', 'warning');
     return;
   }
-  const res = await api('/api/cancel', { method: 'POST' });
-  toast(res.error || 'Stopping the task…', res.error ? 'negative' : 'warning');
+  const res = await api('/api/cancel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task: taskName }),
+  });
+  if (res.error) { toast(res.error, 'negative'); return; }
+  if (res.queued) toast('Removed from queue', 'warning');
+  else toast('Stopping the task…', 'warning');
 }
 
-function startPolling(task) {
-  STATE.pollTimer = setInterval(async () => {
-    const s = await api('/api/status');
-    if (s.running) {
-      await loadTasks(); // re-render: Running pill, Stop button, live log line
-      return;
-    }
-    clearInterval(STATE.pollTimer);
-    STATE.pollTimer = null;
-    const d = s.done;
-    await loadTasks();
-    if (d) {
-      toast(`${d.task}: ${d.ok ? 'OK' : 'FAILED'} — ${d.summary.slice(0, 200)}`, d.ok ? 'positive' : 'negative');
-      if (d.ok && d.paste) openPaste(d.task, d.summary);
-    }
-    if (STATE.pendingQueue.length) {
-      const next = STATE.pendingQueue.shift();
-      const nextTask = STATE.tasks.find((x) => x.name === next);
-      if (nextTask) runTask(nextTask, { skipGenericConfirm: true });
-    }
-  }, 700);
+async function poll() {
+  let activity = false;
+  const s = await api('/api/status');
+  for (const r of s.runs ?? []) {
+    activity = true;
+    const buf = STATE.liveLogs.get(r.task) ?? [];
+    buf.push(...(r.log ?? []));
+    STATE.liveLogs.set(r.task, buf);
+  }
+  for (const d of s.done ?? []) {
+    activity = true;
+    toast(`${d.task}: ${d.ok ? 'OK' : 'FAILED'} — ${d.summary.slice(0, 200)}`, d.ok ? 'positive' : 'negative');
+    if (d.ok && d.paste) openPaste(d.task, d.summary);
+  }
+  if (activity || STATE.activity) await loadTasks();
+  STATE.activity = activity;
+  updateOpenLog();
+}
+
+function updateOpenLog() {
+  const ref = STATE.openLogRef;
+  if (!ref) return;
+  ref.pre.textContent = (STATE.liveLogs.get(ref.task) ?? []).join('\n');
+  ref.pre.scrollTop = ref.pre.scrollHeight;
 }
 
 function resultModal(title, text, buttons) {
@@ -836,6 +864,17 @@ function resultModal(title, text, buttons) {
 }
 
 function openLog(task) {
+  if (task.running) {
+    const pre = el('pre', 'log-box');
+    pre.textContent = (STATE.liveLogs.get(task.name) ?? []).join('\n');
+    openModal({
+      title: `${task.name} — live log`,
+      body: pre,
+      buttons: [{ label: 'Close', cls: 'btn-ghost', onClick: (o) => { o.remove(); STATE.openLogRef = null; } }],
+    });
+    STATE.openLogRef = { task: task.name, pre };
+    return;
+  }
   resultModal(`${task.name} — log`, task.state && task.state.output ? task.state.output : '(no log recorded yet)', [
     { label: 'Close', cls: 'btn-ghost', onClick: (o) => o.remove() },
   ]);
@@ -872,6 +911,8 @@ function wireGlobalDropzone() {
 
 wireGlobalDropzone();
 loadTasks();
+setInterval(poll, 700);
+
   </script>
 </body>
 </html>

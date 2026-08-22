@@ -127,10 +127,17 @@ const main = (dirs) => {
     })
 
     console.log('')
-    console.log(`=== Merged ${summary.length} conversation(s) ===`)
-    summary.forEach(s => {
+    const multi = summary.filter(s => s.sources > 1)
+    const single = summary.filter(s => s.sources === 1)
+    console.log(`=== Merged ${multi.length} conversation(s) from multiple sources ===`)
+    multi.forEach(s => {
         const range = s.first ? `${ts2display(s.first)} -> ${ts2display(s.last)}` : 'no dates found'
-        console.log(`  ${s.outName}  [${range}]  (${s.sources} source${s.sources > 1 ? 's' : ''})`)
+        console.log(`  ${s.outName}  [${range}]  (${s.sources} sources)`)
+    })
+    console.log(`=== ${single.length} conversation(s) from a single source ===`)
+    single.forEach(s => {
+        const range = s.first ? `${ts2display(s.first)} -> ${ts2display(s.last)}` : 'no dates found'
+        console.log(`  ${s.outName}  [${range}]`)
     })
 }
 

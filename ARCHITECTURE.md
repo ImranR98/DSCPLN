@@ -2,38 +2,42 @@
 
 ## 1. Overview
 
-A local web application for config-driven backup workflows. The repo is **personal**: `config/config.yaml` holds all values and task definitions (committed), and personal scripts are referenced as git submodules under `scripts/`. This document is the schema reference.
+A local web application for config-driven backup workflows. The repo is **personal**: `config/config.mjs` holds all values and task definitions (committed), and personal scripts are referenced as git submodules under `scripts/`. This document is the schema reference.
 
 Design goals (in priority order):
 
 1. **Honesty** — a run is reported OK only when its commands actually succeeded (exit codes checked, exports validated); hung commands are killed by timeouts; crashed runs show as *Interrupted*, never as success.
 2. **Determinism** — the UI is plain HTML/CSS/JS with no framework, so every pixel is controlled by one stylesheet with no cascade surprises.
 3. **Zero-friction automation** — drop a file anywhere, the app detects which task it belongs to, asks once, and runs the batch.
-4. **Low maintenance** — one config file, no hard-coded task types: every task is a bash command. No external UI dependencies beyond the Python stdlib ecosystem (`fastapi`, `uvicorn`, `pyyaml`, `pexpect`).
+4. **Low maintenance** — one config file, no hard-coded task types: every task is a bash command. Minimal npm dependencies (`express`, `minimatch`); no native addons (the pty runner delegates to Python's stdlib `pty` module via a small committed helper — python3 is already a system dependency of the personal scripts).
 
 ## 2. Repository layout
 
 ```
-backupctl/
-  app.py               FastAPI server, the generic bash runner (timeouts,
-                       pgids, redaction, runner options), CLI entry
-  core.py              Config loading + {{token}} resolution, run-state
-                       files, staging, the safe subprocess layer, and the
-                       generic pty runner (python -m backupctl.core CMD...)
-  lib.sh               Generic, committed bash helpers: subcommands (move,
-                       copy, encrypt) + sourceable functions (extract,
-                       rsync, git commit, process-and-move, ...); tasks
-                       reach it via the built-in {{lib}} token
-  static/
-    index.html         Page skeleton (favicon inlined as a data URL)
-    app.css            Full design system (plain CSS, dark, red accent)
-    app.js             Frontend logic (rendering, drops, modals, polling)
+core.mjs              Config loading + {{token}} resolution, run-state
+                      files, staging, the safe subprocess layer, and the
+                      generic pty runner (node core.mjs CMD...)
+server.mjs            Express server, the generic bash runner (timeouts,
+                      pgids, redaction, runner options), CLI entry
+pty_runner.py         Stdlib-only Python pty helper for tools that refuse
+                      non-TTY stdin (e.g. age --passphrase)
+lib.sh                Generic, committed bash helpers: subcommands (move,
+                      copy, encrypt) + sourceable functions (extract,
+                      rsync, git commit, process-and-move, ...); tasks
+                      reach it via the built-in {{lib}} token
+static/
+  index.html          Page skeleton (favicon inlined as a data URL)
+  app.css             Full design system (plain CSS, dark, red accent)
+  app.js              Frontend logic (rendering, drops, modals, polling)
 scripts/
-  <submodules>         The personal automation scripts that tasks call
-                       (referenced via the {{scriptroot}} token)
+  <submodules>        The personal automation scripts that tasks call
+                      (referenced via the {{scriptroot}} token)
 config/
-  config.yaml          Committed, personal: values + tasks (the one personal file)
-pyproject.toml         Package metadata, deps, `backupctl` + `backupctl-pty` entry points
+  config.mjs          Committed, personal: values + tasks (the one personal file)
+tests/
+  core.test.mjs       Sandbox suites: tokens, state, subprocess layer, git
+  server.test.mjs     Sandbox suites: every runner option + API surface
+package.json          Deps (express, minimatch), `backupctl` bin → server.mjs
 ```
 
 ## 3. Component diagram
@@ -45,35 +49,35 @@ pyproject.toml         Package metadata, deps, `backupctl` + `backupctl-pty` ent
                     └──────────────────┬─────────────────────────┘
                           JSON / HTTP  │
                     ┌──────────────────▼─────────────────────────┐
-                    │  app.py (FastAPI)                          │
+                    │  server.mjs (Express)                      │
                     │  /api/tasks · /api/upload · /api/run       │
                     │  /api/status · /api/cancel · /api/paste_done│
-                    │  RUN manager: single run slot + thread      │
+                    │  RUN slot: CURRENT object + async worker    │
                     └────────┬───────────────────┬───────────────┘
                              │                   │
-              ┌──────────────▼──────┐   ┌────────▼──────────────┐
-              │  app.py — runner    │   │  core.py              │
-              │  resolves tokens,   │   │  subprocesses with    │
-              │  runs the task's    │   │  timeouts, pgids,     │
-              │  bash command(s)    │   │  askpass, redaction   │
-              │  (tool/fresh/prune  │   │  .backup-state-*.json │
-              │  /capture options)  │   │  running.json marker  │
-              └──────────┬──────────┘   │  staging/<task>/ dirs │
-                         │              └───────────────────────┘
-              ┌──────────▼──────────────────────────────────────┐
-              │  task command → bash backupctl/lib.sh   │
-              │  (or a heredoc sourcing it) + personal scripts   │
-              └─────────────────────────────────────────────────┘
-              ┌──────────────────────────────────────────────────┐
-              │  core.py → config/config.yaml (personal)         │
-              │  values (backup_root, hosts, scripts...) + tasks[]│
-              └──────────────────────────────────────────────────┘
+               ┌──────────────▼──────┐   ┌────────▼──────────────┐
+               │  server.mjs — runner│   │  core.mjs             │
+               │  resolves tokens,   │   │  subprocesses with    │
+               │  runs the task's    │   │  timeouts, pgids,     │
+               │  bash command(s)    │   │  askpass, redaction   │
+               │  (tool/fresh/prune  │   │  .backup-state-*.json │
+               │  /capture options)  │   │  running.json marker  │
+               └──────────┬──────────┘   │  staging/<task>/ dirs │
+                          │              └───────────────────────┘
+               ┌──────────▼──────────────────────────────────────┐
+               │  task command → bash lib.sh                     │
+               │  (or a heredoc sourcing it) + personal scripts  │
+               └─────────────────────────────────────────────────┘
+               ┌──────────────────────────────────────────────────┐
+               │  core.mjs → config/config.mjs (personal)         │
+               │  values (backup_root, hosts, scripts...) + tasks[]│
+               └──────────────────────────────────────────────────┘
 ```
 
-## 4. Config model (`backupctl/core.py`)
+## 4. Config model (`config/config.mjs`)
 
-- `load_config(path)` reads **one YAML file** and returns `(local, tasks)`. Top-level keys are machine-specific values; the `tasks:` key is the task list. If the file is missing it raises `FileNotFoundError` with instructions; `app.py` catches this at import and serves the app with a red warning banner instead.
-- `resolve(template, local, extra)` substitutes `{{a.b.c}}` tokens from the value dict (and a per-run `extra` dict). Resolution **loops until stable**, so values can reference other tokens (`balance_script: '{{scriptroot}}/<repo>/<script>.js'`). A template that is exactly one token resolves to the token's **typed value** (dict/list/int) — e.g. `host: '{{hosts.gaming_pc}}'` — while embedded tokens are stringified. Built-in tokens: `{{repo_dir}}` (the repository root, overridable via `BACKUPCTL_REPO_DIR`) and `{{lib}}` (the packaged `backupctl/lib.sh`, wherever the package is installed).
+- The config is an ESM module whose default export is one object: top-level keys are machine-specific values; the `tasks` key is the task array. `load_config(path)` dynamic-imports it (cache-busted per path), splits off `tasks`, injects the `repo_dir`/`lib` built-ins, and validates (every task needs a unique `name` and a `state_dir`). If the file is missing the server boots with a red warning banner instead; other load errors stop the boot.
+- `resolve(template, local, extra)` substitutes `{{a.b.c}}` tokens from the value object (and a per-run `extra` dict). Resolution **loops until stable**, so values can reference other tokens (`scriptroot: '{{repo_dir}}/scripts'`). A template that is exactly one token resolves to the token's **typed value** (object/array/number) — e.g. `host: '{{hosts.gaming_pc}}'` — while embedded tokens are stringified. Built-in tokens: `{{repo_dir}}` (the repository root, overridable via `BACKUPCTL_REPO_DIR`) and `{{lib}}` (the packaged `lib.sh`, wherever the repo is installed). `expand()` handles `~` and env vars.
 
 ### Task fields
 
@@ -81,15 +85,15 @@ Common: `name`, `group` (card category), `note` (help text, shown inside the dro
 
 Runner: `command` / `commands` (bash; the only required field), `cwd`, `args` (argv form; empty values drop their flag pair), `uploads: true` + `glob` (drop zone; glob may be a list of patterns), `require: [key...]` (fail unless each prompt key has a value), `capture: true` + `commit_dir` (output becomes the summary, shown in a copy/paste dialog whose Done button git-commits `commit_dir`), `tool:` (download+extract a CLI if missing, exposed as `{{tool_binary}}`), `fresh_dir:` (fail unless the newest export dir is non-empty and fresh), `prune:` (delete older export dirs, `keep_newer` keeps any larger than the newest), `root:` (source directory the card requires; glob-aware, drives the availability badge), `summary_last_line: true` (card summary = last non-command log line).
 
-Per-run tokens: `{{uploads}}` (shlex-quoted staged file paths), `{{tmp}}` (unique temp path under the task's staging dir), `{{python}}` (the server's interpreter), plus one `{{key}}` per prompt value. Interactive input is config: `prompts: [{key, label, type: confirm|secret}]` — the GUI renders them generically, the values travel in the run `extra` payload, and secret values are redacted from the command display and output.
+Per-run tokens: `{{uploads}}` (shell-quoted staged file paths), `{{tmp}}` (unique temp path under the task's staging dir), `{{node}}` (the server's Node executable), plus one `{{key}}` per prompt value. Interactive input is config: `prompts: [{key, label, type: confirm|secret}]` — the GUI renders them generically, the values travel in the run `extra` payload, and secret values are redacted from the command display and output.
 
-## 5. Server layer (`backupctl/app.py`)
+## 5. Server layer (`server.mjs`)
 
-A FastAPI app (no UI framework). Config is loaded once at boot (edit → restart). Module state:
+An Express app (no UI framework). Config is loaded once at boot (edit → restart). Module state:
 
 ```
-CURRENT = {"name", "log", "read", "done", "cancelled"}   # run slot
-LOCAL, TASK_LIST                                           # from load_config()
+CURRENT = {name, log, read, done, cancelled}   # run slot (a plain object)
+LOCAL, TASK_LIST                               # from load_config()
 ```
 
 | Endpoint | Purpose |
@@ -97,24 +101,24 @@ LOCAL, TASK_LIST                                           # from load_config()
 | `GET /api/tasks` | Full task list: definitions, availability + reason, queued count, last-run state (or *Interrupted* if `running.json` mentions the task), per-task `running`/`live`/`pill`, `missing_config` flag |
 | `POST /api/detect?name=` | Returns the upload task a filename belongs to (most-specific pattern wins, ties listed as `ambiguous`) — the frontend does no matching itself |
 | `POST /api/upload/{task}?name=` | Raw request body saved to `staging/<task>/<name>` after glob validation (400 on mismatch) |
-| `POST /api/run/{task}` | Body: JSON `extra` (`password`, `totp`, `confirmed`). Refuses when the slot is busy (409) or the task is unavailable. Snapshots the staging file list, writes the `running.json` marker, starts a daemon worker thread |
+| `POST /api/run/{task}` | Body: JSON `extra` (`password`, `totp`, `confirmed`). Refuses when the slot is busy (409) or the task is unavailable. Snapshots the staging file list, writes the `running.json` marker, starts an async worker |
 | `GET /api/status` | `running` task name, newly appended log lines, one-shot `done` result |
 | `POST /api/cancel` | Marks the run cancelled and kills all registered child process groups; the worker then records `Cancelled by user` |
 | `POST /api/paste_done/{task}` | Runs `git_commit` on the task's `commit_dir` (the "Done" button in the paste dialog) |
 
-**Worker thread** (the run slot): calls `run_task(...)`; if `cancelled` was set, overwrites the result with `Cancelled by user`; publishes `done`, clears the slot and the running marker in `finally`.
+**Worker** (the run slot): `await run_task(...)`; if `cancelled` was set, overwrites the result with `Cancelled by user`; publishes `done`, clears the slot and the running marker in `finally`. No threads — the event loop is the worker pool, and a single slot object serializes runs.
 
-## 6. Runner (`backupctl/app.py`)
+## 6. Runner (`server.mjs`)
 
-`run_task(task, local, files, log, extra)` wraps the single execution path: builds a `Ctx`, resolves tokens, checks `uploads`/`require`, optionally installs the task's `tool`, runs `args:` or each `command` (token-resolved) with per-command timeouts, redacts prompt secrets, then clears staging (upload tasks) or the `{{tmp}}` dir, validates `fresh_dir`, prunes old exports, and records run state via `save_task_state(...)` — so **state is recorded exactly once, on both success and failure**. With `capture:` the captured output is the summary; with `summary_last_line:` the summary is the last non-command log line; otherwise "Completed".
+`run_task(task, local, files, log, extra)` wraps the single execution path: builds a ctx, resolves tokens, checks `uploads`/`require`, optionally installs the task's `tool`, runs `args:` or each `command` (token-resolved) with per-command timeouts, redacts prompt secrets, then clears staging (upload tasks) or the `{{tmp}}` dir, validates `fresh_dir`, prunes old exports, and records run state via `save_task_state(...)` — so **state is recorded exactly once, on both success and failure**. With `capture:` the captured output is the summary; with `summary_last_line:` the summary is the last non-command log line; otherwise "Completed".
 
-The bash library `backupctl/lib.sh` (sourced or called as a subcommand) is rc-checked under `set -euo pipefail` and provides:
+The bash library `lib.sh` (sourced or called as a subcommand) is rc-checked under `set -euo pipefail` and provides:
 
 | Entry | Behavior |
 |---|---|
 | `move [--rename NAME] [--git] DEST FILE...` | move files into dest (fixed name optional; multiple files with a rename set fail), git commit when `--git` (like `copy`) |
 | `copy [--git] [--pre CMD] [--post CMD] DEST SRC...` | rsync each source into `dest/<basename>` (missing sources skipped, failures fail the run), per-source git commit when `--git` |
-| `encrypt PYTHON DEST OUTNAME FILE` | age-encrypt exactly one file via the generic pty runner; passphrase comes from `AGE_PASSPHRASE` (env, never argv); git commit |
+| `encrypt NODE DEST OUTNAME FILE` | age-encrypt exactly one file via the generic pty runner; passphrase comes from `AGE_PASSPHRASE` (env, never argv); git commit |
 | `bctl_extract` / `bctl_rsync(_delete)` | unzip/tar extraction; rsync -aq with optional --delete |
 | `bctl_git_commit DIR` | git init/add/commit with `:(exclude).backup-state-*`; empty commits tolerated |
 | `bctl_process_and_move SRC DEST SCRIPT [keep]` | copy files to a temp dir, run the standardize script once, move results to dest, delete originals (unless kept) |
@@ -122,26 +126,26 @@ The bash library `backupctl/lib.sh` (sourced or called as a subcommand) is rc-ch
 
 Task commands are plain shell — export ingestion with an account-name suffix, per-pattern renames, and media workflows (snapshot → raw rsync → standardize → delete originals) are small heredoc scripts sourcing the library. **Delete-originals honesty** comes from `set -e`: the final `rm -rf` is only reached when every prior step succeeded, and `require: [confirmed]` gates the confirm prompt.
 
-## 7. Process safety (`backupctl/core.py`)
+## 7. Process safety (`core.mjs`)
 
 Every subprocess goes through `run()` / `sh()` / `sh_capture()` / `rsync()`:
 
-- **`start_new_session=True`** — each command is its own process group.
-- **Timeouts** — a `select()`-based read loop with a deadline; on expiry the whole group is SIGTERM'd then SIGKILL'd and the call returns 124 (task reports "timed out").
-- **`stdin=DEVNULL`** — interactive prompts fail fast instead of hanging.
+- **`detached: true`** — each command gets its own session/process group.
+- **Timeouts** — a timer kills the whole group (`SIGTERM`, then `SIGKILL` 1s later via `process.kill(-pid)`) and the call returns 124 (task reports "timed out").
+- **`stdin: 'ignore'`** — interactive prompts fail fast instead of hanging.
 - **`SSH_ASKPASS_REQUIRE=force` + a failing askpass script** (generated at `~/.backupctl/askpass.sh`) — ssh can never prompt for a password on a hidden terminal.
 - **`PROC_GROUPS` registry + `cancel_all()`** — the Stop button kills every live child process group.
-- **`redact=[...]`** — secrets are masked in both the logged command line and the streamed output (every prompt value is redacted).
-- **Generic pty runner** (`pty_main`, also the `backupctl-pty` entry point) — for tools that refuse non-TTY stdin (e.g. `age --passphrase`): spawns the command in a pseudo-terminal via `pexpect`, forwards piped stdin to it, strips terminal control sequences, exits with the child's status. Secrets are piped in from env vars, never placed on a command line.
+- **`redact=[...]`** — secrets are masked in both the logged command line and the streamed output (every prompt value is redacted). Output is streamed line-by-line through `readline`.
+- **Generic pty runner** (`pty_main`, entry: `node core.mjs CMD [ARGS...]`) — for tools that refuse non-TTY stdin (e.g. `age --passphrase`): Node has no stdlib pty API and native addons are off the table, so it delegates to `pty_runner.py`, a stdlib-only Python helper (`pty.fork` + `os.execvp`) that allocates the pseudo-terminal, forwards piped stdin line by line (paced so prompt loops that switch the terminal to raw mode between reads never lose input), strips terminal control sequences, and exits with the child's status. Secrets are piped in from env vars, never placed on a command line. Requires `python3` — already a dependency of the personal scripts.
 
-## 8. State layer (`backupctl/core.py`)
+## 8. State layer (`core.mjs`)
 
 - **Run state lives with the data**: `<state_dir>/.backup-state-<slug>.json` — `{task, ts, ok, summary, output}` (output capped at 20k chars). Written atomically (tmp + rename).
 - **Git hygiene**: `git_commit()` and `bctl_git_commit` stage with `git add -A . ':(exclude).backup-state-*'`, so state files never enter backup repos (and "nothing added to commit" is tolerated).
-- **`running.json`** (app dir) marks an in-flight task; `_task_json` reports such a task as red `Interrupted · <ago>` after a server crash.
+- **`running.json`** (app state dir, `~/.backupctl` or `BACKUPCTL_STATE_DIR`) marks an in-flight task; `task_json` reports such a task as red `Interrupted · <ago>` after a server crash.
 - **`staging/<task>/`** holds dropped-but-unprocessed uploads; cleared after a successful run.
 
-## 9. Frontend (`backupctl/static/`)
+## 9. Frontend (`static/`)
 
 Plain HTML + one CSS file + ~400 lines of vanilla JS. No build step, no framework.
 
@@ -166,7 +170,7 @@ Topbar (logo, title, config-missing warning) → global drop zone → `#page` co
 
 ### Global drop flow (multi-file batch)
 
-1. For each dropped file: `POST /api/detect` (server-side `fnmatch` scoring — most literal chars wins); ties → task picker modal; no match → warning toast.
+1. For each dropped file: `POST /api/detect` (server-side pattern scoring — most literal chars wins); ties → task picker modal; no match → warning toast.
 2. Group files by detected task (duplicates of one task run it **once**).
 3. Upload everything to each task's staging.
 4. One **batch confirm** modal: `Detected: <task> (N files), ... Run all now?` — Cancel leaves files queued.
@@ -178,9 +182,9 @@ Topbar (logo, title, config-missing warning) → global drop zone → `#page` co
 User clicks Run / confirms batch
   → JS POST /api/run {extra}
   → server: slot check → availability check → snapshot staging files
-      → write running.json → spawn worker thread
+      → write running.json → start async worker
   → worker: run_task → token resolution → the task's bash command(s)
-      (core.py runs every command with timeout/pgid/env safety)
+      (core.mjs runs every command with timeout/pgid/env safety)
       → fresh_dir/prune validation → save_task_state(state_dir file)
       → cancelled? record "Cancelled by user"
       → publish done, clear slot + marker
@@ -204,15 +208,17 @@ User clicks Run / confirms batch
 
 ## 12. Testing
 
-Sandbox suites in `/tmp/opencode` (never touching real destinations) build a temporary merged config (sandbox values + the machine's task list) and load it through `core.load_config(path)`. The current suite covers: move subcommand (rename + staging cleared), mappings heredoc, ingest heredoc with identify suffix, copy subcommand with git + pre/post (state files excluded from commits), encrypt via the generic pty runner (round-trip decryption + passphrase redaction), run with uploads/capture/tool+fresh_dir+prune/timeout-kill/redaction, media heredoc (plain pairs, process:false, pre script), and media snapshot+raw+concat+delete-originals with confirm.
+`npm test` runs `node:test` suites in `tests/`. Every suite builds a temporary sandbox under the OS temp dir with its own generated `config.mjs` (never touching real destinations); `BACKUPCTL_STATE_DIR` points staging and run markers at the sandbox. Coverage: token resolution (typed, nested, looped, tildes), config validation, state-file round-trip, subprocess streaming + redaction + timeouts, git-commit hygiene, the move/mappings/ingest/copy/encrypt task flows (real bash through the runner), uploads/require/capture/summary/tool+fresh_dir+prune/args options, and the API surface (upload validation, detect scoring + ambiguity, CSRF guard, run/cancel, paste_done). The encrypt round-trip suite runs only when `python3` and `age` are installed.
 
 ## 13. Key design decisions (and why)
 
 1. **Plain HTML/CSS/JS instead of a UI framework** — no cascade layers, no runtime-injected component CSS, no custom elements: every style rule is fully deterministic.
-2. **One committed personal config** — the repo is a personal tool; this document is the schema reference.
+2. **One committed personal config** — the repo is a personal tool; this document is the schema reference. The config is a JS module: values are real JS (numbers, objects, multi-line template literals for heredocs), comments stay.
 3. **State next to the data** — each task's last-run record lives in its destination folder (`.backup-state-<task>.json`), consistent with data ownership, and excluded from git.
-4. **No task types — Python runs bash, bash does the work** — the engine is a generic runner (tokens, timeouts, pgids, redaction, state, prompts) plus a small rc-checked bash library. Everything service-specific is a bash command in the config; no kind registry to maintain.
-5. **Two Python modules** — `core.py` holds everything shared (config, state, subprocess safety, pty runner); `app.py` holds the server, the runner, and the CLI. No cross-module plumbing, no hot config reload: edit config → restart.
+4. **No task types — Node runs bash, bash does the work** — the engine is a generic runner (tokens, timeouts, pgids, redaction, state, prompts) plus a small rc-checked bash library. Everything service-specific is a bash command in the config; no kind registry to maintain.
+5. **Two JS modules** — `core.mjs` holds everything shared (config, state, subprocess safety, pty runner); `server.mjs` holds the server, the runner, and the CLI. No hot config reload: edit config → restart. The async event loop replaces Python's worker thread and select loops outright.
 6. **Subprocess process groups + timeouts** — the UI can never get stuck in a silent "Running" state.
-7. **A generic pty runner instead of a special-cased encryptor** — any tool that insists on a terminal (`age -p`, `ssh-add`, ...) is driven the same way: pipe input in, stream output out, secrets off argv.
+7. **A generic pty runner instead of a special-cased encryptor** — any tool that insists on a terminal (`age -p`, `ssh-add`, ...) is driven the same way: pipe input in, stream output out, secrets off argv. Node delegates the pty to a stdlib-only Python helper (`pty_runner.py`), so there are no native Node addons to rebuild and no extra system packages.
 8. **Success = verified side effects** — exit codes plus post-run validation (`fresh_dir`), not just "the command returned".
+
+(End of file - total 218 lines)

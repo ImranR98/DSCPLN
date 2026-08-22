@@ -1,5 +1,5 @@
 # Same-path mounts: host directories appear at identical paths inside the
-# container, so the personal config.yaml works unmodified.
+# container, so the personal config.mjs works unmodified.
 # Adjust the host paths (left side) to your setup.
 services:
   backup:
@@ -12,7 +12,7 @@ services:
       - /home/node/.ssh:/home/node/.ssh
       - /home/node/.gnupg:/home/node/.gnupg
       - ./config:/app/config
-      - backupctl-state:/home/user/.backupctl
+      - backupctl-state:/home/node/.backupctl
     expose:
       - "8080"
     networks:

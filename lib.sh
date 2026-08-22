@@ -7,6 +7,9 @@
 set -euo pipefail
 shopt -s nullglob
 
+# Directory containing this file (core.mjs lives next to it, for the pty runner)
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 log() { echo "$@"; }
 
 bctl_extract() {  # FILE DEST
@@ -146,10 +149,10 @@ case "${1:-}" in
     ;;
 
   encrypt)
-    # lib.sh encrypt PYTHON DEST OUTNAME FILE (passphrase in
+    # lib.sh encrypt NODE DEST OUTNAME FILE (passphrase in
     # AGE_PASSPHRASE, set by the task; never on the command line)
     shift
-    python="$1" dest="$2" outname="$3"; shift 3
+    node="$1" dest="$2" outname="$3"; shift 3
     if [[ $# -ne 1 ]]; then
       log "Multiple files queued — encrypt one file at a time" >&2
       exit 1
@@ -157,8 +160,8 @@ case "${1:-}" in
     mkdir -p "$dest"
     AGE_PASSPHRASE="${AGE_PASSPHRASE:-}" sh -c '
       printf "%s\n%s\n" "$AGE_PASSPHRASE" "$AGE_PASSPHRASE" |
-        "$0" -m backupctl.core age --encrypt --passphrase -o "$1" "$2"
-    ' "$python" "$dest/$outname" "$1"
+        "$0" "$1" age --encrypt --passphrase -o "$2" "$3"
+    ' "$node" "$LIB_DIR/core.mjs" "$dest/$outname" "$1"
     bctl_git_commit "$dest"
     log "Encrypted export → $dest/$outname"
     ;;

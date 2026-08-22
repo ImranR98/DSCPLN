@@ -62,6 +62,7 @@ export default {
         {
           name: 'Contacts + Calendar (VCF+ICS)',
           glob: ['contacts-*.vcf', 'todo-*.ics', 'regular-or-long-term-*.ics', 'personal-*.ics'],
+          export_url: 'https://nextcloud.home.example.com/apps/calendar',
           note: 'Drop the contacts (VCF) and calendar (ICS) exports here.',
           commands: `bash <<'BASH_SCRIPT'
 source '{{lib}}'
@@ -144,8 +145,9 @@ BASH_SCRIPT
 
         // DNS zone file (example.com.txt), kept under its own name.
         {
-          name: 'DNS Entries',
+          name: 'example.com DNS Records',
           glob: 'example.com.txt',
+          export_url: 'https://dash.cloudflare.com/00000000000000000000000000000000/example.com/dns/records',
           note: 'Drop the DNS entries export here.',
           commands: "bash '{{lib}}' move --git --rename 'example.com.txt' '{{maindir}}/Backups/Manual' {{uploads}}",
         },

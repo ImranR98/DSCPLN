@@ -415,7 +415,11 @@ BASH_SCRIPT
           state_dir: '{{maindir}}/Backups/Instacart',
           timeout: 900,
           note: 'Scrapes recent Instacart order history and delivery images.',
-          commands: `{{scriptroot}}/InstacartFlation/backup.sh {{maindir}}/Backups/Instacart {{maindir}}/Media/Camera "{{scriptroot}}/MediaDateStandardize/mediaDateStandardize.sh -n" --after "$(date -d '4 months ago' '+%Y-%m-%d %H:%M')"`,
+          commands: [
+            '[ -f \'{{scriptroot}}/InstacartFlation/venv/bin/activate\' ] || python3 -m venv \'{{scriptroot}}/InstacartFlation/venv\'',
+            'source \'{{scriptroot}}/InstacartFlation/venv/bin/activate\' && pip install --upgrade -r \'{{scriptroot}}/InstacartFlation/requirements.txt\'',
+            'source \'{{scriptroot}}/InstacartFlation/venv/bin/activate\' && {{scriptroot}}/InstacartFlation/backup.sh {{maindir}}/Backups/Instacart {{maindir}}/Media/Camera "{{scriptroot}}/MediaDateStandardize/mediaDateStandardize.sh -n" --after "$(date -d \'4 months ago\' \'+%Y-%m-%d %H:%M\')"',
+          ],
         },
       ],
     },

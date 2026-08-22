@@ -61,7 +61,7 @@ export default {
         // Drop the contacts (VCF) and calendar (ICS) exports; rename each by pattern.
         {
           name: 'Contacts + Calendar (VCF+ICS)',
-          glob: ['contacts-*.vcf', 'todo-*.ics', 'regular-or-long-term-*.ics', 'personal-*.ics'],
+          glob: ['*.vcf', '*.ics'],
           export_url: 'https://nextcloud.home.example.com/apps/calendar',
           note: 'Drop the contacts (VCF) and calendar (ICS) exports here.',
           commands: `bash <<'BASH_SCRIPT'
@@ -74,6 +74,7 @@ for f in {{uploads}}; do
     todo-*.ics) mv "$f" "$DEST/TODO.ics" ;;
     regular-or-long-term-*.ics) mv "$f" "$DEST/Regular.ics" ;;
     personal-*.ics) mv "$f" "$DEST/Events.ics" ;;
+    *) mv "$f" "$DEST/$(basename "$f")" ;;
   esac
 done
 bctl_git_commit "$DEST"

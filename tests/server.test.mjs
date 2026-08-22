@@ -306,11 +306,11 @@ test('move subcommand: renames the drop, commits, clears staging, records state'
   assert.ok(!out.includes('.backup-state'));
 });
 
-test('mappings heredoc: per-pattern renames', async () => {
+test('mappings heredoc: per-pattern renames + fallback preserves unknown names', async () => {
   const t = task('Contacts', {
     group: 'G',
     uploads: true,
-    glob: ['contacts-*.vcf', 'todo-*.ics'],
+    glob: ['*.vcf', '*.ics'],
     summary_last_line: true,
     commands: `bash <<'BASH_SCRIPT'
 source '{{lib}}'
@@ -320,6 +320,7 @@ for f in {{uploads}}; do
   case "$(basename "$f")" in
     contacts-*.vcf) mv "$f" "$DEST/My Contacts.vcf" ;;
     todo-*.ics) mv "$f" "$DEST/TODO.ics" ;;
+    *) mv "$f" "$DEST/$(basename "$f")" ;;
   esac
 done
 bctl_git_commit "$DEST"
@@ -329,12 +330,25 @@ BASH_SCRIPT`,
   const cfgPath = makeConfig([t]);
   await stage(t.name, 'contacts-1.vcf', 'vcf');
   await stage(t.name, 'todo-2.ics', 'ics');
+  await stage(t.name, 'Personal.ics', 'cal');
   const [local, tasks] = await bctl.loadConfig(cfgPath);
   const files = fs.readdirSync(bctl.stagingDir(t.name)).map((f) => path.join(bctl.stagingDir(t.name), f));
   const [ok, summary] = await bctl.runTask(tasks[0], local, files);
   assert.equal(ok, true, summary);
   assert.ok(fs.existsSync(path.join(maindir, 'Dest2', 'My Contacts.vcf')));
   assert.ok(fs.existsSync(path.join(maindir, 'Dest2', 'TODO.ics')));
+  assert.ok(fs.existsSync(path.join(maindir, 'Dest2', 'Personal.ics')));
+});
+
+test('uploads: staging is cleared after a failed run too', async () => {
+  const cfgPath = makeConfig([task('Fail Upload', { uploads: true, glob: '*.txt', commands: 'false' })]);
+  await bootWith(cfgPath);
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
+  await stage('Fail Upload', 'a.txt', 'x');
+  const files = [path.join(bctl.stagingDir('Fail Upload'), 'a.txt')];
+  const [ok] = await bctl.runTask(tasks[0], local, files);
+  assert.equal(ok, false);
+  assert.deepEqual(fs.readdirSync(bctl.stagingDir('Fail Upload')), []);
 });
 
 test('ingest subcommand: extracts, identifies account, names the folder', async () => {

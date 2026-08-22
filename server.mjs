@@ -434,8 +434,7 @@ export async function runCommands(ctx) {
     }
     if (rc !== 0) return failRun(rc, tmp, timeout);
   }
-  if (task.uploads) clearStaging(ctx);
-  else fs.rmSync(tmp, { recursive: true, force: true });
+  fs.rmSync(tmp, { recursive: true, force: true });
   if (capture) return [true, output.join('\n')];
   if (task.summary_last_line) {
     const last = [...ctx.log.lines].reverse().find((l) => l.trim() && !l.startsWith('$ '));
@@ -499,6 +498,8 @@ export async function runTask(task, local, files, log = null, extra = null) {
   } catch (e) {
     collectLog(`ERROR: ${e.message}`);
     [ok, summary] = [false, String(e.message ?? e)];
+  } finally {
+    if (task.uploads) clearStaging(ctx);
   }
   saveTaskState(task, local, ok, summary, lines.join('\n'));
   return [ok, summary];
@@ -532,20 +533,6 @@ export async function boot(configPath = undefined) {
 
 // run slot: single task at a time
 export const CURRENT = { name: null, log: [], read: 0, done: null, cancelled: false };
-
-export function queuedCount(name) {
-  try {
-    return fs.readdirSync(stagingDir(name)).filter((p) => {
-      try {
-        return fs.statSync(path.join(stagingDir(name), p)).isFile();
-      } catch {
-        return false;
-      }
-    }).length;
-  } catch {
-    return 0;
-  }
-}
 
 export function taskJson(t) {
   const [avail, reason] = availability(t, LOCAL);
@@ -590,7 +577,6 @@ export function taskJson(t) {
     export_url: t.export_url,
     avail,
     avail_reason: reason,
-    queued: queuedCount(t.name),
     state: stateJson,
     pill: running ? 'running' : pill,
     running,
@@ -657,7 +643,7 @@ export function createApp() {
     }
     const staging = stagingDir(task.name);
     fs.writeFileSync(path.join(staging, filename), req.body);
-    res.json({ queued: filename, count: queuedCount(task.name) });
+    res.json({ queued: filename });
   });
 
   app.post('/api/run/:taskName', (req, res) => {

@@ -224,7 +224,38 @@ html, body {
   border: 1px solid rgba(248, 113, 113, 0.35);
 }
 
-.queue-chip { font-size: 11px; font-weight: 600; color: var(--amber); }
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+}
+
+.queue-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+}
+.queue-remove:hover { color: var(--text); }
 
 .card-actions { display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap; align-items: center; }
 
@@ -383,14 +414,14 @@ html, body {
 
     <div id="page"></div>
 
-    <div class="footer-note">Run state is stored per task in its destination folder (.backup-state-*.json); uploads queue in ~/.backupctl and are deleted after a successful run.</div>
+    <div class="footer-note">Run state is stored per task in its destination folder (.backup-state-*.json); dropped files are held in the browser until you click Run.</div>
   </div>
 
   <div id="modal-root"></div>
 
   <script>
 
-const STATE = { tasks: [], groups: [], serverRunning: null, pollTimer: null, pendingQueue: [] };
+const STATE = { tasks: [], groups: [], serverRunning: null, pollTimer: null, pendingQueue: [], queues: {} };
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -523,9 +554,9 @@ function card(t) {
     ${t.running && t.live ? `<div class="card-live"></div>` : ''}
     ${!t.avail ? `<span class="badge-unavail"></span>` : ''}
     ${t.uploads
-      ? `<div class="dropzone-box" tabindex="0"><span class="dropzone-note"></span><input type="file" multiple hidden></div>`
+      ? `<div class="dropzone-box" tabindex="0"><span class="dropzone-note"></span><input type="file" multiple hidden></div>
+         <div class="queue-list"></div>`
       : t.note ? `<div class="card-note"></div>` : ''}
-    ${t.queued > 0 ? `<div class="queue-chip">${t.queued} file(s) queued</div>` : ''}
     <div class="card-actions">
       ${t.export_url ? '<a class="btn btn-ghost export-btn" target="_blank" rel="noopener"></a>' : ''}
       <button class="btn ${t.running ? 'btn-ghost' : 'btn-primary'} run-btn"></button>
@@ -558,6 +589,19 @@ function card(t) {
     const zone = c.querySelector('.dropzone-box');
     const input = c.querySelector('input[type=file]');
     wireDropzone(zone, input, (files) => uploadFiles(t, files));
+    const list = c.querySelector('.queue-list');
+    for (const file of STATE.queues[t.name] ?? []) {
+      const item = el('div', 'queue-item');
+      item.append(el('span', 'queue-name', file.name));
+      const rm = el('button', 'queue-remove', '✕');
+      rm.title = 'Remove from queue';
+      rm.onclick = () => {
+        STATE.queues[t.name] = (STATE.queues[t.name] ?? []).filter((f) => f.name !== file.name);
+        render();
+      };
+      item.append(rm);
+      list.append(item);
+    }
   }
   return c;
 }
@@ -580,15 +624,17 @@ async function uploadToTask(task, file) {
     body: file,
   });
   if (res.error) { toast(res.error, 'warning'); return false; }
-  toast(`${file.name} queued for ${task.name}`, 'positive');
   return true;
 }
 
-async function uploadFiles(task, fileList) {
+function uploadFiles(task, fileList) {
+  const q = (STATE.queues[task.name] ??= []);
   for (const file of fileList) {
-    await uploadToTask(task, file); // the server validates the pattern (400 -> toast)
+    const i = q.findIndex((f) => f.name === file.name);
+    if (i !== -1) q.splice(i, 1);
+    q.push(file);
   }
-  await loadTasks();
+  render();
 }
 
 async function handleGlobalFiles(fileList) {
@@ -616,24 +662,20 @@ async function handleGlobalFiles(fileList) {
   if (!entries.length) return;
 
   for (const { task, files } of entries) {
-    for (const file of files) {
-      await uploadToTask(task, file);
-    }
+    const q = (STATE.queues[task.name] ??= []);
+    for (const file of files) q.push(file);
   }
-  await loadTasks();
+  render();
 
   if (STATE.serverRunning) {
-    toast(`Queued ${entries.length} task(s) — a task is already running`, 'warning');
+    toast(`Held ${entries.length} task(s) — a task is already running`, 'warning');
     return;
   }
   const lines = entries
     .map(({ task, files }) => `${task.name} (${files.length} file${files.length > 1 ? 's' : ''})`)
     .join(', ');
   const ok = await confirmModal(`Detected: ${lines}. Run all now?`);
-  if (!ok) {
-    toast('Files queued — run them later from their cards', 'positive');
-    return;
-  }
+  if (!ok) return;
   STATE.pendingQueue = entries.map((e) => e.task.name);
   const first = STATE.pendingQueue.shift();
   const firstTask = STATE.tasks.find((t) => t.name === first);
@@ -659,12 +701,23 @@ async function runTask(task, opts = {}) {
     const ok = await confirmModal(`Run ${task.name}?`);
     if (!ok) return;
   }
+  const files = STATE.queues[task.name] ?? [];
+  if (task.uploads && !files.length) {
+    toast('Drop files here first', 'warning');
+    return;
+  }
+  if (task.uploads) {
+    for (const file of files) {
+      if (!(await uploadToTask(task, file))) return;
+    }
+  }
   const res = await api(`/api/run/${encodeURIComponent(task.name)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(extra),
   });
   if (res.error) { toast(res.error, 'warning'); return; }
+  if (task.uploads) delete STATE.queues[task.name];
   startPolling(task);
 }
 

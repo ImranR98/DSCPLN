@@ -464,10 +464,11 @@ function openModal({ title, body, buttons }) {
   return overlay;
 }
 
-function confirmModal(title, submitLabel = 'Run') {
+function confirmModal(title, submitLabel = 'Run', body = null) {
   return new Promise((resolve) => {
     openModal({
       title,
+      body,
       buttons: [
         { label: 'Cancel', cls: 'btn-ghost', onClick: (o) => { o.remove(); resolve(false); } },
         { label: submitLabel, cls: 'btn-primary', onClick: (o) => { o.remove(); resolve(true); } },
@@ -588,19 +589,19 @@ function card(t) {
   if (t.uploads) {
     const zone = c.querySelector('.dropzone-box');
     const input = c.querySelector('input[type=file]');
-    wireDropzone(zone, input, (files) => uploadFiles(t, files));
+    wireDropzone(zone, input, (files) => queueFiles(t, files));
     const list = c.querySelector('.queue-list');
     for (const file of STATE.queues[t.name] ?? []) {
-      const item = el('div', 'queue-item');
-      item.append(el('span', 'queue-name', file.name));
+      const it = el('div', 'queue-item');
+      it.append(el('span', 'queue-name', file.name));
       const rm = el('button', 'queue-remove', '✕');
       rm.title = 'Remove from queue';
       rm.onclick = () => {
-        STATE.queues[t.name] = (STATE.queues[t.name] ?? []).filter((f) => f.name !== file.name);
+        STATE.queues[t.name] = (STATE.queues[t.name] ?? []).filter((f) => f !== file);
         render();
       };
-      item.append(rm);
-      list.append(item);
+      it.append(rm);
+      list.append(it);
     }
   }
   return c;
@@ -627,7 +628,7 @@ async function uploadToTask(task, file) {
   return true;
 }
 
-function uploadFiles(task, fileList) {
+function queueFiles(task, fileList) {
   const q = (STATE.queues[task.name] ??= []);
   for (const file of fileList) {
     const i = q.findIndex((f) => f.name === file.name);
@@ -661,20 +662,17 @@ async function handleGlobalFiles(fileList) {
   const entries = [...byTask.values()];
   if (!entries.length) return;
 
-  for (const { task, files } of entries) {
-    const q = (STATE.queues[task.name] ??= []);
-    for (const file of files) q.push(file);
-  }
-  render();
+  for (const { task, files } of entries) queueFiles(task, files);
 
   if (STATE.serverRunning) {
     toast(`Held ${entries.length} task(s) — a task is already running`, 'warning');
     return;
   }
-  const lines = entries
-    .map(({ task, files }) => `${task.name} (${files.length} file${files.length > 1 ? 's' : ''})`)
-    .join(', ');
-  const ok = await confirmModal(`Detected: ${lines}. Run all now?`);
+  const body = el('div', 'modal-fields');
+  for (const { task, files } of entries) {
+    body.append(el('div', null, `${task.name} (${files.length} file${files.length > 1 ? 's' : ''})`));
+  }
+  const ok = await confirmModal('Detected — run all now?', 'Run', body);
   if (!ok) return;
   STATE.pendingQueue = entries.map((e) => e.task.name);
   const first = STATE.pendingQueue.shift();

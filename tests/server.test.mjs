@@ -374,7 +374,7 @@ test('ingest subcommand: extracts, identifies account, names the folder', async 
   const files = [path.join(bctl.stagingDir(t.name), 'gh.tar.gz')];
   const [ok, summary] = await bctl.runTask(tasks[0], local, files);
   assert.equal(ok, true, summary);
-  assert.ok(fs.existsSync(path.join(maindir, 'Backups', 'GitHub - imranr', 'users_000001.json')));
+  assert.ok(fs.existsSync(path.join(maindir, 'Backups', 'GitHub', 'user', 'users_000001.json')));
 });
 
 test('ingest subcommand: awk suffix with escaped fields (Medium-style)', async () => {
@@ -400,7 +400,7 @@ test('ingest subcommand: awk suffix with escaped fields (Medium-style)', async (
   const files = [path.join(bctl.stagingDir(t.name), 'medium.tar.gz')];
   const [ok, summary] = await bctl.runTask(tasks[0], local, files);
   assert.equal(ok, true, summary);
-  assert.ok(fs.existsSync(path.join(maindir, 'Backups', 'Medium - ohnDoe', 'profile', 'profile.html')));
+  assert.ok(fs.existsSync(path.join(maindir, 'Backups', 'Medium', 'ohnDoe', 'profile', 'profile.html')));
 });
 
 test('copy subcommand with --git + --pre: sources synced, state excluded', async () => {

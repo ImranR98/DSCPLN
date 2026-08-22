@@ -274,13 +274,14 @@ BASH_SCRIPT
           commands: "bash '{{lib}}' move --git --rename Cheogram.ceb '{{maindir}}/Backups/Manual' {{uploads}}",
         },
 
-        // Molly (Signal) backup.
+        // Molly (Signal) backup: select the three files (files, main,
+        // metadata) from the backup folder; stored under those names.
         {
           name: 'Molly (Signal)',
-          glob: 'signal-backup-*',
+          glob: ['files', 'main', 'metadata'],
           state_dir: '{{maindir}}/Backups/Manual',
-          note: 'Drop the Molly (Signal) backup here.',
-          commands: "bash '{{lib}}' move --git --rename signal.backup '{{maindir}}/Backups/Manual' {{uploads}}",
+          note: 'Select the files, main, and metadata files from the Molly (Signal) backup folder.',
+          commands: "bash '{{lib}}' move --git '{{maindir}}/Backups/Manual' {{uploads}}",
         },
 
         // Drop WhatsApp chat zips; they are merged into the cumulative TXT backup.

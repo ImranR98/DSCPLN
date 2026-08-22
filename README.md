@@ -54,7 +54,7 @@ or by sourcing it inside a heredoc for anything with logic (media import with sn
 |---|---|
 | `move [--rename NAME] [--git] DEST FILE...` | move files into dest (fixed name optional; multiple files with a rename set fail), git commit when `--git` |
 | `copy [--git] [--pre CMD] [--post CMD] DEST SRC...` | rsync each source into `dest/<basename>` (missing sources skipped, failures fail the run), per-source git commit when `--git` |
-| `ingest DEST SUFFIX_CMD FILE...` | extract every archive into a temp dir, derive an account suffix (SUFFIX_CMD runs inside the temp dir), sync everything into `DEST` (or `DEST - <suffix>`), git commit — powers the Social Media export-import tasks |
+| `ingest DEST SUFFIX_CMD FILE...` | extract every archive into a temp dir, derive an account suffix (SUFFIX_CMD runs inside the temp dir), sync everything into `DEST/<suffix>` (or `DEST` when no suffix), git commit — powers the Social Media export-import tasks |
 | `encrypt DEST OUTNAME FILE` | age-encrypt exactly one file via `pty_runner.py`; passphrase comes from `AGE_PASSPHRASE` (env, never argv); git commit |
 | `validate-fresh DIR [MAX_AGE_SECONDS]` | fail unless the newest export dir (by name) is non-empty and modified within the max age |
 | `prune-exports DIR [--keep-newer]` | delete all but the newest export dir; `--keep-newer` keeps any dir with more files than the newest |

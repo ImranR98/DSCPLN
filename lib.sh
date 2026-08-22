@@ -80,7 +80,7 @@ fi
 
 case "${1:-}" in
   move)
-    # backupctl-lib.sh move [--rename NAME] [--git] DEST FILE...
+    # lib.sh move [--rename NAME] [--git] DEST FILE...
     shift
     rename="" git=0 dest="" name="" count=0
     while [[ $# -gt 1 && "$1" == --* ]]; do
@@ -170,7 +170,8 @@ case "${1:-}" in
   ingest)
     # lib.sh ingest DEST SUFFIX_CMD FILE... — extract every archive into a
     # temp dir, derive an account suffix (SUFFIX_CMD runs inside the temp
-    # dir), sync everything into DEST (or "DEST - <suffix>"), git commit.
+    # dir), sync everything into DEST/<suffix> (or DEST when no suffix),
+    # git commit.
     shift
     dest="$1" suffix_cmd="$2"; shift 2
     [[ $# -ge 1 ]] || { log "ingest: no files queued" >&2; exit 1; }
@@ -183,7 +184,7 @@ case "${1:-}" in
     if [[ -n "$suffix_cmd" ]]; then
       suffix=$(cd "$tmp" && eval "$suffix_cmd" 2>/dev/null) || true
     fi
-    [[ -n "$suffix" ]] && dest="$dest - $suffix"
+    [[ -n "$suffix" ]] && dest="$dest/$suffix"
     mkdir -p "$dest"
     bctl_rsync_delete --exclude .git/ "$tmp/" "$dest"
     rm -rf "$tmp"

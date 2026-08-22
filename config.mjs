@@ -391,8 +391,8 @@ BASH_SCRIPT
           capture: true,
           note: 'You still need to manually add Transaction Types, sort entries, and remove duplicates. Press "Done" to commit the Balance.xlsx change to git.',
           commands: [
-            'npm i',
-            "node '{{scriptroot}}/Balance/accMDToXLSX.js' \"$(cat $(ls '{{maindir}}/Notes/Transactions'/Acc*.md | tail -1))\" '{{maindir}}/Documents/Balance/Balance.xlsx'",
+            'npm i >/dev/null',
+            "node '{{scriptroot}}/Balance/accMDToXLSX.js' \"$(cat \"$(ls '{{maindir}}/Notes/Transactions'/Acc*.md | tail -1)\")\" '{{maindir}}/Documents/Balance/Balance.xlsx'",
           ],
         },
 

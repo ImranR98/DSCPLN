@@ -519,6 +519,15 @@ log "Files → $DEST"
           ingest: { suffix: 'awk -F, \'{print $1}\' "Uber Data/Account and Profile/user_profile-0.csv" | tail -1' },
         },
 
+        // Lyft data export; folder named after the account.
+        {
+          name: 'Lyft',
+          glob: 'lyft_data.zip',
+          state_dir: '{{maindir}}/Backups/Lyft',
+          note: 'Drop the Lyft data export zip here.',
+          ingest: { suffix: 'awk -F, \'{print $1}\' user_profile.csv | tail -1' },
+        },
+
         // Qwen chat exports, kept under their own names.
         {
           name: 'Qwen Chats',

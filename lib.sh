@@ -25,16 +25,21 @@ bctl_extract() {  # FILE DEST
 bctl_rsync() { rsync -aq "$@"; }
 bctl_rsync_delete() { rsync -aq --delete "$@"; }
 
-bctl_git_commit() {  # DIR — state files excluded; empty commits tolerated
-  local d="$1" out
+bctl_git_commit() {  # DIR [MSG] — state files excluded; empty commits tolerated
+  local d="$1" msg="${2:-backupctl · $(date)}" out
+  mkdir -p "$d"
   git -C "$d" init -q
   git -C "$d" add -A . ':(exclude).backup-state-*'
-  out=$(git -C "$d" commit -q -m "backupctl · $(date)" 2>&1) && return 0
+  out=$(git -C "$d" commit -q -m "$msg" 2>&1) && return 0
   case "$out" in
     *"nothing to commit"*|*"nothing added to commit"*) return 0 ;;
   esac
   echo "$out" >&2
   return 1
+}
+
+bctl_export_dirs() {  # ROOT — export dirs sorted by name (newest last)
+  find "$1" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V
 }
 
 bctl_first_glob() {  # PATTERN — print first match (e.g. MTP mounts)
@@ -72,6 +77,17 @@ bctl_process_and_move() {  # SRC DEST PROCESS_SCRIPT [keep_originals]
   if [[ $keep -eq 0 ]]; then
     rm -f "$src"/*
   fi
+}
+
+bctl_import_pair() {  # SRC DEST STD_DIR — deleteSynced + standardize + move
+  local src="$1" dest="$2" stddir="$3"
+  if [[ ! -d "$src" ]]; then
+    log "Missing source dir: $src"
+    return 0
+  fi
+  bash "$stddir/deleteSynced.sh" "$src" "$dest"
+  log "Importing $(basename "$src") → $dest..."
+  bctl_process_and_move "$src" "$dest" "$stddir/mediaDateStandardize.sh"
 }
 
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
@@ -203,7 +219,7 @@ case "${1:-}" in
     shift
     root="$1" max_age="${2:-86400}"
     [[ -d "$root" ]] || { log "No export directory found at $root" >&2; exit 1; }
-    newest=$(find "$root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -1)
+    newest=$(bctl_export_dirs "$root" | tail -1)
     [[ -n "$newest" ]] || { log "Export produced no backup directory" >&2; exit 1; }
     items=$(find "$root/$newest" -mindepth 1 -maxdepth 1 | wc -l)
     age=$(( $(date +%s) - $(stat -c %Y "$root/$newest") ))
@@ -222,7 +238,7 @@ case "${1:-}" in
     keep_newer=0
     if [[ "${1:-}" == --keep-newer ]]; then keep_newer=1; fi
     [[ -d "$root" ]] || exit 0
-    mapfile -t dirs < <(find "$root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V)
+    mapfile -t dirs < <(bctl_export_dirs "$root")
     [[ ${#dirs[@]} -ge 2 ]] || exit 0
     newest="${dirs[-1]}"
     newest_count=$(find "$root/$newest" -mindepth 1 -maxdepth 1 | wc -l)
@@ -235,6 +251,12 @@ case "${1:-}" in
         log "Deleted old export $d"
       fi
     done
+    ;;
+
+  git-commit)
+    # lib.sh git-commit DIR [MSG]
+    shift
+    bctl_git_commit "$@"
     ;;
 
   *)

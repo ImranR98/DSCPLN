@@ -85,15 +85,17 @@ html, body {
 .app-title { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
 .app-subtitle { color: var(--muted); font-size: 13px; margin-top: 2px; }
 
-.config-warning {
-  font-size: 12px;
+.alert-badge {
+  font-size: 11px;
   font-weight: 600;
-  padding: 5px 12px;
+  padding: 3px 9px;
   border-radius: 999px;
   background: rgba(248, 113, 113, 0.12);
   color: var(--red);
   border: 1px solid rgba(248, 113, 113, 0.35);
 }
+
+.badge-unavail { align-self: flex-start; }
 
 .page-wrap { max-width: 1280px; margin: 0 auto; padding: 0 24px 48px; }
 .footer-note { color: var(--muted); font-size: 12px; margin-top: 36px; }
@@ -213,16 +215,7 @@ html, body {
 
 @keyframes pulse { 50% { opacity: 0.55; } }
 
-.badge-unavail {
-  align-self: flex-start;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: rgba(248, 113, 113, 0.12);
-  color: var(--red);
-  border: 1px solid rgba(248, 113, 113, 0.35);
-}
+.badge-unavail { align-self: flex-start; }
 
 .queue-list {
   display: flex;
@@ -414,7 +407,7 @@ html, body {
         <div class="app-subtitle">Config-driven local backups</div>
       </div>
     </div>
-    <div id="config-warning" class="config-warning" hidden>
+    <div id="config-warning" class="alert-badge" hidden>
       Missing config.mjs — create it (see README.md for the schema)
     </div>
   </div>
@@ -436,7 +429,7 @@ html, body {
   <div id="modal-root"></div>
 
   <script>
-const STATE = { tasks: [], groups: [], queues: {}, uploading: new Map(), uploadAborts: new Map(), liveLogs: new Map(), openLogRef: null, activity: false };
+const STATE = { tasks: [], groups: [], queues: {}, uploading: new Map(), uploadAborts: new Map(), liveLogs: new Map(), openLogRef: null };
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -453,6 +446,14 @@ async function api(path, options = {}) {
     return data;
   }
   return data;
+}
+
+function apiPost(path, body = {}) {
+  return api(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 function toast(message, type = 'positive') {
@@ -598,7 +599,7 @@ function card(t) {
     </div>
     ${liveText ? `<div class="card-live"></div>` : ''}
     ${isUploading ? `<div class="upload-bar"><div class="upload-fill"></div></div>` : ''}
-    ${!t.avail ? `<span class="badge-unavail"></span>` : ''}
+    ${!t.avail ? `<span class="alert-badge badge-unavail"></span>` : ''}
     ${t.uploads
       ? `<div class="dropzone-box" tabindex="0"><span class="dropzone-note"></span><input type="file" multiple hidden></div>
          <div class="queue-list"></div>`
@@ -666,12 +667,10 @@ function wireDropzone(zone, input, handler) {
   input.onchange = () => { handler(input.files); input.value = ''; };
 }
 
-const CHUNK_SIZE = 256 * 1024 * 1024;
-
-function uploadChunk(task, name, body, chunk, total, onProgress) {
+function uploadFile(task, file, onProgress = () => {}) {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `/api/upload/${encodeURIComponent(task.name)}?name=${encodeURIComponent(name)}&chunk=${chunk}&total=${total}`);
+    xhr.open('POST', `/api/upload/${encodeURIComponent(task.name)}?name=${encodeURIComponent(file.name)}`);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
     };
@@ -687,26 +686,12 @@ function uploadChunk(task, name, body, chunk, total, onProgress) {
     };
     xhr.onabort = () => resolve(false);
     xhr.onerror = () => {
-      toast(`Upload of ${name} failed`, 'warning');
+      toast(`Upload of ${file.name} failed`, 'warning');
       resolve(false);
     };
     STATE.uploadAborts.set(task.name, xhr);
-    xhr.send(body);
+    xhr.send(file);
   });
-}
-
-function uploadToTask(task, file, onProgress = () => {}) {
-  if (file.size <= CHUNK_SIZE) {
-    return uploadChunk(task, file.name, file, 0, 1, onProgress);
-  }
-  const total = Math.ceil(file.size / CHUNK_SIZE);
-  const step = async (i) => {
-    const body = file.slice(i * CHUNK_SIZE, Math.min(file.size, (i + 1) * CHUNK_SIZE));
-    const ok = await uploadChunk(task, file.name, body, i, total, (frac) => onProgress((i + frac) / total));
-    if (!ok || i === total - 1) return ok;
-    return step(i + 1);
-  };
-  return step(0);
 }
 
 function queueFiles(task, fileList) {
@@ -784,7 +769,7 @@ async function runTask(task, opts = {}) {
     try {
       let done = 0;
       for (const file of files) {
-        const ok = await uploadToTask(task, file, (frac) => {
+        const ok = await uploadFile(task, file, (frac) => {
           const pct = ((done + frac) / files.length) * 100;
           STATE.uploading.set(task.name, pct);
           const fill = document.querySelector(`.task-card[data-task="${CSS.escape(task.name)}"] .upload-fill`);
@@ -800,11 +785,7 @@ async function runTask(task, opts = {}) {
       render();
     }
   }
-  const res = await api(`/api/run/${encodeURIComponent(task.name)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(extra),
-  });
+  const res = await apiPost(`/api/run/${encodeURIComponent(task.name)}`, extra);
   if (res.error) { toast(res.error, 'warning'); return; }
   if (task.uploads) delete STATE.queues[task.name];
   STATE.liveLogs.set(task.name, []);
@@ -821,11 +802,7 @@ async function cancelRun(taskName) {
     toast('Upload cancelled', 'warning');
     return;
   }
-  const res = await api('/api/cancel', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ task: taskName }),
-  });
+  const res = await apiPost('/api/cancel', { task: taskName });
   if (res.error) { toast(res.error, 'negative'); return; }
   if (res.queued) toast('Removed from queue', 'warning');
   else toast('Stopping the task…', 'warning');
@@ -845,8 +822,7 @@ async function poll() {
     toast(`${d.task}: ${d.ok ? 'OK' : 'FAILED'} — ${d.summary.slice(0, 200)}`, d.ok ? 'positive' : 'negative');
     if (d.ok && d.paste) openPaste(d.task, d.summary);
   }
-  if (activity || STATE.activity) await loadTasks();
-  STATE.activity = activity;
+  if (activity) await loadTasks();
   updateOpenLog();
 }
 
@@ -863,7 +839,7 @@ function resultModal(title, text, buttons) {
   openModal({ title, body: pre, buttons });
 }
 
-function openLog(task) {
+async function openLog(task) {
   if (task.running) {
     const pre = el('pre', 'log-box');
     pre.textContent = (STATE.liveLogs.get(task.name) ?? []).join('\n');
@@ -875,7 +851,8 @@ function openLog(task) {
     STATE.openLogRef = { task: task.name, pre };
     return;
   }
-  resultModal(`${task.name} — log`, task.state && task.state.output ? task.state.output : '(no log recorded yet)', [
+  const res = await api(`/api/log/${encodeURIComponent(task.name)}`);
+  resultModal(`${task.name} — log`, res.output || '(no log recorded yet)', [
     { label: 'Close', cls: 'btn-ghost', onClick: (o) => o.remove() },
   ]);
 }
@@ -891,7 +868,7 @@ function openPaste(name, output) {
       label: 'Done',
       cls: 'btn-primary',
       onClick: async (o) => {
-        const res = await api(`/api/paste_done/${encodeURIComponent(name)}`, { method: 'POST' });
+        const res = await apiPost(`/api/paste_done/${encodeURIComponent(name)}`);
         o.remove();
         if (res.error) { toast(res.error, 'negative'); return; }
         if (!res.committed) { toast('No commit_dir configured for this task — nothing to commit', 'warning'); return; }

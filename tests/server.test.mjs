@@ -153,6 +153,65 @@ test('loadConfig: validates groups, tasks, defaults, duplicates', async () => {
   await assert.rejects(bctl.loadConfig(path.join(SANDBOX, 'absent.mjs')), bctl.ConfigMissingError);
 });
 
+test('loadConfig: script/move/ingest shorthands normalize into commands', async () => {
+  const [local, tasks] = await bctl.loadConfig(
+    writeConfig('shorthand.mjs', {
+      maindir: '/tmp',
+      groups: [{
+        name: 'G',
+        tasks: [
+          { name: 's', state_dir: '/x', script: 'echo one\necho two' },
+          { name: 'm1', state_dir: '{{maindir}}/Dest', move: {} },
+          { name: 'm2', state_dir: '{{maindir}}/Dest', move: { rename: 'bookmarks.html' } },
+          { name: 'm3', state_dir: '/x', move: { dest: '{{maindir}}/Else', rename: 'r.txt' } },
+          { name: 'i1', state_dir: '{{maindir}}/G', ingest: { suffix: 'jq -r ".id" actor.json' } },
+        ],
+      }],
+    })
+  );
+  const lib = `'${local.lib}'`;
+  assert.ok(tasks[0].commands.startsWith(`bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; RC=$?; rm -f "$TMP"; exit $RC' <<'BASH_SCRIPT'\necho one\necho two\nBASH_SCRIPT`));
+  assert.equal(tasks[0].script, undefined);
+  assert.equal(bctl.resolve(tasks[1].commands, local), `bash ${lib} move --git '/tmp/Dest' {{uploads}}`);
+  assert.equal(bctl.resolve(tasks[2].commands, local), `bash ${lib} move --git --rename bookmarks.html '/tmp/Dest' {{uploads}}`);
+  assert.equal(bctl.resolve(tasks[3].commands, local), `bash ${lib} move --git --rename r.txt '/tmp/Else' {{uploads}}`);
+  assert.equal(bctl.resolve(tasks[4].commands, local), `bash ${lib} ingest '/tmp/G' 'jq -r ".id" actor.json' {{uploads}}`);
+});
+
+test('script shorthand runs through the heredoc wrapper (stdin-safe)', async () => {
+  const t = task('Script Task', {
+    group: 'G',
+    summary_last_line: true,
+    script: `echo one
+cat >/dev/null
+echo two`,
+  });
+  const cfgPath = makeConfig([t]);
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
+  const [ok, summary] = await bctl.runTask(tasks[0], local, []);
+  assert.equal(ok, true, summary);
+  assert.equal(summary, 'two');
+});
+
+test('move shorthand: renames the drop, commits, records state', async () => {
+  const t = task('Move Shorthand', {
+    group: 'G',
+    uploads: true,
+    glob: 'bookmarks_*.html',
+    summary_last_line: true,
+    state_dir: '{{maindir}}/Dest',
+    move: { rename: 'bookmarks.html' },
+  });
+  const cfgPath = makeConfig([t]);
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
+  await stage(t.name, 'bookmarks_2024.html', '<html>');
+  const [ok, summary] = await bctl.runTask(tasks[0], local, [
+    path.join(bctl.stagingDir(t.name), 'bookmarks_2024.html'),
+  ]);
+  assert.equal(ok, true, summary);
+  assert.ok(fs.existsSync(path.join(maindir, 'Dest', 'bookmarks.html')));
+});
+
 test('resolve: nested lookup, typed values, loops, tildes', () => {
   const local = {
     repo_dir: bctl.REPO_DIR,
@@ -299,18 +358,20 @@ test('globMatch: literal + * patterns', () => {
   }
 });
 
-test('gitCommit: excludes state files, tolerates empty commits', async () => {
+test('git-commit subcommand: excludes state files, tolerates empty commits', async () => {
   const dest = path.join(SANDBOX, 'gitdest');
-  await bctl.gitCommit(dest, 'first');
+  const commit = (msg) =>
+    bctl.shCapture(`bash ${bctl.shellQuote(bctl.LIB_PATH)} git-commit ${bctl.shellQuote(dest)} ${bctl.shellQuote(msg)}`);
+  assert.equal((await commit('first')).rc, 0);
   fs.writeFileSync(path.join(dest, 'a.txt'), 'hi');
   fs.writeFileSync(path.join(dest, '.backup-state-x.json'), '{"ok":true}');
-  await bctl.gitCommit(dest, 'second');
+  assert.equal((await commit('second')).rc, 0);
   const { rc, out } = await bctl.shCapture(`git -C ${bctl.shellQuote(dest)} ls-files`, {});
   assert.equal(rc, 0);
   assert.ok(out.includes('a.txt'));
   assert.ok(!out.includes('.backup-state-x.json'));
   // empty commit tolerated
-  await bctl.gitCommit(dest, 'third');
+  assert.equal((await commit('third')).rc, 0);
 });
 
 test('pathFound: globs and plain dirs', () => {
@@ -550,8 +611,11 @@ test('capture: output becomes the summary; paste_done commits', async () => {
   const [ok, summary] = await bctl.runTask(t, { maindir }, []);
   assert.equal(ok, true);
   assert.equal(summary, 'line1\nline2');
-  // paste done via gitCommit path
-  await bctl.gitCommit(path.join(maindir, 'CapDest'), 'test');
+  // paste done via the lib.sh git-commit subcommand
+  const { rc } = await bctl.shCapture(
+    `bash ${bctl.shellQuote(bctl.LIB_PATH)} git-commit ${bctl.shellQuote(path.join(maindir, 'CapDest'))} test`
+  );
+  assert.equal(rc, 0);
 });
 
 test('summary_last_line: last non-command log line', async () => {
@@ -727,34 +791,25 @@ test('API: upload with JSON content-type stores raw bytes, not a parsed object',
   await close();
 });
 
-test('API: chunked uploads append and assemble in order, .part excluded from runs', async () => {
-  const t = task('Chunk Upload', { uploads: true, glob: '*.zip', commands: 'true' });
+test('API: uploads stream to disk; leftover .part files are never picked up', async () => {
+  const t = task('Stream Upload', { uploads: true, glob: '*.zip', commands: 'true' });
   await bootWith(makeConfig([t]));
   const { req, close } = await api();
 
-  let res = await req('POST', '/api/upload/Chunk%20Upload?name=big.zip&chunk=0&total=3', 'AAA', true);
+  let res = await req('POST', '/api/upload/Stream%20Upload?name=big.zip', 'AAABBBCCC', true);
   assert.equal(res.status, 200);
-  res = await req('POST', '/api/upload/Chunk%20Upload?name=big.zip&chunk=1&total=3', 'BBB', true);
-  assert.equal(res.status, 200);
-  assert.ok(fs.existsSync(path.join(bctl.stagingDir('Chunk Upload'), 'big.zip.part')));
-  res = await req('POST', '/api/upload/Chunk%20Upload?name=big.zip&chunk=2&total=3', 'CCC', true);
-  assert.equal(res.status, 200);
-  assert.equal(fs.readFileSync(path.join(bctl.stagingDir('Chunk Upload'), 'big.zip'), 'utf8'), 'AAABBBCCC');
-  assert.ok(!fs.existsSync(path.join(bctl.stagingDir('Chunk Upload'), 'big.zip.part')));
+  assert.equal(res.json.queued, 'big.zip');
+  assert.equal(fs.readFileSync(path.join(bctl.stagingDir('Stream Upload'), 'big.zip'), 'utf8'), 'AAABBBCCC');
+  assert.ok(!fs.existsSync(path.join(bctl.stagingDir('Stream Upload'), 'big.zip.part')));
 
   // a leftover .part file is never picked up by a run
-  fs.writeFileSync(path.join(bctl.stagingDir('Chunk Upload'), 'other.zip.part'), 'junk');
-  res = await req('POST', '/api/run/Chunk%20Upload', {});
+  fs.writeFileSync(path.join(bctl.stagingDir('Stream Upload'), 'other.zip.part'), 'junk');
+  res = await req('POST', '/api/run/Stream%20Upload', {});
   assert.equal(res.status, 200);
-  await pollUntil(() => !bctl.RUNS.has('Chunk Upload'));
+  await pollUntil(() => !bctl.RUNS.has('Stream Upload'));
   res = await req('GET', '/api/tasks');
-  const tj = res.json.groups[0].tasks.find((x) => x.name === 'Chunk Upload');
+  const tj = res.json.groups[0].tasks.find((x) => x.name === 'Stream Upload');
   assert.equal(tj.state.ok, true);
-
-  res = await req('POST', '/api/upload/Chunk%20Upload?name=big.zip&chunk=5&total=3', 'X', true);
-  assert.equal(res.status, 400);
-  res = await req('POST', '/api/upload/Chunk%20Upload?name=big.zip&chunk=abc&total=3', 'X', true);
-  assert.equal(res.status, 400);
   await close();
 });
 
@@ -862,5 +917,19 @@ test('API: paste_done commits the capture dir', async () => {
   assert.equal(res.json.committed, true);
   const { out } = await bctl.shCapture(`git -C ${bctl.shellQuote(commitDir)} ls-files`);
   assert.ok(out.includes('data.txt'));
+  await close();
+});
+
+test('API: /api/log returns the last run output', async () => {
+  const t = task('Log Task', { group: 'G', commands: 'echo hello-log' });
+  await bootWith(makeConfig([t]));
+  const { req, close } = await api();
+  let res = await req('POST', '/api/run/Log%20Task', {});
+  await pollUntil(() => !bctl.RUNS.has('Log Task'));
+  res = await req('GET', '/api/log/Log%20Task');
+  assert.equal(res.status, 200);
+  assert.match(res.json.output, /hello-log/);
+  res = await req('GET', '/api/log/No%20Such%20Task');
+  assert.equal(res.status, 404);
   await close();
 });

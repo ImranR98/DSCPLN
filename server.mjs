@@ -1,26 +1,29 @@
 #!/usr/bin/env node
 /* backupctl — Express server, generic bash runner, and CLI entry, in one module.
  *
- * Tasks are bash: each task has a `commands` list (or a single string)
- * executed by the runner with process groups, secret redaction, and
- * per-task state recording. Multiple tasks can run in parallel; tasks with
- * the same `serial_key:` run one at a time. There are no automatic
- * timeouts — a run goes until it finishes or the user cancels it. Runner
- * options: `uploads:` (dropped files, available as {{uploads}}), `glob:`
- * (drop pattern, or list of patterns), `prompts:` (confirm/secret,
- * redacted), `require:`, `capture:` + `commit_dir:` (output shown in a
- * paste dialog), `root:` (availability badge), `summary_last_line:`
- * (summary = last log line). Everything service-specific (tool installs,
- * export validation, pruning) lives in the task's own bash or in lib.sh. */
+ * Tasks are bash: each task has a `commands` list (or a single string) —
+ * or a `script:`/`move:`/`ingest:` shorthand that is normalized into a
+ * command at config load — executed by the runner with process groups,
+ * secret redaction, and per-task state recording. Multiple tasks can run
+ * in parallel; tasks with the same `serial_key:` run one at a time. There
+ * are no automatic timeouts — a run goes until it finishes or the user
+ * cancels it. Runner options: `uploads:` (dropped files, available as
+ * {{uploads}}), `glob:` (drop pattern, or list of patterns), `prompts:`
+ * (confirm/secret, redacted), `require:`, `capture:` + `commit_dir:`
+ * (output shown in a paste dialog), `root:` (availability badge),
+ * `summary_last_line:` (summary = last log line). Everything
+ * service-specific (tool installs, export validation, pruning) lives in
+ * the task's own bash or in lib.sh. */
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
 import express from 'express';
 
-export const REPO_DIR = path.dirname(new URL(import.meta.url).pathname);
+export const REPO_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const CONFIG_FILE = process.env.BACKUPCTL_CONFIG_FILE ?? path.join(REPO_DIR, 'config.mjs');
 export const LIB_PATH = path.join(REPO_DIR, 'lib.sh');
 const INDEX_PATH = path.join(REPO_DIR, 'index.html');
@@ -30,6 +33,30 @@ const DAY_SECONDS = 86400;
 
 export class ConfigMissingError extends Error {}
 export class ConfigError extends Error {}
+
+const HEREDOC_WRAP = `bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; RC=$?; rm -f "$TMP"; exit $RC' <<'BASH_SCRIPT'`;
+
+/* Task shorthands, normalized into `commands` at load: `script:` is a bash
+ * body wrapped in a temp-file heredoc (children can't eat the script from
+ * stdin); `move:`/`ingest:` are the common "file this drop into a
+ * destination dir and git-commit it" flows, with `dest` defaulting to the
+ * task's state_dir. */
+function shorthandCommands(t) {
+  if (t.script) {
+    const body = String(t.script).replace(/\n+$/, '');
+    return `${HEREDOC_WRAP}\n${body}\nBASH_SCRIPT`;
+  }
+  if (t.move) {
+    const { rename, dest = t.state_dir } = t.move;
+    const flags = rename ? ` --rename ${shellQuote(rename)}` : '';
+    return `bash '{{lib}}' move --git${flags} ${shellQuote(dest)} {{uploads}}`;
+  }
+  if (t.ingest) {
+    const { suffix, dest = t.state_dir } = t.ingest;
+    return `bash '{{lib}}' ingest ${shellQuote(dest)} ${shellQuote(suffix)} {{uploads}}`;
+  }
+  return null;
+}
 
 export async function loadConfig(configPath = CONFIG_FILE) {
   const p = configPath instanceof URL ? configPath : path.resolve(configPath);
@@ -62,7 +89,13 @@ export async function loadConfig(configPath = CONFIG_FILE) {
       const merged = { ...g.defaults, ...t, group: g.name };
       if (!merged.name) throw new ConfigError("Every task needs a 'name'");
       if (!merged.state_dir) throw new ConfigError(`Task '${merged.name}' needs a 'state_dir' for its run state`);
-      if (!merged.commands) throw new ConfigError(`Task '${merged.name}' needs 'commands' (a bash string or array)`);
+      merged.commands ??= shorthandCommands(merged);
+      delete merged.script;
+      delete merged.move;
+      delete merged.ingest;
+      if (!merged.commands) {
+        throw new ConfigError(`Task '${merged.name}' needs 'commands' (or 'script'/'move'/'ingest')`);
+      }
       if (taskSeen.has(merged.name)) throw new ConfigError(`Duplicate task name: '${merged.name}'`);
       taskSeen.add(merged.name);
       tasks.push(merged);
@@ -133,9 +166,7 @@ export function slugify(name) {
 }
 
 export function stateFileFor(task, local) {
-  const raw = task.state_dir;
-  if (!raw) throw new Error(`Task '${task.name}' needs a 'state_dir' for its run state`);
-  const base = expand(resolve(raw, local));
+  const base = expand(resolve(task.state_dir, local));
   return path.join(base, `.backup-state-${slugify(task.name)}.json`);
 }
 
@@ -164,17 +195,20 @@ export function loadTaskState(task, local) {
   }
 }
 
+function writeRunning(list) {
+  if (list.length) fs.writeFileSync(RUNNING_FILE, JSON.stringify(list));
+  else fs.rmSync(RUNNING_FILE, { force: true });
+}
+
 export function markRunning(taskName) {
   const list = (runningMarker() ?? []).filter((m) => m.task !== taskName);
   list.push({ task: taskName, ts: Date.now() / 1000 });
   fs.mkdirSync(STATE_DIR, { recursive: true });
-  fs.writeFileSync(RUNNING_FILE, JSON.stringify(list));
+  writeRunning(list);
 }
 
 export function clearRunning(taskName) {
-  const list = (runningMarker() ?? []).filter((m) => m.task !== taskName);
-  if (list.length) fs.writeFileSync(RUNNING_FILE, JSON.stringify(list));
-  else fs.rmSync(RUNNING_FILE, { force: true });
+  writeRunning((runningMarker() ?? []).filter((m) => m.task !== taskName));
 }
 
 export function runningMarker() {
@@ -229,6 +263,12 @@ export function shellQuote(arg) {
 function redactText(text, secrets) {
   for (const secret of secrets) text = text.replaceAll(secret, '***');
   return text;
+}
+
+function splitLines(text) {
+  const lines = text.split(/\r?\n/);
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
 }
 
 export function killpg(pid, log = () => {}) {
@@ -312,9 +352,7 @@ export function run(cmd, opts = {}) {
       if (!capture) {
         if (outTail) log(redactText(outTail, redact));
         // stderr is buffered and flushed here (nothing is lost to the pipe race)
-        const parts = redactText(errBuf.join(''), redact).split(/\r?\n/);
-        if (parts.at(-1) === '') parts.pop();
-        for (const line of parts) log(line);
+        for (const line of splitLines(redactText(errBuf.join(''), redact))) log(line);
       }
       resolvePromise(done(rc));
     });
@@ -330,27 +368,13 @@ export function shCapture(cmd, opts = {}) {
   return run(cmd, { ...opts, shell: true, capture: true });
 }
 
-export async function gitCommit(dest, message, log = () => {}) {
-  fs.mkdirSync(dest, { recursive: true });
-  if ((await run(['git', 'init', '-q'], { cwd: dest, log })) !== 0) {
-    throw new Error(`git init failed in ${dest}`);
-  }
-  if ((await run(['git', 'add', '-A', '.', ':(exclude).backup-state-*'], { cwd: dest, log })) !== 0) {
-    throw new Error(`git add failed in ${dest}`);
-  }
-  const { rc, out, err } = await shCapture(`git commit -q -m ${shellQuote(message)}`, { cwd: dest });
-  if (rc !== 0 && !(out + err).includes('nothing to commit') && !(out + err).includes('nothing added to commit')) {
-    throw new Error(`git commit failed in ${dest}: ${err.trim()}`);
-  }
-}
-
 export function humanAgo(ts) {
   const delta = Date.now() / 1000 - ts;
   if (delta < 3600) return `${Math.floor(delta / 60)} min ago`;
-  if (delta < 86400) return `${Math.floor(delta / 3600)} hr ago`;
-  if (delta < 86400 * 30) return `${Math.floor(delta / 86400)} days ago`;
-  if (delta < 86400 * 365) return `${Math.floor(delta / (86400 * 30))} months ago`;
-  return `${Math.floor(delta / (86400 * 365))} years ago`;
+  if (delta < DAY_SECONDS) return `${Math.floor(delta / 3600)} hr ago`;
+  if (delta < 30 * DAY_SECONDS) return `${Math.floor(delta / DAY_SECONDS)} days ago`;
+  if (delta < 365 * DAY_SECONDS) return `${Math.floor(delta / (30 * DAY_SECONDS))} months ago`;
+  return `${Math.floor(delta / (365 * DAY_SECONDS))} years ago`;
 }
 
 /* Does a path pattern exist? Glob-aware, drives the availability badge. */
@@ -379,18 +403,13 @@ function makeLogger() {
   return log;
 }
 
-function resolveTpl(template, ctx, extra = undefined) {
-  return expand(resolve(template, ctx.local, extra));
-}
-
 function clearStaging(ctx) {
   const d = stagingDir(ctx.task.name);
   fs.rmSync(d, { recursive: true, force: true });
   fs.mkdirSync(d, { recursive: true });
 }
 
-function failRun(rc, tmp) {
-  fs.rmSync(tmp, { recursive: true, force: true });
+function failRun(rc) {
   return [false, `Command failed (exit ${rc})`];
 }
 
@@ -401,17 +420,15 @@ export async function runCommands(ctx) {
     return [false, 'No files queued — drop them here first'];
   }
   for (const key of task.require ?? []) {
-    if (!(ctx.extra ?? {})[key]) return [false, `Missing required input: ${key}`];
+    if (!ctx.extra[key]) return [false, `Missing required input: ${key}`];
   }
-  const tmp = path.join(stagingDir(task.name), `tmp_${Math.floor(Math.random() * 1_000_000)}`);
   const extra = {
     uploads: ctx.files.map((f) => shellQuote(String(f))).join(' '),
-    tmp: String(tmp),
-    ...Object.fromEntries(Object.entries(ctx.extra ?? {}).map(([k, v]) => [k, String(v)])),
+    ...Object.fromEntries(Object.entries(ctx.extra).map(([k, v]) => [k, String(v)])),
   };
-  const redact = Object.values(ctx.extra ?? {}).filter((v) => v).map(String);
+  const redact = Object.values(ctx.extra).filter((v) => v).map(String);
   const output = [];
-  const cwd = resolveTpl(task.cwd ?? '.', ctx);
+  const cwd = expand(resolve(task.cwd ?? '.', ctx.local));
   const groups = ctx.groups ?? new Set();
   const env = { TMPDIR: ctx.tmpdir };
   const cmds = Array.isArray(task.commands) ? task.commands : [task.commands];
@@ -421,17 +438,15 @@ export async function runCommands(ctx) {
     if (capture) {
       const { rc: r, out, err } = await shCapture(resolved, { cwd, redact, env, groups });
       rc = r;
-      const lines = out.split(/\r?\n/);
-      if (lines.at(-1) === '') lines.pop();
+      const lines = splitLines(out);
       for (const line of lines) ctx.log(line);
       if (err.trim()) ctx.log(err.trim());
       output.push(...lines);
     } else {
       rc = await sh(resolved, { cwd, log: ctx.log, redact, env, groups });
     }
-    if (rc !== 0) return failRun(rc, tmp);
+    if (rc !== 0) return failRun(rc);
   }
-  fs.rmSync(tmp, { recursive: true, force: true });
   if (capture) return [true, output.join('\n')];
   if (task.summary_last_line) {
     const last = [...ctx.log.lines].reverse().find((l) => l.trim() && !l.startsWith('$ '));
@@ -456,15 +471,14 @@ export function supportsUploads(task) {
   return Boolean(task.uploads);
 }
 
-export function uploadPatterns(task, local = null) {
+export function uploadPatterns(task, local) {
   const globs = task.glob ?? '*';
-  let patterns = Array.isArray(globs) ? globs : [globs];
-  if (local !== null) patterns = patterns.map((p) => resolve(p, local));
-  return patterns;
+  const patterns = Array.isArray(globs) ? globs : [globs];
+  return local === undefined ? patterns : patterns.map((p) => resolve(p, local));
 }
 
 export function matchScore(pattern) {
-  return [...pattern].filter((c) => !'*?'.includes(c)).length;
+  return pattern.replace(/[*?]/g, '').length;
 }
 
 /* Glob match for the simple patterns used in config (literal chars plus
@@ -519,9 +533,7 @@ export let TASK_MAP = new Map();
 
 export async function boot(configPath = undefined) {
   try {
-    [LOCAL, TASK_LIST] = configPath
-      ? await loadConfig(configPath)
-      : await loadConfig();
+    [LOCAL, TASK_LIST] = await loadConfig(configPath);
   } catch (e) {
     if (e instanceof ConfigMissingError) {
       console.warn(`WARNING: ${e.message}`);
@@ -610,7 +622,6 @@ export function taskJson(t) {
       ts,
       ok: false,
       summary: 'Interrupted',
-      output: '',
       last_run_text: `Interrupted · ${humanAgo(ts)}`,
     };
   } else {
@@ -621,7 +632,6 @@ export function taskJson(t) {
         ts: rec.ts,
         ok,
         summary: rec.summary ?? '',
-        output: rec.output ?? '',
         last_run_text: `${ok ? 'OK' : 'FAILED'} · ${humanAgo(rec.ts)}`,
       };
     }
@@ -630,7 +640,7 @@ export function taskJson(t) {
   let pill = 'fail';
   if (stateJson && stateJson.ok) {
     const age = Date.now() / 1000 - stateJson.ts;
-    pill = age < 24 * 3600 ? 'ok' : age <= 7 * DAY_SECONDS ? 'neutral' : 'fail';
+    pill = age < DAY_SECONDS ? 'ok' : age <= 7 * DAY_SECONDS ? 'neutral' : 'fail';
   }
   const run = RUNS.get(t.name);
   const running = Boolean(run);
@@ -671,10 +681,9 @@ export function createApp() {
     next();
   });
 
-  // uploads are parsed as raw bytes BEFORE express.json runs, so JSON
-  // uploads (content-type: application/json) are never parsed into objects
-  app.use('/api/upload', express.raw({ type: () => true, limit: '2gb' }));
-  app.use(express.json({ limit: '1mb' }));
+  // JSON body parsing only for the endpoints that need it; /api/upload
+  // streams raw bytes straight to disk (JSON-typed uploads included).
+  app.use(['/api/run', '/api/cancel', '/api/paste_done'], express.json({ limit: '1mb' }));
 
   // most-specific pattern wins; ties listed as `ambiguous`
   app.post('/api/detect', (req, res) => {
@@ -700,6 +709,8 @@ export function createApp() {
     });
   });
 
+  // The body is streamed into a .part file and renamed on completion, so a
+  // half-written upload is never picked up by a run (runs skip .part files).
   app.post('/api/upload/:taskName', (req, res) => {
     const task = TASK_MAP.get(req.params.taskName);
     if (!task || !supportsUploads(task)) return res.status(404).json({ detail: 'Unknown task' });
@@ -710,21 +721,17 @@ export function createApp() {
         .status(400)
         .json({ detail: `${filename} does not match the expected pattern(s): ${patterns.join(', ')}` });
     }
-    const staging = stagingDir(task.name);
-    const finalPath = path.join(staging, filename);
-    if (req.query.chunk != null) {
-      const chunk = parseInt(req.query.chunk, 10);
-      const total = parseInt(req.query.total, 10);
-      if (!Number.isInteger(chunk) || chunk < 0 || !Number.isInteger(total) || total <= 0 || chunk >= total) {
-        return res.status(400).json({ detail: 'Invalid chunk parameters' });
-      }
-      const partPath = finalPath + '.part';
-      fs.appendFileSync(partPath, req.body);
-      if (chunk === total - 1) fs.renameSync(partPath, finalPath);
-      return res.json({ queued: filename });
-    }
-    fs.writeFileSync(finalPath, req.body);
-    res.json({ queued: filename });
+    const partPath = path.join(stagingDir(task.name), filename + '.part');
+    const finalPath = partPath.slice(0, -'.part'.length);
+    const ws = fs.createWriteStream(partPath);
+    ws.on('error', () => {
+      if (!res.headersSent) res.status(500).json({ detail: 'Upload failed' });
+    });
+    req.pipe(ws);
+    ws.on('finish', () => {
+      fs.renameSync(partPath, finalPath);
+      res.json({ queued: filename });
+    });
   });
 
   app.post('/api/run/:taskName', (req, res) => {
@@ -755,6 +762,13 @@ export function createApp() {
     res.json({ runs, done: DONE.splice(0) });
   });
 
+  // last run's full log, fetched lazily by the Log dialog
+  app.get('/api/log/:taskName', (req, res) => {
+    const task = TASK_MAP.get(req.params.taskName);
+    if (!task) return res.status(404).json({ detail: 'Unknown task' });
+    res.json({ output: loadTaskState(task, LOCAL)?.output ?? '' });
+  });
+
   app.post('/api/cancel', (req, res) => {
     const taskName = req.body?.task;
     if (!taskName) return res.status(409).json({ detail: 'No task specified' });
@@ -779,10 +793,10 @@ export function createApp() {
     const commitDir = task.commit_dir;
     if (!commitDir) return res.json({ committed: false });
     const dest = expand(resolve(commitDir, LOCAL));
-    try {
-      await gitCommit(dest, `${task.name} · ${new Date().toLocaleString()}`);
-    } catch (e) {
-      return res.status(500).json({ detail: `git commit failed: ${e.message}` });
+    const message = shellQuote(`${task.name} · ${new Date().toLocaleString()}`);
+    const { rc, err } = await shCapture(`bash ${shellQuote(LIB_PATH)} git-commit ${shellQuote(dest)} ${message}`);
+    if (rc !== 0) {
+      return res.status(500).json({ detail: `git commit failed: ${err.trim()}` });
     }
     res.json({ committed: true, dest });
   });
@@ -797,28 +811,27 @@ export function createApp() {
 // CLI ------------------------------------------------------------------------
 
 export function main() {
-  const args = process.argv.slice(2);
-  let port = 8080;
-  let host = '127.0.0.1';
-  let noBrowser = false;
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--port') port = parseInt(args[++i], 10);
-    else if (args[i] === '--host') host = args[++i];
-    else if (args[i] === '--no-browser') noBrowser = true;
-    else if (args[i] === '--help' || args[i] === '-h') {
-      console.log('usage: backupctl [--port N] [--host H] [--no-browser]');
-      process.exit(0);
-    }
+  const { values } = parseArgs({
+    options: {
+      port: { type: 'string', default: '8080' },
+      host: { type: 'string', default: '127.0.0.1' },
+      'no-browser': { type: 'boolean', default: false },
+      help: { type: 'boolean', short: 'h', default: false },
+    },
+  });
+  if (values.help) {
+    console.log('usage: backupctl [--port N] [--host H] [--no-browser]');
+    process.exit(0);
   }
-
-  const url = `http://${host}:${port}`;
-  if (!noBrowser) {
+  const port = parseInt(values.port, 10);
+  const url = `http://${values.host}:${port}`;
+  if (!values['no-browser']) {
     setTimeout(() => {
       spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
     }, 1000);
   }
   const app = createApp();
-  app.listen(port, host, () => console.log(`backupctl listening on ${url}`));
+  app.listen(port, values.host, () => console.log(`backupctl listening on ${url}`));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

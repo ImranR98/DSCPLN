@@ -509,6 +509,16 @@ log "Files → $DEST"
           ingest: { suffix: 'grep -Eo ": \\".*@.*\\"" Takeout/Profile/Profile.json | head -1 | tail -c +4 | head -c -2' },
         },
 
+        // Uber data request export; folder named after the account.
+        {
+          name: 'Uber',
+          glob: 'Uber Data Request *.zip',
+          state_dir: '{{maindir}}/Backups/Uber',
+          export_url: 'https://myprivacy.uber.com/exploreyourdata/download',
+          note: 'Drop the Uber data request zip here.',
+          ingest: { suffix: 'awk -F, \'{print $1}\' "Uber Data/Account and Profile/user_profile-0.csv" | tail -1' },
+        },
+
         // Qwen chat exports, kept under their own names.
         {
           name: 'Qwen Chats',

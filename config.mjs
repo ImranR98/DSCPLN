@@ -299,6 +299,7 @@ log "Import completed; originals deleted"
           name: 'Wealthsimple Recents to Balance',
           state_dir: '{{maindir}}/Documents/Balance',
           cwd: '{{scriptroot}}/Wealthsimpleton',
+          serial_key: 'selenium-browser',
           capture: true,
           note: 'Paste the results into Balance.xlsx, remembering to skip duplicates.',
           commands: [
@@ -313,6 +314,7 @@ log "Import completed; originals deleted"
         {
           name: 'Instacart Orders',
           state_dir: '{{maindir}}/Backups/Instacart',
+          serial_key: 'selenium-browser',
           note: 'Scrapes recent Instacart order history and delivery images.',
           commands: [
             '[ -f \'{{scriptroot}}/InstacartFlation/venv/bin/activate\' ] || python3 -m venv \'{{scriptroot}}/InstacartFlation/venv\'',

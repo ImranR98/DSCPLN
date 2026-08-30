@@ -534,6 +534,7 @@ log "Files → $DEST"
           name: 'Qwen Chats',
           glob: 'chat-export-*.json',
           state_dir: '{{maindir}}/Backups/Qwen Chat',
+          export_url: 'https://chat.qwen.ai/settings/chats',
           note: 'Drop the chat-export-*.json file(s) here.',
           move: {},
         },

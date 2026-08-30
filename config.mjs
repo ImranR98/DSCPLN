@@ -524,6 +524,7 @@ log "Files → $DEST"
           name: 'Lyft',
           glob: 'lyft_data.zip',
           state_dir: '{{maindir}}/Backups/Lyft',
+          export_url: 'https://account.lyft.com/privacy/data',
           note: 'Drop the Lyft data export zip here.',
           ingest: { suffix: 'awk -F, \'{print $1}\' user_profile.csv | tail -1' },
         },

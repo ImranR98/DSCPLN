@@ -580,7 +580,7 @@ log "Files → $DEST"
           name: 'Twitter',
           glob: 'twitter*.zip',
           state_dir: '{{maindir}}/Backups/Twitter',
-          export_url: 'https://twitter.com/i/flow/verify_account_ownership',
+          export_url: 'https://x.com/settings/download_your_data',
           note: 'Drop the Twitter/X data export zip here.',
           ingest: { suffix: 'grep -Eo "accountId\\" : \\".*\\"" data/account.js | tail -c +15 | head -c -2' },
         },

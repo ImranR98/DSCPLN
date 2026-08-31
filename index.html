@@ -626,7 +626,7 @@ function card(t) {
   const runBtn = c.querySelector('.run-btn');
   const logBtn = c.querySelector('.log-btn');
   runBtn.textContent = busy ? 'Stop' : 'Run';
-  runBtn.disabled = !busy && !t.avail;
+  runBtn.disabled = !busy && (!t.avail || (t.uploads && !(STATE.queues[t.name] ?? []).length));
   runBtn.onclick = busy ? () => cancelRun(t.name) : () => runTask(t);
   logBtn.onclick = () => openLog(t);
   const exportBtn = c.querySelector('.export-btn');

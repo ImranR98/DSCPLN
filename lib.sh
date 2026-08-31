@@ -43,9 +43,12 @@ bctl_export_dirs() {  # ROOT — export dirs sorted by name (newest last)
 }
 
 bctl_first_glob() {  # PATTERN — print first match (e.g. MTP mounts)
+  # compgen -G expands the glob in one word, so patterns containing spaces work
+  # (ls -d "$1" would treat the '*' literally and never match).
   local m
-  m=$(ls -d "$1" 2>/dev/null | head -1)
+  m=$(compgen -G "$1" 2>/dev/null | head -1 || true)
   [[ -n "$m" ]] && echo "$m"
+  return 0
 }
 
 bctl_process_and_move() {  # SRC DEST PROCESS_SCRIPT [keep_originals]

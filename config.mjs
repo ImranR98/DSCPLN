@@ -405,7 +405,7 @@ log "Media import completed"
           state_dir: '{{maindir}}/Backups/Meta_Quest',
           root: '{{quest_root}}',
           note: 'Copies ModData, ModsBeforeFriday, and Android from the connected Quest.',
-          commands: 'bash \'{{lib}}\' copy \'{{maindir}}/Backups/Meta_Quest\' "{{quest_root}}/ModData" "{{quest_root}}/ModsBeforeFriday" "{{quest_root}}/Android"',
+          commands: 'source \'{{lib}}\' && SRC=$(bctl_first_glob \'{{quest_root}}\') && [[ -n "$SRC" ]] && bash \'{{lib}}\' copy \'{{maindir}}/Backups/Meta_Quest\' "$SRC/ModData" "$SRC/ModsBeforeFriday" "$SRC/Android"',
         },
       ],
     },

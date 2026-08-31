@@ -153,9 +153,17 @@ case "${1:-}" in
       [[ -d "$s" ]] && src="$s/"
       args=()
       [[ $git -eq 1 ]] && args+=(--exclude .git/)
-      if ! bctl_rsync_delete "${args[@]}" "$src" "$target"; then
-        log "rsync failed for $s"
-        failed=1
+      # --ignore-errors: tolerate unreadable files on flaky mounts (e.g. MTP);
+      # rsync still exits 23 for skipped files, which we accept as a warning.
+      rc=0
+      bctl_rsync_delete "${args[@]}" --ignore-errors "$src" "$target" || rc=$?
+      if [[ $rc -ne 0 ]]; then
+        if [[ $rc -eq 23 ]]; then
+          log "Warning: some files under $s could not be read and were skipped"
+        else
+          log "rsync failed for $s"
+          failed=1
+        fi
       elif [[ $git -eq 1 ]]; then
         bctl_git_commit "$target"
       fi

@@ -34,7 +34,9 @@ export default {
       infra_path: '/home/node/Main/Infra',
     },
     vps0: {               // VPS
+      user: 'root',
       host: 'vps0.example.com',
+      infra_path: '/root/Infra',
     },
   },
 
@@ -109,8 +111,8 @@ export default {
           state_dir: '{{maindir}}/Infra',
           note: 'Pulls compose state from the infra hosts via infra.sh.',
           commands: [
-            '{{maindir}}/Infra/infra.sh pc compose backup-state root@{{hosts.vps0.host}}:/root/Infra vps0',
-            '{{maindir}}/Infra/infra.sh pc compose backup-state {{hosts.srv0.user}}@{{hosts.srv0.host}}:{{hosts.srv0.infra_path}} srv0',
+            '{{maindir}}/Infra/scripts/compose-backup.sh vps0 -e backup_remote={{hosts.vps0.user}}@{{hosts.vps0.host}}:{{hosts.vps0.infra_path}}',
+            '{{maindir}}/Infra/scripts/compose-backup.sh srv0 -e backup_remote={{hosts.srv0.user}}@{{hosts.srv0.host}}:{{hosts.srv0.infra_path}}'
           ],
         },
 

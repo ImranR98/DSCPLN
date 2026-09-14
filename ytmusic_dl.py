@@ -116,6 +116,13 @@ def download_track(video_id, track_info, download_dir):
 
 def create_playlist_files(playlists, download_dir):
     """Create M3U8 playlist files for each playlist."""
+    # Build a map of video_id -> actual filename for fast lookup
+    file_map = {}
+    for file_path in download_dir.iterdir():
+        if file_path.suffix in ['.mp3', '.m4a', '.webm'] and ']' in file_path.stem:
+            video_id = file_path.stem.split(']')[0][1:]
+            file_map[video_id] = file_path.name
+    
     for playlist in playlists:
         playlist_file = download_dir / f"{playlist['title']}.m3u8"
         with open(playlist_file, 'w', encoding='utf-8') as f:
@@ -123,18 +130,9 @@ def create_playlist_files(playlists, download_dir):
             
             for ti, track in enumerate(playlist['tracks']):
                 video_id = track['videoId']
-                base_pattern =  f"[{video_id}] {sanitize_filename(f"{track['artist']} - {track['title']}")}"
-                print(base_pattern)
-                # Find matching audio files
-                matches = []
-                for file_path in download_dir.iterdir():
-                    if file_path.stem == base_pattern:
-                        matches.append(file_path)
-                print(matches)
-                audio_files = [f for f in matches if f.suffix in ['.mp3', '.m4a', '.webm']]
+                audio_file = file_map.get(video_id)
                 
-                if audio_files:
-                    audio_file = audio_files[0].name
+                if audio_file:
                     f.write(f"#EXTINF:{ti+1},{track['artist']} - {track['title']}\n")
                     f.write(f"./{audio_file}\n")
 

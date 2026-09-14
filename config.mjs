@@ -105,14 +105,20 @@ export default {
           commands: "bash '{{lib}}' copy --git --pre 'dconf dump /org/gnome/shell/extensions/ > ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf' --post 'rm ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf' '{{maindir}}/Backups/PC Files' ~/.bashrc.d ~/.bash_history ~/.config/mimeapps.list ~/.ssh ~/.gnupg ~/.config/autostart ~/.local/share/applications ~/.config/gtk-3.0/bookmarks ~/.local/share/gnome-shell/extensions/gnome-extension-settings.conf",
         },
 
-        // Pull compose state from the infra hosts via infra.sh.
+        // Pull compose state from the infra hosts via infra.sh. srv0's docker
+        // needs sudo; compose-backup.sh takes the password via SUDO_PASSWORD
+        // (fed to sudo -S over SSH, since the tar stream leaves no tty).
         {
           name: 'Infra Compose State',
           state_dir: '{{maindir}}/Infra',
-          note: 'Pulls compose state from the infra hosts via infra.sh.',
+          require: ['srv0_password'],
+          note: "Pulls compose state from the infra hosts via infra.sh. You will be asked for srv0's sudo password.",
+          prompts: [
+            { key: 'srv0_password', label: "srv0's sudo password", type: 'secret' },
+          ],
           commands: [
             '{{maindir}}/Infra/scripts/compose-backup.sh vps0 -e backup_remote={{hosts.vps0.user}}@{{hosts.vps0.host}}:{{hosts.vps0.infra_path}}',
-            '{{maindir}}/Infra/scripts/compose-backup.sh srv0 -e backup_remote={{hosts.srv0.user}}@{{hosts.srv0.host}}:{{hosts.srv0.infra_path}}'
+            "SUDO_PASSWORD='{{srv0_password}}' {{maindir}}/Infra/scripts/compose-backup.sh srv0 -e backup_remote={{hosts.srv0.user}}@{{hosts.srv0.host}}:{{hosts.srv0.infra_path}}",
           ],
         },
 

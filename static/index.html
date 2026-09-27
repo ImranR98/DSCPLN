@@ -94,7 +94,14 @@
         const modifyFirstWeekBiasFormInput = document.getElementById('modifyFirstWeekBiasFormInput')
         const weekMessageText = document.getElementById('weekMessageText')
 
-        pretendDateFormInput.value = new Date().toLocaleDateString()
+        const today = new Date()
+        pretendDateFormInput.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+
+        const showError = (e) => {
+            console.error(e)
+            weekMessageText.textContent = 'Something went wrong. Check the server logs.'
+            weekMessageText.style.color = '#B00'
+        }
 
         const updateBudget = async (monthlyBudget, firstWeekBias) => {
             const response = await fetch('/budget', {
@@ -156,6 +163,7 @@
                     weekMessageText.textContent = ''
                     break;
             }
+            weekMessageText.style.color = ''
         }
 
         modifyBudgetsForm.addEventListener('submit', async (event) => {
@@ -163,17 +171,21 @@
             let mb = Number.parseFloat(modifyBudgetsFormInput.value)
             let fb = Number.parseFloat(modifyFirstWeekBiasFormInput.value)
             if (mb > 0) {
-                await updateBudget(mb, fb)
-                await fetchData()
+                try {
+                    await updateBudget(mb, fb)
+                    await fetchData()
+                } catch (e) {
+                    showError(e)
+                }
             }
         })
 
         pretendDateForm.addEventListener('submit', async (event) => {
             event.preventDefault()
-            fetchData(pretendDateFormInput.value ? pretendDateFormInput.value : undefined)
+            fetchData(pretendDateFormInput.value ? pretendDateFormInput.value : undefined).catch(showError)
         })
 
-        fetchData()
+        fetchData().catch(showError)
     </script>
 </body>
 

@@ -9,7 +9,6 @@ const fs = require('fs')
 const path = require('path')
 
 const defaultDataFile = path.resolve(`${__dirname}/../data.txt`)
-const defaultBudgetFile = path.resolve(`${__dirname}/../budget.txt`)
 
 process.env['TEXTFILE_DATA_PROVIDER_DATA_PATH'] = process.env['TEXTFILE_DATA_PROVIDER_DATA_PATH'] || `${__dirname}/../data.txt`
 process.env['TEXTFILE_DATA_PROVIDER_BUDGET_PATH'] = process.env['TEXTFILE_DATA_PROVIDER_BUDGET_PATH'] || `${__dirname}/../budget.txt`
@@ -17,18 +16,18 @@ process.env['TEXTFILE_DATA_PROVIDER_BUDGET_PATH'] = process.env['TEXTFILE_DATA_P
 const dataFile = path.resolve(process.env['TEXTFILE_DATA_PROVIDER_DATA_PATH'])
 const budgetFile = path.resolve(process.env['TEXTFILE_DATA_PROVIDER_BUDGET_PATH'])
 
-const checkFile = (file, createIfIsThis, contentIfCreated = '') => {
+const checkFile = (file, createIfMissing, contentIfCreated = '') => {
     if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
-        if (file == createIfIsThis) {
+        if (createIfMissing) {
             fs.writeFileSync(file, contentIfCreated)
         } else {
-            throw `File does not exist: ${file}`
+            throw new Error(`File does not exist: ${file}`)
         }
     }
 }
 
-checkFile(dataFile, defaultDataFile, '')
-checkFile(budgetFile, defaultBudgetFile,
+checkFile(dataFile, dataFile == defaultDataFile, '')
+checkFile(budgetFile, true,
     `${(process.env['TEXTFILE_BUDGET_INIT_AMT'] || '2400')}\n${(process.env['TEXTFILE_FIRST_WEEK_BIAS_INIT_AMT'] || '1400')}`
 )
 
@@ -37,9 +36,8 @@ const getMonthNumber = (date = new Date()) => (date.getMonth() + 1)
 const getFirstDateOfCalWeek = (date, includePartial = false) => {
     const givenDate = new Date(date)
     let tempDate = new Date(givenDate)
-    const thisSatDay = new Date(tempDate.setDate(tempDate.getDate() - tempDate.getDay()))
-    const dayOne = new Date(thisSatDay)
-    dayOne.setDate(1)
+    const thisSunday = new Date(tempDate.setDate(tempDate.getDate() - tempDate.getDay()))
+    const dayOne = new Date(givenDate.getFullYear(), givenDate.getMonth(), 1)
     if (includePartial) {
         if (isPartialStartWeek(givenDate)) {
             return {
@@ -47,7 +45,7 @@ const getFirstDateOfCalWeek = (date, includePartial = false) => {
                 code: "partialStart"
             }
         } else if (isPartialEndWeek(givenDate)) {
-            let d = new Date(thisSatDay)
+            let d = new Date(thisSunday)
             d.setDate(d.getDate() - 7)
             return {
                 date: d,
@@ -55,7 +53,7 @@ const getFirstDateOfCalWeek = (date, includePartial = false) => {
             }
         } else if (isNextWeekPartialEnd(givenDate)) {
             return {
-                date: thisSatDay,
+                date: thisSunday,
                 code: "beforePartial"
             }
         } else if (wasLastWeekPartialStart(givenDate)) {
@@ -66,7 +64,7 @@ const getFirstDateOfCalWeek = (date, includePartial = false) => {
         }
     }
     return {
-        date: thisSatDay,
+        date: thisSunday,
         code: null
     }
 }
@@ -104,24 +102,24 @@ function countFullWeeksInMonth(inputDate) {
 
     // Find the Sunday on or after the first day of the month
     const startOfWeek = new Date(firstDayOfMonth);
-    startOfWeek.setDate(firstDayOfMonth.getDate() + (7 - firstDayOfMonth.getDay()));
+    startOfWeek.setDate(firstDayOfMonth.getDate() + ((7 - firstDayOfMonth.getDay()) % 7));
 
     // Get the last day of the month
     const lastDayOfMonth = new Date(inputDate.getFullYear(), inputDate.getMonth() + 1, 0);
 
     // Find the Saturday on or before the last day of the month
     const endOfWeek = new Date(lastDayOfMonth);
-    endOfWeek.setDate(lastDayOfMonth.getDate() - lastDayOfMonth.getDay() + 6);
+    endOfWeek.setDate(lastDayOfMonth.getDate() - ((lastDayOfMonth.getDay() + 1) % 7));
 
     // Calculate the number of full weeks
-    const millisecondsInWeek = 7 * 24 * 60 * 60 * 1000;
-    const numberOfWeeks = Math.floor((endOfWeek - startOfWeek) / millisecondsInWeek);
+    const millisecondsInDay = 24 * 60 * 60 * 1000;
+    const numberOfWeeks = Math.floor(Math.round((endOfWeek - startOfWeek) / millisecondsInDay) / 7) + 1;
     return numberOfWeeks;
 }
 
 const getTotalExpensesFromLines = (expenseLines) => expenseLines.reduce((prev, curr) => {
-    return prev + Number.parseFloat(curr.split(' ')[0])
-}, 0)
+    return prev + Math.round(Number.parseFloat(curr.split(' ')[0]) * 100)
+}, 0) / 100
 
 // NOTE: A 'week' below is not a block of 7 days. It is one of:
 // - A full week: A week starting on Sunday, ending on Saturday, where all days are in the same month
@@ -132,21 +130,22 @@ module.exports.getData = async (date = new Date()) => {
         .map(l => l.trim())
         .filter(l => l.match('^[0-9]+(\.[0-9]+)? '))
     const monthNum = getMonthNumber(date)
+    const monthLinePattern = new RegExp(`(?:^| )${monthNum} [0-9]{1,2}$`)
     const weekStart = getFirstDateOfCalWeek(date, true)
     const weekStartNum = weekStart.date.getDate()
     const weekSpecialCode = weekStart.code
     const firstMonthLineIndex = expenseLines.findIndex(l =>
-        l.match(`${monthNum} [0-9]{1,2}$`)
+        l.match(monthLinePattern)
     )
     const firstWeekLineIndex = expenseLines.findIndex(l =>
-        l.match(`${monthNum} [0-9]{1,2}$`) &&
+        l.match(monthLinePattern) &&
         Number.parseInt(l.split(' ').reverse()[0]) >= weekStartNum
     )
     var lastMonthLineIndex = expenseLines.findIndex((l, i) =>
         i > firstMonthLineIndex &&
         l.match(`[0-9]{1,2} [0-9]{1,2}$`) &&
         (
-            !l.match(`${monthNum} [0-9]{1,2}$`) ||
+            !l.match(monthLinePattern) ||
             Number.parseInt(l.split(' ').reverse()[0]) > date.getDate() + 1
         )
     )
@@ -156,12 +155,16 @@ module.exports.getData = async (date = new Date()) => {
     var lastWeekLineIndex = expenseLines.findIndex((l, i) =>
         i > firstWeekLineIndex &&
         l.match(`[0-9]{1,2} [0-9]{1,2}$`) &&
-        Number.parseInt(l.split(' ').reverse()[0]) > Math.min(date.getDate() + 1, weekStartNum + 7)
+        (
+            !l.match(monthLinePattern) ||
+            Number.parseInt(l.split(' ').reverse()[0]) > Math.min(date.getDate() + 1, weekStartNum + 7)
+        )
     )
     if (lastWeekLineIndex < 0) {
         lastWeekLineIndex = undefined
     }
-    const thisMonthsExpenseLines = expenseLines.slice(firstMonthLineIndex, lastMonthLineIndex)
+    const thisMonthsExpenseLines = firstMonthLineIndex < 0 ? [] : expenseLines.slice(firstMonthLineIndex, lastMonthLineIndex)
+    const thisWeeksExpenseLines = firstWeekLineIndex < 0 ? [] : expenseLines.slice(firstWeekLineIndex, lastWeekLineIndex)
     const budgetData = fs.readFileSync(budgetFile).toString().trim().split('\n').map(l => Number.parseFloat(l || 0))
     const monthlyBudget = budgetData[0] || 0
     const firstWeekBias = budgetData[1] || 0
@@ -174,13 +177,18 @@ module.exports.getData = async (date = new Date()) => {
             normalWeeklyBudget,
         weekSpecialCode,
         monthsSpend: getTotalExpensesFromLines(thisMonthsExpenseLines),
-        weeksSpend: getTotalExpensesFromLines(expenseLines.slice(firstWeekLineIndex, lastWeekLineIndex)),
+        weeksSpend: getTotalExpensesFromLines(thisWeeksExpenseLines),
         extraData: thisMonthsExpenseLines
     }
 }
 
 module.exports.updateMonthlyBudget = async (monthlyBudget, firstWeekBias) => {
-    fs.writeFileSync(budgetFile,
-        `${Number.parseFloat(monthlyBudget || 0).toString()}\n${Number.parseFloat(firstWeekBias || 0).toString()}`
-    )
+    const budget = Number.parseFloat(monthlyBudget)
+    const bias = Number.parseFloat(firstWeekBias)
+    if (!Number.isFinite(budget) || budget < 0 || !Number.isFinite(bias) || bias < 0) {
+        throw new Error('Invalid budget values')
+    }
+    const tempBudgetFile = `${budgetFile}.tmp`
+    fs.writeFileSync(tempBudgetFile, `${budget.toString()}\n${bias.toString()}`)
+    fs.renameSync(tempBudgetFile, budgetFile)
 }

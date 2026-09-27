@@ -1,7 +1,7 @@
 FROM node
 COPY . .
 RUN npm install
-CMD npm start
+CMD ["node", "server.js"]
 
 # docker build -t dscpln .
 # docker run -v ~/expenses.md:/data.txt dscpln # Note: Keep this in mind: https://stackoverflow.com/a/52897306

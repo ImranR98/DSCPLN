@@ -1,0 +1,552 @@
+:root {
+    color-scheme: light;
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eceef2;
+    --text: #15171c;
+    --text-muted: #68707f;
+    --border: #e2e5ea;
+    --accent: #2f6fed;
+    --accent-contrast: #ffffff;
+    --ok: #17974a;
+    --warn: #b26205;
+    --over: #d92d20;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(21, 23, 28, 0.05), 0 4px 12px rgba(21, 23, 28, 0.05);
+}
+
+html[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0e1116;
+    --surface: #161a21;
+    --surface-2: #222834;
+    --text: #eef1f6;
+    --text-muted: #99a2b3;
+    --border: #2a3140;
+    --accent: #6ea1ff;
+    --accent-contrast: #0b1220;
+    --ok: #4cc38a;
+    --warn: #e8b44a;
+    --over: #ff6b6b;
+    --shadow: none;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+}
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: 1rem 1rem 3rem;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+.muted {
+    color: var(--text-muted);
+}
+
+/* ---------- Header ---------- */
+
+.app-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 1rem;
+}
+
+.app-header__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+h1 {
+    font-size: 1.4rem;
+    margin: 0;
+    letter-spacing: 0.02em;
+}
+
+h1 .accent {
+    color: var(--accent);
+}
+
+.app-header__actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.app-header__meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+/* ---------- Buttons ---------- */
+
+.button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.9rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease, filter 0.15s ease;
+}
+
+.button svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.button:hover {
+    border-color: var(--accent);
+}
+
+.button--primary {
+    background: var(--accent);
+    color: var(--accent-contrast);
+    border-color: transparent;
+}
+
+.button--primary:hover {
+    filter: brightness(1.07);
+}
+
+.button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.icon-button:hover {
+    color: var(--text);
+    border-color: var(--accent);
+}
+
+.icon-button svg {
+    width: 1.1rem;
+    height: 1.1rem;
+}
+
+.icon-button.is-spinning svg {
+    animation: spin 0.6s linear;
+}
+
+/* ---------- Banner ---------- */
+
+.banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    background: var(--surface);
+    background: color-mix(in srgb, var(--warn) 12%, var(--surface));
+    border: 1px solid var(--border);
+    border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
+    border-radius: var(--radius);
+    padding: 0.65rem 0.9rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.banner .button {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.85rem;
+}
+
+/* ---------- Cards ---------- */
+
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1rem 1.1rem;
+    margin-bottom: 1rem;
+}
+
+.card__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.card h2 {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.card__context {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.figure {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin: 0 0 0.6rem;
+}
+
+.figure__spend {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.figure__of,
+.figure__budget {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+}
+
+.progress {
+    height: 9px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    overflow: hidden;
+}
+
+.progress__fill {
+    height: 100%;
+    width: 0%;
+    border-radius: inherit;
+    background: var(--ok);
+    transition: width 0.45s ease, background-color 0.3s ease;
+}
+
+.card--warn .progress__fill {
+    background: var(--warn);
+}
+
+.card--over .progress__fill {
+    background: var(--over);
+}
+
+.card--none .progress__fill {
+    background: var(--text-muted);
+}
+
+.card__stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.9rem;
+    margin-top: 0.6rem;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+.pace--ok {
+    color: var(--ok);
+}
+
+.pace--over {
+    color: var(--over);
+}
+
+.badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    margin: 0 0 0.6rem;
+}
+
+/* ---------- Expenses ---------- */
+
+details.card > summary {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    list-style: none;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--text-muted);
+}
+
+details.card > summary::-webkit-details-marker {
+    display: none;
+}
+
+details.card > summary::after {
+    content: "";
+    width: 0.45rem;
+    height: 0.45rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform 0.2s ease;
+}
+
+details.card[open] > summary::after {
+    transform: rotate(-135deg);
+}
+
+#expensesMeta {
+    text-align: right;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: 0.85rem;
+}
+
+.expenses__list {
+    list-style: none;
+    margin: 0.75rem 0 0;
+    padding: 0;
+}
+
+.expense {
+    display: grid;
+    grid-template-columns: 3.1rem 1fr auto;
+    gap: 0.6rem;
+    align-items: baseline;
+    padding: 0.45rem 0;
+    border-top: 1px solid var(--border);
+    font-size: 0.9rem;
+}
+
+.expense:first-child {
+    border-top: 0;
+}
+
+.expense__date {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.expense__desc {
+    overflow-wrap: anywhere;
+}
+
+.expense__amount {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.expense--today .expense__date {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+/* ---------- Controls ---------- */
+
+.controls__row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+}
+
+.controls__row input[type="date"] {
+    flex: 1 1 11rem;
+    min-width: 0;
+    font: inherit;
+    font-size: 0.9rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+}
+
+.controls__row input[type="date"]:hover {
+    border-color: var(--accent);
+}
+
+/* ---------- Dialog ---------- */
+
+.dialog {
+    width: min(24rem, calc(100vw - 2rem));
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+.dialog::backdrop {
+    background: rgba(10, 12, 16, 0.45);
+    backdrop-filter: blur(2px);
+}
+
+.dialog form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 1.1rem;
+}
+
+.dialog h2 {
+    font-size: 1.05rem;
+    margin: 0 0 0.5rem;
+}
+
+.dialog label {
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.dialog input {
+    font: inherit;
+    padding: 0.55rem 0.7rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.hint {
+    margin: 0.3rem 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.form-error {
+    margin: 0.5rem 0 0;
+    font-size: 0.85rem;
+    color: var(--over);
+}
+
+.dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+/* ---------- Toasts ---------- */
+
+.toasts {
+    position: fixed;
+    left: 50%;
+    bottom: 1rem;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: min(24rem, calc(100vw - 2rem));
+    z-index: 10;
+}
+
+.toast {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--ok);
+    border-radius: 10px;
+    padding: 0.6rem 0.8rem;
+    font-size: 0.875rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    animation: toast-in 0.2s ease;
+}
+
+.toast--error {
+    border-left-color: var(--over);
+}
+
+.toast--leaving {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+/* ---------- Loading + motion ---------- */
+
+.is-loading .card {
+    animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    50% {
+        opacity: 0.55;
+    }
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation: none !important;
+        transition: none !important;
+    }
+}

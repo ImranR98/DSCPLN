@@ -125,6 +125,18 @@ const renderConversationShell = () => {
     scroll.append(el('div', 'message-rows'))
     scroll.addEventListener('scroll', onScroll)
     content.append(scroll)
+    const controls = el('div', 'jump-controls')
+    const topButton = el('button', 'jump-btn', '↑ Top')
+    topButton.title = 'Jump to the first message (Home)'
+    topButton.setAttribute('aria-label', 'Jump to the first message')
+    topButton.addEventListener('click', () => jumpTo(0))
+    const latestButton = el('button', 'jump-btn', '↓ Latest')
+    latestButton.title = 'Jump to the latest message (End)'
+    latestButton.setAttribute('aria-label', 'Jump to the latest message')
+    latestButton.addEventListener('click', () => jumpTo(state.total - 1))
+    controls.append(topButton, latestButton)
+    content.append(controls)
+    updateJumpVisibility()
 }
 
 const messageRow = (message, previous) => {
@@ -198,6 +210,15 @@ const loadPage = async (offset, { preserveScroll = false } = {}) => {
     }
 }
 
+const updateJumpVisibility = () => {
+    const scroll = $('#message-scroll')
+    const controls = $('.jump-controls')
+    if (!scroll || !controls) return
+    const [topButton, latestButton] = controls.children
+    topButton.classList.toggle('hidden', scroll.scrollTop < 80)
+    latestButton.classList.toggle('hidden', scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 80)
+}
+
 const onScroll = () => {
     const scroll = $('#message-scroll')
     if (!scroll || state.loading) return
@@ -206,6 +227,7 @@ const onScroll = () => {
     } else if (scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 600 && state.loadedLast < state.total - 1) {
         loadPage(state.loadedLast + 1)
     }
+    updateJumpVisibility()
 }
 
 const openConversation = async (id, at) => {
@@ -229,6 +251,7 @@ const openConversation = async (id, at) => {
         : 0
     await loadPage(offset)
     if (target != null && !Number.isNaN(target)) scrollToIndex(target)
+    updateJumpVisibility()
 }
 
 const scrollToIndex = (index) => {
@@ -237,6 +260,27 @@ const scrollToIndex = (index) => {
     row.scrollIntoView({ block: 'center' })
     row.classList.add('flash')
     setTimeout(() => row.classList.remove('flash'), 1600)
+}
+
+const jumpTo = async (index) => {
+    if (!state.conversation || state.total === 0) return
+    const target = Math.max(0, Math.min(index, state.total - 1))
+    const scroll = $('#message-scroll')
+    state.messages = new Map()
+    state.loadedFirst = 0
+    state.loadedLast = -1
+    state.token++
+    state.loading = false
+    const offset = Math.max(0, target - Math.floor(state.pageSize / 2))
+    await loadPage(offset)
+    if (target === 0) {
+        if (scroll) scroll.scrollTop = 0
+    } else if (target >= state.total - 1) {
+        if (scroll) scroll.scrollTop = scroll.scrollHeight
+    } else {
+        scrollToIndex(target)
+    }
+    updateJumpVisibility()
 }
 
 // ---- search view ------------------------------------------------------------
@@ -425,6 +469,10 @@ const setup = async () => {
         } else if (event.key === 'Escape') {
             if (typing) document.activeElement.blur()
             else location.hash = '#/'
+        } else if (!typing && (event.key === 'Home' || event.key === 'End')) {
+            if (!state.conversation) return
+            event.preventDefault()
+            jumpTo(event.key === 'Home' ? 0 : state.total - 1)
         } else if (!typing && (event.key === 'j' || event.key === 'k')) {
             const scroll = $('#message-scroll')
             if (scroll) scroll.scrollBy({ top: event.key === 'j' ? 120 : -120 })

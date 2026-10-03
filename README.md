@@ -58,7 +58,7 @@ Each merged conversation is a JSON array of message objects:
 ## Merging
 
 - Sources (`.txt` exports and `.json` outputs alike) are parsed into messages and merged as a union, then sorted by `date` (stable).
-- Overlapping messages are deduplicated by **same body within the same minute** (seconds are ignored because export versions drift), keeping the highest occurrence count seen in any single source — genuine repeats survive, txt+txt, txt+json and json+json merges all behave the same way.
+- Overlapping messages are matched by **same body within a 12-hour window** (nearest timestamp wins), so export-version drift — seconds, DST, or whole timezone changes — can't duplicate history; unmatched messages are aligned to the reference timeline using their nearest matched neighbour. txt+txt, txt+json and json+json merges all behave the same way, keeping the highest occurrence count seen in any single source.
 - JSON outputs written by a previous run are read back and re-merged, so running the tool repeatedly is idempotent.
 - Typical phone workflow: drop the new `.txt` export(s) into the JSON directory and run the tool; the txt and its existing JSON are merged into a fresh `YYYYMMDD - Name.json` and both old files are replaced.
 
@@ -67,10 +67,10 @@ Each merged conversation is a JSON array of message objects:
 When a contact or group is renamed, separate exports can exist for what is really one
 conversation. Those are detected automatically:
 
-- A "shared message" means the same body text **and the same hour+minute** (seconds are
-  ignored because export versions drift); files whose histories share at least **5 messages
-  and 60% of the smaller file** are treated as the same conversation (linked transitively,
-  so rename chains merge too).
+- A "shared message" means the same body text with a timestamp within **12 hours** (nearest
+  match wins, so seconds/DST/timezone drift is tolerated); files whose histories share at
+  least **5 messages and 60% of the smaller file** are treated as the same conversation
+  (linked transitively, so rename chains merge too).
 - Merged histories are deduplicated by minute+body, keeping the max multiplicity seen in any
   single file, and overlapping messages use the **newest** file's names.
 - Each name change is recorded at the older file's last-message timestamp as a system message:
@@ -148,6 +148,7 @@ conversation into memory and serves a single-page UI:
 - full-text search (case-insensitive substring, with a **Whole words** toggle so `the` does not match `then`) with snippets, filters (conversation, sender, type, date range) and globally chronological results (oldest/newest first);
 - click a search result to jump to that exact message;
 - windowed paging keeps very large conversations (tens of thousands of messages) responsive;
+- jump-to-top/latest buttons (`Home` / `End`) for long conversations;
 - light/dark theme, `fs.watch` reindexing plus a manual reload button, `/` and `j`/`k` shortcuts.
 
 Performance at the current scale (455 conversations, 539k messages, ~80MB): ~0.5s startup,

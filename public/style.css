@@ -168,6 +168,37 @@ body {
     min-height: 0;
     display: flex;
     flex-direction: column;
+    position: relative;
+}
+
+.jump-controls {
+    position: absolute;
+    right: 18px;
+    bottom: 22px;
+    display: flex;
+    gap: 8px;
+    z-index: 3;
+}
+
+.jump-btn {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+}
+
+.jump-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.jump-btn.hidden {
+    display: none;
 }
 
 .empty-state {

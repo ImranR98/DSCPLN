@@ -410,6 +410,46 @@ const runMessageChecks = (expect) => {
     expect(merged.filter(message => message.body === 'x').length === 2, 'messages: merge must keep the max multiplicity')
 }
 
+const runAlignmentChecks = (expect) => {
+    const base = new Date(2024, 0, 1, 9, 0).getTime()
+    const chat = (offsetMs, entries) => entries.map(([offset, sender, body]) => ({ date: new Date(base + offsetMs + offset), sender, type: 'text', body }))
+    const reference = chat(0, [[0, 'A', 'one'], [60000, 'B', 'two'], [120000, 'A', 'three'], [180000, 'B', 'four'], [240000, 'A', 'five']])
+
+    // A constant timezone shift dedupes the overlap and aligns unique messages to the reference timeline
+    const shifted = chat(-5 * 3600000, [[0, 'A', 'one'], [60000, 'B', 'two'], [120000, 'A', 'three'], [180000, 'B', 'four'], [240000, 'A', 'five'], [300000, 'A', 'brand new']])
+    const constant = app.mergeMessages([reference, shifted])
+    expect(constant.length === 6, `alignment: constant shift expected 6 messages, got ${constant.length}`)
+    expect(constant[constant.length - 1].date.getTime() === base + 300000, `alignment: unique message not aligned, got ${constant[constant.length - 1].date.toISOString()}`)
+
+    // Minute-level clock skew still dedupes
+    const skewed = chat(2 * 60000, [[0, 'A', 'one'], [60000, 'B', 'two'], [120000, 'A', 'three'], [180000, 'B', 'four'], [240000, 'A', 'five']])
+    expect(app.mergeMessages([reference, skewed]).length === 5, 'alignment: minute skew should dedupe')
+
+    // Mixed offsets (two clusters) still dedupe every shared message
+    const mixed = reference.map(message => ({ ...message }))
+    for (let i = 0; i < mixed.length; i++) {
+        const shift = i < 2 ? -5 * 3600000 : -6 * 3600000
+        mixed[i].date = new Date(mixed[i].date.getTime() + shift)
+    }
+    expect(app.mergeMessages([reference, mixed]).length === 5, 'alignment: mixed offsets should dedupe')
+
+    // The same body outside the 12h window must not be paired
+    const far = chat(13 * 3600000, [[0, 'A', 'one']])
+    expect(app.mergeMessages([reference, far]).length === 6, 'alignment: beyond the match window should stay separate')
+
+    // Repeated copies must pair optimally; a nearest-neighbour scan would leave the later copy unmatched
+    const dupBase = new Date(2024, 0, 1, 0, 0).getTime()
+    const dupRef = [
+        { date: new Date(dupBase), sender: 'A', type: 'text', body: 'repeat' },
+        { date: new Date(dupBase + 13 * 3600000), sender: 'A', type: 'text', body: 'repeat' }
+    ]
+    const dupIn = [
+        { date: new Date(dupBase + 11 * 3600000), sender: 'A', type: 'text', body: 'repeat' },
+        { date: new Date(dupBase + 23 * 3600000), sender: 'A', type: 'text', body: 'repeat' }
+    ]
+    expect(app.mergeMessages([dupRef, dupIn]).length === 2, 'alignment: repeated copies should pair optimally')
+}
+
 const runRenameChecks = (expect) => {
     const makeChat = (name, extraBody) => {
         const times = [['09:00', 'hello'], ['09:01', 'how are you'], ['09:02', 'good'], ['09:03', 'bye'], ['09:04', 'later'], ['09:05', 'x']]
@@ -593,6 +633,22 @@ const runEndToEndChecks = (expect) => {
             expect(messages.some(message => message.body === 'brand new'), 'e2e: txt+json new message missing')
         }
 
+        // A phone export rendered in another timezone still merges into the existing JSON
+        const tz = path.join(tmp, 'tz')
+        fs.mkdirSync(tz)
+        fs.writeFileSync(path.join(tz, '20240101 - Alice.json'), JSON.stringify(existing, null, 2) + '\n')
+        const tzLines = [0, 1, 2, 3, 4].map(i => `2024-01-01, 4:0${i} a.m. - Alice: overlap ${i}`).join('\n')
+        fs.writeFileSync(path.join(tz, 'WhatsApp Chat with Alice.txt'), `${tzLines}\n2024-01-01, 4:05 a.m. - Alice: brand new\n`)
+        silent(() => app.main([tz]))
+        const tzOutputs = fs.readdirSync(tz)
+        expect(tzOutputs.length === 1 && tzOutputs[0] === '20240101 - Alice.json', `e2e: shifted txt+json expected one output, got ${JSON.stringify(tzOutputs)}`)
+        if (tzOutputs.length === 1) {
+            const messages = app.parseJsonChat(fs.readFileSync(path.join(tz, tzOutputs[0]), 'utf8'))
+            expect(messages.length === 6, `e2e: shifted txt+json expected 6 messages, got ${messages.length}`)
+            const fresh = messages.find(message => message.body === 'brand new')
+            expect(fresh && fresh.date.getHours() === 9 && fresh.date.getMinutes() === 5, `e2e: shifted unique message not aligned to the reference time (${fresh && fresh.date.toISOString()})`)
+        }
+
         // A new-name txt merges with the existing JSON and records the rename
         const renamedMix = path.join(tmp, 'renamed-mix')
         fs.mkdirSync(renamedMix)
@@ -697,7 +753,7 @@ const runSelfTest = () => {
             for (const list of messageLists) {
                 const counts = new Map()
                 for (const message of list) {
-                    const key = app.overlapKey(message)
+                    const key = `${message.date.getTime()}|${message.body}`
                     counts.set(key, (counts.get(key) || 0) + 1)
                 }
                 for (const [key, count] of counts) maxCounts.set(key, Math.max(maxCounts.get(key) || 0, count))
@@ -714,6 +770,7 @@ const runSelfTest = () => {
     runParserChecks(expect)
     runInferenceChecks(expect)
     runMessageChecks(expect)
+    runAlignmentChecks(expect)
     runRenameChecks(expect)
     runEndToEndChecks(expect)
 

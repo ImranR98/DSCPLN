@@ -1,0 +1,4 @@
+Chat exported on Mon Apr 06 2020 03:37:54 GMT-0400 (Eastern Daylight Time).
+
+2024-01-15, 9:00 a.m. - Alice: Only the first header line is present
+2024-01-15, 9:01 a.m. - Bob: The checker warns but the file still passes

@@ -1,0 +1,2 @@
+(15/01/2024, 3:04 PM) Alice: Parenthesized bracketed timestamp
+(15/01/2024, 3:05 PM) Bob: Still parses

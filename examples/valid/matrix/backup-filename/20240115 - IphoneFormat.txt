@@ -1,0 +1,16 @@
+[2024-01-15, 8:58:05 AM] Messages and calls are end-to-end encrypted. No one outside of this chat, not even WhatsApp, can read or listen to them.
+[2024-01-15, 9:00:05 AM] Alice: Hey Bob! How are you?
+[2024-01-15, 9:01:05 AM] Bob: I'm good, thanks! 😄
+[2024-01-15, 9:02:05 AM] Alice: This is a multi-line message
+that continues on the next line.
+
+And even has a blank line in the middle.
+[2024-01-15, 9:03:05 AM] Bob: ‎image omitted
+[2024-01-15, 9:04:05 AM] Alice: <attached: IMG_0001.jpg>
+[2024-01-15, 9:05:05 AM] Bob: This message was deleted
+[2024-01-15, 9:06:05 AM] Alice: You deleted this message
+[2024-01-15, 9:07:05 AM] Alice added Carol
+[2024-01-15, 9:08:05 AM] Alice: Check this out: https://example.com/path?a=1
+[2024-01-15, 9:09:05 AM] Bob: 
+[2024-01-15, 12:00:05 PM] Alice: Meeting at noon?
+[2024-01-15, 11:59:05 PM] Bob: Good night

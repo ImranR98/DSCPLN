@@ -1,0 +1,2 @@
+﻿2024-01-15, 9:00 a.m. - Alice: The BOM breaks this first date line
+2024-01-15, 9:01 a.m. - Bob: Later date lines still look fine

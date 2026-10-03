@@ -1,0 +1,4 @@
+‎[2024-01-15, 9:00:05 AM] Alice: First line carries a leading left-to-right mark
+[2024-01-15, 9:01:05 AM] Bob: Plain line without the mark
+‎[2024-01-15, 9:02:05 AM] Alice: ‎<attached: IMG_0001.jpg>
+[2024-01-15, 9:03:05 AM] Bob: ‎image omitted

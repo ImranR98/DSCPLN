@@ -1,0 +1,5 @@
+2024-01-18, 8:00 a.m. - Alice: Android format
+1/18/24, 9:00 AM - Bob: New Android format
+18/1/2024, 10:00 am - Alice: New DMY format
+[2024-01-18, 11:00:00 AM] Bob: iPhone format
+2024-01-18, 12:00 p.m. - Alice: Back to Android

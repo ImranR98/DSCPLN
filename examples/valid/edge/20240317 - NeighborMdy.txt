@@ -1,0 +1,4 @@
+2022-10-01, 9:00 a.m. - Alice: Fixed anchor before the ambiguous lines
+10/3/22, 2:26 pm - Alice: Ambiguous, bracketed by fixed dates
+10/7/22, 3:35 pm - Alice: Ambiguous, still inside the window
+2022-10-29, 9:00 a.m. - Alice: Fixed anchor after the ambiguous lines

@@ -1,3 +1,9 @@
 {
-  "type": "commonjs"
+  "type": "commonjs",
+  "private": true,
+  "scripts": {
+    "check": "node checkFormat.js",
+    "check-examples": "node checkFormat.js --check-examples",
+    "test": "node checkFormat.js --check-examples"
+  }
 }

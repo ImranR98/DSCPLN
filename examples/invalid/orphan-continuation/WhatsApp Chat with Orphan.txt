@@ -1,0 +1,2 @@
+This continuation line appears before any date line
+2024-01-15, 9:00 a.m. - Alice: Then a valid date line

@@ -1,0 +1,2 @@
+Hello, this file has no date lines at all
+just message text

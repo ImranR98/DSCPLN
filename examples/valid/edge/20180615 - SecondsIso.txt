@@ -1,0 +1,3 @@
+2016-03-18, 10:39:52 AM: Alice: Old Android ISO timestamp with seconds
+2016-03-18, 10:40:01 AM: Bob: Seconds are preserved
+2017-11-09, 9:01:18 AM: Alice: A later message in the same format

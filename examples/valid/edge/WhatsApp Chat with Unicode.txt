@@ -1,0 +1,4 @@
+2024-01-17, 9:00 a.m. - Alice: 😀🎉👍
+2024-01-17, 9:01 a.m. - Bob: مرحبا بالعالم
+2024-01-17, 9:02 a.m. - Alice: Café naïve résumé
+２０２４-０１-１７, ９：０３ ａ．ｍ． - Bob: Fullwidth digits normalize through NFKD

@@ -1,0 +1,2 @@
+2024-01-15, 9:00 a.m. - Alice: Narrow no-break space before the meridiem
+2024-01-15, 3:04 p.m. - Bob: NFKD normalization makes this parse

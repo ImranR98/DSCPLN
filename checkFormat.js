@@ -470,44 +470,6 @@ const runRenameChecks = (expect) => {
     }
 }
 
-const runMergeUnitChecks = (expect) => {
-    const cases = [
-        {
-            name: 'disjoint concatenation keeps the trailing newline without a blank junction',
-            cont1: '2024-01-01, 1:00 p.m. - A: one\n2024-01-02, 1:00 p.m. - A: two\n',
-            cont2: '2024-01-03, 1:00 p.m. - A: three\n',
-            expected: '2024-01-01, 1:00 p.m. - A: one\n2024-01-02, 1:00 p.m. - A: two\n2024-01-03, 1:00 p.m. - A: three\n',
-            last: new Date(2024, 0, 3, 13, 0).valueOf()
-        },
-        {
-            name: 'same end timestamp keeps the containing file',
-            cont1: '2024-01-02, 10:00 a.m. - A: b\n2024-01-03, 10:00 a.m. - A: c\n',
-            cont2: '2024-01-01, 10:00 a.m. - A: a\n2024-01-03, 10:00 a.m. - A: c2\n',
-            expected: '2024-01-01, 10:00 a.m. - A: a\n2024-01-03, 10:00 a.m. - A: c2\n',
-            last: new Date(2024, 0, 3, 10, 0).valueOf()
-        },
-        {
-            name: 'partial overlap appends from the first newer date',
-            cont1: '2024-01-01, 1:00 p.m. - A: x0\n2024-01-03, 1:00 p.m. - A: x1\n',
-            cont2: '2024-01-02, 1:00 p.m. - A: y0\n2024-01-04, 1:00 p.m. - A: y1\n',
-            expected: '2024-01-01, 1:00 p.m. - A: x0\n2024-01-03, 1:00 p.m. - A: x1\n2024-01-04, 1:00 p.m. - A: y1\n',
-            last: new Date(2024, 0, 4, 13, 0).valueOf()
-        },
-        {
-            name: 'identical ranges return the first file',
-            cont1: '2024-01-01, 1:00 p.m. - A: x0\n',
-            cont2: '2024-01-01, 1:00 p.m. - A: y0\n',
-            expected: '2024-01-01, 1:00 p.m. - A: x0\n',
-            last: new Date(2024, 0, 1, 13, 0).valueOf()
-        }
-    ]
-    for (const testCase of cases) {
-        const [content, timestamp] = app.mergeContents(testCase.cont1, testCase.cont2)
-        expect(content === testCase.expected, `merge unit ${testCase.name}: got ${JSON.stringify(content)}`)
-        expect(timestamp === testCase.last, `merge unit ${testCase.name}: timestamp ${timestamp}, expected ${testCase.last}`)
-    }
-}
-
 const runEndToEndChecks = (expect) => {
     const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'whatsapptxt-test-'))
     const silent = (fn) => {
@@ -613,18 +575,47 @@ const runEndToEndChecks = (expect) => {
             expect(parsedFilename[0].date === new Date(2022, 9, 8, 9, 0).toISOString(), `e2e: filename inference should pick MDY, got ${parsedFilename[0].date}`)
         }
 
-        const raw = path.join(tmp, 'raw')
-        fs.mkdirSync(raw)
-        fs.writeFileSync(path.join(raw, 'WhatsApp Chat with Frank.txt'), '2024-01-01, 10:00 a.m. - Alice: Raw line\n')
-        const rawOut = path.join(tmp, 'raw-out')
-        fs.mkdirSync(rawOut)
-        silent(() => app.main([rawOut, raw], { normalize: false }))
-        const rawOutputs = fs.readdirSync(rawOut)
-        expect(rawOutputs.length === 1 && rawOutputs[0] === '20240101 - Frank.txt', `e2e: --no-normalize output name ${JSON.stringify(rawOutputs)}`)
-        if (rawOutputs.length === 1) {
-            const rawContent = fs.readFileSync(path.join(rawOut, rawOutputs[0]), 'utf8')
-            expect(rawContent === '2024-01-01, 10:00 a.m. - Alice: Raw line\n', `e2e: --no-normalize content changed: ${JSON.stringify(rawContent)}`)
+        const existing = [0, 1, 2, 3, 4].map(i => ({ date: new Date(2024, 0, 1, 9, i, 30).toISOString(), sender: 'Alice', type: 'text', body: `overlap ${i}` }))
+
+        // New phone txt without seconds merges into the existing JSON (with seconds) plus a new message
+        const mixed = path.join(tmp, 'mixed')
+        fs.mkdirSync(mixed)
+        fs.writeFileSync(path.join(mixed, '20240101 - Alice.json'), JSON.stringify(existing, null, 2) + '\n')
+        const mixedLines = [0, 1, 2, 3, 4].map(i => `2024-01-01, 9:0${i} a.m. - Alice: overlap ${i}`).join('\n')
+        fs.writeFileSync(path.join(mixed, 'WhatsApp Chat with Alice.txt'), `${mixedLines}\n2024-01-01, 9:05 a.m. - Alice: brand new\n`)
+        silent(() => app.main([mixed]))
+        const mixedOutputs = fs.readdirSync(mixed)
+        expect(mixedOutputs.length === 1 && mixedOutputs[0] === '20240101 - Alice.json', `e2e: txt+json expected one output, got ${JSON.stringify(mixedOutputs)}`)
+        if (mixedOutputs.length === 1) {
+            const messages = app.parseJsonChat(fs.readFileSync(path.join(mixed, mixedOutputs[0]), 'utf8'))
+            expect(messages.length === 6, `e2e: txt+json expected 6 messages without drift duplicates, got ${messages.length}`)
+            expect(messages.filter(message => message.body.startsWith('overlap')).length === 5, 'e2e: txt+json overlap was duplicated')
+            expect(messages.some(message => message.body === 'brand new'), 'e2e: txt+json new message missing')
         }
+
+        // A new-name txt merges with the existing JSON and records the rename
+        const renamedMix = path.join(tmp, 'renamed-mix')
+        fs.mkdirSync(renamedMix)
+        fs.writeFileSync(path.join(renamedMix, '20240101 - Alice.json'), JSON.stringify(existing, null, 2) + '\n')
+        const renamedLines = [0, 1, 2, 3, 4].map(i => `2024-01-01, 9:0${i} a.m. - Alice Smith: overlap ${i}`).join('\n')
+        fs.writeFileSync(path.join(renamedMix, 'WhatsApp Chat with Alice Smith.txt'), `${renamedLines}\n2024-01-01, 9:05 a.m. - Alice Smith: brand new\n`)
+        silent(() => app.main([renamedMix]))
+        const renamedOutputs = fs.readdirSync(renamedMix)
+        expect(renamedOutputs.length === 1 && renamedOutputs[0] === '20240101 - Alice Smith.json', `e2e: renamed txt+json output ${JSON.stringify(renamedOutputs)}`)
+        if (renamedOutputs.length === 1) {
+            const messages = app.parseJsonChat(fs.readFileSync(path.join(renamedMix, renamedOutputs[0]), 'utf8'))
+            expect(messages.some(message => message.type === 'system' && message.body === 'Conversation name changed from "Alice" to "Alice Smith"'), 'e2e: renamed txt+json missing marker')
+        }
+
+        // The removed text mode is ignored; output is still JSON
+        const removedMode = path.join(tmp, 'removed-mode')
+        fs.mkdirSync(removedMode)
+        fs.writeFileSync(path.join(removedMode, 'WhatsApp Chat with Frank.txt'), '2024-01-01, 10:00 a.m. - Alice: Raw line\n')
+        const removedModeOut = path.join(tmp, 'removed-mode-out')
+        fs.mkdirSync(removedModeOut)
+        silent(() => app.main([removedModeOut, removedMode], { normalize: false }))
+        const removedModeOutputs = fs.readdirSync(removedModeOut)
+        expect(removedModeOutputs.length === 1 && removedModeOutputs[0] === '20240101 - Frank.json', `e2e: removed text mode should still write JSON, got ${JSON.stringify(removedModeOutputs)}`)
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true })
     }
@@ -706,7 +697,7 @@ const runSelfTest = () => {
             for (const list of messageLists) {
                 const counts = new Map()
                 for (const message of list) {
-                    const key = app.messageKey(message)
+                    const key = app.overlapKey(message)
                     counts.set(key, (counts.get(key) || 0) + 1)
                 }
                 for (const [key, count] of counts) maxCounts.set(key, Math.max(maxCounts.get(key) || 0, count))
@@ -724,7 +715,6 @@ const runSelfTest = () => {
     runInferenceChecks(expect)
     runMessageChecks(expect)
     runRenameChecks(expect)
-    runMergeUnitChecks(expect)
     runEndToEndChecks(expect)
 
     if (failures > 0) {

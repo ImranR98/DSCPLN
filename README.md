@@ -5,15 +5,17 @@ Merges WhatsApp `.txt` chat exports of the same conversation across multiple bac
 ## Usage
 
 ```
-node WhatsAppTXT.js [--dry-run] [--no-normalize] [--date-order=auto|dmy|mdy|ymd] [--help] <output-directory> [additional-source-directory] [...]
+node WhatsAppTXT.js [--dry-run] [--no-merge-renamed] [--date-order=auto|dmy|mdy|ymd]
+                   [--rename-min-shared=5] [--rename-min-coverage=0.6] [--help]
+                   <output-directory> [additional-source-directory] [...]
 ```
 
 - The first directory receives the merged files; old outputs there are replaced.
-- Files that result in the same conversation name are merged across all directories (`Alice.txt` and `20240105 - Alice.json` are the same conversation).
+- New phone `.txt` exports merge with existing `.json` outputs: both are parsed and grouped by conversation name (`WhatsApp Chat with Alice.txt`, `Alice.txt` and `20240105 - Alice.json` are all the same conversation), and the result is written back as JSON.
 - Recognized filename prefixes are stripped before matching (`WhatsApp Chat with `, `YYYYMMDD - `, `YYYY-M-D-`).
 - `--dry-run` reports what would happen without renaming, deleting or writing anything.
-- `--no-normalize` writes the legacy verbatim `.txt` merge instead of JSON.
 - `--date-order` forces the component order for ambiguous slash/dot dates (`auto` infers per file).
+- `--no-merge-renamed` disables detecting and merging renamed contacts/groups.
 - The run aborts **before modifying anything** if a directory has filename collisions or a file cannot be parsed.
 - Recognized 2-line export headers (`Chat exported on …` / `Last chat on …`) are stripped.
 - Files containing ambiguous dates are reported in an `=== Ambiguous dates ===` summary section.
@@ -51,13 +53,14 @@ Each merged conversation is a JSON array of message objects:
 - `type` is one of `text`, `media`, `attachment`, `deleted`, `system`.
 - Continuation lines are joined into `body` with `\n`; a multi-line message is one object.
 - Output is pretty-printed with stable field order and ends with one newline, so re-runs are byte-identical.
-- Output files are named `YYYYMMDD - <conversation>.json` using the last message date; `--no-normalize` uses `.txt`.
+- Output files are named `YYYYMMDD - <conversation>.json` using the last message date.
 
 ## Merging
 
-- Sources are parsed into messages and merged as a union, then sorted by `date` (stable).
-- Identical messages from overlapping backups are deduplicated by `(date, sender, body)`, keeping the highest occurrence count seen in any single source — genuine repeats survive, cross-source overlap does not duplicate.
+- Sources (`.txt` exports and `.json` outputs alike) are parsed into messages and merged as a union, then sorted by `date` (stable).
+- Overlapping messages are deduplicated by **same body within the same minute** (seconds are ignored because export versions drift), keeping the highest occurrence count seen in any single source — genuine repeats survive, txt+txt, txt+json and json+json merges all behave the same way.
 - JSON outputs written by a previous run are read back and re-merged, so running the tool repeatedly is idempotent.
+- Typical phone workflow: drop the new `.txt` export(s) into the JSON directory and run the tool; the txt and its existing JSON are merged into a fresh `YYYYMMDD - Name.json` and both old files are replaced.
 
 ### Renamed conversations
 
@@ -88,7 +91,7 @@ Matching is built from two layers:
 | `android` | `2024-01-15, 3:04 p.m. - Alice: hello` |
 | `androidSeconds` | `2017-11-09, 9:01:18 AM: Alice: hello` |
 | `iphone` | `[2024-01-15, 3:04:05 AM] Alice: hello` |
-| `canonical` | `2024-01-15-090418 - Alice: hello` (legacy text output) |
+| `canonical` | `2024-01-15-090418 - Alice: hello` (legacy text format, still accepted as input) |
 
 2. **Generic matcher** for slash/dot date shapes, which covers current and future export variants:
 

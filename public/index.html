@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WhatsApp TXT browser</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header class="topbar">
+        <button id="sidebar-toggle" class="icon-btn" aria-label="Toggle conversation list">☰</button>
+        <span class="brand">WhatsApp&nbsp;TXT</span>
+        <form id="search-form" role="search" class="search-form">
+            <input id="search-input" type="search" placeholder="Search messages…  /" autocomplete="off" spellcheck="false">
+        </form>
+        <span id="status" class="status"></span>
+        <button id="reload" class="icon-btn" title="Reindex the data directory">↻</button>
+        <button id="theme" class="icon-btn" title="Toggle light/dark theme">◐</button>
+    </header>
+
+    <main class="layout">
+        <aside id="sidebar" class="sidebar" aria-label="Conversations">
+            <div class="sidebar-head">
+                <input id="conversation-filter" type="search" placeholder="Filter conversations" autocomplete="off" spellcheck="false">
+            </div>
+            <ul id="conversation-list" class="conversation-list"></ul>
+        </aside>
+        <section id="content" class="content" aria-live="polite"></section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+</body>
+</html>

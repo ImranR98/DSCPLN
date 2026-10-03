@@ -112,10 +112,45 @@ Validates `.txt` exports and app-produced `.json` conversations, without modifyi
 - `--date-order` mirrors the merge app's override for ambiguous dates.
 - `--check-examples` runs the test suite: fixtures, parser, inference, message parsing, merge units, collisions and end-to-end runs in temp dirs.
 
+## Web browser
+
+```
+npm install
+npm start -- --dir "/path/to/WhatsApp TXT" [--port 8787] [--host 127.0.0.1] [--no-watch]
+```
+
+A read-only Express server (the data directory is never written) that indexes every `.json`
+conversation into memory and serves a single-page UI:
+
+- conversation sidebar with name filter, message counts and last activity;
+- message view with date separators, sender colors and type styling (`media`, `attachment`, `deleted`, `system`); dates and times render as `YYYY-MM-DD` and `hh:mm AM/PM` in the browser's timezone;
+- full-text search (case-insensitive substring, with a **Whole words** toggle so `the` does not match `then`) with snippets, filters (conversation, sender, type, date range) and globally chronological results (oldest/newest first);
+- click a search result to jump to that exact message;
+- windowed paging keeps very large conversations (tens of thousands of messages) responsive;
+- light/dark theme, `fs.watch` reindexing plus a manual reload button, `/` and `j`/`k` shortcuts.
+
+Performance at the current scale (455 conversations, 539k messages, ~80MB): ~0.5s startup,
+~300MB RSS, searches in <100ms. Invalid or hidden files are skipped and reported in
+`/api/state`. The JSON API is `/api/state`, `/api/conversations`,
+`/api/conversations/:id/messages?offset=&limit=&around=`, `/api/search` (add `whole=1` for whole-word matching) and `POST /api/reload`.
+
+### Docker
+
+```
+docker build -t whatsapptxt-browser .
+docker run --rm -p 8787:8787 -v "/path/to/WhatsApp TXT:/data:ro" whatsapptxt-browser
+```
+
+The container reads `/data` by default, so mount the conversation directory there (read-only is enough).
+`DATA_DIR`, `HOST` and `PORT` environment variables override the defaults
+(e.g. `-e PORT=9000 -p 9000:9000`). The image runs as uid 1000; if your files are owned by a different
+uid, add `--user "$(id -u):$(id -g)"` to the `docker run` command.
+
 ## Development
 
 ```
-npm test                    # node checkFormat.js --check-examples
+npm test                    # checker self-test + server API tests
+npm run test:server         # server API tests only
 node examples/generate.js   # regenerate the committed example fixtures
 ```
 

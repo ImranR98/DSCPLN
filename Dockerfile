@@ -22,3 +22,6 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
 USER node
 
 CMD ["sh", "-c", "exec node server.mjs --dir \"$DATA_DIR\" --host \"$HOST\" --port \"$PORT\""]
+
+# sudo docker build -t imranrdev/whatsapp-txt-browser .
+# sudo docker push imranrdev/whatsapp-txt-browser

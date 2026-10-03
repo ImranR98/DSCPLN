@@ -8,26 +8,30 @@
 </head>
 <body>
     <header class="topbar">
-        <button id="sidebar-toggle" class="icon-btn" aria-label="Toggle conversation list">☰</button>
+        <button id="sidebar-toggle" class="icon-btn" aria-label="Toggle conversation list"></button>
         <span class="brand">WhatsApp&nbsp;TXT</span>
         <form id="search-form" role="search" class="search-form">
-            <input id="search-input" type="search" placeholder="Search messages…  /" autocomplete="off" spellcheck="false">
+            <span class="search-box">
+                <input id="search-input" type="search" placeholder="Search messages…  /" autocomplete="off" spellcheck="false" aria-label="Search messages">
+                <button type="button" id="search-clear" class="clear-btn" aria-label="Clear search" hidden></button>
+            </span>
         </form>
-        <span id="status" class="status"></span>
-        <button id="reload" class="icon-btn" title="Reindex the data directory">↻</button>
-        <button id="theme" class="icon-btn" title="Toggle light/dark theme">◐</button>
+        <span id="status" class="status" role="status"></span>
+        <button id="reload" class="icon-btn" aria-label="Reindex the data directory" title="Reindex"></button>
     </header>
-
+    <div id="banner" class="banner" hidden role="alert">
+        <span id="banner-text"></span>
+        <button id="banner-close" class="icon-btn" aria-label="Dismiss notification"></button>
+    </div>
     <main class="layout">
         <aside id="sidebar" class="sidebar" aria-label="Conversations">
             <div class="sidebar-head">
-                <input id="conversation-filter" type="search" placeholder="Filter conversations" autocomplete="off" spellcheck="false">
+                <input id="conversation-filter" type="search" placeholder="Filter conversations" autocomplete="off" spellcheck="false" aria-label="Filter conversations">
             </div>
             <ul id="conversation-list" class="conversation-list"></ul>
         </aside>
-        <section id="content" class="content" aria-live="polite"></section>
+        <section id="content" class="content"></section>
     </main>
-
     <script type="module" src="/app.js"></script>
 </body>
 </html>

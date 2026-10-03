@@ -148,8 +148,10 @@ conversation into memory and serves a single-page UI:
 - full-text search (case-insensitive substring, with a **Whole words** toggle so `the` does not match `then`) with snippets, filters (conversation, sender, type, date range) and globally chronological results (oldest/newest first);
 - click a search result to jump to that exact message;
 - windowed paging keeps very large conversations (tens of thousands of messages) responsive;
-- jump-to-top/latest buttons (`Home` / `End`) for long conversations;
-- light/dark theme, `fs.watch` reindexing plus a manual reload button, `/` and `j`/`k` shortcuts.
+- three view modes (Transcript / Bubbles / Compact) and jump-to-top/latest buttons (`Home` / `End`);
+- live debounced search with a whole-words toggle, filters kept in the URL, and `j`/`k` result navigation;
+- keyboard-friendly conversation list, loading skeletons and error banners, and an automatic light/dark theme that follows the device;
+- `fs.watch` reindexing plus a manual reload button; `/` focuses search.
 
 Performance at the current scale (455 conversations, 539k messages, ~80MB): ~0.5s startup,
 ~300MB RSS, searches in <100ms. Invalid or hidden files are skipped and reported in

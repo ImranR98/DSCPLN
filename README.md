@@ -59,6 +59,24 @@ Each merged conversation is a JSON array of message objects:
 - Identical messages from overlapping backups are deduplicated by `(date, sender, body)`, keeping the highest occurrence count seen in any single source — genuine repeats survive, cross-source overlap does not duplicate.
 - JSON outputs written by a previous run are read back and re-merged, so running the tool repeatedly is idempotent.
 
+### Renamed conversations
+
+When a contact or group is renamed, separate exports can exist for what is really one
+conversation. Those are detected automatically:
+
+- A "shared message" means the same body text **and the same hour+minute** (seconds are
+  ignored because export versions drift); files whose histories share at least **5 messages
+  and 60% of the smaller file** are treated as the same conversation (linked transitively,
+  so rename chains merge too).
+- Merged histories are deduplicated by minute+body, keeping the max multiplicity seen in any
+  single file, and overlapping messages use the **newest** file's names.
+- Each name change is recorded at the older file's last-message timestamp as a system message:
+  `Conversation name changed from "Old Name" to "New Name"` (equivalent names such as
+  `Papa_s` / `Papa's` or duplicate ` (1)` files merge without a marker).
+- Control it with `--no-merge-renamed`, `--rename-min-shared=N` (default 5) and
+  `--rename-min-coverage=0.6`. Renamed merges are listed in the console summary and in
+  `--dry-run`.
+
 ## Timestamp matching
 
 Matching is built from two layers:

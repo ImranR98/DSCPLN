@@ -410,6 +410,66 @@ const runMessageChecks = (expect) => {
     expect(merged.filter(message => message.body === 'x').length === 2, 'messages: merge must keep the max multiplicity')
 }
 
+const runRenameChecks = (expect) => {
+    const makeChat = (name, extraBody) => {
+        const times = [['09:00', 'hello'], ['09:01', 'how are you'], ['09:02', 'good'], ['09:03', 'bye'], ['09:04', 'later'], ['09:05', 'x']]
+        const messages = times.map(([time, body]) => ({ date: new Date(`2024-01-01T${time}:00`), sender: name, type: 'text', body }))
+        if (extraBody) messages.push({ date: new Date('2024-01-01T09:06:00'), sender: name, type: 'text', body: extraBody })
+        return { key: name, name, messages, sources: [] }
+    }
+    const oldChat = makeChat('Old Name')
+    const newChat = makeChat('New Name', 'new message')
+    const unrelated = { key: 'Someone Else', name: 'Someone Else', sources: [], messages: [{ date: new Date('2024-01-01T09:00:00'), sender: 'Someone Else', type: 'text', body: 'different' }] }
+
+    const detected = app.detectRenamedGroups([oldChat, newChat, unrelated], { minShared: 5, minCoverage: 0.6 })
+    expect(detected.groups.length === 1 && detected.groups[0].length === 2, `renames: expected one group of two, got ${JSON.stringify(detected.groups)}`)
+    const strict = app.detectRenamedGroups([oldChat, newChat], { minShared: 10, minCoverage: 0.6 })
+    expect(strict.groups.length === 0, `renames: expected no group below the shared threshold, got ${JSON.stringify(strict.groups)}`)
+
+    const merged = app.mergeConversationGroup([oldChat, newChat])
+    expect(merged.name === 'New Name', `renames: expected newest name, got ${merged.name}`)
+    expect(merged.messages.length === 8, `renames: expected 8 messages (7 unique + 1 marker), got ${merged.messages.length}`)
+    const senders = new Set(merged.messages.filter(message => message.sender).map(message => message.sender))
+    expect(senders.size === 1 && senders.has('New Name'), `renames: expected newest sender names, got ${JSON.stringify([...senders])}`)
+    const marker = merged.messages.find(message => message.type === 'system')
+    expect(marker != null && marker.sender === null, 'renames: missing rename marker')
+    expect(marker.body === 'Conversation name changed from "Old Name" to "New Name"', `renames: unexpected marker body ${marker && marker.body}`)
+    expect(marker.date.getTime() === oldChat.messages[oldChat.messages.length - 1].date.getTime(), 'renames: marker should sit at the older file last message')
+    const markerIndex = merged.messages.indexOf(marker)
+    expect(markerIndex > 0 && merged.messages[markerIndex - 1].date.getTime() <= marker.date.getTime(), 'renames: marker ordering wrong')
+
+    const drifted = makeChat('Drifted')
+    const fresh = makeChat('Fresh', 'extra')
+    fresh.messages[0].date = new Date(fresh.messages[0].date.getTime() + 30000)
+    const driftMerged = app.mergeConversationGroup([drifted, fresh])
+    expect(driftMerged.messages.filter(message => message.type !== 'system').length === 7, `renames: expected minute-level dedupe, got ${driftMerged.messages.length}`)
+
+    const equivalent = app.mergeConversationGroup([makeChat('Papa_s Contact'), makeChat("Papa's Contact", 'extra')])
+    expect(equivalent.messages.every(message => message.type !== 'system'), 'renames: equivalent names should not produce a marker')
+
+    const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'whatsapptxt-renames-'))
+    const silent = (fn) => {
+        const original = console.log
+        console.log = () => {}
+        try { fn() } finally { console.log = original }
+    }
+    try {
+        fs.writeFileSync(path.join(tmp, '20240101 - Old Name.json'), JSON.stringify(oldChat.messages) + '\n')
+        fs.writeFileSync(path.join(tmp, '20240101 - New Name.json'), JSON.stringify(newChat.messages) + '\n')
+        silent(() => app.main([tmp]))
+        const outputs = fs.readdirSync(tmp).sort()
+        expect(outputs.length === 1 && outputs[0] === '20240101 - New Name.json', `renames: expected one merged output, got ${JSON.stringify(outputs)}`)
+        if (outputs.length === 1) {
+            const result = checkJsonFile(path.join(tmp, outputs[0]))
+            expect(result.errors.length === 0, `renames: merged output failed validation:\n${report(result)}`)
+            const messages = app.parseJsonChat(fs.readFileSync(path.join(tmp, outputs[0]), 'utf8'))
+            expect(messages.some(message => message.type === 'system' && message.body.startsWith('Conversation name changed')), 'renames: merged output missing the rename marker')
+        }
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true })
+    }
+}
+
 const runMergeUnitChecks = (expect) => {
     const cases = [
         {
@@ -663,6 +723,7 @@ const runSelfTest = () => {
     runParserChecks(expect)
     runInferenceChecks(expect)
     runMessageChecks(expect)
+    runRenameChecks(expect)
     runMergeUnitChecks(expect)
     runEndToEndChecks(expect)
 

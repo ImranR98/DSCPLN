@@ -493,6 +493,125 @@ const parseJsonChat = (content) => {
     })
 }
 
+// Strips a duplicate-file suffix like " (1)" from a conversation name
+const cleanDisplayName = (name) => name.replace(/\s*\(\d+\)\s*$/, '')
+
+// Normalizes a conversation name for equivalence checks (punctuation/case insensitive)
+const normalizeName = (name) => cleanDisplayName(name).normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+
+const lastDateOf = (member) => member.messages.reduce((max, message) => Math.max(max, message.date.getTime()), -Infinity)
+const firstDateOf = (member) => member.messages.reduce((min, message) => Math.min(min, message.date.getTime()), Infinity)
+
+// Cross-file matching key: same body within the same minute (seconds differ between export versions)
+const overlapKey = (message) => `${Math.floor(message.date.getTime() / 60000)}|${message.body}`
+
+// Finds groups of conversations whose message histories substantially overlap (renamed contacts/groups).
+// Returns { groups: [[memberIndex...]], edges: Map "a|b" -> { shared, coverage } }
+const detectRenamedGroups = (members, options = {}) => {
+    const minShared = options.minShared ?? 5
+    const minCoverage = options.minCoverage ?? 0.6
+    const keyOwners = new Map()
+    members.forEach((member, index) => {
+        for (const key of new Set(member.messages.map(overlapKey))) {
+            if (!keyOwners.has(key)) keyOwners.set(key, [])
+            keyOwners.get(key).push(index)
+        }
+    })
+    const sharedCounts = new Map()
+    for (const owners of keyOwners.values()) {
+        if (owners.length < 2) continue
+        for (let i = 0; i < owners.length; i++) {
+            for (let j = i + 1; j < owners.length; j++) {
+                const pairKey = `${owners[i]}|${owners[j]}`
+                sharedCounts.set(pairKey, (sharedCounts.get(pairKey) || 0) + 1)
+            }
+        }
+    }
+    const parent = members.map((_, index) => index)
+    const find = (index) => {
+        while (parent[index] !== index) {
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        }
+        return index
+    }
+    const union = (a, b) => { const rootA = find(a); const rootB = find(b); if (rootA !== rootB) parent[rootB] = rootA }
+    const edges = new Map()
+    const grouped = new Set()
+    for (const [pairKey, shared] of sharedCounts) {
+        const [a, b] = pairKey.split('|').map(Number)
+        const coverage = shared / Math.min(members[a].messages.length, members[b].messages.length)
+        if (shared < minShared || coverage < minCoverage) continue
+        edges.set(pairKey, { shared, coverage })
+        union(a, b)
+        grouped.add(a)
+        grouped.add(b)
+    }
+    const byRoot = new Map()
+    for (const index of grouped) {
+        const root = find(index)
+        if (!byRoot.has(root)) byRoot.set(root, [])
+        byRoot.get(root).push(index)
+    }
+    const groups = [...byRoot.values()].filter(group => group.length > 1)
+    for (const group of groups) group.sort((a, b) => lastDateOf(members[a]) - lastDateOf(members[b]))
+    return { groups, edges }
+}
+
+// Merges a group of renamed conversations. Overlapping messages use the newest member's copy,
+// duplicates keep the max multiplicity seen in any single member, and rename markers are inserted.
+const mergeConversationGroup = (members) => {
+    const ordered = [...members].sort((a, b) => lastDateOf(a) - lastDateOf(b) || firstDateOf(a) - firstDateOf(b) || a.name.localeCompare(b.name))
+    const maxCounts = new Map()
+    for (const member of ordered) {
+        const counts = new Map()
+        for (const message of member.messages) {
+            const key = overlapKey(message)
+            counts.set(key, (counts.get(key) || 0) + 1)
+        }
+        for (const [key, count] of counts) maxCounts.set(key, Math.max(maxCounts.get(key) || 0, count))
+    }
+    const remaining = new Map(maxCounts)
+    const messages = []
+    for (let i = ordered.length - 1; i >= 0; i--) {
+        for (const message of ordered[i].messages) {
+            const key = overlapKey(message)
+            const left = remaining.get(key) || 0
+            if (left <= 0) continue
+            messages.push({ date: message.date, sender: message.sender, type: message.type, body: message.body })
+            remaining.set(key, left - 1)
+        }
+    }
+    messages.sort((a, b) => a.date.getTime() - b.date.getTime())
+    const displayNames = ordered.map(member => cleanDisplayName(member.name))
+    for (let i = 0; i < ordered.length - 1; i++) {
+        if (normalizeName(displayNames[i]) === normalizeName(displayNames[i + 1])) continue
+        const at = lastDateOf(ordered[i])
+        let insertAt = messages.length
+        while (insertAt > 0 && messages[insertAt - 1].date.getTime() > at) insertAt--
+        messages.splice(insertAt, 0, {
+            date: new Date(at),
+            sender: null,
+            type: 'system',
+            body: `Conversation name changed from "${displayNames[i]}" to "${displayNames[i + 1]}"`
+        })
+    }
+    return { name: displayNames[displayNames.length - 1], messages }
+}
+
+// Number of distinct messages shared by at least two members of a group
+const groupSharedCount = (memberList) => {
+    const owners = new Map()
+    for (const member of memberList) {
+        for (const key of new Set(member.messages.map(overlapKey))) {
+            owners.set(key, (owners.get(key) || 0) + 1)
+        }
+    }
+    let shared = 0
+    for (const count of owners.values()) if (count >= 2) shared++
+    return shared
+}
+
 // Main function
 const main = (dirs, options = {}) => {
     // NOTE: FIRST DIR IN ARRAY IS TREATED DIFFERENTLY - Previous files are deleted and new ones placed there
@@ -561,8 +680,8 @@ const main = (dirs, options = {}) => {
 
     // Phase 3: merge everything in memory, still before any mutation
     const summary = []
-    sources.forEach((list, key) => {
-        if (textMode) {
+    if (textMode) {
+        sources.forEach((list, key) => {
             const allLines = list.flatMap(source => source.content.split('\n'))
             const conversationContext = buildDateContext(allLines, { ...parseOptions, fileName: list[0].original })
             const mergeOptions = { ...parseOptions, context: conversationContext }
@@ -577,13 +696,39 @@ const main = (dirs, options = {}) => {
             })
             if (timestamp === null) throw `Timestamp is null for ${key}!`
             const dates = returnFirstLastDates(content.split('\n'), mergeOptions)
-            summary.push({ name: key, outName: `${ts2ds(timestamp)} - ${key}.txt`, sources: list.length, first: dates ? dates[0] : null, last: dates ? dates[1] : null, content })
-        } else {
-            const messages = mergeMessages(list.map(source => source.messages))
+            summary.push({ name: key, outName: `${ts2ds(timestamp)} - ${key}.txt`, sources: list.length, first: dates ? dates[0] : null, last: dates ? dates[1] : null, content, cleanupKeys: [key] })
+        })
+    } else {
+        const members = []
+        sources.forEach((list, key) => {
+            members.push({ key, name: key, messages: mergeMessages(list.map(source => source.messages)), sources: list })
+        })
+        const detected = options.mergeRenamed === false
+            ? { groups: [], edges: new Map() }
+            : detectRenamedGroups(members, { minShared: options.renameMinShared, minCoverage: options.renameMinCoverage })
+        const groupedMembers = new Set(detected.groups.flat())
+        detected.groups.forEach(group => {
+            const memberList = group.map(index => members[index])
+            const merged = mergeConversationGroup(memberList)
+            const last = merged.messages[merged.messages.length - 1].date
+            summary.push({
+                name: merged.name,
+                outName: `${ts2ds(last)} - ${merged.name}.json`,
+                sources: memberList.reduce((total, member) => total + member.sources.length, 0),
+                first: merged.messages[0].date,
+                last,
+                messages: merged.messages,
+                cleanupKeys: memberList.map(member => member.key),
+                group: { names: memberList.map(member => cleanDisplayName(member.name)), shared: groupSharedCount(memberList) }
+            })
+        })
+        members.forEach((member, index) => {
+            if (groupedMembers.has(index)) return
+            const messages = member.messages
             const last = messages[messages.length - 1].date
-            summary.push({ name: key, outName: `${ts2ds(last)} - ${key}.json`, sources: list.length, first: messages[0].date, last, messages })
-        }
-    })
+            summary.push({ name: member.key, outName: `${ts2ds(last)} - ${member.key}.json`, sources: member.sources.length, first: messages[0].date, last, messages, cleanupKeys: [member.key] })
+        })
+    }
 
     // Phase 4: apply renames, delete old outputs and write merged files
     if (!dryRun) {
@@ -593,9 +738,11 @@ const main = (dirs, options = {}) => {
             })
         })
         summary.forEach(conversation => {
-            for (const extension of ['.txt', '.json']) {
-                const existing = `${dirs[0]}/${conversation.name}${extension}`
-                if (fs.existsSync(existing)) fs.unlinkSync(existing)
+            for (const key of conversation.cleanupKeys) {
+                for (const extension of ['.txt', '.json']) {
+                    const existing = `${dirs[0]}/${key}${extension}`
+                    if (fs.existsSync(existing)) fs.unlinkSync(existing)
+                }
             }
             fs.writeFileSync(`${dirs[0]}/${conversation.outName}`, textMode ? conversation.content : chatToJson(conversation.messages))
         })
@@ -603,8 +750,8 @@ const main = (dirs, options = {}) => {
 
     console.log('')
     if (dryRun) console.log('=== Dry run: no files were renamed, deleted or written ===')
-    const multi = summary.filter(s => s.sources > 1)
-    const single = summary.filter(s => s.sources === 1)
+    const multi = summary.filter(s => !s.group && s.sources > 1)
+    const single = summary.filter(s => !s.group && s.sources === 1)
     console.log(`=== Merged ${multi.length} conversation(s) from multiple sources ===`)
     multi.forEach(s => {
         const range = s.first ? `${ts2display(s.first)} -> ${ts2display(s.last)}` : 'no dates found'
@@ -615,6 +762,14 @@ const main = (dirs, options = {}) => {
         const range = s.first ? `${ts2display(s.first)} -> ${ts2display(s.last)}` : 'no dates found'
         console.log(`  ${s.outName}  [${range}]`)
     })
+    const renamed = summary.filter(s => s.group)
+    if (renamed.length > 0) {
+        const files = renamed.reduce((total, s) => total + s.cleanupKeys.length, 0)
+        console.log(`=== Merged ${renamed.length} renamed conversation(s) (${files} files) ===`)
+        renamed.forEach(s => {
+            console.log(`  ${s.group.names.map(name => `"${name}"`).join(' + ')} -> "${s.name}"  (${s.group.shared} shared msgs)`)
+        })
+    }
     if (ambiguous.length > 0) {
         console.log('=== Ambiguous dates ===')
         ambiguous.forEach(item => {
@@ -626,17 +781,25 @@ const main = (dirs, options = {}) => {
 
 // Actual run
 if (require.main === module) {
-    const usage = 'Usage: node WhatsAppTXT.js [--dry-run] [--no-normalize] [--date-order=auto|dmy|mdy|ymd] [--help] <output-directory> [additional-source-directory] [...]\n\n' +
+    const usage = 'Usage: node WhatsAppTXT.js [--dry-run] [--no-normalize] [--no-merge-renamed]\n' +
+        '                            [--date-order=auto|dmy|mdy|ymd]\n' +
+        '                            [--rename-min-shared=5] [--rename-min-coverage=0.6] [--help]\n' +
+        '                            <output-directory> [additional-source-directory] [...]\n\n' +
         'Merges WhatsApp TXT exports with the same conversation name across directories.\n' +
         'The first directory receives the merged files; existing outputs there are replaced.\n' +
         'By default each conversation is written as a JSON array of {date, sender, type, body} messages.\n' +
+        'Conversations whose histories overlap heavily (renamed contacts/groups) are merged, with the\n' +
+        'name changes recorded as system messages; --no-merge-renamed disables that.\n' +
         'Use --no-normalize for the legacy verbatim .txt output instead.\n' +
         'Ambiguous slash dates default to DMY; --date-order forces an interpretation (auto = infer per file).\n' +
         'Aborts without modifying anything if a directory has name collisions or a file cannot be parsed.'
     try {
         const args = process.argv.slice(2)
-        const flags = ['--dry-run', '--no-normalize', '--help', '-h']
-        const dirs = args.filter(arg => !flags.includes(arg) && !arg.startsWith('--date-order='))
+        const flags = ['--dry-run', '--no-normalize', '--no-merge-renamed', '--help', '-h']
+        const dirs = args.filter(arg => !flags.includes(arg)
+            && !arg.startsWith('--date-order=')
+            && !arg.startsWith('--rename-min-shared=')
+            && !arg.startsWith('--rename-min-coverage='))
         if (args.includes('--help') || args.includes('-h') || dirs.length === 0) {
             console.log(usage)
             process.exit(args.length === 0 ? 2 : 0)
@@ -647,16 +810,35 @@ if (require.main === module) {
             dateOrder = dateOrderArg.slice('--date-order='.length)
             if (!['auto', 'dmy', 'mdy', 'ymd'].includes(dateOrder)) throw `Invalid --date-order: ${dateOrder}`
         }
+        let renameMinShared = 5
+        const minSharedArg = args.find(arg => arg.startsWith('--rename-min-shared='))
+        if (minSharedArg) {
+            renameMinShared = Number(minSharedArg.slice('--rename-min-shared='.length))
+            if (!Number.isFinite(renameMinShared) || renameMinShared < 1) throw `Invalid --rename-min-shared: ${minSharedArg}`
+        }
+        let renameMinCoverage = 0.6
+        const minCoverageArg = args.find(arg => arg.startsWith('--rename-min-coverage='))
+        if (minCoverageArg) {
+            renameMinCoverage = Number(minCoverageArg.slice('--rename-min-coverage='.length))
+            if (!Number.isFinite(renameMinCoverage) || renameMinCoverage <= 0 || renameMinCoverage > 1) throw `Invalid --rename-min-coverage: ${minCoverageArg}`
+        }
         dirs.forEach(dir => {
             if (!fs.existsSync(dir)) throw `Directory does not exist: ${dir}`
         })
-        main(dirs, { dryRun: args.includes('--dry-run'), normalize: !args.includes('--no-normalize'), dateOrder })
+        main(dirs, {
+            dryRun: args.includes('--dry-run'),
+            normalize: !args.includes('--no-normalize'),
+            mergeRenamed: !args.includes('--no-merge-renamed'),
+            renameMinShared,
+            renameMinCoverage,
+            dateOrder
+        })
     } catch (err) {
         console.error(err)
         process.exit(-1)
     }
 }
 
-module.exports = { getTxts, getChatFiles, conversationKey, matchFilenamePrefix, planFileRenames, exportHeaderLabels, normalizeLineForDate, matchExportHeader, stripExportHeader, dateFormats, genericDateRegex, classifyGenericLine, filenameDateFromName, analyzeOrder, chooseOrder, buildDateContext, classifyDateLine, returnDateLineIfValid, returnFirstLastDates, mergeContents, classifyMessageType, messageTypes, parseChat, messageKey, mergeMessages, chatToJson, parseJsonChat, ts2ds, ts2display, main }
+module.exports = { getTxts, getChatFiles, conversationKey, matchFilenamePrefix, planFileRenames, exportHeaderLabels, normalizeLineForDate, matchExportHeader, stripExportHeader, dateFormats, genericDateRegex, classifyGenericLine, filenameDateFromName, analyzeOrder, chooseOrder, buildDateContext, classifyDateLine, returnDateLineIfValid, returnFirstLastDates, mergeContents, classifyMessageType, messageTypes, parseChat, messageKey, mergeMessages, cleanDisplayName, normalizeName, overlapKey, detectRenamedGroups, mergeConversationGroup, groupSharedCount, chatToJson, parseJsonChat, ts2ds, ts2display, main }
 
 

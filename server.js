@@ -42,18 +42,19 @@ const createApp = (config) => {
     app.use(express.json())
 
     app.get('/data', asyncRoute(async (req, res) => {
-        res.send(await dataProvider.getData(parseDateQuery(req.query['date']), req.query['currency']))
+        res.send(await dataProvider.getData(parseDateQuery(req.query['date'])))
     }))
 
     app.post('/budget', asyncRoute(async (req, res) => {
         const monthlyBudget = Number.parseFloat(req.body?.monthlyBudget)
         const firstDayBias = Number.parseFloat(req.body?.firstDayBias ?? 0)
+        const currency = req.body?.currency
         if (!Number.isFinite(monthlyBudget) || monthlyBudget <= 0 ||
             !Number.isFinite(firstDayBias) || firstDayBias < 0 || firstDayBias > monthlyBudget) {
             res.status(400).send('Invalid budget values')
             return
         }
-        await dataProvider.updateMonthlyBudget(monthlyBudget, firstDayBias)
+        await dataProvider.updateMonthlyBudget(monthlyBudget, firstDayBias, currency)
         res.send()
     }))
 
@@ -78,6 +79,14 @@ const createApp = (config) => {
         res.status(204).send()
     }))
 
+    app.get('/category-suggestions', asyncRoute(async (req, res) => {
+        if (typeof dataProvider.suggestCategories !== 'function') {
+            res.status(501).send('This data provider does not support category suggestions')
+            return
+        }
+        res.send(await dataProvider.suggestCategories(req.query['q'], req.query['kind']))
+    }))
+
     app.use((err, req, res, next) => {
         if (err.type === 'entity.parse.failed') {
             res.status(400).send('Invalid JSON body')
@@ -95,17 +104,15 @@ const createApp = (config) => {
 }
 
 const startNotifications = (config, dataProvider) => {
-    const { monthlyLimitUrl, weeklyLimitUrl, ntfyToken, checkIntervalMinutes } = config.notifications
+    const { monthlyLimitUrl, ntfyToken, checkIntervalMinutes } = config.notifications
     const onlyWarnOnce = config.notifications.onlyWarnOnce !== false
-    if (!monthlyLimitUrl && !weeklyLimitUrl) {
+    if (!monthlyLimitUrl) {
         return
     }
     const ntfyAuthHeader = ntfyToken ? `Basic ${Buffer.from(`:${ntfyToken}`).toString('base64')}` : null
     const intervalMs = (checkIntervalMinutes > 0 ? checkIntervalMinutes : 30) * 60 * 1000
-    let didWarnMonthly = false
-    let didWarnWeekly = false
-    let prevMonthSpend = -1
-    let prevWeekSpend = -1
+    const warnedCurrencies = new Set()
+    const previousSpend = new Map()
     const sendNotification = async (url, message, title) => {
         try {
             await axios.post(url, message, {
@@ -121,39 +128,32 @@ const startNotifications = (config, dataProvider) => {
             return false
         }
     }
-    const checkLimit = async () => {
+    const checkLimits = async () => {
         try {
-            const data = await dataProvider.getData()
-            if (data.monthlyBudget <= data.monthsSpend) {
-                if (monthlyLimitUrl && !(didWarnMonthly && onlyWarnOnce) && data.monthsSpend != prevMonthSpend) {
-                    if (await sendNotification(monthlyLimitUrl,
-                        `$${data.monthsSpend.toFixed(2)} of $${data.monthlyBudget.toFixed(2)}`,
-                        'Monthly Budget Limit Reached')) {
-                        didWarnMonthly = true
-                    }
+            const overview = await dataProvider.getData()
+            for (const entry of overview.currencies || []) {
+                if (!entry || entry.monthlyBudget <= 0) {
+                    continue
                 }
-            } else {
-                didWarnMonthly = false
-            }
-            if (data.weeklyBudget <= data.weeksSpend) {
-                if (weeklyLimitUrl && !(didWarnWeekly && onlyWarnOnce) && data.weeksSpend != prevWeekSpend) {
-                    if (await sendNotification(weeklyLimitUrl,
-                        `$${data.weeksSpend.toFixed(2)} of $${data.weeklyBudget.toFixed(2)}`,
-                        'Weekly Budget Limit Reached')) {
-                        didWarnWeekly = true
+                if (entry.monthlyBudget <= entry.monthsSpend) {
+                    if (!(warnedCurrencies.has(entry.code) && onlyWarnOnce) && entry.monthsSpend !== previousSpend.get(entry.code)) {
+                        if (await sendNotification(monthlyLimitUrl,
+                            `${entry.code} $${entry.monthsSpend.toFixed(2)} of $${entry.monthlyBudget.toFixed(2)}`,
+                            `Monthly Budget Limit Reached (${entry.code})`)) {
+                            warnedCurrencies.add(entry.code)
+                        }
                     }
+                } else {
+                    warnedCurrencies.delete(entry.code)
                 }
-            } else {
-                didWarnWeekly = false
+                previousSpend.set(entry.code, entry.monthsSpend)
             }
-            prevMonthSpend = data.monthsSpend
-            prevWeekSpend = data.weeksSpend
         } catch (e) {
             console.error(e)
         }
     }
-    checkLimit()
-    setInterval(checkLimit, intervalMs)
+    checkLimits()
+    setInterval(checkLimits, intervalMs)
 }
 
 const start = (config) => {

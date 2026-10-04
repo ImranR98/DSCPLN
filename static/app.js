@@ -5,14 +5,13 @@ const $ = (id) => document.getElementById(id)
 const els = {
     refreshButton: $('refreshButton'),
     themeButton: $('themeButton'),
-    editBudgetButton: $('editBudgetButton'),
     contextLabel: $('contextLabel'),
-    currencySelect: $('currencySelect'),
     updatedLabel: $('updatedLabel'),
     pretendBanner: $('pretendBanner'),
     pretendBannerDate: $('pretendBannerDate'),
     bannerTodayButton: $('bannerTodayButton'),
     monthCard: $('monthCard'),
+    monthHeading: $('monthHeading'),
     monthName: $('monthName'),
     monthSpend: $('monthSpend'),
     monthOf: $('monthOf'),
@@ -22,17 +21,14 @@ const els = {
     monthRemaining: $('monthRemaining'),
     monthDaily: $('monthDaily'),
     monthPace: $('monthPace'),
-    monthCurrencyNote: $('monthCurrencyNote'),
-    weekCard: $('weekCard'),
-    weekRange: $('weekRange'),
-    weekSpend: $('weekSpend'),
-    weekOf: $('weekOf'),
-    weekBudget: $('weekBudget'),
-    weekProgress: $('weekProgress'),
-    weekProgressFill: $('weekProgressFill'),
-    weekRemaining: $('weekRemaining'),
-    weekDaysLeft: $('weekDaysLeft'),
-    weekPace: $('weekPace'),
+    monthSpentThis: $('monthSpentThis'),
+    monthSpentPrev: $('monthSpentPrev'),
+    monthSpentAvg: $('monthSpentAvg'),
+    monthEarnThis: $('monthEarnThis'),
+    monthEarnPrev: $('monthEarnPrev'),
+    monthEarnAvg: $('monthEarnAvg'),
+    primaryBudgetButton: $('primaryBudgetButton'),
+    otherCurrencies: $('otherCurrencies'),
     expensesList: $('expensesList'),
     expensesMeta: $('expensesMeta'),
     expensesEmpty: $('expensesEmpty'),
@@ -43,17 +39,21 @@ const els = {
     budgetForm: $('budgetForm'),
     monthlyBudgetInput: $('monthlyBudgetInput'),
     firstDayBiasInput: $('firstDayBiasInput'),
+    budgetCurrencyNote: $('budgetCurrencyNote'),
     budgetFormError: $('budgetFormError'),
     budgetCancelButton: $('budgetCancelButton'),
     budgetSaveButton: $('budgetSaveButton'),
     transactionDialog: $('transactionDialog'),
     transactionForm: $('transactionForm'),
     transactionDialogTitle: $('transactionDialogTitle'),
+    transactionKindInputs: [...document.querySelectorAll('input[name="kind"]')],
     transactionAmountInput: $('transactionAmountInput'),
-    transactionDescriptionInput: $('transactionDescriptionInput'),
-    transactionCurrencyInput: $('transactionCurrencyInput'),
-    currencyOptions: $('currencyOptions'),
+    transactionDetailsInput: $('transactionDetailsInput'),
     transactionDateInput: $('transactionDateInput'),
+    transactionCategorySelect: $('transactionCategorySelect'),
+    transactionCategoryHint: $('transactionCategoryHint'),
+    transactionCurrencySelect: $('transactionCurrencySelect'),
+    transactionNotesInput: $('transactionNotesInput'),
     transactionFormError: $('transactionFormError'),
     transactionCancelButton: $('transactionCancelButton'),
     transactionSaveButton: $('transactionSaveButton'),
@@ -68,6 +68,7 @@ const els = {
 const THEME_KEY = 'dscpln-theme'
 const THEME_ORDER = ['auto', 'light', 'dark']
 const REFRESH_STALE_MS = 60 * 1000
+const INCOME_GROUP = 'Money In'
 
 const ICONS = {
     auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg>',
@@ -81,7 +82,6 @@ const moneyFormat = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2,
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
 const dayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
 const fullDayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
-const shortDayFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' })
 const timeFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
 
 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)')
@@ -91,12 +91,15 @@ const state = {
     viewDate: startOfDay(new Date()),
     data: null,
     lastFetchAt: 0,
-    fetching: false,
     theme: readTheme(),
-    currency: null,
+    editingBudgetCurrency: null,
     editingTransaction: null,
     pendingDelete: null,
+    categoryTouched: false,
 }
+
+let suggestionTimer = null
+let fetchSequence = 0
 
 function startOfDay(date) {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate())
@@ -115,6 +118,11 @@ function parseDateInputValue(value) {
     return date
 }
 
+function parseIsoDate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value || '')
+    return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : null
+}
+
 function isSameDay(a, b) {
     return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
@@ -126,6 +134,11 @@ function toNumber(value) {
 
 function money(value) {
     return `$${moneyFormat.format(value)}`
+}
+
+function getSelectedKind() {
+    const selected = els.transactionKindInputs.find((input) => input.checked)
+    return selected ? selected.value : 'expense'
 }
 
 function readTheme() {
@@ -170,62 +183,44 @@ function refreshToday() {
 }
 
 async function fetchData({ silent = false } = {}) {
-    if (state.fetching) return
-    state.fetching = true
+    const sequence = ++fetchSequence
     refreshToday()
     if (!state.data && !silent) document.body.classList.add('is-loading')
     try {
         const params = new URLSearchParams({ date: toDateInputValue(state.viewDate) })
-        if (state.currency) params.set('currency', state.currency)
         const response = await fetch(`/data?${params}`, {
             headers: { Accept: 'application/json' },
         })
         if (!response.ok) throw new Error(`Request failed (${response.status})`)
-        state.data = await response.json()
+        const data = await response.json()
+        if (sequence !== fetchSequence) return
+        state.data = data
         state.lastFetchAt = Date.now()
         render()
     } catch (e) {
-        console.error(e)
-        toast('Could not load data. Check the server logs.', 'error')
+        if (sequence === fetchSequence) {
+            console.error(e)
+            toast('Could not load data. Check the server logs.', 'error')
+        }
     } finally {
-        state.fetching = false
-        document.body.classList.remove('is-loading')
+        if (sequence === fetchSequence) {
+            document.body.classList.remove('is-loading')
+        }
     }
 }
 
 function render() {
     if (!state.data) return
     renderContext()
-    renderCurrencyPicker()
-    renderMonth()
-    renderWeek()
+    renderMonth(primaryCurrency())
+    renderOtherCurrencies()
     renderExpenses()
     syncControls()
 }
 
-function renderCurrencyPicker() {
+function primaryCurrency() {
     const currencies = state.data.currencies || []
-    const options = state.currency && !currencies.includes(state.currency) ?
-        [...currencies, state.currency].sort() : currencies
-    els.currencySelect.hidden = options.length === 0
-    els.currencySelect.textContent = ''
-    const localOption = document.createElement('option')
-    localOption.value = ''
-    localOption.textContent = 'Local'
-    els.currencySelect.appendChild(localOption)
-    for (const currency of options) {
-        const option = document.createElement('option')
-        option.value = currency
-        option.textContent = currency
-        els.currencySelect.appendChild(option)
-    }
-    els.currencySelect.value = state.currency || ''
-    els.currencyOptions.textContent = ''
-    for (const currency of options) {
-        const option = document.createElement('option')
-        option.value = currency
-        els.currencyOptions.appendChild(option)
-    }
+    return currencies.find((currency) => currency.primary) || currencies[0] || null
 }
 
 function renderContext() {
@@ -262,16 +257,16 @@ function setPace(el, budget, spent, fraction) {
     el.className = `pace ${delta >= 0 ? 'pace--ok' : 'pace--over'}`
 }
 
-function renderMonth() {
-    const data = state.data
-    const budget = toNumber(data.monthlyBudget)
-    const spent = toNumber(data.monthsSpend)
+function renderMonth(currency) {
+    const budget = currency ? toNumber(currency.monthlyBudget) : 0
+    const spent = currency ? toNumber(currency.monthsSpend) : 0
     const date = state.viewDate
     const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
     const day = date.getDate()
     const daysLeft = Math.max(1, daysInMonth - day + 1)
     const remaining = budget - spent
 
+    els.monthHeading.textContent = currency ? currency.code : 'Main'
     els.monthName.textContent = monthFormat.format(date)
     els.monthSpend.textContent = money(spent)
     els.monthBudget.textContent = budget > 0 ? money(budget) : 'no budget'
@@ -285,55 +280,117 @@ function renderMonth() {
         els.monthRemaining.textContent = `${money(-remaining)} over`
         els.monthDaily.textContent = ''
     }
-    const currencyView = Boolean(state.currency)
-    els.monthOf.hidden = currencyView
-    els.monthBudget.hidden = currencyView
-    els.monthProgress.hidden = currencyView
-    els.monthRemaining.hidden = currencyView
-    els.monthDaily.hidden = currencyView
-    els.monthPace.hidden = currencyView
-    els.monthCurrencyNote.hidden = !currencyView
-    els.monthCurrencyNote.textContent = currencyView ? 'Budgets are tracked for local spending only.' : ''
+    els.monthSpentThis.textContent = money(spent)
+    els.monthSpentPrev.textContent = money(currency ? toNumber(currency.previousMonthsSpend) : 0)
+    els.monthSpentAvg.textContent = money(currency ? toNumber(currency.trailingSpendAverage) : 0)
+    els.monthEarnThis.textContent = `+${money(currency ? toNumber(currency.monthsIncome) : 0)}`
+    els.monthEarnPrev.textContent = `+${money(currency ? toNumber(currency.previousMonthsIncome) : 0)}`
+    els.monthEarnAvg.textContent = `+${money(currency ? toNumber(currency.trailingIncomeAverage) : 0)}`
 
-    const expected = data.monthsExpectedSpend != null ? toNumber(data.monthsExpectedSpend) : budget * (day / daysInMonth)
+    const expected = currency && currency.monthsExpectedSpend != null ? toNumber(currency.monthsExpectedSpend) : budget * (day / daysInMonth)
     setPace(els.monthPace, budget, spent, budget > 0 ? expected / budget : 0)
     setProgress(els.monthProgress, els.monthProgressFill, spent, budget)
     setCardState(els.monthCard, spent, budget)
 }
 
-function renderWeek() {
-    const data = state.data
-    const budget = toNumber(data.weeklyBudget)
-    const spent = toNumber(data.weeksSpend)
-    const date = state.viewDate
-    const periodStartDay = toNumber(data.weekPeriodStartDay) || date.getDate()
-    const periodEndDay = toNumber(data.weekPeriodEndDay) || date.getDate()
-    const periodStart = new Date(date.getFullYear(), date.getMonth(), periodStartDay)
-    const periodEnd = new Date(date.getFullYear(), date.getMonth(), periodEndDay)
-    const daysLeft = Math.max(0, periodEndDay - date.getDate())
+function buildCurrencyCard(currency) {
+    const card = document.createElement('section')
+    card.className = 'card card--compact currency-card'
+    card.setAttribute('aria-label', `${currency.code} budget`)
+
+    const header = document.createElement('div')
+    header.className = 'card__header'
+    const title = document.createElement('h2')
+    title.textContent = currency.code
+    const editButton = document.createElement('button')
+    editButton.type = 'button'
+    editButton.className = 'icon-button icon-button--small'
+    editButton.title = `Edit ${currency.code} budget`
+    editButton.setAttribute('aria-label', `Edit ${currency.code} budget`)
+    editButton.innerHTML = ICONS.edit
+    editButton.addEventListener('click', () => openBudgetDialog(currency.code))
+    header.append(title, editButton)
+
+    const budget = toNumber(currency.monthlyBudget)
+    const spent = toNumber(currency.monthsSpend)
     const remaining = budget - spent
 
-    els.weekRange.textContent = `${shortDayFormat.format(periodStart)} – ${shortDayFormat.format(periodEnd)}`
-    els.weekSpend.textContent = money(spent)
-    els.weekBudget.textContent = budget > 0 ? money(budget) : 'no budget'
+    const figure = document.createElement('p')
+    figure.className = 'figure'
+    const spendEl = document.createElement('span')
+    spendEl.className = 'figure__spend'
+    spendEl.textContent = money(spent)
+    const ofEl = document.createElement('span')
+    ofEl.className = 'figure__of'
+    ofEl.textContent = budget > 0 ? 'of' : ''
+    const budgetEl = document.createElement('span')
+    budgetEl.className = 'figure__budget'
+    budgetEl.textContent = budget > 0 ? money(budget) : 'no budget'
+    figure.append(spendEl, ofEl, budgetEl)
+
+    const progress = document.createElement('div')
+    progress.className = 'progress'
+    progress.setAttribute('role', 'progressbar')
+    progress.setAttribute('aria-valuemin', '0')
+    progress.setAttribute('aria-valuemax', '100')
+    const fill = document.createElement('div')
+    fill.className = 'progress__fill'
+    const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0
+    fill.style.width = `${pct.toFixed(1)}%`
+    progress.setAttribute('aria-valuenow', String(Math.round(pct)))
+    progress.setAttribute('aria-valuetext', budget > 0 ? `${Math.round(pct)}% of budget used` : 'No budget set')
+    progress.appendChild(fill)
+    setCardState(card, spent, budget)
+
+    const stats = document.createElement('div')
+    stats.className = 'card__stats'
+    const statsMain = document.createElement('span')
     if (budget <= 0) {
-        els.weekRemaining.textContent = ''
+        statsMain.textContent = 'No budget'
     } else {
-        els.weekRemaining.textContent = remaining >= 0 ? `${money(remaining)} left` : `${money(-remaining)} over`
+        statsMain.textContent = remaining >= 0 ? `${money(remaining)} left` : `${money(-remaining)} over`
     }
-    els.weekDaysLeft.textContent = `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} to go`
+    const pace = document.createElement('span')
+    pace.className = 'pace'
+    if (budget > 0 && currency.monthsExpectedSpend != null) {
+        const delta = toNumber(currency.monthsExpectedSpend) - spent
+        pace.textContent = `${money(Math.abs(delta))} ${delta >= 0 ? 'less' : 'more'} than expected`
+        pace.className = `pace ${delta >= 0 ? 'pace--ok' : 'pace--over'}`
+    }
+    stats.append(statsMain, pace)
 
-    const currencyView = Boolean(state.currency)
-    els.weekOf.hidden = currencyView
-    els.weekBudget.hidden = currencyView
-    els.weekProgress.hidden = currencyView
-    els.weekRemaining.hidden = currencyView
-    els.weekPace.hidden = currencyView
+    const grid = document.createElement('div')
+    grid.className = 'mini-grid'
+    const addCell = (text, className) => {
+        const cell = document.createElement('span')
+        cell.className = className
+        cell.textContent = text
+        grid.appendChild(cell)
+    }
+    addCell('', 'mini-grid__label')
+    addCell('This month', 'mini-grid__header')
+    addCell('Last month', 'mini-grid__header')
+    addCell('12-mo avg', 'mini-grid__header')
+    addCell('Spent', 'mini-grid__label')
+    addCell(money(spent), 'mini-grid__value')
+    addCell(money(toNumber(currency.previousMonthsSpend)), 'mini-grid__value')
+    addCell(money(toNumber(currency.trailingSpendAverage)), 'mini-grid__value')
+    addCell('Earned', 'mini-grid__label')
+    addCell(`+${money(toNumber(currency.monthsIncome))}`, 'mini-grid__value mini-grid__value--in')
+    addCell(`+${money(toNumber(currency.previousMonthsIncome))}`, 'mini-grid__value mini-grid__value--in')
+    addCell(`+${money(toNumber(currency.trailingIncomeAverage))}`, 'mini-grid__value mini-grid__value--in')
 
-    const expected = data.weeksExpectedSpend != null ? toNumber(data.weeksExpectedSpend) : budget * ((date.getDay() + 1) / 7)
-    setPace(els.weekPace, budget, spent, budget > 0 ? expected / budget : 0)
-    setProgress(els.weekProgress, els.weekProgressFill, spent, budget)
-    setCardState(els.weekCard, spent, budget)
+    card.append(header, figure, progress, stats, grid)
+    return card
+}
+
+function renderOtherCurrencies() {
+    const currencies = (state.data.currencies || []).filter((currency) => !currency.primary && currency.hasActivity)
+    els.otherCurrencies.textContent = ''
+    els.otherCurrencies.hidden = currencies.length === 0
+    for (const currency of currencies) {
+        els.otherCurrencies.appendChild(buildCurrencyCard(currency))
+    }
 }
 
 function buildExpenseActions(transaction) {
@@ -344,7 +401,7 @@ function buildExpenseActions(transaction) {
     editButton.type = 'button'
     editButton.className = 'icon-button'
     editButton.title = 'Edit'
-    editButton.setAttribute('aria-label', `Edit ${transaction.description || 'transaction'}`)
+    editButton.setAttribute('aria-label', `Edit ${transaction.details || 'transaction'}`)
     editButton.innerHTML = ICONS.edit
     editButton.addEventListener('click', () => openEditTransactionDialog(transaction))
 
@@ -352,7 +409,7 @@ function buildExpenseActions(transaction) {
     deleteButton.type = 'button'
     deleteButton.className = 'icon-button icon-button--danger'
     deleteButton.title = 'Delete'
-    deleteButton.setAttribute('aria-label', `Delete ${transaction.description || 'transaction'}`)
+    deleteButton.setAttribute('aria-label', `Delete ${transaction.details || 'transaction'}`)
     deleteButton.innerHTML = ICONS.delete
     deleteButton.addEventListener('click', () => openDeleteTransactionDialog(transaction))
 
@@ -360,45 +417,80 @@ function buildExpenseActions(transaction) {
     return actions
 }
 
+function buildExpenseRow(transaction, writable) {
+    const li = document.createElement('li')
+    li.className = 'expense'
+    if (transaction.kind === 'income') {
+        li.classList.add('expense--income')
+    }
+    const date = parseIsoDate(transaction.date)
+    if (date && isSameDay(date, state.viewDate)) {
+        li.classList.add('expense--today')
+    } else if (date && date > state.viewDate) {
+        li.classList.add('expense--future')
+        li.title = 'Dated after the viewed date'
+    }
+    const dateEl = document.createElement('span')
+    dateEl.className = 'expense__date'
+    dateEl.textContent = date ? `${date.getMonth() + 1}/${date.getDate()}` : ''
+    const descEl = document.createElement('span')
+    descEl.className = 'expense__desc'
+    descEl.textContent = transaction.details || '—'
+    if (transaction.notes) {
+        const notesEl = document.createElement('span')
+        notesEl.className = 'expense__notes'
+        notesEl.textContent = transaction.notes
+        descEl.appendChild(notesEl)
+    }
+    const categoryEl = document.createElement('span')
+    categoryEl.className = 'expense__category'
+    categoryEl.textContent = transaction.category || ''
+    const amountEl = document.createElement('span')
+    amountEl.className = transaction.kind === 'income' ? 'expense__amount expense__amount--in' : 'expense__amount'
+    const amount = transaction.kind === 'income' ? transaction.moneyIn : transaction.expenses
+    amountEl.textContent = transaction.kind === 'income' ? `+${money(amount || 0)}` : money(amount || 0)
+    li.append(dateEl, descEl, categoryEl, amountEl)
+    if (writable) {
+        li.append(buildExpenseActions(transaction))
+    }
+    return li
+}
+
 function renderExpenses() {
     const transactions = state.data.transactions || []
-    const totalCents = transactions.reduce((sum, transaction) => sum + Math.round(transaction.amount * 100), 0)
     const count = transactions.length
     const writable = state.data.writable !== false
 
     els.addTransactionButton.hidden = !writable
     els.expensesList.textContent = ''
-    const currencyLabel = state.currency ? `${state.currency} · ` : ''
-    els.expensesMeta.textContent = count ?
-        `${currencyLabel}${count} ${count === 1 ? 'expense' : 'expenses'} · ${money(totalCents / 100)}` :
-        ''
+    els.expensesList.hidden = count === 0
+    els.expensesMeta.textContent = count ? `${count} ${count === 1 ? 'transaction' : 'transactions'}` : ''
     els.expensesEmpty.hidden = count > 0
 
-    for (const transaction of transactions.slice().reverse()) {
-        const li = document.createElement('li')
-        li.className = 'expense'
-        const date = transaction.effectiveDate
-        const sameMonth = date && date.month === state.viewDate.getMonth() + 1
-        if (sameMonth && date.day === state.viewDate.getDate()) {
-            li.classList.add('expense--today')
-        } else if (sameMonth && date.day > state.viewDate.getDate()) {
-            li.classList.add('expense--future')
-            li.title = 'Dated after the viewed date'
+    const currencies = state.data.currencies || []
+    const known = new Set(currencies.map((currency) => currency.code))
+    const groups = []
+    for (const currency of currencies) {
+        const items = transactions.filter((transaction) => transaction.currency === currency.code)
+        if (items.length) {
+            groups.push({ code: currency.code, items })
         }
-        const dateEl = document.createElement('span')
-        dateEl.className = 'expense__date'
-        dateEl.textContent = date ? `${date.month}/${date.day}` : ''
-        const descEl = document.createElement('span')
-        descEl.className = 'expense__desc'
-        descEl.textContent = transaction.description || '—'
-        const amountEl = document.createElement('span')
-        amountEl.className = 'expense__amount'
-        amountEl.textContent = money(transaction.amount)
-        li.append(dateEl, descEl, amountEl)
-        if (writable) {
-            li.append(buildExpenseActions(transaction))
+    }
+    const unknown = transactions.filter((transaction) => !known.has(transaction.currency))
+    if (unknown.length) {
+        groups.push({ code: '', items: unknown })
+    }
+
+    for (const group of groups) {
+        const outCents = group.items.reduce((sum, transaction) => sum + Math.round((transaction.expenses || 0) * 100), 0)
+        const inCents = group.items.reduce((sum, transaction) => sum + Math.round((transaction.moneyIn || 0) * 100), 0)
+        const header = document.createElement('li')
+        header.className = 'expense-group'
+        header.textContent = `${group.code ? `${group.code} · ` : ''}${money(outCents / 100)} out${inCents > 0 ? ` · +${money(inCents / 100)} in` : ''}`
+        els.expensesList.appendChild(header)
+        for (const transaction of group.items.slice().reverse()) {
+            els.expensesList.appendChild(buildExpenseRow(transaction, writable))
         }
-        els.expensesList.appendChild(li)
     }
 }
 
@@ -411,28 +503,117 @@ async function responseErrorMessage(response, fallback) {
     }
 }
 
+function renderCategoryOptions(kind) {
+    const groups = (state.data.categories || []).filter((entry) =>
+        kind === 'income' ? entry.group === INCOME_GROUP : entry.group !== INCOME_GROUP)
+    const previous = els.transactionCategorySelect.value
+    els.transactionCategorySelect.textContent = ''
+    const placeholder = document.createElement('option')
+    placeholder.value = ''
+    placeholder.textContent = 'Select a category'
+    placeholder.disabled = true
+    placeholder.selected = true
+    els.transactionCategorySelect.appendChild(placeholder)
+    let restored = false
+    for (const entry of groups) {
+        const optgroup = document.createElement('optgroup')
+        optgroup.label = entry.group
+        for (const category of entry.categories) {
+            const option = document.createElement('option')
+            option.value = category
+            option.textContent = category
+            optgroup.appendChild(option)
+            if (category === previous) {
+                restored = true
+            }
+        }
+        els.transactionCategorySelect.appendChild(optgroup)
+    }
+    if (restored && previous) {
+        els.transactionCategorySelect.value = previous
+    }
+}
+
+function renderCurrencyOptions() {
+    const currencies = state.data.currencies || []
+    els.transactionCurrencySelect.textContent = ''
+    for (const currency of currencies) {
+        const option = document.createElement('option')
+        option.value = currency.code
+        option.textContent = currency.code
+        els.transactionCurrencySelect.appendChild(option)
+    }
+}
+
+function scheduleCategorySuggestion() {
+    window.clearTimeout(suggestionTimer)
+    suggestionTimer = window.setTimeout(fetchCategorySuggestions, 250)
+}
+
+async function fetchCategorySuggestions() {
+    const details = els.transactionDetailsInput.value.trim()
+    if (details.length < 3) {
+        els.transactionCategoryHint.hidden = true
+        return
+    }
+    try {
+        const response = await fetch(`/category-suggestions?q=${encodeURIComponent(details)}&kind=${getSelectedKind()}`)
+        if (!response.ok) {
+            return
+        }
+        const result = await response.json()
+        const suggestions = result.suggestions || []
+        if (!suggestions.length) {
+            els.transactionCategoryHint.hidden = true
+            return
+        }
+        const top = suggestions[0]
+        if (result.confident && !state.categoryTouched) {
+            els.transactionCategorySelect.value = top.category
+            els.transactionCategoryHint.textContent = `Suggested: ${top.category} (${Math.round(top.score * 100)}% match)`
+        } else {
+            els.transactionCategoryHint.textContent = `Suggestions: ${suggestions.slice(0, 3).map((s) => s.category).join(', ')}`
+        }
+        els.transactionCategoryHint.hidden = false
+    } catch (e) {
+        console.error(e)
+    }
+}
+
 function openAddTransactionDialog() {
     if (!state.data || state.data.writable === false) return
     state.editingTransaction = null
+    state.categoryTouched = false
     els.transactionDialogTitle.textContent = 'Add transaction'
     els.transactionForm.reset()
-    els.transactionCurrencyInput.value = state.currency || ''
+    renderCategoryOptions('expense')
+    renderCurrencyOptions()
+    const primary = primaryCurrency()
+    els.transactionCurrencySelect.value = primary ? primary.code : ''
     els.transactionDateInput.value = toDateInputValue(state.viewDate)
+    els.transactionCategoryHint.hidden = true
     els.transactionFormError.hidden = true
     els.transactionDialog.showModal()
-    els.transactionAmountInput.focus()
+    els.transactionDetailsInput.focus()
 }
 
 function openEditTransactionDialog(transaction) {
     state.editingTransaction = transaction
+    state.categoryTouched = true
     els.transactionDialogTitle.textContent = 'Edit transaction'
-    els.transactionAmountInput.value = transaction.amount
-    els.transactionDescriptionInput.value = transaction.description || ''
-    els.transactionCurrencyInput.value = transaction.currency || ''
-    const date = transaction.date || transaction.effectiveDate
-    els.transactionDateInput.value = date ?
-        toDateInputValue(new Date(state.viewDate.getFullYear(), date.month - 1, date.day)) :
-        toDateInputValue(state.viewDate)
+    for (const input of els.transactionKindInputs) {
+        input.checked = input.value === transaction.kind
+    }
+    renderCategoryOptions(transaction.kind)
+    renderCurrencyOptions()
+    els.transactionAmountInput.value = transaction.kind === 'income' ? transaction.moneyIn : transaction.expenses
+    els.transactionDetailsInput.value = transaction.details || ''
+    const date = parseIsoDate(transaction.date)
+    els.transactionDateInput.value = date ? toDateInputValue(date) : toDateInputValue(state.viewDate)
+    els.transactionCategorySelect.value = transaction.category || ''
+    els.transactionCurrencySelect.value = transaction.currency || ''
+    els.transactionNotesInput.value = transaction.notes || ''
+    els.transactionCategoryHint.hidden = true
     els.transactionFormError.hidden = true
     els.transactionDialog.showModal()
     els.transactionAmountInput.focus()
@@ -442,10 +623,13 @@ async function submitTransaction(event) {
     event.preventDefault()
     const editing = state.editingTransaction
     const payload = {
+        kind: getSelectedKind(),
         amount: Number.parseFloat(els.transactionAmountInput.value),
-        description: els.transactionDescriptionInput.value,
-        currency: els.transactionCurrencyInput.value.trim().toUpperCase(),
+        details: els.transactionDetailsInput.value,
         date: els.transactionDateInput.value,
+        category: els.transactionCategorySelect.value,
+        currency: els.transactionCurrencySelect.value,
+        notes: els.transactionNotesInput.value,
     }
     els.transactionSaveButton.disabled = true
     try {
@@ -480,7 +664,8 @@ async function submitTransaction(event) {
 
 function openDeleteTransactionDialog(transaction) {
     state.pendingDelete = transaction
-    els.deleteDialogText.textContent = `${money(transaction.amount)} · ${transaction.description || 'No description'}`
+    const amount = transaction.kind === 'income' ? transaction.moneyIn : transaction.expenses
+    els.deleteDialogText.textContent = `${money(amount || 0)} · ${transaction.details || 'No details'}`
     els.deleteDialogError.hidden = true
     els.deleteDialog.showModal()
 }
@@ -521,7 +706,7 @@ function syncControls() {
     const viewingToday = isSameDay(state.viewDate, state.today)
     els.pretendDateInput.value = toDateInputValue(state.viewDate)
     els.pretendTodayButton.disabled = viewingToday
-    els.editBudgetButton.disabled = !state.data
+    els.primaryBudgetButton.disabled = !state.data
 }
 
 function viewToday() {
@@ -541,10 +726,13 @@ function applyPretendDate() {
     fetchData({ silent: true })
 }
 
-function openBudgetDialog() {
+function openBudgetDialog(currencyCode) {
     if (!state.data) return
-    els.monthlyBudgetInput.value = toNumber(state.data.monthlyBudget)
-    els.firstDayBiasInput.value = toNumber(state.data.firstDayBias)
+    const currency = (state.data.currencies || []).find((entry) => entry.code === currencyCode)
+    state.editingBudgetCurrency = currencyCode
+    els.monthlyBudgetInput.value = currency ? toNumber(currency.monthlyBudget) : 0
+    els.firstDayBiasInput.value = currency ? toNumber(currency.firstDayBias) : 0
+    els.budgetCurrencyNote.textContent = `Editing the ${currencyCode} budget.`
     updateBudgetFormValidity()
     els.budgetDialog.showModal()
 }
@@ -581,7 +769,7 @@ async function submitBudget(event) {
         const response = await fetch('/budget', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ monthlyBudget, firstDayBias }),
+            body: JSON.stringify({ monthlyBudget, firstDayBias, currency: state.editingBudgetCurrency }),
         })
         if (!response.ok) throw new Error(`Save failed (${response.status})`)
         els.budgetDialog.close()
@@ -607,7 +795,12 @@ els.themeButton.addEventListener('click', () => {
     applyTheme()
 })
 
-els.editBudgetButton.addEventListener('click', openBudgetDialog)
+els.primaryBudgetButton.addEventListener('click', () => {
+    const primary = primaryCurrency()
+    if (primary) {
+        openBudgetDialog(primary.code)
+    }
+})
 els.budgetCancelButton.addEventListener('click', () => els.budgetDialog.close())
 els.budgetForm.addEventListener('submit', submitBudget)
 els.budgetForm.addEventListener('input', updateBudgetFormValidity)
@@ -615,16 +808,29 @@ els.budgetDialog.addEventListener('click', (event) => {
     if (event.target === els.budgetDialog) els.budgetDialog.close()
 })
 
-els.currencySelect.addEventListener('change', () => {
-    state.currency = els.currencySelect.value || null
-    fetchData({ silent: true })
-})
-
 els.addTransactionButton.addEventListener('click', openAddTransactionDialog)
 els.transactionForm.addEventListener('submit', submitTransaction)
 els.transactionCancelButton.addEventListener('click', () => els.transactionDialog.close())
 els.transactionDialog.addEventListener('click', (event) => {
     if (event.target === els.transactionDialog) els.transactionDialog.close()
+})
+
+for (const input of els.transactionKindInputs) {
+    input.addEventListener('change', () => {
+        state.categoryTouched = false
+        renderCategoryOptions(getSelectedKind())
+        scheduleCategorySuggestion()
+    })
+}
+els.transactionDetailsInput.addEventListener('input', () => {
+    if (state.categoryTouched === false) {
+        els.transactionCategorySelect.value = ''
+    }
+    scheduleCategorySuggestion()
+})
+els.transactionCategorySelect.addEventListener('change', () => {
+    state.categoryTouched = true
+    els.transactionCategoryHint.hidden = true
 })
 
 els.deleteConfirmButton.addEventListener('click', confirmDeleteTransaction)

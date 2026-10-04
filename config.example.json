@@ -1,17 +1,15 @@
 {
   "port": 3300,
-  "dataProvider": "textFileDataProvider",
+  "dataProvider": "excelDataProvider",
   "providers": {
-    "textFileDataProvider": {
-      "dataFile": "./data.txt",
-      "budgetFile": "./budget.txt",
-      "monthlyBudgetInit": 2400,
-      "firstDayBiasInit": 1400
+    "excelDataProvider": {
+      "workbookFile": "./mock-data.xlsx",
+      "transactionsSheet": "Transactions",
+      "constantsSheet": "Constants"
     }
   },
   "notifications": {
     "monthlyLimitUrl": null,
-    "weeklyLimitUrl": null,
     "ntfyToken": null,
     "checkIntervalMinutes": 30,
     "onlyWarnOnce": false

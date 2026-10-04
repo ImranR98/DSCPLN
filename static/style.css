@@ -111,19 +111,10 @@ h1 .accent {
     gap: 0.5rem;
 }
 
-.currency-select {
-    font: inherit;
-    font-size: 0.8rem;
-    padding: 0.15rem 0.4rem;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
-    cursor: pointer;
-}
-
-.currency-select:hover {
-    border-color: var(--accent);
+.card__header-tools {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
 }
 
 /* ---------- Buttons ---------- */
@@ -190,6 +181,16 @@ h1 .accent {
 .icon-button svg {
     width: 1.1rem;
     height: 1.1rem;
+}
+
+.icon-button--small {
+    width: 1.75rem;
+    height: 1.75rem;
+}
+
+.icon-button--small svg {
+    width: 0.9rem;
+    height: 0.9rem;
 }
 
 .icon-button.is-spinning svg {
@@ -395,6 +396,11 @@ details.card[open] > summary::after {
     margin-top: 0.75rem;
 }
 
+.expenses__actions .button {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+}
+
 .expenses__list {
     list-style: none;
     margin: 0.75rem 0 0;
@@ -403,7 +409,7 @@ details.card[open] > summary::after {
 
 .expense {
     display: grid;
-    grid-template-columns: 3.1rem 1fr auto auto;
+    grid-template-columns: 3.1rem minmax(0, 1fr) auto auto auto;
     gap: 0.6rem;
     align-items: center;
     padding: 0.45rem 0;
@@ -415,6 +421,23 @@ details.card[open] > summary::after {
     border-top: 0;
 }
 
+.expense-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 0 0.35rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+}
+
+.expense-group:first-child {
+    border-top: 0;
+}
+
 .expense__date {
     color: var(--text-muted);
     font-size: 0.8rem;
@@ -422,12 +445,34 @@ details.card[open] > summary::after {
 }
 
 .expense__desc {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
     overflow-wrap: anywhere;
+}
+
+.expense__notes {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.expense__category {
+    font-size: 0.72rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    white-space: nowrap;
 }
 
 .expense__amount {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.expense__amount--in {
+    color: var(--ok);
 }
 
 .expense--today .expense__date {
@@ -547,8 +592,110 @@ details.card[open] > summary::after {
     color: var(--text);
 }
 
-#transactionCurrencyInput {
+.dialog select {
+    font: inherit;
+    padding: 0.55rem 0.7rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.segmented {
+    display: flex;
+    gap: 0.35rem;
+    margin: 0.2rem 0 0.4rem;
+}
+
+.segmented__option {
+    flex: 1;
+}
+
+.segmented__option input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.segmented__option span {
+    display: block;
+    text-align: center;
+    padding: 0.5rem 0.7rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.segmented__option input:checked + span {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+    color: var(--text);
+    font-weight: 600;
+}
+
+.segmented__option input:focus-visible + span {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.mini-grid {
+    display: grid;
+    grid-template-columns: auto repeat(3, minmax(0, 1fr));
+    gap: 0.2rem 0.6rem;
+    margin-top: 0.55rem;
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.mini-grid__header {
+    font-size: 0.65rem;
+    font-weight: 600;
     text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    text-align: right;
+}
+
+.mini-grid__label {
+    color: var(--text-muted);
+}
+
+.mini-grid__value {
+    text-align: right;
+}
+
+.mini-grid__value--in {
+    color: var(--ok);
+}
+
+.mini-grid--primary {
+    grid-template-columns: auto repeat(3, minmax(0, 1fr));
+    gap: 0.3rem 0.9rem;
+    margin-top: 1.4rem;
+    font-size: 0.9rem;
+}
+
+.mini-grid--primary .mini-grid__header {
+    font-size: 0.7rem;
+}
+
+.mini-grid--primary .mini-grid__value {
+    font-weight: 600;
+}
+
+@media (max-width: 30rem) {
+    .mini-grid--primary {
+        gap: 0.25rem 0.5rem;
+        font-size: 0.8rem;
+    }
+
+    .mini-grid--primary .mini-grid__header {
+        font-size: 0.6rem;
+        letter-spacing: 0.04em;
+    }
 }
 
 .label-optional {

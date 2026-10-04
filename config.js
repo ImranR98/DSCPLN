@@ -7,11 +7,10 @@ const DEFAULT_CONFIG_PATH = './config.json'
 
 const DEFAULTS = {
     port: 3300,
-    dataProvider: 'textFileDataProvider',
+    dataProvider: 'excelDataProvider',
     providers: {},
     notifications: {
         monthlyLimitUrl: null,
-        weeklyLimitUrl: null,
         ntfyToken: null,
         checkIntervalMinutes: 30,
         onlyWarnOnce: false,
@@ -48,7 +47,7 @@ const validateConfig = (config) => {
     if (!isPlainObject(config.notifications)) {
         throw new Error('Config error: "notifications" must be an object')
     }
-    for (const key of ['monthlyLimitUrl', 'weeklyLimitUrl', 'ntfyToken']) {
+    for (const key of ['monthlyLimitUrl', 'ntfyToken']) {
         if (config.notifications[key] != null && typeof config.notifications[key] !== 'string') {
             throw new Error(`Config error: "notifications.${key}" must be a string or null`)
         }

@@ -154,6 +154,37 @@ test('computes previous month and trailing 12 month averages', async () => {
     assert.equal(lastDay.monthsExpectedSpend, 1000)
 })
 
+test('returns 12 months of per-currency history ending with the viewed month', async () => {
+    const { provider } = setup()
+    const data = await provider.getData(new Date(2026, 8, 15))
+    assert.equal(data.history.length, 12)
+    assert.deepEqual([data.history[0].year, data.history[0].month], [2025, 10])
+    assert.deepEqual([data.history[11].year, data.history[11].month], [2026, 9])
+    assert.equal(data.history[11].currencies.CAD.spend, 1472.23)
+    assert.equal(data.history[11].currencies.CAD.income, 2645)
+    assert.deepEqual(data.history[0].currencies.XMR, { spend: 0, income: 0 })
+    const june = data.history.find((entry) => entry.year === 2026 && entry.month === 6)
+    assert.equal(june.currencies.XMR.spend, 0.05)
+})
+
+test('history zero-fills months without data', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dscpln-xlsx-'))
+    const file = path.join(dir, 'custom.xlsx')
+    await createCustomWorkbook(file, [
+        { year: 2026, month: 1, day: 6, details: 'Rent', expenses: 100, category: 'Rent' },
+    ])
+    initGitRepo(dir)
+    const provider = createProvider({ workbookFile: file }, dir)
+    const data = await provider.getData(new Date(2026, 2, 15))
+    assert.equal(data.history.length, 12)
+    assert.deepEqual([data.history[0].year, data.history[0].month], [2025, 4])
+    assert.deepEqual([data.history[11].year, data.history[11].month], [2026, 3])
+    const january = data.history.find((entry) => entry.year === 2026 && entry.month === 1)
+    assert.equal(january.currencies.CAD.spend, 100)
+    const february = data.history.find((entry) => entry.year === 2026 && entry.month === 2)
+    assert.deepEqual(february.currencies.CAD, { spend: 0, income: 0 })
+})
+
 test('preserves high-precision amounts like fractional XMR', async () => {
     const { provider, workbookFile } = setup()
     const created = await provider.addTransaction({

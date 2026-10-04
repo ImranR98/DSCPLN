@@ -8,16 +8,16 @@ const { ValidationError } = require('./errors')
 
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 
-// Shows at least 2 decimals, plus more when the value is smaller than a cent
-// (e.g. fractional XMR), without excessive trailing zeros.
+// Shows at least 2 decimals and enough more to keep the value's significant
+// digits (e.g. fractional XMR), without excessive trailing zeros.
 const formatAmount = (value) => {
     const amount = Number.isFinite(value) ? value : 0
     const absolute = Math.abs(amount)
-    if (absolute === 0 || absolute >= 0.01) {
-        return amount.toFixed(2)
-    }
-    const decimals = Math.min(12, 3 - Math.floor(Math.log10(absolute)))
-    return amount.toFixed(decimals).replace(/0+$/, '').replace(/\.$/, '')
+    const decimals = absolute >= 1 ? 2 : Math.min(12, Math.max(2, 8 - 1 - Math.floor(Math.log10(absolute || 1))))
+    const [integerPart, fractionPart = ''] = amount.toFixed(decimals).split('.')
+    const trimmed = fractionPart.replace(/0+$/, '')
+    const fraction = trimmed.length < 2 ? fractionPart.slice(0, 2) : trimmed
+    return `${integerPart}.${fraction}`
 }
 
 const parseDateQuery = (dateStr) => {

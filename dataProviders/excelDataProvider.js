@@ -665,9 +665,26 @@ module.exports = (config = {}, configDir = process.cwd()) => {
             }
         })
 
+        const history = []
+        for (let offset = 11; offset >= 0; offset--) {
+            const target = new Date(year, month - 1 - offset, 1)
+            const targetYear = target.getFullYear()
+            const targetMonth = target.getMonth() + 1
+            const currencyTotals = {}
+            for (const code of constants.currencies) {
+                const entry = monthly.get(`${code}|${targetYear}|${targetMonth}`) || { spend: 0, income: 0 }
+                currencyTotals[code] = {
+                    spend: cleanAmount(entry.spend),
+                    income: cleanAmount(entry.income),
+                }
+            }
+            history.push({ year: targetYear, month: targetMonth, currencies: currencyTotals })
+        }
+
         return {
             currencies,
             categories: constants.categoryGroups,
+            history,
             warnings,
             writable: true,
             transactions: monthTransactions.map(serializeTransaction),

@@ -63,7 +63,8 @@
         <button id="bannerTodayButton" class="button button--small" type="button">Back to today</button>
     </div>
 
-    <main>
+    <main class="layout">
+        <div class="layout__main">
         <section class="card" id="monthCard" aria-labelledby="monthHeading">
             <div class="card__header">
                 <h2 id="monthHeading">Main</h2>
@@ -111,6 +112,27 @@
 
         <div id="otherCurrencies"></div>
 
+        <section class="card" id="historyCard" aria-labelledby="historyHeading" hidden>
+            <div class="card__header">
+                <h2 id="historyHeading">Last 12 months</h2>
+                <span class="card__header-tools">
+                    <span id="historyRange" class="card__context"></span>
+                    <span class="history-legend">
+                        <span class="history-legend__item">
+                            <span class="history-legend__swatch"></span>Out
+                        </span>
+                        <span class="history-legend__item">
+                            <span class="history-legend__swatch history-legend__swatch--in"></span>In
+                        </span>
+                    </span>
+                </span>
+            </div>
+            <div id="historyChart" class="history"></div>
+            <div id="historyTooltip" class="history-tooltip" hidden></div>
+        </section>
+        </div>
+
+        <div class="layout__side">
         <details class="card" id="expensesCard" open>
             <summary>
                 <span>This month</span>
@@ -122,7 +144,7 @@
             <ul id="expensesList" class="expenses__list"></ul>
             <p id="expensesEmpty" class="muted" hidden>No transactions recorded this month.</p>
         </details>
-
+        </div>
     </main>
 
     <dialog id="budgetDialog" class="dialog" aria-labelledby="budgetDialogTitle">

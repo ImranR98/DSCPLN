@@ -154,6 +154,28 @@ test('computes previous month and trailing 12 month averages', async () => {
     assert.equal(lastDay.monthsExpectedSpend, 1000)
 })
 
+test('preserves high-precision amounts like fractional XMR', async () => {
+    const { provider, workbookFile } = setup()
+    const created = await provider.addTransaction({
+        kind: 'expense',
+        amount: 0.000001,
+        details: 'XMR fee',
+        date: '2026-09-15',
+        category: 'Snacks',
+        currency: 'XMR',
+        notes: '',
+    })
+    assert.equal(created.expenses, 0.000001)
+    const data = await provider.getData(new Date(2026, 8, 15))
+    const xmr = currencyOf(data, 'XMR')
+    assert.equal(xmr.monthsSpend, 0.000001)
+    assert.equal(xmr.hasActivity, true)
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.readFile(workbookFile)
+    const sheet = workbook.getWorksheet('Transactions')
+    assert.equal(sheet.getRow(created.row).getCell(4).value, 0.000001)
+})
+
 test('ignores a bloated sheet dimension', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dscpln-xlsx-'))
     const file = path.join(dir, 'bloated.xlsx')
@@ -255,7 +277,7 @@ test('validates transaction input', async () => {
     await assert.rejects(provider.addTransaction({ ...base, category: 'Nope' }), ValidationError)
     await assert.rejects(provider.addTransaction({ ...base, currency: 'EUR' }), ValidationError)
     await assert.rejects(provider.addTransaction({ ...base, amount: 0 }), ValidationError)
-    await assert.rejects(provider.addTransaction({ ...base, amount: 1.234 }), ValidationError)
+    await assert.rejects(provider.addTransaction({ ...base, amount: 1.1234567890123 }), ValidationError)
     await assert.rejects(provider.addTransaction({ ...base, details: '' }), ValidationError)
     await assert.rejects(provider.addTransaction({ ...base, date: '2026-02-30' }), ValidationError)
     await assert.rejects(provider.addTransaction({ ...base, kind: 'income', category: 'Snacks' }), ValidationError)

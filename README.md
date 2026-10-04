@@ -56,6 +56,7 @@ The first row holds the headers, which are matched by name (other sheets and ext
 
 - `Date` is a real Excel date; the app reads and writes full dates, so the sheet can span any number of years.
 - `Money In` and `Expenses` are separate amount columns; a transaction fills one of them (choose Expense or Income in the form).
+- Amounts may have up to 12 decimal places (fractional currencies like XMR work). The UI always shows at least two decimals and adds more only when a value needs it.
 - `Type` is the category, and must exist in the Constants sheet (matched to the transaction kind).
 - `Currency` must be one of the currencies listed in the Constants sheet.
 

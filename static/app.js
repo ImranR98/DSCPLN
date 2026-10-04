@@ -10,6 +10,12 @@ const els = {
     pretendBanner: $('pretendBanner'),
     pretendBannerDate: $('pretendBannerDate'),
     bannerTodayButton: $('bannerTodayButton'),
+    pretendButton: $('pretendButton'),
+    pretendDialog: $('pretendDialog'),
+    pretendForm: $('pretendForm'),
+    pretendFormError: $('pretendFormError'),
+    pretendCancelButton: $('pretendCancelButton'),
+    pretendApplyButton: $('pretendApplyButton'),
     monthCard: $('monthCard'),
     monthHeading: $('monthHeading'),
     monthName: $('monthName'),
@@ -78,7 +84,7 @@ const ICONS = {
     delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>',
 }
 
-const moneyFormat = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const moneyFormatters = new Map()
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
 const dayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
 const fullDayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
@@ -99,7 +105,6 @@ const state = {
 }
 
 let suggestionTimer = null
-let pretendDateTimer = null
 let fetchSequence = 0
 
 function startOfDay(date) {
@@ -133,8 +138,20 @@ function toNumber(value) {
     return Number.isFinite(n) ? n : 0
 }
 
+// Shows at least 2 decimals, plus more when the value is smaller than a cent
+// (e.g. fractional XMR), without excessive trailing zeros.
 function money(value) {
-    return `$${moneyFormat.format(value)}`
+    const amount = Number.isFinite(value) ? value : 0
+    const absolute = Math.abs(amount)
+    const decimals = absolute === 0 || absolute >= 0.01 ?
+        2 :
+        Math.min(12, 3 - Math.floor(Math.log10(absolute)))
+    let formatter = moneyFormatters.get(decimals)
+    if (!formatter) {
+        formatter = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: decimals })
+        moneyFormatters.set(decimals, formatter)
+    }
+    return `$${formatter.format(amount)}`
 }
 
 function getSelectedKind() {
@@ -443,6 +460,10 @@ function buildExpenseRow(transaction, writable) {
         notesEl.textContent = transaction.notes
         descEl.appendChild(notesEl)
     }
+    const currencyEl = document.createElement('span')
+    currencyEl.className = 'expense__currency'
+    currencyEl.textContent = transaction.currency || ''
+    currencyEl.hidden = !transaction.currency
     const categoryEl = document.createElement('span')
     categoryEl.className = 'expense__category'
     categoryEl.textContent = transaction.category || ''
@@ -450,7 +471,7 @@ function buildExpenseRow(transaction, writable) {
     amountEl.className = transaction.kind === 'income' ? 'expense__amount expense__amount--in' : 'expense__amount'
     const amount = transaction.kind === 'income' ? transaction.moneyIn : transaction.expenses
     amountEl.textContent = transaction.kind === 'income' ? `+${money(amount || 0)}` : money(amount || 0)
-    li.append(dateEl, descEl, categoryEl, amountEl)
+    li.append(dateEl, descEl, currencyEl, categoryEl, amountEl)
     if (writable) {
         li.append(buildExpenseActions(transaction))
     }
@@ -468,30 +489,8 @@ function renderExpenses() {
     els.expensesMeta.textContent = count ? `${count} ${count === 1 ? 'transaction' : 'transactions'}` : ''
     els.expensesEmpty.hidden = count > 0
 
-    const currencies = state.data.currencies || []
-    const known = new Set(currencies.map((currency) => currency.code))
-    const groups = []
-    for (const currency of currencies) {
-        const items = transactions.filter((transaction) => transaction.currency === currency.code)
-        if (items.length) {
-            groups.push({ code: currency.code, items })
-        }
-    }
-    const unknown = transactions.filter((transaction) => !known.has(transaction.currency))
-    if (unknown.length) {
-        groups.push({ code: '', items: unknown })
-    }
-
-    for (const group of groups) {
-        const outCents = group.items.reduce((sum, transaction) => sum + Math.round((transaction.expenses || 0) * 100), 0)
-        const inCents = group.items.reduce((sum, transaction) => sum + Math.round((transaction.moneyIn || 0) * 100), 0)
-        const header = document.createElement('li')
-        header.className = 'expense-group'
-        header.textContent = `${group.code ? `${group.code} · ` : ''}${money(outCents / 100)} out${inCents > 0 ? ` · +${money(inCents / 100)} in` : ''}`
-        els.expensesList.appendChild(header)
-        for (const transaction of group.items.slice().reverse()) {
-            els.expensesList.appendChild(buildExpenseRow(transaction, writable))
-        }
+    for (const transaction of transactions) {
+        els.expensesList.appendChild(buildExpenseRow(transaction, writable))
     }
 }
 
@@ -704,25 +703,33 @@ async function confirmDeleteTransaction() {
 }
 
 function syncControls() {
-    const viewingToday = isSameDay(state.viewDate, state.today)
-    els.pretendDateInput.value = toDateInputValue(state.viewDate)
-    els.pretendTodayButton.disabled = viewingToday
     els.primaryBudgetButton.disabled = !state.data
 }
 
 function viewToday() {
-    window.clearTimeout(pretendDateTimer)
+    if (els.pretendDialog.open) {
+        els.pretendDialog.close()
+    }
     state.viewDate = startOfDay(new Date())
     syncControls()
     fetchData({ silent: true })
 }
 
-function applyPretendDate() {
+function openPretendDialog() {
+    els.pretendDateInput.value = toDateInputValue(state.viewDate)
+    els.pretendFormError.hidden = true
+    els.pretendDialog.showModal()
+}
+
+function submitPretendForm(event) {
+    event.preventDefault()
     const parsed = parseDateInputValue(els.pretendDateInput.value)
     if (!parsed) {
-        els.pretendDateInput.value = toDateInputValue(state.viewDate)
+        els.pretendFormError.textContent = 'Enter a valid date.'
+        els.pretendFormError.hidden = false
         return
     }
+    els.pretendDialog.close()
     state.viewDate = startOfDay(parsed)
     syncControls()
     fetchData({ silent: true })
@@ -847,9 +854,11 @@ els.deleteDialog.addEventListener('click', (event) => {
     }
 })
 
-els.pretendDateInput.addEventListener('change', () => {
-    window.clearTimeout(pretendDateTimer)
-    pretendDateTimer = window.setTimeout(applyPretendDate, 150)
+els.pretendButton.addEventListener('click', openPretendDialog)
+els.pretendForm.addEventListener('submit', submitPretendForm)
+els.pretendCancelButton.addEventListener('click', () => els.pretendDialog.close())
+els.pretendDialog.addEventListener('click', (event) => {
+    if (event.target === els.pretendDialog) els.pretendDialog.close()
 })
 els.pretendTodayButton.addEventListener('click', viewToday)
 els.bannerTodayButton.addEventListener('click', viewToday)

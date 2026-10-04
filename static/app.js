@@ -26,7 +26,9 @@ const els = {
     monthProgressFill: $('monthProgressFill'),
     monthRemaining: $('monthRemaining'),
     monthDaily: $('monthDaily'),
+    monthDaysLeft: $('monthDaysLeft'),
     monthPace: $('monthPace'),
+    monthPaceMarker: $('monthPaceMarker'),
     monthSpentThis: $('monthSpentThis'),
     monthSpentPrev: $('monthSpentPrev'),
     monthSpentAvg: $('monthSpentAvg'),
@@ -43,6 +45,7 @@ const els = {
     expensesMeta: $('expensesMeta'),
     expensesEmpty: $('expensesEmpty'),
     addTransactionButton: $('addTransactionButton'),
+    fabAdd: $('fabAdd'),
     pretendDateInput: $('pretendDateInput'),
     pretendTodayButton: $('pretendTodayButton'),
     budgetDialog: $('budgetDialog'),
@@ -86,6 +89,8 @@ const ICONS = {
     dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
     edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
     delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>',
 }
 
 const moneyFormatters = new Map()
@@ -222,6 +227,30 @@ function setBreakableText(element, text) {
     element.append(document.createTextNode(text.slice(start)))
 }
 
+// Deterministic accent per currency so cards, chips and chart lanes stay
+// recognizable; known currencies get hand-picked colors.
+const CURRENCY_ACCENTS = {
+    CAD: '#dc2626',
+    USD: '#16a34a',
+    GBP: '#2563eb',
+    TZS: '#d4a017',
+    XMR: '#ea7a1a',
+}
+const FALLBACK_ACCENTS = ['#7c3aed', '#0891b2', '#db2777', '#65a30d', '#9333ea', '#0d9488', '#f59e0b', '#4f46e5']
+
+function currencyColor(code) {
+    if (!code) return null
+    if (CURRENCY_ACCENTS[code]) return CURRENCY_ACCENTS[code]
+    let hash = 0
+    for (const char of code) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+    return FALLBACK_ACCENTS[hash % FALLBACK_ACCENTS.length]
+}
+
+function applyCurrencyAccent(element, code) {
+    const color = currencyColor(code)
+    if (color) element.style.setProperty('--currency', color)
+}
+
 function getSelectedKind() {
     const selected = els.transactionKindInputs.find((input) => input.checked)
     return selected ? selected.value : 'expense'
@@ -254,7 +283,12 @@ function toast(message, type = 'success') {
     const el = document.createElement('div')
     el.className = `toast toast--${type}`
     el.setAttribute('role', 'status')
-    el.textContent = message
+    const icon = document.createElement('span')
+    icon.className = 'toast__icon'
+    icon.innerHTML = type === 'error' ? ICONS.alert : ICONS.check
+    const text = document.createElement('span')
+    text.textContent = message
+    el.append(icon, text)
     els.toasts.appendChild(el)
     window.setTimeout(() => {
         el.classList.add('toast--leaving')
@@ -355,19 +389,24 @@ function renderMonth(currency) {
     const remaining = budget - spent
 
     els.monthHeading.textContent = currency ? currency.code : 'Main'
+    applyCurrencyAccent(els.monthCard, code)
     els.monthName.textContent = monthFormat.format(date)
     setBreakableText(els.monthSpend, money(spent, code))
     setBreakableText(els.monthBudget, budget > 0 ? money(budget, code) : 'no budget')
     if (budget <= 0) {
-        els.monthRemaining.textContent = 'Set a budget to track your spending.'
-        els.monthDaily.textContent = ''
+        els.monthRemaining.textContent = '—'
+        els.monthDaily.textContent = '—'
+        els.monthRemaining.classList.remove('is-over')
     } else if (remaining >= 0) {
-        els.monthRemaining.textContent = `${money(remaining, code)} left`
-        els.monthDaily.textContent = `${money(remaining / daysLeft, code)}/day · ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left`
+        setBreakableText(els.monthRemaining, money(remaining, code))
+        setBreakableText(els.monthDaily, money(remaining / daysLeft, code))
+        els.monthRemaining.classList.remove('is-over')
     } else {
-        els.monthRemaining.textContent = `${money(-remaining, code)} over`
-        els.monthDaily.textContent = ''
+        setBreakableText(els.monthRemaining, money(remaining, code))
+        setBreakableText(els.monthDaily, money(0, code))
+        els.monthRemaining.classList.add('is-over')
     }
+    els.monthDaysLeft.textContent = String(daysLeft)
     setBreakableText(els.monthSpentThis, money(spent, code))
     setBreakableText(els.monthSpentPrev, money(currency ? toNumber(currency.previousMonthsSpend) : 0, code))
     setBreakableText(els.monthSpentAvg, money(currency ? toNumber(currency.trailingSpendAverage) : 0, code))
@@ -379,46 +418,50 @@ function renderMonth(currency) {
     setPace(els.monthPace, budget, spent, budget > 0 ? expected / budget : 0, code)
     setProgress(els.monthProgress, els.monthProgressFill, spent, budget)
     setCardState(els.monthCard, spent, budget)
+    const paceFraction = budget > 0 ? Math.min(1, Math.max(0, expected / budget)) : 0
+    els.monthPaceMarker.hidden = budget <= 0
+    els.monthPaceMarker.style.left = `${(paceFraction * 100).toFixed(1)}%`
 }
 
 function buildCurrencyCard(currency) {
     const card = document.createElement('section')
-    card.className = 'card card--compact currency-card'
+    card.className = 'currency-card'
     card.setAttribute('aria-label', `${currency.code} budget`)
+    applyCurrencyAccent(card, currency.code)
 
-    const header = document.createElement('div')
-    header.className = 'card__header'
-    const title = document.createElement('h2')
-    title.textContent = currency.code
-    const editButton = document.createElement('button')
-    editButton.type = 'button'
-    editButton.className = 'icon-button icon-button--small'
-    editButton.title = `Edit ${currency.code} budget`
-    editButton.setAttribute('aria-label', `Edit ${currency.code} budget`)
-    editButton.innerHTML = ICONS.edit
-    editButton.addEventListener('click', () => openBudgetDialog(currency.code))
-    header.append(title, editButton)
-
+    const code = currency.code
     const budget = toNumber(currency.monthlyBudget)
     const spent = toNumber(currency.monthsSpend)
     const remaining = budget - spent
-    const code = currency.code
+
+    const header = document.createElement('div')
+    header.className = 'currency-card__header'
+    const title = document.createElement('span')
+    title.className = 'currency-badge'
+    const codeEl = document.createElement('span')
+    codeEl.textContent = code
+    title.append(codeEl)
+    const editButton = document.createElement('button')
+    editButton.type = 'button'
+    editButton.className = 'icon-button icon-button--small'
+    editButton.title = `Edit ${code} budget`
+    editButton.setAttribute('aria-label', `Edit ${code} budget`)
+    editButton.innerHTML = ICONS.edit
+    editButton.addEventListener('click', () => openBudgetDialog(code))
+    header.append(title, editButton)
 
     const figure = document.createElement('p')
-    figure.className = 'figure'
+    figure.className = 'currency-card__figure'
     const spendEl = document.createElement('span')
-    spendEl.className = 'figure__spend'
+    spendEl.className = 'currency-card__spend'
     setBreakableText(spendEl, money(spent, code))
-    const ofEl = document.createElement('span')
-    ofEl.className = 'figure__of'
-    ofEl.textContent = budget > 0 ? 'of' : ''
     const budgetEl = document.createElement('span')
-    budgetEl.className = 'figure__budget'
-    setBreakableText(budgetEl, budget > 0 ? money(budget, code) : 'no budget')
-    figure.append(spendEl, ofEl, budgetEl)
+    budgetEl.className = 'currency-card__budget'
+    setBreakableText(budgetEl, budget > 0 ? `of ${money(budget, code)}` : 'no budget')
+    figure.append(spendEl, budgetEl)
 
     const progress = document.createElement('div')
-    progress.className = 'progress'
+    progress.className = 'progress progress--sm'
     progress.setAttribute('role', 'progressbar')
     progress.setAttribute('aria-valuemin', '0')
     progress.setAttribute('aria-valuemax', '100')
@@ -431,49 +474,25 @@ function buildCurrencyCard(currency) {
     progress.appendChild(fill)
     setCardState(card, spent, budget)
 
-    const stats = document.createElement('div')
-    stats.className = 'card__stats'
-    const statsMain = document.createElement('span')
-    if (budget <= 0) {
-        statsMain.textContent = 'No budget'
-    } else {
-        statsMain.textContent = remaining >= 0 ? `${money(remaining, code)} left` : `${money(-remaining, code)} over`
-    }
-    const pace = document.createElement('span')
-    pace.className = 'pace'
-    if (budget > 0 && currency.monthsExpectedSpend != null) {
-        const delta = toNumber(currency.monthsExpectedSpend) - spent
-        pace.textContent = `${money(Math.abs(delta), code)} ${delta >= 0 ? 'less' : 'more'} than expected`
-        pace.className = `pace ${delta >= 0 ? 'pace--ok' : 'pace--over'}`
-    }
-    stats.append(statsMain, pace)
-
-    const grid = document.createElement('div')
-    grid.className = 'mini-grid'
-    const addCell = (text, className) => {
-        const cell = document.createElement('span')
-        cell.className = className
-        if (className.includes('mini-grid__value')) {
-            setBreakableText(cell, text)
+    const meta = document.createElement('div')
+    meta.className = 'currency-card__meta'
+    const earned = document.createElement('span')
+    earned.className = 'currency-card__earned'
+    earned.textContent = `+${money(toNumber(currency.monthsIncome), code)} in`
+    if (budget > 0) {
+        const left = document.createElement('span')
+        if (remaining >= 0) {
+            left.textContent = `${money(remaining, code)} left`
         } else {
-            cell.textContent = text
+            left.textContent = `${money(-remaining, code)} over`
+            left.className = 'currency-card__over'
         }
-        grid.appendChild(cell)
+        meta.append(left, earned)
+    } else {
+        meta.append(earned)
     }
-    addCell('', 'mini-grid__label')
-    addCell('This month', 'mini-grid__header')
-    addCell('Last month', 'mini-grid__header')
-    addCell('12-mo avg', 'mini-grid__header')
-    addCell('Spent', 'mini-grid__label')
-    addCell(money(spent, code), 'mini-grid__value')
-    addCell(money(toNumber(currency.previousMonthsSpend), code), 'mini-grid__value')
-    addCell(money(toNumber(currency.trailingSpendAverage), code), 'mini-grid__value')
-    addCell('Earned', 'mini-grid__label')
-    addCell(`+${money(toNumber(currency.monthsIncome), code)}`, 'mini-grid__value mini-grid__value--in')
-    addCell(`+${money(toNumber(currency.previousMonthsIncome), code)}`, 'mini-grid__value mini-grid__value--in')
-    addCell(`+${money(toNumber(currency.trailingIncomeAverage), code)}`, 'mini-grid__value mini-grid__value--in')
 
-    card.append(header, figure, progress, stats, grid)
+    card.append(header, figure, progress, meta)
     return card
 }
 
@@ -544,7 +563,13 @@ function buildHistoryTooltip(monthIndex, activeCurrencies) {
         row.className = 'history-tooltip__row'
         const codeEl = document.createElement('span')
         codeEl.className = 'history-tooltip__code'
-        codeEl.textContent = code
+        const dot = document.createElement('span')
+        dot.className = 'history-tooltip__dot'
+        const color = currencyColor(code)
+        if (color) dot.style.background = color
+        const codeText = document.createElement('span')
+        codeText.textContent = code
+        codeEl.append(dot, codeText)
         const outEl = document.createElement('span')
         outEl.className = 'history-tooltip__out'
         outEl.textContent = `${money(toNumber(totals.spend), code)} out`
@@ -597,6 +622,8 @@ function renderHistory() {
     const width = Math.max(240, Math.round(els.historyChart.clientWidth || 720))
     const topPad = 6
     const laneHeight = 92
+    const laneGap = 18
+    const laneStride = laneHeight + laneGap
     const axisHeight = 26
 
     const laneMax = new Map()
@@ -682,11 +709,11 @@ function renderHistory() {
     const plotWidth = Math.max(40, width - leftPad - rightPad - totalColumnWidth)
     const dividerX = leftPad + plotWidth
     const columnWidth = plotWidth / history.length
-    const labelStep = columnWidth < 34 ? 3 : columnWidth < 46 ? 2 : 1
+    const labelStep = columnWidth < 12 ? 6 : columnWidth < 20 ? 4 : columnWidth < 30 ? 3 : columnWidth < 40 ? 2 : 1
     const groupWidth = columnWidth * 0.7
     const barGap = 1.5
     const barWidth = Math.max(1, (groupWidth - barGap) / 2)
-    const height = topPad + active.length * laneHeight + axisHeight
+    const height = topPad + active.length * laneStride - laneGap + axisHeight
 
     const svg = svgElement('svg', {
         viewBox: `0 0 ${width} ${height}`,
@@ -699,19 +726,29 @@ function renderHistory() {
         class: 'history__band',
         y: topPad,
         width: columnWidth,
-        height: active.length * laneHeight,
+        height: active.length * laneStride - laneGap,
     })
     band.style.display = 'none'
     svg.appendChild(band)
 
     active.forEach((code, laneIndex) => {
-        const laneTop = topPad + laneIndex * laneHeight
+        const laneTop = topPad + laneIndex * laneStride
         const plotTop = laneTop + 24
         const baseline = laneTop + laneHeight - 8
         const plotHeight = baseline - plotTop
         const max = laneMax.get(code)
 
-        const laneLabel = svgElement('text', { x: 4, y: laneTop + 10, class: 'history__lane-label' })
+        const laneColor = currencyColor(code) || 'var(--accent)'
+        const laneDot = svgElement('circle', {
+            cx: 3.5,
+            cy: laneTop + 6,
+            r: 3.5,
+            class: 'history__lane-dot',
+            fill: laneColor,
+        })
+        svg.appendChild(laneDot)
+
+        const laneLabel = svgElement('text', { x: 12, y: laneTop + 10, class: 'history__lane-label' })
         laneLabel.textContent = code
         svg.appendChild(laneLabel)
 
@@ -742,9 +779,10 @@ function renderHistory() {
                     y: baseline - outHeight,
                     width: barWidth,
                     height: outHeight,
+                    rx: Math.min(2.5, barWidth / 2).toFixed(2),
                     class: 'history__bar',
                 })
-                bar.style.fill = `var(--chart-${(laneIndex % 6) + 1})`
+                bar.style.fill = laneColor
                 svg.appendChild(bar)
             }
             if (inHeight > 0) {
@@ -753,10 +791,11 @@ function renderHistory() {
                     y: baseline - inHeight,
                     width: barWidth,
                     height: inHeight,
+                    rx: Math.min(2.5, barWidth / 2).toFixed(2),
                     class: 'history__bar history__bar--in',
                 })
-                bar.style.fill = `var(--chart-${(laneIndex % 6) + 1})`
-                bar.style.stroke = `var(--chart-${(laneIndex % 6) + 1})`
+                bar.style.fill = laneColor
+                bar.style.stroke = laneColor
                 svg.appendChild(bar)
             }
             if (laneIndex === active.length - 1 && monthIndex % labelStep === 0) {
@@ -788,7 +827,7 @@ function renderHistory() {
         x1: dividerX,
         x2: dividerX,
         y1: topPad,
-        y2: topPad + active.length * laneHeight,
+        y2: topPad + active.length * laneStride - laneGap,
         class: 'history__divider',
     }))
     const totalHeader = svgElement('text', {
@@ -804,7 +843,7 @@ function renderHistory() {
             x: leftPad + monthIndex * columnWidth,
             y: topPad,
             width: columnWidth,
-            height: active.length * laneHeight,
+            height: active.length * laneStride - laneGap,
             class: 'history__hit',
         })
         const show = (event) => {
@@ -859,22 +898,28 @@ function buildExpenseActions(transaction) {
     return actions
 }
 
+function expenseDateLabel(date) {
+    const yesterday = new Date(state.today.getFullYear(), state.today.getMonth(), state.today.getDate() - 1)
+    if (isSameDay(date, state.today)) return 'Today'
+    if (isSameDay(date, yesterday)) return 'Yesterday'
+    return dayFormat.format(date)
+}
+
 function buildExpenseRow(transaction, writable) {
     const li = document.createElement('li')
     li.className = 'expense'
     if (transaction.kind === 'income') {
         li.classList.add('expense--income')
     }
+    applyCurrencyAccent(li, transaction.currency)
     const date = parseIsoDate(transaction.date)
-    if (date && isSameDay(date, state.viewDate)) {
-        li.classList.add('expense--today')
-    } else if (date && date > state.viewDate) {
+    if (date && date > state.viewDate) {
         li.classList.add('expense--future')
         li.title = 'Dated after the viewed date'
     }
-    const dateEl = document.createElement('span')
-    dateEl.className = 'expense__date'
-    dateEl.textContent = date ? `${date.getMonth() + 1}/${date.getDate()}` : ''
+
+    const main = document.createElement('span')
+    main.className = 'expense__main'
     const descEl = document.createElement('span')
     descEl.className = 'expense__desc'
     descEl.textContent = transaction.details || '—'
@@ -886,6 +931,12 @@ function buildExpenseRow(transaction, writable) {
     }
     const metaEl = document.createElement('span')
     metaEl.className = 'expense__meta'
+    if (date) {
+        const dateEl = document.createElement('span')
+        dateEl.className = 'expense__date'
+        dateEl.textContent = expenseDateLabel(date)
+        metaEl.appendChild(dateEl)
+    }
     const currencyEl = document.createElement('span')
     currencyEl.className = 'expense__currency'
     currencyEl.textContent = transaction.currency || ''
@@ -894,16 +945,19 @@ function buildExpenseRow(transaction, writable) {
     categoryEl.className = 'expense__category'
     categoryEl.textContent = transaction.category || ''
     metaEl.append(currencyEl, categoryEl)
+    main.append(descEl, metaEl)
+
     const amountEl = document.createElement('span')
     amountEl.className = transaction.kind === 'income' ? 'expense__amount expense__amount--in' : 'expense__amount'
     const amount = transaction.kind === 'income' ? transaction.moneyIn : transaction.expenses
     setBreakableText(amountEl, transaction.kind === 'income' ?
         `+${money(amount || 0, transaction.currency)}` :
         money(amount || 0, transaction.currency))
-    li.append(dateEl, descEl, metaEl, amountEl)
+    li.append(main)
     if (writable) {
         li.append(buildExpenseActions(transaction))
     }
+    li.append(amountEl)
     return li
 }
 
@@ -913,6 +967,7 @@ function renderExpenses() {
     const writable = state.data.writable !== false
 
     els.addTransactionButton.hidden = !writable
+    els.fabAdd.hidden = !writable
     els.expensesList.textContent = ''
     els.expensesList.hidden = count === 0
     els.expensesMeta.textContent = count ? `${count} ${count === 1 ? 'transaction' : 'transactions'}` : ''
@@ -1247,6 +1302,7 @@ els.budgetDialog.addEventListener('click', (event) => {
 })
 
 els.addTransactionButton.addEventListener('click', openAddTransactionDialog)
+els.fabAdd.addEventListener('click', openAddTransactionDialog)
 els.transactionForm.addEventListener('submit', submitTransaction)
 els.transactionCancelButton.addEventListener('click', () => els.transactionDialog.close())
 els.transactionDialog.addEventListener('click', (event) => {

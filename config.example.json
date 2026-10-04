@@ -1,0 +1,19 @@
+{
+  "port": 3300,
+  "dataProvider": "textFileDataProvider",
+  "providers": {
+    "textFileDataProvider": {
+      "dataFile": "./data.txt",
+      "budgetFile": "./budget.txt",
+      "monthlyBudgetInit": 2400,
+      "firstDayBiasInit": 1400
+    }
+  },
+  "notifications": {
+    "monthlyLimitUrl": null,
+    "weeklyLimitUrl": null,
+    "ntfyToken": null,
+    "checkIntervalMinutes": 30,
+    "onlyWarnOnce": false
+  }
+}

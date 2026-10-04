@@ -7,6 +7,7 @@ const els = {
     themeButton: $('themeButton'),
     editBudgetButton: $('editBudgetButton'),
     contextLabel: $('contextLabel'),
+    currencySelect: $('currencySelect'),
     updatedLabel: $('updatedLabel'),
     pretendBanner: $('pretendBanner'),
     pretendBannerDate: $('pretendBannerDate'),
@@ -14,16 +15,18 @@ const els = {
     monthCard: $('monthCard'),
     monthName: $('monthName'),
     monthSpend: $('monthSpend'),
+    monthOf: $('monthOf'),
     monthBudget: $('monthBudget'),
     monthProgress: $('monthProgress'),
     monthProgressFill: $('monthProgressFill'),
     monthRemaining: $('monthRemaining'),
     monthDaily: $('monthDaily'),
     monthPace: $('monthPace'),
+    monthCurrencyNote: $('monthCurrencyNote'),
     weekCard: $('weekCard'),
     weekRange: $('weekRange'),
-    weekBadge: $('weekBadge'),
     weekSpend: $('weekSpend'),
+    weekOf: $('weekOf'),
     weekBudget: $('weekBudget'),
     weekProgress: $('weekProgress'),
     weekProgressFill: $('weekProgressFill'),
@@ -33,15 +36,32 @@ const els = {
     expensesList: $('expensesList'),
     expensesMeta: $('expensesMeta'),
     expensesEmpty: $('expensesEmpty'),
+    addTransactionButton: $('addTransactionButton'),
     pretendDateInput: $('pretendDateInput'),
     pretendTodayButton: $('pretendTodayButton'),
     budgetDialog: $('budgetDialog'),
     budgetForm: $('budgetForm'),
     monthlyBudgetInput: $('monthlyBudgetInput'),
-    firstWeekBiasInput: $('firstWeekBiasInput'),
+    firstDayBiasInput: $('firstDayBiasInput'),
     budgetFormError: $('budgetFormError'),
     budgetCancelButton: $('budgetCancelButton'),
     budgetSaveButton: $('budgetSaveButton'),
+    transactionDialog: $('transactionDialog'),
+    transactionForm: $('transactionForm'),
+    transactionDialogTitle: $('transactionDialogTitle'),
+    transactionAmountInput: $('transactionAmountInput'),
+    transactionDescriptionInput: $('transactionDescriptionInput'),
+    transactionCurrencyInput: $('transactionCurrencyInput'),
+    currencyOptions: $('currencyOptions'),
+    transactionDateInput: $('transactionDateInput'),
+    transactionFormError: $('transactionFormError'),
+    transactionCancelButton: $('transactionCancelButton'),
+    transactionSaveButton: $('transactionSaveButton'),
+    deleteDialog: $('deleteDialog'),
+    deleteDialogText: $('deleteDialogText'),
+    deleteDialogError: $('deleteDialogError'),
+    deleteCancelButton: $('deleteCancelButton'),
+    deleteConfirmButton: $('deleteConfirmButton'),
     toasts: $('toasts'),
 }
 
@@ -53,13 +73,8 @@ const ICONS = {
     auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg>',
     light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
     dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
-}
-
-const WEEK_MESSAGES = {
-    partialStart: 'Includes next week (current week is partial)',
-    partialEnd: 'Includes last week (current week is partial)',
-    beforePartial: 'Includes next week (which is partial)',
-    afterPartial: 'Includes last week (which was partial)',
+    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+    delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>',
 }
 
 const moneyFormat = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -78,6 +93,9 @@ const state = {
     lastFetchAt: 0,
     fetching: false,
     theme: readTheme(),
+    currency: null,
+    editingTransaction: null,
+    pendingDelete: null,
 }
 
 function startOfDay(date) {
@@ -157,7 +175,9 @@ async function fetchData({ silent = false } = {}) {
     refreshToday()
     if (!state.data && !silent) document.body.classList.add('is-loading')
     try {
-        const response = await fetch(`/data?date=${toDateInputValue(state.viewDate)}`, {
+        const params = new URLSearchParams({ date: toDateInputValue(state.viewDate) })
+        if (state.currency) params.set('currency', state.currency)
+        const response = await fetch(`/data?${params}`, {
             headers: { Accept: 'application/json' },
         })
         if (!response.ok) throw new Error(`Request failed (${response.status})`)
@@ -176,10 +196,36 @@ async function fetchData({ silent = false } = {}) {
 function render() {
     if (!state.data) return
     renderContext()
+    renderCurrencyPicker()
     renderMonth()
     renderWeek()
     renderExpenses()
     syncControls()
+}
+
+function renderCurrencyPicker() {
+    const currencies = state.data.currencies || []
+    const options = state.currency && !currencies.includes(state.currency) ?
+        [...currencies, state.currency].sort() : currencies
+    els.currencySelect.hidden = options.length === 0
+    els.currencySelect.textContent = ''
+    const localOption = document.createElement('option')
+    localOption.value = ''
+    localOption.textContent = 'Local'
+    els.currencySelect.appendChild(localOption)
+    for (const currency of options) {
+        const option = document.createElement('option')
+        option.value = currency
+        option.textContent = currency
+        els.currencySelect.appendChild(option)
+    }
+    els.currencySelect.value = state.currency || ''
+    els.currencyOptions.textContent = ''
+    for (const currency of options) {
+        const option = document.createElement('option')
+        option.value = currency
+        els.currencyOptions.appendChild(option)
+    }
 }
 
 function renderContext() {
@@ -239,7 +285,18 @@ function renderMonth() {
         els.monthRemaining.textContent = `${money(-remaining)} over`
         els.monthDaily.textContent = ''
     }
-    setPace(els.monthPace, budget, spent, day / daysInMonth)
+    const currencyView = Boolean(state.currency)
+    els.monthOf.hidden = currencyView
+    els.monthBudget.hidden = currencyView
+    els.monthProgress.hidden = currencyView
+    els.monthRemaining.hidden = currencyView
+    els.monthDaily.hidden = currencyView
+    els.monthPace.hidden = currencyView
+    els.monthCurrencyNote.hidden = !currencyView
+    els.monthCurrencyNote.textContent = currencyView ? 'Budgets are tracked for local spending only.' : ''
+
+    const expected = data.monthsExpectedSpend != null ? toNumber(data.monthsExpectedSpend) : budget * (day / daysInMonth)
+    setPace(els.monthPace, budget, spent, budget > 0 ? expected / budget : 0)
     setProgress(els.monthProgress, els.monthProgressFill, spent, budget)
     setCardState(els.monthCard, spent, budget)
 }
@@ -249,15 +306,14 @@ function renderWeek() {
     const budget = toNumber(data.weeklyBudget)
     const spent = toNumber(data.weeksSpend)
     const date = state.viewDate
-    const weekStart = new Date(date)
-    weekStart.setDate(date.getDate() - date.getDay())
-    const weekEnd = new Date(weekStart)
-    weekEnd.setDate(weekStart.getDate() + 6)
-    const daysLeft = 6 - date.getDay()
+    const periodStartDay = toNumber(data.weekPeriodStartDay) || date.getDate()
+    const periodEndDay = toNumber(data.weekPeriodEndDay) || date.getDate()
+    const periodStart = new Date(date.getFullYear(), date.getMonth(), periodStartDay)
+    const periodEnd = new Date(date.getFullYear(), date.getMonth(), periodEndDay)
+    const daysLeft = Math.max(0, periodEndDay - date.getDate())
     const remaining = budget - spent
-    const code = data.weekSpecialCode
 
-    els.weekRange.textContent = `${shortDayFormat.format(weekStart)} – ${shortDayFormat.format(weekEnd)}`
+    els.weekRange.textContent = `${shortDayFormat.format(periodStart)} – ${shortDayFormat.format(periodEnd)}`
     els.weekSpend.textContent = money(spent)
     els.weekBudget.textContent = budget > 0 ? money(budget) : 'no budget'
     if (budget <= 0) {
@@ -267,76 +323,197 @@ function renderWeek() {
     }
     els.weekDaysLeft.textContent = `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} to go`
 
-    if (code && WEEK_MESSAGES[code]) {
-        els.weekBadge.textContent = WEEK_MESSAGES[code]
-        els.weekBadge.hidden = false
-    } else {
-        els.weekBadge.hidden = true
-    }
+    const currencyView = Boolean(state.currency)
+    els.weekOf.hidden = currencyView
+    els.weekBudget.hidden = currencyView
+    els.weekProgress.hidden = currencyView
+    els.weekRemaining.hidden = currencyView
+    els.weekPace.hidden = currencyView
 
-    if (code) {
-        els.weekPace.textContent = ''
-        els.weekPace.className = 'pace'
-    } else {
-        setPace(els.weekPace, budget, spent, (date.getDay() + 1) / 7)
-    }
+    const expected = data.weeksExpectedSpend != null ? toNumber(data.weeksExpectedSpend) : budget * ((date.getDay() + 1) / 7)
+    setPace(els.weekPace, budget, spent, budget > 0 ? expected / budget : 0)
     setProgress(els.weekProgress, els.weekProgressFill, spent, budget)
     setCardState(els.weekCard, spent, budget)
 }
 
-function parseExpenseLines(lines) {
-    let lastDate = null
-    return lines.map((line) => {
-        const tokens = line.split(/\s+/)
-        const amount = Math.round(toNumber(tokens[0]) * 100) / 100
-        let date = null
-        if (tokens.length >= 3) {
-            const monthToken = tokens[tokens.length - 2]
-            const dayToken = tokens[tokens.length - 1]
-            const month = Number.parseInt(monthToken, 10)
-            const day = Number.parseInt(dayToken, 10)
-            if (/^\d{1,2}$/.test(monthToken) && /^\d{1,2}$/.test(dayToken) &&
-                month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                date = { month, day }
-                lastDate = date
-                tokens.splice(-2)
-            }
-        }
-        if (!date) date = lastDate
-        return { amount, date, description: tokens.slice(1).join(' ').trim() }
-    })
+function buildExpenseActions(transaction) {
+    const actions = document.createElement('span')
+    actions.className = 'expense__actions'
+
+    const editButton = document.createElement('button')
+    editButton.type = 'button'
+    editButton.className = 'icon-button'
+    editButton.title = 'Edit'
+    editButton.setAttribute('aria-label', `Edit ${transaction.description || 'transaction'}`)
+    editButton.innerHTML = ICONS.edit
+    editButton.addEventListener('click', () => openEditTransactionDialog(transaction))
+
+    const deleteButton = document.createElement('button')
+    deleteButton.type = 'button'
+    deleteButton.className = 'icon-button icon-button--danger'
+    deleteButton.title = 'Delete'
+    deleteButton.setAttribute('aria-label', `Delete ${transaction.description || 'transaction'}`)
+    deleteButton.innerHTML = ICONS.delete
+    deleteButton.addEventListener('click', () => openDeleteTransactionDialog(transaction))
+
+    actions.append(editButton, deleteButton)
+    return actions
 }
 
 function renderExpenses() {
-    const parsed = parseExpenseLines(state.data.extraData || [])
-    const totalCents = parsed.reduce((sum, e) => sum + Math.round(e.amount * 100), 0)
-    const count = parsed.length
+    const transactions = state.data.transactions || []
+    const totalCents = transactions.reduce((sum, transaction) => sum + Math.round(transaction.amount * 100), 0)
+    const count = transactions.length
+    const writable = state.data.writable !== false
 
+    els.addTransactionButton.hidden = !writable
     els.expensesList.textContent = ''
+    const currencyLabel = state.currency ? `${state.currency} · ` : ''
     els.expensesMeta.textContent = count ?
-        `${count} ${count === 1 ? 'expense' : 'expenses'} · ${money(totalCents / 100)}` :
+        `${currencyLabel}${count} ${count === 1 ? 'expense' : 'expenses'} · ${money(totalCents / 100)}` :
         ''
     els.expensesEmpty.hidden = count > 0
 
-    for (const expense of parsed.slice().reverse()) {
+    for (const transaction of transactions.slice().reverse()) {
         const li = document.createElement('li')
         li.className = 'expense'
-        if (expense.date &&
-            expense.date.month === state.viewDate.getMonth() + 1 &&
-            expense.date.day === state.viewDate.getDate()) {
+        const date = transaction.effectiveDate
+        const sameMonth = date && date.month === state.viewDate.getMonth() + 1
+        if (sameMonth && date.day === state.viewDate.getDate()) {
             li.classList.add('expense--today')
+        } else if (sameMonth && date.day > state.viewDate.getDate()) {
+            li.classList.add('expense--future')
+            li.title = 'Dated after the viewed date'
         }
         const dateEl = document.createElement('span')
         dateEl.className = 'expense__date'
-        dateEl.textContent = expense.date ? `${expense.date.month}/${expense.date.day}` : ''
+        dateEl.textContent = date ? `${date.month}/${date.day}` : ''
         const descEl = document.createElement('span')
         descEl.className = 'expense__desc'
-        descEl.textContent = expense.description || '—'
+        descEl.textContent = transaction.description || '—'
         const amountEl = document.createElement('span')
         amountEl.className = 'expense__amount'
-        amountEl.textContent = money(expense.amount)
+        amountEl.textContent = money(transaction.amount)
         li.append(dateEl, descEl, amountEl)
+        if (writable) {
+            li.append(buildExpenseActions(transaction))
+        }
         els.expensesList.appendChild(li)
+    }
+}
+
+async function responseErrorMessage(response, fallback) {
+    try {
+        const text = (await response.text()).trim()
+        return text || fallback
+    } catch (e) {
+        return fallback
+    }
+}
+
+function openAddTransactionDialog() {
+    if (!state.data || state.data.writable === false) return
+    state.editingTransaction = null
+    els.transactionDialogTitle.textContent = 'Add transaction'
+    els.transactionForm.reset()
+    els.transactionCurrencyInput.value = state.currency || ''
+    els.transactionDateInput.value = toDateInputValue(state.viewDate)
+    els.transactionFormError.hidden = true
+    els.transactionDialog.showModal()
+    els.transactionAmountInput.focus()
+}
+
+function openEditTransactionDialog(transaction) {
+    state.editingTransaction = transaction
+    els.transactionDialogTitle.textContent = 'Edit transaction'
+    els.transactionAmountInput.value = transaction.amount
+    els.transactionDescriptionInput.value = transaction.description || ''
+    els.transactionCurrencyInput.value = transaction.currency || ''
+    const date = transaction.date || transaction.effectiveDate
+    els.transactionDateInput.value = date ?
+        toDateInputValue(new Date(state.viewDate.getFullYear(), date.month - 1, date.day)) :
+        toDateInputValue(state.viewDate)
+    els.transactionFormError.hidden = true
+    els.transactionDialog.showModal()
+    els.transactionAmountInput.focus()
+}
+
+async function submitTransaction(event) {
+    event.preventDefault()
+    const editing = state.editingTransaction
+    const payload = {
+        amount: Number.parseFloat(els.transactionAmountInput.value),
+        description: els.transactionDescriptionInput.value,
+        currency: els.transactionCurrencyInput.value.trim().toUpperCase(),
+        date: els.transactionDateInput.value,
+    }
+    els.transactionSaveButton.disabled = true
+    try {
+        const response = await fetch(editing ? `/transactions/${encodeURIComponent(editing.id)}` : '/transactions', {
+            method: editing ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        })
+        if (!response.ok) {
+            const message = await responseErrorMessage(response, `Save failed (${response.status})`)
+            if (response.status === 409) {
+                els.transactionDialog.close()
+                toast(message, 'error')
+                await fetchData({ silent: true })
+                return
+            }
+            els.transactionFormError.textContent = message
+            els.transactionFormError.hidden = false
+            return
+        }
+        els.transactionDialog.close()
+        toast(editing ? 'Transaction updated' : 'Transaction added')
+        await fetchData({ silent: true })
+    } catch (e) {
+        console.error(e)
+        els.transactionFormError.textContent = 'Could not save the transaction. Check the server logs.'
+        els.transactionFormError.hidden = false
+    } finally {
+        els.transactionSaveButton.disabled = false
+    }
+}
+
+function openDeleteTransactionDialog(transaction) {
+    state.pendingDelete = transaction
+    els.deleteDialogText.textContent = `${money(transaction.amount)} · ${transaction.description || 'No description'}`
+    els.deleteDialogError.hidden = true
+    els.deleteDialog.showModal()
+}
+
+async function confirmDeleteTransaction() {
+    const transaction = state.pendingDelete
+    if (!transaction) return
+    els.deleteConfirmButton.disabled = true
+    try {
+        const response = await fetch(`/transactions/${encodeURIComponent(transaction.id)}`, { method: 'DELETE' })
+        if (!response.ok) {
+            const message = await responseErrorMessage(response, `Delete failed (${response.status})`)
+            if (response.status === 409) {
+                els.deleteDialog.close()
+                state.pendingDelete = null
+                toast(message, 'error')
+                await fetchData({ silent: true })
+                return
+            }
+            els.deleteDialogError.textContent = message
+            els.deleteDialogError.hidden = false
+            return
+        }
+        els.deleteDialog.close()
+        state.pendingDelete = null
+        toast('Transaction deleted')
+        await fetchData({ silent: true })
+    } catch (e) {
+        console.error(e)
+        els.deleteDialogError.textContent = 'Could not delete the transaction. Check the server logs.'
+        els.deleteDialogError.hidden = false
+    } finally {
+        els.deleteConfirmButton.disabled = false
     }
 }
 
@@ -367,7 +544,7 @@ function applyPretendDate() {
 function openBudgetDialog() {
     if (!state.data) return
     els.monthlyBudgetInput.value = toNumber(state.data.monthlyBudget)
-    els.firstWeekBiasInput.value = toNumber(state.data.firstWeekBias)
+    els.firstDayBiasInput.value = toNumber(state.data.firstDayBias)
     updateBudgetFormValidity()
     els.budgetDialog.showModal()
 }
@@ -375,19 +552,19 @@ function openBudgetDialog() {
 function getBudgetFormValues() {
     return {
         monthlyBudget: Number.parseFloat(els.monthlyBudgetInput.value),
-        firstWeekBias: Number.parseFloat(els.firstWeekBiasInput.value),
+        firstDayBias: Number.parseFloat(els.firstDayBiasInput.value),
     }
 }
 
 function updateBudgetFormValidity() {
-    const { monthlyBudget, firstWeekBias } = getBudgetFormValues()
+    const { monthlyBudget, firstDayBias } = getBudgetFormValues()
     let error = ''
     if (!Number.isFinite(monthlyBudget) || monthlyBudget <= 0) {
         error = 'Monthly budget must be greater than 0.'
-    } else if (!Number.isFinite(firstWeekBias) || firstWeekBias < 0) {
-        error = 'First week bias must be 0 or greater.'
-    } else if (firstWeekBias > monthlyBudget) {
-        error = 'First week bias cannot be greater than the monthly budget.'
+    } else if (!Number.isFinite(firstDayBias) || firstDayBias < 0) {
+        error = 'First day bias must be 0 or greater.'
+    } else if (firstDayBias > monthlyBudget) {
+        error = 'First day bias cannot be greater than the monthly budget.'
     }
     els.budgetFormError.textContent = error
     els.budgetFormError.hidden = !error
@@ -398,13 +575,13 @@ function updateBudgetFormValidity() {
 async function submitBudget(event) {
     event.preventDefault()
     if (!updateBudgetFormValidity()) return
-    const { monthlyBudget, firstWeekBias } = getBudgetFormValues()
+    const { monthlyBudget, firstDayBias } = getBudgetFormValues()
     els.budgetSaveButton.disabled = true
     try {
         const response = await fetch('/budget', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ monthlyBudget, firstWeekBias }),
+            body: JSON.stringify({ monthlyBudget, firstDayBias }),
         })
         if (!response.ok) throw new Error(`Save failed (${response.status})`)
         els.budgetDialog.close()
@@ -436,6 +613,30 @@ els.budgetForm.addEventListener('submit', submitBudget)
 els.budgetForm.addEventListener('input', updateBudgetFormValidity)
 els.budgetDialog.addEventListener('click', (event) => {
     if (event.target === els.budgetDialog) els.budgetDialog.close()
+})
+
+els.currencySelect.addEventListener('change', () => {
+    state.currency = els.currencySelect.value || null
+    fetchData({ silent: true })
+})
+
+els.addTransactionButton.addEventListener('click', openAddTransactionDialog)
+els.transactionForm.addEventListener('submit', submitTransaction)
+els.transactionCancelButton.addEventListener('click', () => els.transactionDialog.close())
+els.transactionDialog.addEventListener('click', (event) => {
+    if (event.target === els.transactionDialog) els.transactionDialog.close()
+})
+
+els.deleteConfirmButton.addEventListener('click', confirmDeleteTransaction)
+els.deleteCancelButton.addEventListener('click', () => {
+    state.pendingDelete = null
+    els.deleteDialog.close()
+})
+els.deleteDialog.addEventListener('click', (event) => {
+    if (event.target === els.deleteDialog) {
+        state.pendingDelete = null
+        els.deleteDialog.close()
+    }
 })
 
 els.pretendDateInput.addEventListener('change', applyPretendDate)

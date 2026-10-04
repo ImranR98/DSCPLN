@@ -39,7 +39,7 @@ const setup = () => {
     return { dir, workbookFile, provider: createProvider({ workbookFile }, dir) }
 }
 
-const createCustomWorkbook = async (file, rows) => {
+const createCustomWorkbook = async (file, rows, options = {}) => {
     const workbook = new ExcelJS.Workbook()
     const sheet = workbook.addWorksheet('Transactions')
     sheet.addRow(['Date', 'Details', 'Money In', 'Expenses', 'Currency', 'Type', 'Notes'])
@@ -53,6 +53,11 @@ const createCustomWorkbook = async (file, rows) => {
             row.category,
             row.notes || '',
         ])
+    }
+    if (options.bloated) {
+        // LibreOffice-style inflated dimension: rowCount becomes 1048576 while
+        // only a couple of rows actually exist.
+        sheet.getRow(1048576).getCell(1).value = null
     }
     const constants = workbook.addWorksheet('Constants')
     constants.getCell('A2').value = 'Main Expenses'
@@ -147,6 +152,38 @@ test('computes previous month and trailing 12 month averages', async () => {
     assert.equal(Math.round(dayOne.monthsExpectedSpend * 100) / 100, 516.13)
     const lastDay = currencyOf(await custom.getData(new Date(2026, 2, 31)), 'CAD')
     assert.equal(lastDay.monthsExpectedSpend, 1000)
+})
+
+test('ignores a bloated sheet dimension', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dscpln-xlsx-'))
+    const file = path.join(dir, 'bloated.xlsx')
+    await createCustomWorkbook(file, [
+        { year: 2026, month: 9, day: 1, details: 'Rent', expenses: 100, category: 'Rent' },
+    ], { bloated: true })
+    initGitRepo(dir)
+    const provider = createProvider({ workbookFile: file }, dir)
+    const data = await Promise.race([
+        provider.getData(new Date(2026, 8, 15)),
+        new Promise((resolve, reject) => setTimeout(() => reject(new Error('getData timed out')), 5000)),
+    ])
+    assert.equal(data.transactions.length, 1)
+    assert.equal(data.currencies[0].monthsSpend, 100)
+})
+
+test('picks up external workbook changes despite the cache', async () => {
+    const { provider, workbookFile } = setup()
+    const before = await provider.getData(new Date(2026, 8, 15))
+    assert.equal(before.transactions.length, 6)
+
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.readFile(workbookFile)
+    const sheet = workbook.getWorksheet('Transactions')
+    sheet.addRow([new Date(Date.UTC(2026, 8, 20)), 'External edit', null, 12.34, 'CAD', 'Snacks', ''])
+    await workbook.xlsx.writeFile(workbookFile)
+
+    const after = await provider.getData(new Date(2026, 8, 15))
+    assert.equal(after.transactions.length, 7)
+    assert.equal(after.transactions.some((transaction) => transaction.details === 'External edit'), true)
 })
 
 test('reports every currency with its own activity', async () => {

@@ -7,7 +7,12 @@
 // Transactions sheet (headers in row 1, mapped by name):
 //   Date | Details | Money In | Expenses | Currency | Type | Notes
 // Constants sheet (headers in row 2, one category list per column) plus a
-// Currencies column and a Budget section (labels in column A, values in column B).
+// Currencies column and a Budgets section (labels in column A, values to the right).
+//
+// Parsed data is cached per provider keyed by the workbook's mtime+size, and
+// concurrent loads share a single in-flight parse. Rows are always iterated with
+// worksheet.eachRow so files with an inflated dimension (e.g. LibreOffice writing
+// A1:AMK1048576) don't cause million-row loops.
 
 const fs = require('fs')
 const path = require('path')
@@ -37,6 +42,8 @@ const getMonthExpectedSpend = (monthlyBudget, firstDayBias, day, daysInMonth) =>
     const expected = bias + (monthlyBudget - bias) * (day / daysInMonth)
     return Math.min(monthlyBudget, Math.max(0, expected))
 }
+
+const roundCents = (cents) => Math.round(cents) / 100
 
 const normalizeHeader = (value) => String(value == null ? '' : value).trim()
 
@@ -197,6 +204,9 @@ module.exports = (config = {}, configDir = process.cwd()) => {
     }
     assertWorkbookRepo(workbookFile)
 
+    let parsedCache = null
+    let parseInFlight = null
+
     const loadWorkbook = async () => {
         if (!fs.existsSync(workbookFile)) {
             throw new Error(`Workbook not found: ${workbookFile}`)
@@ -204,20 +214,6 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         const workbook = new ExcelJS.Workbook()
         await workbook.xlsx.readFile(workbookFile)
         return workbook
-    }
-
-    const saveWorkbook = async (workbook, commitMessage) => {
-        const tempFile = `${workbookFile}.tmp`
-        await workbook.xlsx.writeFile(tempFile)
-        if (fs.existsSync(workbookFile)) {
-            fs.copyFileSync(workbookFile, `${workbookFile}.bak`)
-        }
-        fs.renameSync(tempFile, workbookFile)
-        try {
-            commitFile(workbookFile, commitMessage)
-        } catch (e) {
-            console.error(`Failed to commit workbook changes: ${e.message}`)
-        }
     }
 
     const getSheet = (workbook, name, label) => {
@@ -244,8 +240,7 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         return map
     }
 
-    const parseTransactionRow = (sheet, map, rowNumber, date1904) => {
-        const row = sheet.getRow(rowNumber)
+    const parseTransactionRow = (row, map, rowNumber, date1904) => {
         const details = cellString(row.getCell(map['Details']).value).trim()
         const moneyIn = cellNumber(row.getCell(map['Money In']).value)
         const expenses = cellNumber(row.getCell(map['Expenses']).value)
@@ -275,17 +270,20 @@ module.exports = (config = {}, configDir = process.cwd()) => {
     const readTransactions = (sheet, map, date1904) => {
         const transactions = []
         const warnings = []
-        for (let rowNumber = 2; rowNumber <= sheet.rowCount; rowNumber++) {
-            const transaction = parseTransactionRow(sheet, map, rowNumber, date1904)
+        sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            if (rowNumber === 1) {
+                return
+            }
+            const transaction = parseTransactionRow(row, map, rowNumber, date1904)
             if (!transaction) {
-                continue
+                return
             }
             if (transaction.invalidDate) {
                 warnings.push(`Row ${rowNumber}: missing or invalid date, skipped`)
-                continue
+                return
             }
             transactions.push(transaction)
-        }
+        })
         return { transactions, warnings }
     }
 
@@ -295,73 +293,84 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         const currencies = []
         const budgets = {}
         let legacyBudget = null
+        let budgetsLabelRow = -1
+
+        const columns = []
         sheet.getRow(2).eachCell({ includeEmpty: false }, (cell, column) => {
             const header = normalizeHeader(cellString(cell.value))
-            if (!header) {
-                return
-            }
-            if (header === 'Currencies') {
-                for (let rowNumber = 3; rowNumber <= sheet.rowCount; rowNumber++) {
-                    const value = cellString(sheet.getRow(rowNumber).getCell(column).value).trim()
-                    if (!value) {
-                        break
-                    }
-                    currencies.push(value)
-                }
-                return
-            }
-            const categories = []
-            for (let rowNumber = 3; rowNumber <= sheet.rowCount; rowNumber++) {
-                const value = cellString(sheet.getRow(rowNumber).getCell(column).value).trim()
-                if (!value) {
-                    break
-                }
-                categories.push(value)
-            }
-            if (categories.length) {
-                categoryGroups.push({ group: header, categories })
+            if (header) {
+                columns.push({ header, column, values: [], stopped: false })
             }
         })
-        let budgetsLabelRow = -1
-        for (let rowNumber = 1; rowNumber <= sheet.rowCount; rowNumber++) {
-            const label = normalizeHeader(cellString(sheet.getRow(rowNumber).getCell(1).value))
+        let previousRow = 0
+        sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            if (rowNumber > 2) {
+                if (previousRow >= 2 && rowNumber > previousRow + 1) {
+                    for (const entry of columns) {
+                        entry.stopped = true
+                    }
+                }
+                for (const entry of columns) {
+                    if (entry.stopped) {
+                        continue
+                    }
+                    const value = cellString(row.getCell(entry.column).value).trim()
+                    if (!value) {
+                        entry.stopped = true
+                        continue
+                    }
+                    entry.values.push(value)
+                }
+            }
+            const label = normalizeHeader(cellString(row.getCell(1).value))
             if (label === BUDGETS_LABEL && budgetsLabelRow < 0) {
                 budgetsLabelRow = rowNumber
             }
-        }
-        if (budgetsLabelRow > 0) {
-            const columns = {}
-            sheet.getRow(budgetsLabelRow + 1).eachCell({ includeEmpty: false }, (cell, column) => {
-                const header = normalizeHeader(cellString(cell.value))
-                if (header) {
-                    columns[header] = column
-                }
-            })
-            const currencyColumn = columns[BUDGET_CURRENCY_HEADER] || 1
-            const budgetColumn = columns[BUDGET_MONTHLY_LABEL] || currencyColumn + 1
-            const biasColumn = columns[BUDGET_BIAS_LABEL] || currencyColumn + 2
-            for (let rowNumber = budgetsLabelRow + 2; rowNumber <= sheet.rowCount; rowNumber++) {
-                const currency = cellString(sheet.getRow(rowNumber).getCell(currencyColumn).value).trim()
-                if (!currency) {
-                    break
-                }
-                budgets[currency] = {
-                    monthlyBudget: cellNumber(sheet.getRow(rowNumber).getCell(budgetColumn).value) || 0,
-                    firstDayBias: cellNumber(sheet.getRow(rowNumber).getCell(biasColumn).value) || 0,
-                }
-            }
-        }
-        for (let rowNumber = 1; rowNumber <= sheet.rowCount; rowNumber++) {
-            const label = normalizeHeader(cellString(sheet.getRow(rowNumber).getCell(1).value))
             if (label === BUDGET_MONTHLY_LABEL || label === BUDGET_BIAS_LABEL) {
                 legacyBudget = legacyBudget || { monthlyBudget: 0, firstDayBias: 0 }
-                const value = cellNumber(sheet.getRow(rowNumber).getCell(2).value) || 0
+                const value = cellNumber(row.getCell(2).value) || 0
                 if (label === BUDGET_MONTHLY_LABEL) {
                     legacyBudget.monthlyBudget = value
                 } else {
                     legacyBudget.firstDayBias = value
                 }
             }
+            previousRow = rowNumber
+        })
+        for (const entry of columns) {
+            if (entry.header === 'Currencies') {
+                currencies.push(...entry.values)
+            } else if (entry.values.length) {
+                categoryGroups.push({ group: entry.header, categories: entry.values })
+            }
+        }
+
+        if (budgetsLabelRow > 0) {
+            const columnsByHeader = {}
+            sheet.getRow(budgetsLabelRow + 1).eachCell({ includeEmpty: false }, (cell, column) => {
+                const header = normalizeHeader(cellString(cell.value))
+                if (header) {
+                    columnsByHeader[header] = column
+                }
+            })
+            const currencyColumn = columnsByHeader[BUDGET_CURRENCY_HEADER] || 1
+            const budgetColumn = columnsByHeader[BUDGET_MONTHLY_LABEL] || currencyColumn + 1
+            const biasColumn = columnsByHeader[BUDGET_BIAS_LABEL] || currencyColumn + 2
+            let scanning = true
+            sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+                if (!scanning || rowNumber <= budgetsLabelRow + 1) {
+                    return
+                }
+                const currency = cellString(row.getCell(currencyColumn).value).trim()
+                if (!currency) {
+                    scanning = false
+                    return
+                }
+                budgets[currency] = {
+                    monthlyBudget: cellNumber(row.getCell(budgetColumn).value) || 0,
+                    firstDayBias: cellNumber(row.getCell(biasColumn).value) || 0,
+                }
+            })
         }
         return { categoryGroups, currencies, budgets, legacyBudget }
     }
@@ -374,6 +383,108 @@ module.exports = (config = {}, configDir = process.cwd()) => {
             return constants.legacyBudget
         }
         return { monthlyBudget: 0, firstDayBias: 0 }
+    }
+
+    // Monthly totals in cents keyed by `${currency}|${year}|${month}`.
+    const buildMonthlyTotals = (transactions) => {
+        const monthly = new Map()
+        for (const transaction of transactions) {
+            const key = `${transaction.currency}|${transaction.date.year}|${transaction.date.month}`
+            let entry = monthly.get(key)
+            if (!entry) {
+                entry = { spend: 0, income: 0 }
+                monthly.set(key, entry)
+            }
+            if (transaction.kind === 'income') {
+                entry.income += Math.round((transaction.moneyIn || 0) * 100)
+            } else {
+                entry.spend += Math.round((transaction.expenses || 0) * 100)
+            }
+        }
+        return monthly
+    }
+
+    const buildSamples = (transactions, constants, kind) => {
+        const allowed = new Set(categoriesForKind(constants, kind))
+        return transactions
+            .filter((transaction) => transaction.category && allowed.has(transaction.category))
+            .map((transaction) => ({
+                details: transaction.details,
+                category: transaction.category,
+                date: datePartsToUtcDate(transaction.date),
+            }))
+    }
+
+    const parseWorkbook = (workbook) => {
+        const date1904 = Boolean(workbook.properties.date1904)
+        const constants = readConstants(workbook)
+        const sheet = getSheet(workbook, transactionsSheetName, 'transactions')
+        const headerMap = readHeaderMap(sheet)
+        const { transactions, warnings } = readTransactions(sheet, headerMap, date1904)
+        return {
+            date1904,
+            headerMap,
+            constants,
+            transactions,
+            warnings,
+            monthly: buildMonthlyTotals(transactions),
+            samplesByKind: {
+                expense: buildSamples(transactions, constants, 'expense'),
+                income: buildSamples(transactions, constants, 'income'),
+            },
+        }
+    }
+
+    const getParsed = async () => {
+        let stat
+        try {
+            stat = fs.statSync(workbookFile)
+        } catch (e) {
+            throw new Error(`Workbook not found: ${workbookFile}`)
+        }
+        if (parsedCache && parsedCache.mtimeMs === stat.mtimeMs && parsedCache.size === stat.size) {
+            return parsedCache
+        }
+        if (parseInFlight) {
+            return parseInFlight
+        }
+        parseInFlight = (async () => {
+            try {
+                const workbook = await loadWorkbook()
+                const parsed = parseWorkbook(workbook)
+                const freshStat = fs.statSync(workbookFile)
+                parsedCache = { ...parsed, mtimeMs: freshStat.mtimeMs, size: freshStat.size }
+                return parsedCache
+            } finally {
+                parseInFlight = null
+            }
+        })()
+        return parseInFlight
+    }
+
+    const cacheFromWorkbook = (workbook) => {
+        try {
+            const parsed = parseWorkbook(workbook)
+            const stat = fs.statSync(workbookFile)
+            parsedCache = { ...parsed, mtimeMs: stat.mtimeMs, size: stat.size }
+        } catch (e) {
+            parsedCache = null
+        }
+    }
+
+    const saveWorkbook = async (workbook, commitMessage) => {
+        const tempFile = `${workbookFile}.tmp`
+        await workbook.xlsx.writeFile(tempFile)
+        if (fs.existsSync(workbookFile)) {
+            fs.copyFileSync(workbookFile, `${workbookFile}.bak`)
+        }
+        fs.renameSync(tempFile, workbookFile)
+        cacheFromWorkbook(workbook)
+        try {
+            commitFile(workbookFile, commitMessage)
+        } catch (e) {
+            console.error(`Failed to commit workbook changes: ${e.message}`)
+        }
     }
 
     const validateTransactionInput = (constants, input = {}) => {
@@ -403,35 +514,46 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         }
     }
 
+    const rowHasTransactionContent = (row, map) => ['Date', 'Details', 'Money In', 'Expenses']
+        .some((header) => {
+            const value = row.getCell(map[header]).value
+            return value != null && value !== ''
+        })
+
     const findLastDataRow = (sheet, map) => {
-        const hasContent = (row) => ['Date', 'Details', 'Money In', 'Expenses']
-            .some((header) => {
-                const value = row.getCell(map[header]).value
-                return value != null && value !== ''
-            })
-        let lastRow = Math.max(sheet.rowCount, 1)
-        while (lastRow > 1 && !hasContent(sheet.getRow(lastRow))) {
-            lastRow--
-        }
+        let lastRow = 1
+        sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            if (rowNumber > 1 && rowNumber > lastRow && rowHasTransactionContent(row, map)) {
+                lastRow = rowNumber
+            }
+        })
         return lastRow
     }
 
-    const findTemplateStyles = (sheet, map, fromRow) => {
-        const styles = {}
+    const findTemplateStyles = (sheet, map) => {
+        const cells = {}
         let height = null
-        for (const [header, column] of Object.entries(map)) {
-            let style = null
-            for (let rowNumber = fromRow; rowNumber >= 2; rowNumber--) {
-                const value = sheet.getRow(rowNumber).getCell(column).value
-                if (value != null && value !== '') {
-                    style = JSON.parse(JSON.stringify(sheet.getRow(rowNumber).getCell(column).style || {}))
-                    if (height == null) {
-                        height = sheet.getRow(rowNumber).height || null
-                    }
-                    break
+        sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            if (rowNumber === 1) {
+                return
+            }
+            let hasContent = false
+            for (const [header, column] of Object.entries(map)) {
+                const cell = row.getCell(column)
+                if (cell.value != null && cell.value !== '') {
+                    cells[header] = cell
+                    hasContent = true
                 }
             }
-            styles[header] = style || JSON.parse(JSON.stringify(sheet.getColumn(column).style || {}))
+            if (hasContent) {
+                height = row.height || height
+            }
+        })
+        const styles = {}
+        for (const [header, column] of Object.entries(map)) {
+            styles[header] = cells[header] ?
+                JSON.parse(JSON.stringify(cells[header].style || {})) :
+                JSON.parse(JSON.stringify(sheet.getColumn(column).style || {}))
         }
         return { styles, height }
     }
@@ -465,47 +587,64 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         return row
     }
 
+    const findTransactionRow = (sheet, map, rowNumber, date1904, id) => {
+        const row = sheet.findRow(rowNumber)
+        if (!row) {
+            throw new ConflictError('This transaction changed on disk. Refresh and try again.')
+        }
+        const existing = parseTransactionRow(row, map, rowNumber, date1904)
+        if (!existing || existing.invalidDate || existing.id !== id) {
+            throw new ConflictError('This transaction changed on disk. Refresh and try again.')
+        }
+        return row
+    }
+
     const getData = async (date = new Date()) => {
-        const workbook = await loadWorkbook()
-        const date1904 = Boolean(workbook.properties.date1904)
-        const constants = readConstants(workbook)
-        const sheet = getSheet(workbook, transactionsSheetName, 'transactions')
-        const map = readHeaderMap(sheet)
-        const { transactions, warnings } = readTransactions(sheet, map, date1904)
+        const parsed = await getParsed()
+        const { constants, transactions, monthly, warnings } = parsed
         const year = date.getFullYear()
         const month = date.getMonth() + 1
         const day = date.getDate()
         const daysInMonth = new Date(year, month, 0).getDate()
-        const sameMonth = (transaction, targetYear, targetMonth) =>
-            transaction.date.year === targetYear && transaction.date.month === targetMonth
-        const sum = (list, key) => Math.round(list.reduce((total, item) => total + Math.round((item[key] || 0) * 100), 0)) / 100
         const previousMonthDate = new Date(year, month - 2, 1)
-        const monthTransactions = transactions.filter((transaction) => sameMonth(transaction, year, month))
+        const previousYear = previousMonthDate.getFullYear()
+        const previousMonth = previousMonthDate.getMonth() + 1
+        const monthTransactions = transactions.filter((transaction) =>
+            transaction.date.year === year && transaction.date.month === month)
+
+        const currentByCurrency = new Map()
+        for (const transaction of monthTransactions) {
+            if (transaction.date.day > day) {
+                continue
+            }
+            let entry = currentByCurrency.get(transaction.currency)
+            if (!entry) {
+                entry = { spend: 0, income: 0 }
+                currentByCurrency.set(transaction.currency, entry)
+            }
+            if (transaction.kind === 'income') {
+                entry.income += Math.round((transaction.moneyIn || 0) * 100)
+            } else {
+                entry.spend += Math.round((transaction.expenses || 0) * 100)
+            }
+        }
 
         const currencies = constants.currencies.map((code, index) => {
             const budget = getBudgetForCurrency(constants, code)
-            const inCurrency = (transaction) => transaction.currency === code
-            const expenseTransactions = monthTransactions.filter((transaction) =>
-                inCurrency(transaction) && transaction.kind === 'expense')
-            const incomeTransactions = monthTransactions.filter((transaction) =>
-                inCurrency(transaction) && transaction.kind === 'income')
-            const monthsSpend = sum(expenseTransactions.filter((transaction) => transaction.date.day <= day), 'expenses')
-            const monthsIncome = sum(incomeTransactions.filter((transaction) => transaction.date.day <= day), 'moneyIn')
-            let trailingIncomeTotal = 0
-            let trailingSpendTotal = 0
+            const current = currentByCurrency.get(code) || { spend: 0, income: 0 }
+            let trailingSpendCents = 0
+            let trailingIncomeCents = 0
             for (let offset = 1; offset <= 12; offset++) {
                 const target = new Date(year, month - 1 - offset, 1)
-                const targetYear = target.getFullYear()
-                const targetMonth = target.getMonth() + 1
-                trailingIncomeTotal += sum(transactions.filter((transaction) =>
-                    transaction.kind === 'income' &&
-                    inCurrency(transaction) &&
-                    sameMonth(transaction, targetYear, targetMonth)), 'moneyIn')
-                trailingSpendTotal += sum(transactions.filter((transaction) =>
-                    transaction.kind === 'expense' &&
-                    inCurrency(transaction) &&
-                    sameMonth(transaction, targetYear, targetMonth)), 'expenses')
+                const entry = monthly.get(`${code}|${target.getFullYear()}|${target.getMonth() + 1}`)
+                if (entry) {
+                    trailingSpendCents += entry.spend
+                    trailingIncomeCents += entry.income
+                }
             }
+            const previous = monthly.get(`${code}|${previousYear}|${previousMonth}`) || { spend: 0, income: 0 }
+            const monthsSpend = roundCents(current.spend)
+            const monthsIncome = roundCents(current.income)
             return {
                 code,
                 primary: index === 0,
@@ -513,17 +652,11 @@ module.exports = (config = {}, configDir = process.cwd()) => {
                 monthlyBudget: budget.monthlyBudget,
                 firstDayBias: budget.firstDayBias,
                 monthsSpend,
-                previousMonthsSpend: sum(transactions.filter((transaction) =>
-                    transaction.kind === 'expense' &&
-                    inCurrency(transaction) &&
-                    sameMonth(transaction, previousMonthDate.getFullYear(), previousMonthDate.getMonth() + 1)), 'expenses'),
-                trailingSpendAverage: Math.round((trailingSpendTotal / 12) * 100) / 100,
+                previousMonthsSpend: roundCents(previous.spend),
+                trailingSpendAverage: roundCents(trailingSpendCents / 12),
                 monthsIncome,
-                previousMonthsIncome: sum(transactions.filter((transaction) =>
-                    transaction.kind === 'income' &&
-                    inCurrency(transaction) &&
-                    sameMonth(transaction, previousMonthDate.getFullYear(), previousMonthDate.getMonth() + 1)), 'moneyIn'),
-                trailingIncomeAverage: Math.round((trailingIncomeTotal / 12) * 100) / 100,
+                previousMonthsIncome: roundCents(previous.income),
+                trailingIncomeAverage: roundCents(trailingIncomeCents / 12),
                 monthsExpectedSpend: getMonthExpectedSpend(budget.monthlyBudget, budget.firstDayBias, day, daysInMonth),
             }
         })
@@ -553,31 +686,32 @@ module.exports = (config = {}, configDir = process.cwd()) => {
             throw new ValidationError('Unknown currency')
         }
         const sheet = getSheet(workbook, constantsSheetName, 'constants')
-        const findLabelRow = (label) => {
-            for (let rowNumber = 1; rowNumber <= sheet.rowCount; rowNumber++) {
-                if (normalizeHeader(cellString(sheet.getRow(rowNumber).getCell(1).value)) === label) {
-                    return rowNumber
-                }
+
+        let budgetsLabelRow = -1
+        let lastUsedRow = 1
+        sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            lastUsedRow = Math.max(lastUsedRow, rowNumber)
+            if (normalizeHeader(cellString(row.getCell(1).value)) === BUDGETS_LABEL && budgetsLabelRow < 0) {
+                budgetsLabelRow = rowNumber
             }
-            return -1
-        }
-        let labelRow = findLabelRow(BUDGETS_LABEL)
+        })
+
         let currencyColumn = 1
         let budgetColumn = 2
         let biasColumn = 3
         let targetRow
-        if (labelRow < 0) {
-            labelRow = sheet.rowCount + 2
-            sheet.getRow(labelRow).getCell(1).value = BUDGETS_LABEL
-            const headerRow = sheet.getRow(labelRow + 1)
+        if (budgetsLabelRow < 0) {
+            budgetsLabelRow = lastUsedRow + 2
+            sheet.getRow(budgetsLabelRow).getCell(1).value = BUDGETS_LABEL
+            const headerRow = sheet.getRow(budgetsLabelRow + 1)
             headerRow.getCell(1).value = BUDGET_CURRENCY_HEADER
             headerRow.getCell(2).value = BUDGET_MONTHLY_LABEL
             headerRow.getCell(3).value = BUDGET_BIAS_LABEL
             headerRow.font = { bold: true }
-            targetRow = labelRow + 2
+            targetRow = budgetsLabelRow + 2
         } else {
             const columns = {}
-            sheet.getRow(labelRow + 1).eachCell({ includeEmpty: false }, (cell, column) => {
+            sheet.getRow(budgetsLabelRow + 1).eachCell({ includeEmpty: false }, (cell, column) => {
                 const header = normalizeHeader(cellString(cell.value))
                 if (header) {
                     columns[header] = column
@@ -587,15 +721,24 @@ module.exports = (config = {}, configDir = process.cwd()) => {
             budgetColumn = columns[BUDGET_MONTHLY_LABEL] || currencyColumn + 1
             biasColumn = columns[BUDGET_BIAS_LABEL] || currencyColumn + 2
             targetRow = -1
-            for (let rowNumber = labelRow + 2; rowNumber <= sheet.rowCount; rowNumber++) {
-                const value = cellString(sheet.getRow(rowNumber).getCell(currencyColumn).value).trim()
-                if (value === currencyCode || !value) {
-                    targetRow = rowNumber
-                    break
+            let lastBudgetRow = budgetsLabelRow + 1
+            let scanning = true
+            sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+                if (!scanning || rowNumber <= budgetsLabelRow + 1) {
+                    return
                 }
-            }
+                const value = cellString(row.getCell(currencyColumn).value).trim()
+                if (!value) {
+                    scanning = false
+                    return
+                }
+                lastBudgetRow = rowNumber
+                if (value === currencyCode && targetRow < 0) {
+                    targetRow = rowNumber
+                }
+            })
             if (targetRow < 0) {
-                targetRow = sheet.rowCount + 1
+                targetRow = lastBudgetRow + 1
             }
         }
         const row = sheet.getRow(targetRow)
@@ -615,11 +758,11 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         const sheet = getSheet(workbook, transactionsSheetName, 'transactions')
         const map = readHeaderMap(sheet)
         const lastRow = findLastDataRow(sheet, map)
-        const template = findTemplateStyles(sheet, map, lastRow)
+        const template = findTemplateStyles(sheet, map)
         const row = lastRow + 1
         writeTransaction(sheet, map, { ...transaction, row }, template)
         await saveWorkbook(workbook, 'D$CPLN: add transaction')
-        const stored = parseTransactionRow(sheet, map, row, date1904)
+        const stored = parseTransactionRow(sheet.getRow(row), map, row, date1904)
         return serializeTransaction(stored)
     }
 
@@ -631,16 +774,10 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         const transaction = validateTransactionInput(constants, input)
         const sheet = getSheet(workbook, transactionsSheetName, 'transactions')
         const map = readHeaderMap(sheet)
-        if (rowNumber < 2 || rowNumber > sheet.rowCount) {
-            throw new ConflictError('This transaction changed on disk. Refresh and try again.')
-        }
-        const existing = parseTransactionRow(sheet, map, rowNumber, date1904)
-        if (!existing || existing.invalidDate || existing.id !== id) {
-            throw new ConflictError('This transaction changed on disk. Refresh and try again.')
-        }
+        findTransactionRow(sheet, map, rowNumber, date1904, id)
         writeTransaction(sheet, map, { ...transaction, row: rowNumber }, null)
         await saveWorkbook(workbook, 'D$CPLN: update transaction')
-        const stored = parseTransactionRow(sheet, map, rowNumber, date1904)
+        const stored = parseTransactionRow(sheet.getRow(rowNumber), map, rowNumber, date1904)
         return serializeTransaction(stored)
     }
 
@@ -650,13 +787,7 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         const date1904 = Boolean(workbook.properties.date1904)
         const sheet = getSheet(workbook, transactionsSheetName, 'transactions')
         const map = readHeaderMap(sheet)
-        if (rowNumber < 2 || rowNumber > sheet.rowCount) {
-            throw new ConflictError('This transaction changed on disk. Refresh and try again.')
-        }
-        const existing = parseTransactionRow(sheet, map, rowNumber, date1904)
-        if (!existing || existing.invalidDate || existing.id !== id) {
-            throw new ConflictError('This transaction changed on disk. Refresh and try again.')
-        }
+        findTransactionRow(sheet, map, rowNumber, date1904, id)
         sheet.spliceRows(rowNumber, 1)
         await saveWorkbook(workbook, 'D$CPLN: delete transaction')
     }
@@ -669,21 +800,8 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         if (kind !== 'expense' && kind !== 'income') {
             throw new ValidationError('Kind must be "expense" or "income"')
         }
-        const workbook = await loadWorkbook()
-        const date1904 = Boolean(workbook.properties.date1904)
-        const constants = readConstants(workbook)
-        const sheet = getSheet(workbook, transactionsSheetName, 'transactions')
-        const map = readHeaderMap(sheet)
-        const { transactions } = readTransactions(sheet, map, date1904)
-        const allowed = new Set(categoriesForKind(constants, kind))
-        const samples = transactions
-            .filter((transaction) => transaction.category && allowed.has(transaction.category))
-            .map((transaction) => ({
-                details: transaction.details,
-                category: transaction.category,
-                date: datePartsToUtcDate(transaction.date),
-            }))
-        return computeSuggestions(query, samples)
+        const parsed = await getParsed()
+        return computeSuggestions(query, parsed.samplesByKind[kind])
     }
 
     return {

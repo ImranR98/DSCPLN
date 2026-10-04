@@ -258,7 +258,7 @@ function setPace(el, budget, spent, fraction) {
         return
     }
     const delta = budget * fraction - spent
-    el.textContent = `${money(Math.abs(delta))} ${delta >= 0 ? 'under' : 'over'} pace`
+    el.textContent = `${money(Math.abs(delta))} ${delta >= 0 ? 'less' : 'more'} than expected`
     el.className = `pace ${delta >= 0 ? 'pace--ok' : 'pace--over'}`
 }
 
@@ -276,7 +276,7 @@ function renderMonth() {
     els.monthSpend.textContent = money(spent)
     els.monthBudget.textContent = budget > 0 ? money(budget) : 'no budget'
     if (budget <= 0) {
-        els.monthRemaining.textContent = 'Set a budget to track your pace.'
+        els.monthRemaining.textContent = 'Set a budget to track your spending.'
         els.monthDaily.textContent = ''
     } else if (remaining >= 0) {
         els.monthRemaining.textContent = `${money(remaining)} left`

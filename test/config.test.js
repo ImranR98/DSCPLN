@@ -15,8 +15,8 @@ const writeConfig = (value) => {
 }
 
 const minimalConfig = {
-    dataProvider: 'textFileDataProvider',
-    providers: { textFileDataProvider: {} },
+    dataProvider: 'excelDataProvider',
+    providers: { excelDataProvider: {} },
 }
 
 test('applies defaults for missing fields', () => {
@@ -26,6 +26,7 @@ test('applies defaults for missing fields', () => {
     assert.equal(config.notifications.checkIntervalMinutes, 30)
     assert.equal(config.notifications.onlyWarnOnce, false)
     assert.equal(config.notifications.monthlyLimitUrl, null)
+    assert.equal('weeklyLimitUrl' in config.notifications, false)
     assert.equal(config.configDir, dir)
 })
 
@@ -33,12 +34,12 @@ test('keeps values from the config file', () => {
     const { file } = writeConfig({
         ...minimalConfig,
         port: 8080,
-        providers: { textFileDataProvider: { dataFile: '/tmp/notes.md' } },
+        providers: { excelDataProvider: { workbookFile: '/tmp/notes.xlsx' } },
         notifications: { monthlyLimitUrl: 'https://example.com/topic', onlyWarnOnce: true },
     })
     const config = loadConfig(file)
     assert.equal(config.port, 8080)
-    assert.equal(config.providers.textFileDataProvider.dataFile, '/tmp/notes.md')
+    assert.equal(config.providers.excelDataProvider.workbookFile, '/tmp/notes.xlsx')
     assert.equal(config.notifications.monthlyLimitUrl, 'https://example.com/topic')
     assert.equal(config.notifications.onlyWarnOnce, true)
     assert.equal(config.notifications.checkIntervalMinutes, 30)
@@ -50,7 +51,7 @@ test('uses DSCPLN_CONFIG when no path is passed', () => {
     process.env['DSCPLN_CONFIG'] = file
     try {
         const config = loadConfig()
-        assert.equal(config.dataProvider, 'textFileDataProvider')
+        assert.equal(config.dataProvider, 'excelDataProvider')
     } finally {
         if (previous === undefined) {
             delete process.env['DSCPLN_CONFIG']
@@ -67,8 +68,8 @@ test('throws when the config file is missing', () => {
 test('throws on invalid values', () => {
     assert.throws(() => loadConfig(writeConfig({ ...minimalConfig, port: 0 }).file), /"port"/)
     assert.throws(() => loadConfig(writeConfig({ ...minimalConfig, port: 'abc' }).file), /"port"/)
-    assert.throws(() => loadConfig(writeConfig({ dataProvider: 'textFileDataProvider' }).file), /providers/)
-    assert.throws(() => loadConfig(writeConfig({ ...minimalConfig, providers: { textFileDataProvider: 5 } }).file), /providers/)
+    assert.throws(() => loadConfig(writeConfig({ dataProvider: 'excelDataProvider' }).file), /providers/)
+    assert.throws(() => loadConfig(writeConfig({ ...minimalConfig, providers: { excelDataProvider: 5 } }).file), /providers/)
     assert.throws(() => loadConfig(writeConfig({
         ...minimalConfig,
         notifications: { onlyWarnOnce: 'yes' },

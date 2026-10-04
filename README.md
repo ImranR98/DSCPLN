@@ -2,9 +2,7 @@
 
 A simple webpage that shows whether or not you've gone over your budget this month, and sends you push notifications when the limit is reached.
 
-Does this by reading a list of your expenses from some source and checking to see if the total exceeds a preference you set. This assumes that you religiously record your expenses somewhere as they happen. You can also add, edit, and delete transactions from the dashboard, which writes them back to the data file.
-
-Currently, the only supported data source are text files with a specific formatting, but the code could be expanded to include other data sources.
+Does this by reading a list of your expenses from an Excel workbook and checking to see if the total exceeds a preference you set. You can add, edit, and delete transactions from the dashboard, which writes them straight back to the workbook, and the app suggests a category for new transactions based on similar past ones.
 
 ## Setup
 
@@ -21,7 +19,7 @@ Currently, the only supported data source are text files with a specific formatt
    npm start
    ```
 
-The app reads `config.json` from its directory by default. Set `DSCPLN_CONFIG` to use a different path (useful in Docker).
+The app reads `config.json` from its directory by default. Set `DSCPLN_CONFIG` to use a different path (useful in Docker). The example config points at the included `mock-data.xlsx`, so you can try it immediately; `npm run mock` regenerates that file.
 
 ## Configuration
 
@@ -30,66 +28,92 @@ The app reads `config.json` from its directory by default. Set `DSCPLN_CONFIG` t
 | Key | Description |
 | --- | --- |
 | `port` | HTTP port to listen on (defaults to `3300`). |
-| `dataProvider` | The module from `/dataProviders` to use for data sourcing. Defaults to `textFileDataProvider` (the only one currently available). |
+| `dataProvider` | The module from `/dataProviders` to use for data sourcing. Defaults to `excelDataProvider` (the only one currently available). |
 | `providers.<name>` | Provider-specific options, described below. |
-| `notifications.monthlyLimitUrl` | The ntfy.sh URL to which to send "monthly budget limit reached" notifications, or `null`. |
-| `notifications.weeklyLimitUrl` | The ntfy.sh URL to which to send "weekly budget limit reached" notifications, or `null`. |
+| `notifications.monthlyLimitUrl` | The ntfy.sh URL to which to send "monthly budget limit reached" notifications, or `null`. Notifications are sent per currency with a budget. |
 | `notifications.ntfyToken` | An authorization token to use when sending out notifications, or `null`. |
 | `notifications.checkIntervalMinutes` | How often, in minutes, to check for changes so that notifications can be sent out if needed (defaults to `30`). |
-| `notifications.onlyWarnOnce` | When `true`, monthly and weekly notifications are only sent the first time you go over budget, not for subsequent increases. |
+| `notifications.onlyWarnOnce` | When `true`, a given currency's monthly notification is only sent the first time it goes over budget, not for subsequent increases. |
 
-### `textFileDataProvider` options
+### `excelDataProvider` options
 
 | Key | Description |
 | --- | --- |
-| `dataFile` | The path to the text file where you record expenses (defaults to `./data.txt`). Relative paths resolve against the config file's directory. |
-| `budgetFile` | The path to a text file where the budget limit should be stored (defaults to `./budget.txt`). |
-| `monthlyBudgetInit` | The amount that the monthly limit should be initialized to if `budgetFile` does not already exist. |
-| `firstDayBiasInit` | The first day bias that should be initialized to if `budgetFile` does not already exist. |
+| `workbookFile` | The path to the Excel workbook (`.xlsx`). Relative paths resolve against the config file's directory. |
+| `transactionsSheet` | Name of the sheet holding transactions (defaults to `Transactions`). |
+| `constantsSheet` | Name of the sheet holding categories, currencies, and the budget (defaults to `Constants`). |
 
-The budget file's first line is the monthly budget and its second line is the first day bias: an extra amount assigned to the first day of the month (for example, for rent). Weekly budgets are given for "full weeks" (weeks with all 7 days), with any adjacent partial weeks lumped in to the current week's budget.
+## Workbook schema
 
-## Data file format
+### Transactions sheet
 
-Lines in the data file must adhere to the format:
+The first row holds the headers, which are matched by name (other sheets and extra columns are left untouched):
 
-```
-<optional 3-letter currency> <amount> <description> <optional 'M D' date (if none, take from previous line)>
-```
+| Date | Details | Money In | Expenses | Currency | Type | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-09-01 | Rent September | | 1275 | CAD | Rent | |
+| 2026-09-03 | Job | 2645 | | CAD | Job | Paycheque |
 
-For example:
+- `Date` is a real Excel date; the app reads and writes full dates, so the sheet can span any number of years.
+- `Money In` and `Expenses` are separate amount columns; a transaction fills one of them (choose Expense or Income in the form).
+- `Type` is the category, and must exist in the Constants sheet (matched to the transaction kind).
+- `Currency` must be one of the currencies listed in the Constants sheet.
 
-```
-34 groceries 9 28
-12 coffee
-77.2 utilities 9 30
-USD 50 lunch 10 2
-```
+### Constants sheet
 
-Lines that do not start with an amount (or a 3-letter uppercase currency code followed by an amount) are ignored, so you can keep other notes in the same file.
+Row 2 holds a header per column, and each column lists the allowed values for that group:
 
-Lines prefixed with a currency code are foreign-currency transactions. They are not counted in any month/week/budget calculations by default; pick a currency from the dropdown in the header to view it, at which point its lines are used for the spend totals and transaction list instead of the local ones. Budget tracking is only available for local spending, so budget figures, progress, and pace are hidden while a currency is selected. Currencies found anywhere in the file are offered as autocomplete options when adding or editing a transaction.
+| Main Expenses | Extra Expenses | Special Expenses | Money In | Currencies |
+| --- | --- | --- | --- | --- |
+| Rent | Entertainment | School Fees | Job | CAD |
+| Subscriptions | Snacks | Loan Repayment | From Parents | USD |
+| ... | ... | ... | ... | XMR |
 
-When you add or edit a transaction from the dashboard, the line is written with an explicit date. When you delete a line that provided a date for following undated lines, the date is copied onto the next undated line so no other dates change.
+- Category names and currencies are never hardcoded: edit this sheet to add, rename, or remove them (the `Money In` column defines income categories; everything else is an expense category).
+- Budgets live below the table, one row per currency:
+  ```
+  Budgets
+  Currency   Monthly Budget   First Day Bias
+  CAD        3000             1500
+  USD        500              100
+  ```
+  The first-day bias is an extra amount available on the 1st of the month. A currency with no row (or a 0 budget) simply has no budget tracking. The app creates the table on the first save if it is missing. If you still have the older single `Budget` section (`Monthly Budget` / `First Day Bias` in column A/B), it is read as the first currency's budget until you save a new one.
 
 ## Transactions
 
-- **Add**: open "This month", click "Add transaction", and fill in amount, description, optional currency, and date. The date defaults to the day you are viewing, and the currency defaults to the one currently selected.
-- **Edit / delete**: use the buttons on each row. Deleting asks for confirmation.
+- **Add**: open "This month", click "Add transaction", and fill in Expense/Income, amount, details, date, category, currency, and optional notes. The date defaults to the day you are viewing, and the currency defaults to the main (first) Constants currency.
+- **Category suggestions**: as you type details, the app scores them against all past transactions of the same kind (fuzzy token/trigram/edit-distance matching, weighted by how often and how recently a category was used). It auto-selects the category when the match is confident, and always shows the top suggestions so you can pick a different one.
+- **Edit / delete**: use the buttons on each row. Deleting shifts the remaining rows up, like deleting a row in Excel.
 
 The same actions are available over HTTP:
 
 | Method | Path | Body |
 | --- | --- | --- |
-| `GET` | `/data?date=YYYY-MM-DD&currency=USD` | - |
-| `POST` | `/transactions` | `{ "amount", "description", "date", "currency" }` |
-| `PUT` | `/transactions/:id` | `{ "amount", "description", "date", "currency" }` |
+| `GET` | `/data?date=YYYY-MM-DD` | - |
+| `GET` | `/category-suggestions?q=details&kind=expense` | - |
+| `POST` | `/transactions` | `{ "kind", "amount", "details", "date", "category", "currency", "notes" }` |
+| `PUT` | `/transactions/:id` | `{ "kind", "amount", "details", "date", "category", "currency", "notes" }` |
 | `DELETE` | `/transactions/:id` | - |
-| `POST` | `/budget` | `{ "monthlyBudget", "firstDayBias" }` |
+| `POST` | `/budget` | `{ "monthlyBudget", "firstDayBias", "currency" }` |
 
-`currency` is optional and must be a 3-letter code; omit it for local transactions. The `/data` `currency` query parameter also accepts any 3-letter code and filters the response to it.
+Transaction ids embed the row number and a hash of the row values. If the workbook changes underneath the app, stale ids are rejected with `409 Conflict` and the UI refreshes.
 
-Transaction ids embed the line number and a hash of the line. If the file changes underneath the app, stale ids are rejected with `409 Conflict` and the UI refreshes.
+## Dashboard
+
+Everything is shown on one page, per currency:
+
+- The **main currency** (the first one in Constants) gets the full Month card: spend against its budget with progress, pace, remaining/day, previous-month spend, and 12-month average spend.
+- **Earnings** for the main currency: `Money In` for the viewed month, the previous calendar month, and the running average of the 12 complete months before the viewed month (missing months count as $0).
+- **Other currencies** appear as compact cards below, each with spend vs budget, a progress bar, income, and the same trend figures. Currencies with no spending or income on the viewed date are hidden; the main currency is always shown.
+- **This month** lists all currencies' transactions, grouped by currency with per-currency out/in totals.
+- Each currency has its own budget, editable from the pencil button on its card. The first-day bias is available from day 1 and the rest of the budget accrues across the month.
+
+## Backups and version control
+
+- The workbook is required to live in a git repository. Every write is committed automatically to that repository as `D$CPLN <dscpln@localhost>`, with signing disabled (any configured git user, email, or signing key is not used).
+- Every write first copies the current workbook to `<workbookFile>.bak`, then writes a temp file and atomically renames it over the original. Add `*.xlsx.bak` and `*.xlsx.tmp` to the repository's `.gitignore`.
+- Close the workbook in Excel/LibreOffice while the app is editing it; otherwise the app's save or the spreadsheet app's save can overwrite the other.
+- Writing recalculates formulas only when the workbook is next opened; cached formula values are not preserved by the writer.
 
 ## Docker
 
@@ -98,7 +122,7 @@ docker build -t dscpln .
 docker run -p 3300:3300 -v ./config.json:/app/config.json -v ./dscpln-data:/data dscpln
 ```
 
-The image runs as the non-root `node` user (uid 1000), so `dataFile` and `budgetFile` in `config.json` must point at a writable directory (for example `/data/data.txt` and `/data/budget.txt`), and the mounted directory must be writable by uid 1000. `./build.sh` builds and pushes `imranrdev/dscpln:latest` for linux/amd64 and prints the digest to pin in your deployment.
+The image includes git and runs as the non-root `node` user (uid 1000), so mount the workbook's repository directory (with its `.git` directory) writable by that uid and point `workbookFile` at the file inside it (for example `/data/Balance.xlsx`). `./build.sh` builds and pushes `imranrdev/dscpln:latest` for linux/amd64 and prints the digest to pin in your deployment.
 
 ## Tests
 

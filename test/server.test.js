@@ -5,20 +5,20 @@ const assert = require('node:assert/strict')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { execFileSync } = require('child_process')
 const { loadConfig } = require('../config')
 const { createApp } = require('../server')
 
 const startServer = async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dscpln-server-'))
-    fs.writeFileSync(path.join(dir, 'data.txt'), '')
-    fs.writeFileSync(path.join(dir, 'budget.txt'), '3000\n1470')
+    fs.copyFileSync(path.join(__dirname, '..', 'mock-data.xlsx'), path.join(dir, 'mock.xlsx'))
+    execFileSync('git', ['init', '-q'], { cwd: dir })
     fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
         port: 3300,
-        dataProvider: 'textFileDataProvider',
+        dataProvider: 'excelDataProvider',
         providers: {
-            textFileDataProvider: {
-                dataFile: './data.txt',
-                budgetFile: './budget.txt',
+            excelDataProvider: {
+                workbookFile: './mock.xlsx',
             },
         },
     }))
@@ -32,72 +32,106 @@ const startServer = async () => {
     }
 }
 
-const jsonPost = (baseUrl, url, body, method = 'POST') => fetch(`${baseUrl}${url}`, {
+const jsonRequest = (baseUrl, url, body, method = 'POST') => fetch(`${baseUrl}${url}`, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
 })
 
-test('serves bias-aware data and supports transaction CRUD', async (t) => {
+test('serves workbook data with categories, currencies and income stats', async (t) => {
     const { server, baseUrl } = await startServer()
     t.after(() => new Promise((resolve) => server.close(resolve)))
 
-    let response = await fetch(`${baseUrl}/data?date=2026-10-03`)
+    const response = await fetch(`${baseUrl}/data?date=2026-09-15`)
     assert.equal(response.status, 200)
-    let data = await response.json()
-    assert.equal(data.monthlyBudget, 3000)
-    assert.equal(data.monthsExpectedSpend, 1584.75)
-    assert.equal(data.transactions.length, 0)
+    const data = await response.json()
+    assert.deepEqual(data.currencies.map((entry) => entry.code), ['CAD', 'USD', 'XMR'])
+    const cad = data.currencies.find((entry) => entry.code === 'CAD')
+    assert.equal(cad.primary, true)
+    assert.equal(cad.monthlyBudget, 3000)
+    assert.equal(cad.firstDayBias, 1500)
+    assert.equal(cad.monthsIncome, 2645)
+    assert.equal(cad.previousMonthsIncome, 2640)
+    assert.equal(cad.trailingIncomeAverage, 2632.5)
+    assert.equal(typeof cad.previousMonthsSpend, 'number')
+    assert.equal(typeof cad.trailingSpendAverage, 'number')
+    assert.equal('monthlyBudget' in data, false)
+    assert.equal(data.transactions.length, 6)
+    assert.equal(data.categories.find((entry) => entry.group === 'Money In').categories.includes('Job'), true)
+})
 
-    response = await jsonPost(baseUrl, '/transactions', { amount: 25, description: 'lunch', date: '2026-10-03' })
+test('supports transaction CRUD and category suggestions', async (t) => {
+    const { server, baseUrl } = await startServer()
+    t.after(() => new Promise((resolve) => server.close(resolve)))
+
+    let response = await jsonRequest(baseUrl, '/transactions', {
+        kind: 'expense',
+        amount: 25,
+        details: 'Unit lunch',
+        date: '2026-09-15',
+        category: 'Snacks',
+        currency: 'CAD',
+        notes: '',
+    })
     assert.equal(response.status, 201)
     const created = await response.json()
+    assert.equal(created.expenses, 25)
 
-    response = await fetch(`${baseUrl}/data?date=2026-10-03`)
-    data = await response.json()
-    assert.equal(data.monthsSpend, 25)
-    assert.equal(data.transactions[0].id, created.id)
+    let data = await (await fetch(`${baseUrl}/data?date=2026-09-15`)).json()
+    assert.equal(data.transactions.length, 7)
 
-    response = await jsonPost(baseUrl, `/transactions/${created.id}`, { amount: 30, description: 'lunch', date: '2026-10-03' }, 'PUT')
+    response = await jsonRequest(baseUrl, `/transactions/${created.id}`, {
+        kind: 'income',
+        amount: 30,
+        details: 'Unit lunch',
+        date: '2026-09-15',
+        category: 'Interest',
+        currency: 'CAD',
+        notes: '',
+    }, 'PUT')
     assert.equal(response.status, 200)
     const updated = await response.json()
-    assert.equal(updated.raw, '30 lunch 10 3')
+    assert.equal(updated.kind, 'income')
+    assert.equal(updated.moneyIn, 30)
 
-    response = await jsonPost(baseUrl, `/transactions/${created.id}`, { amount: 31, description: 'lunch', date: '2026-10-03' }, 'PUT')
+    response = await jsonRequest(baseUrl, `/transactions/${created.id}`, {
+        kind: 'income',
+        amount: 31,
+        details: 'Unit lunch',
+        date: '2026-09-15',
+        category: 'Interest',
+        currency: 'CAD',
+        notes: '',
+    }, 'PUT')
     assert.equal(response.status, 409)
 
     response = await fetch(`${baseUrl}/transactions/${updated.id}`, { method: 'DELETE' })
     assert.equal(response.status, 204)
 
-    response = await fetch(`${baseUrl}/data?date=2026-10-03`)
-    data = await response.json()
-    assert.equal(data.monthsSpend, 0)
+    response = await fetch(`${baseUrl}/category-suggestions?q=grocries&kind=expense`)
+    assert.equal(response.status, 200)
+    const suggestions = await response.json()
+    assert.equal(suggestions.suggestions[0].category, 'Food Weekly')
+
+    response = await fetch(`${baseUrl}/category-suggestions?q=grocries&kind=transfer`)
+    assert.equal(response.status, 400)
 })
 
-test('filters calculations and transactions by currency', async (t) => {
+test('writes per-currency budget updates to the Constants sheet', async (t) => {
     const { server, baseUrl } = await startServer()
     t.after(() => new Promise((resolve) => server.close(resolve)))
 
-    let response = await jsonPost(baseUrl, '/transactions', { amount: 40, description: 'usd lunch', date: '2026-10-03', currency: 'usd' })
-    assert.equal(response.status, 201)
-    const created = await response.json()
-    assert.equal(created.currency, 'USD')
-    assert.equal(created.raw, 'USD 40 usd lunch 10 3')
+    let response = await jsonRequest(baseUrl, '/budget', { monthlyBudget: 2800, firstDayBias: 1000, currency: 'USD' })
+    assert.equal(response.status, 200)
+    const data = await (await fetch(`${baseUrl}/data?date=2026-09-15`)).json()
+    const usd = data.currencies.find((entry) => entry.code === 'USD')
+    assert.equal(usd.monthlyBudget, 2800)
+    assert.equal(usd.firstDayBias, 1000)
+    const cad = data.currencies.find((entry) => entry.code === 'CAD')
+    assert.equal(cad.monthlyBudget, 3000)
+    assert.equal(cad.firstDayBias, 1500)
 
-    response = await jsonPost(baseUrl, '/transactions', { amount: 10, description: 'local lunch', date: '2026-10-03' })
-    assert.equal(response.status, 201)
-
-    let data = await (await fetch(`${baseUrl}/data?date=2026-10-03`)).json()
-    assert.equal(data.monthsSpend, 10)
-    assert.deepEqual(data.currencies, ['USD'])
-    assert.equal(data.transactions.length, 1)
-
-    data = await (await fetch(`${baseUrl}/data?date=2026-10-03&currency=USD`)).json()
-    assert.equal(data.monthsSpend, 40)
-    assert.equal(data.transactions.length, 1)
-    assert.equal(data.transactions[0].id, created.id)
-
-    response = await fetch(`${baseUrl}/data?date=2026-10-03&currency=US`)
+    response = await jsonRequest(baseUrl, '/budget', { monthlyBudget: 100, firstDayBias: 0 })
     assert.equal(response.status, 400)
 })
 
@@ -108,15 +142,27 @@ test('rejects invalid input', async (t) => {
     let response = await fetch(`${baseUrl}/data?date=nope`)
     assert.equal(response.status, 400)
 
-    response = await jsonPost(baseUrl, '/transactions', { amount: -5, description: 'bad', date: '2026-10-03' })
-    assert.equal(response.status, 400)
-
-    response = await jsonPost(baseUrl, '/transactions', { amount: 5, description: 'bad 10 2', date: '2026-10-03' })
-    assert.equal(response.status, 400)
-
-    response = await fetch(`${baseUrl}/transactions/not-an-id`, {
-        method: 'DELETE',
+    response = await jsonRequest(baseUrl, '/transactions', {
+        kind: 'expense',
+        amount: -5,
+        details: 'bad',
+        date: '2026-09-15',
+        category: 'Snacks',
+        currency: 'CAD',
     })
+    assert.equal(response.status, 400)
+
+    response = await jsonRequest(baseUrl, '/transactions', {
+        kind: 'expense',
+        amount: 5,
+        details: 'bad',
+        date: '2026-09-15',
+        category: 'Not a category',
+        currency: 'CAD',
+    })
+    assert.equal(response.status, 400)
+
+    response = await fetch(`${baseUrl}/transactions/not-an-id`, { method: 'DELETE' })
     assert.equal(response.status, 400)
 
     response = await fetch(`${baseUrl}/transactions`, {

@@ -8,6 +8,18 @@ const { ValidationError } = require('./errors')
 
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 
+// Shows at least 2 decimals, plus more when the value is smaller than a cent
+// (e.g. fractional XMR), without excessive trailing zeros.
+const formatAmount = (value) => {
+    const amount = Number.isFinite(value) ? value : 0
+    const absolute = Math.abs(amount)
+    if (absolute === 0 || absolute >= 0.01) {
+        return amount.toFixed(2)
+    }
+    const decimals = Math.min(12, 3 - Math.floor(Math.log10(absolute)))
+    return amount.toFixed(decimals).replace(/0+$/, '').replace(/\.$/, '')
+}
+
 const parseDateQuery = (dateStr) => {
     if (!dateStr) {
         return new Date()
@@ -138,7 +150,7 @@ const startNotifications = (config, dataProvider) => {
                 if (entry.monthlyBudget <= entry.monthsSpend) {
                     if (!(warnedCurrencies.has(entry.code) && onlyWarnOnce) && entry.monthsSpend !== previousSpend.get(entry.code)) {
                         if (await sendNotification(monthlyLimitUrl,
-                            `${entry.code} $${entry.monthsSpend.toFixed(2)} of $${entry.monthlyBudget.toFixed(2)}`,
+                            `${entry.code} $${formatAmount(entry.monthsSpend)} of $${formatAmount(entry.monthlyBudget)}`,
                             `Monthly Budget Limit Reached (${entry.code})`)) {
                             warnedCurrencies.add(entry.code)
                         }

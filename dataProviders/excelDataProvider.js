@@ -43,7 +43,9 @@ const getMonthExpectedSpend = (monthlyBudget, firstDayBias, day, daysInMonth) =>
     return Math.min(monthlyBudget, Math.max(0, expected))
 }
 
-const roundCents = (cents) => Math.round(cents) / 100
+// Trims floating point noise without forcing a fixed number of decimals, so
+// tiny amounts (e.g. fractional XMR) keep their precision.
+const cleanAmount = (value) => Number.parseFloat(Number(value).toPrecision(12))
 
 const normalizeHeader = (value) => String(value == null ? '' : value).trim()
 
@@ -79,14 +81,14 @@ const cellNumber = (value) => {
         return cellNumber(value.result)
     }
     if (typeof value === 'number') {
-        return Number.isFinite(value) ? Math.round(value * 100) / 100 : null
+        return Number.isFinite(value) ? value : null
     }
     const text = String(value).trim().replace(/,/g, '')
     if (text === '') {
         return null
     }
     const parsed = Number(text)
-    return Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : null
+    return Number.isFinite(parsed) ? parsed : null
 }
 
 const dateFromCell = (value, date1904) => {
@@ -130,16 +132,18 @@ const parseTransactionId = (id) => {
     return { row: Number.parseInt(match[1], 10), hash: match[2] }
 }
 
+const MAX_AMOUNT_DECIMALS = 12
+
 const validateAmount = (value) => {
     const amount = Number.parseFloat(value)
     if (!Number.isFinite(amount) || amount <= 0) {
         throw new ValidationError('Amount must be greater than 0')
     }
-    const rounded = Math.round(amount * 100) / 100
-    if (Math.abs(amount - rounded) > 1e-6) {
-        throw new ValidationError('Amount can have at most 2 decimal places')
+    const scaled = amount * (10 ** MAX_AMOUNT_DECIMALS)
+    if (Math.abs(scaled - Math.round(scaled)) > 1e-6) {
+        throw new ValidationError(`Amount can have at most ${MAX_AMOUNT_DECIMALS} decimal places`)
     }
-    return rounded
+    return Number.parseFloat(amount.toFixed(MAX_AMOUNT_DECIMALS))
 }
 
 const validateText = (value, label, required) => {
@@ -396,9 +400,9 @@ module.exports = (config = {}, configDir = process.cwd()) => {
                 monthly.set(key, entry)
             }
             if (transaction.kind === 'income') {
-                entry.income += Math.round((transaction.moneyIn || 0) * 100)
+                entry.income += transaction.moneyIn || 0
             } else {
-                entry.spend += Math.round((transaction.expenses || 0) * 100)
+                entry.spend += transaction.expenses || 0
             }
         }
         return monthly
@@ -623,9 +627,9 @@ module.exports = (config = {}, configDir = process.cwd()) => {
                 currentByCurrency.set(transaction.currency, entry)
             }
             if (transaction.kind === 'income') {
-                entry.income += Math.round((transaction.moneyIn || 0) * 100)
+                entry.income += transaction.moneyIn || 0
             } else {
-                entry.spend += Math.round((transaction.expenses || 0) * 100)
+                entry.spend += transaction.expenses || 0
             }
         }
 
@@ -643,8 +647,8 @@ module.exports = (config = {}, configDir = process.cwd()) => {
                 }
             }
             const previous = monthly.get(`${code}|${previousYear}|${previousMonth}`) || { spend: 0, income: 0 }
-            const monthsSpend = roundCents(current.spend)
-            const monthsIncome = roundCents(current.income)
+            const monthsSpend = cleanAmount(current.spend)
+            const monthsIncome = cleanAmount(current.income)
             return {
                 code,
                 primary: index === 0,
@@ -652,11 +656,11 @@ module.exports = (config = {}, configDir = process.cwd()) => {
                 monthlyBudget: budget.monthlyBudget,
                 firstDayBias: budget.firstDayBias,
                 monthsSpend,
-                previousMonthsSpend: roundCents(previous.spend),
-                trailingSpendAverage: roundCents(trailingSpendCents / 12),
+                previousMonthsSpend: cleanAmount(previous.spend),
+                trailingSpendAverage: cleanAmount(trailingSpendCents / 12),
                 monthsIncome,
-                previousMonthsIncome: roundCents(previous.income),
-                trailingIncomeAverage: roundCents(trailingIncomeCents / 12),
+                previousMonthsIncome: cleanAmount(previous.income),
+                trailingIncomeAverage: cleanAmount(trailingIncomeCents / 12),
                 monthsExpectedSpend: getMonthExpectedSpend(budget.monthlyBudget, budget.firstDayBias, day, daysInMonth),
             }
         })

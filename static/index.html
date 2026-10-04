@@ -38,6 +38,14 @@
                         <path d="M20 4v7h-7" />
                     </svg>
                 </button>
+                <button id="pretendButton" class="icon-button" type="button" title="Pretend date"
+                    aria-label="Pretend date">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="5" width="18" height="16" rx="2" />
+                        <path d="M8 3v4M16 3v4M3 10h18" />
+                    </svg>
+                </button>
                 <button id="themeButton" class="icon-button" type="button" title="Theme: auto"
                     aria-label="Theme: auto. Click to change."></button>
             </div>
@@ -52,7 +60,7 @@
 
     <div id="pretendBanner" class="banner" hidden>
         <span>Viewing as of <strong id="pretendBannerDate"></strong> — this is a simulation.</span>
-        <button id="bannerTodayButton" class="button" type="button">Back to today</button>
+        <button id="bannerTodayButton" class="button button--small" type="button">Back to today</button>
     </div>
 
     <main>
@@ -109,21 +117,12 @@
                 <span id="expensesMeta" class="muted"></span>
             </summary>
             <div class="expenses__actions">
-                <button id="addTransactionButton" class="button button--primary" type="button" hidden>Add transaction</button>
+                <button id="addTransactionButton" class="button button--primary button--small" type="button" hidden>Add transaction</button>
             </div>
             <ul id="expensesList" class="expenses__list"></ul>
             <p id="expensesEmpty" class="muted" hidden>No transactions recorded this month.</p>
         </details>
 
-        <section class="card" aria-labelledby="pretendHeading">
-            <div class="card__header">
-                <h2 id="pretendHeading">Pretend it's</h2>
-            </div>
-            <div class="controls__row">
-                <input id="pretendDateInput" type="date" aria-label="Pretend date">
-                <button id="pretendTodayButton" class="button" type="button">Today</button>
-            </div>
-        </section>
     </main>
 
     <dialog id="budgetDialog" class="dialog" aria-labelledby="budgetDialogTitle">
@@ -159,7 +158,7 @@
                 </label>
             </div>
             <label for="transactionAmountInput">Amount</label>
-            <input id="transactionAmountInput" name="amount" type="number" step="0.01" min="0.01"
+            <input id="transactionAmountInput" name="amount" type="number" step="any" min="0.000000000001"
                 inputmode="decimal" autocomplete="off" required>
             <label for="transactionDetailsInput">Details</label>
             <input id="transactionDetailsInput" name="details" type="text" autocomplete="off" required>
@@ -190,6 +189,20 @@
                 <button id="deleteConfirmButton" class="button button--danger" type="button">Delete</button>
             </div>
         </div>
+    </dialog>
+
+    <dialog id="pretendDialog" class="dialog" aria-labelledby="pretendDialogTitle">
+        <form id="pretendForm">
+            <h2 id="pretendDialogTitle">Pretend it's</h2>
+            <label for="pretendDateInput">Date</label>
+            <input id="pretendDateInput" name="date" type="date" required>
+            <p id="pretendFormError" class="form-error" hidden></p>
+            <div class="dialog__actions">
+                <button id="pretendCancelButton" class="button" type="button">Cancel</button>
+                <button id="pretendTodayButton" class="button" type="button">Today</button>
+                <button id="pretendApplyButton" class="button button--primary" type="submit">View</button>
+            </div>
+        </form>
     </dialog>
 
     <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>

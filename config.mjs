@@ -287,14 +287,14 @@ log "Import completed; originals deleted"
           ],
         },
 
-        // Pull recent Wealthsimple transactions; paste into Balance.xlsx.
+        // Pull recent Wealthsimple transactions; paste into D$CPLN.
         {
-          name: 'Wealthsimple Recents to Balance',
+          name: 'Wealthsimple Recents to D$CPLN',
           state_dir: '{{maindir}}/Documents/Balance',
           cwd: '{{scriptroot}}/Wealthsimpleton',
           serial_key: 'selenium-browser',
           capture: true,
-          note: 'Paste the results into Balance.xlsx, remembering to skip duplicates.',
+          note: 'Paste the results into D$CPLN, remembering to skip duplicates.',
           commands: [
             '[ -f \'{{scriptroot}}/Wealthsimpleton/venv/bin/activate\' ] || python3 -m venv \'{{scriptroot}}/Wealthsimpleton/venv\'',
             'source \'{{scriptroot}}/Wealthsimpleton/venv/bin/activate\' && pip install --upgrade -r \'{{scriptroot}}/Wealthsimpleton/requirements.txt\' >/dev/null',

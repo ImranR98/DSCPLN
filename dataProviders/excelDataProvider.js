@@ -182,6 +182,84 @@ const categoriesForKind = (constants, kind) => {
     return groups.flatMap((entry) => entry.categories)
 }
 
+const TRANSACTION_HEADERS = ['Date', 'Details', 'Money In', 'Expenses', 'Currency', 'Type', 'Notes']
+const MAX_IMPORT_ROWS = 1000
+const MAX_IMPORT_TEXT_LENGTH = 200 * 1024
+
+const parseImportLines = (text) => {
+    if (typeof text !== 'string' || text.trim() === '') {
+        throw new ValidationError('Paste at least one transaction line')
+    }
+    if (text.length > MAX_IMPORT_TEXT_LENGTH) {
+        throw new ValidationError('Import is too large. Split it into smaller batches.')
+    }
+    const lines = []
+    text.split(/\r?\n/).forEach((raw, index) => {
+        if (raw.trim() === '') {
+            return
+        }
+        lines.push({ number: index + 1, fields: raw.split('\t').map((field) => field.trim()) })
+    })
+    if (lines.length === 0) {
+        throw new ValidationError('Paste at least one transaction line')
+    }
+    if (lines.length > MAX_IMPORT_ROWS) {
+        throw new ValidationError(`Import is limited to ${MAX_IMPORT_ROWS} transactions at a time`)
+    }
+    return lines
+}
+
+const parseImportAmount = (value, label) => {
+    if (value == null || value === '') {
+        return null
+    }
+    const parsed = Number(String(value).replace(/[,\s]/g, ''))
+    if (!Number.isFinite(parsed)) {
+        throw new ValidationError(`${label} must be a number`)
+    }
+    return parsed
+}
+
+// Fields are matched positionally to the sheet's header row, so pasted rows
+// are exactly the columns as they appear in the workbook.
+const parseImportLine = (line, orderedHeaders) => {
+    const fields = {}
+    const unknown = []
+    line.fields.forEach((value, index) => {
+        const header = orderedHeaders[index]
+        if (!header) {
+            if (value !== '') {
+                unknown.push(`column ${index + 1}`)
+            }
+            return
+        }
+        if (value !== '' && !TRANSACTION_HEADERS.includes(header)) {
+            unknown.push(`"${header}"`)
+        }
+        fields[header] = value
+    })
+    if (unknown.length) {
+        throw new ValidationError(`Unexpected value in ${unknown.join(', ')}`)
+    }
+    const moneyIn = parseImportAmount(fields['Money In'], 'Money In')
+    const expenses = parseImportAmount(fields['Expenses'], 'Expenses')
+    if (moneyIn != null && expenses != null) {
+        throw new ValidationError('Fill only one of Money In or Expenses')
+    }
+    if (moneyIn == null && expenses == null) {
+        throw new ValidationError('Fill one of Money In or Expenses')
+    }
+    return {
+        kind: moneyIn != null ? 'income' : 'expense',
+        amount: moneyIn != null ? moneyIn : expenses,
+        date: fields['Date'],
+        details: fields['Details'],
+        currency: fields['Currency'],
+        category: fields['Type'],
+        notes: fields['Notes'],
+    }
+}
+
 const serializeTransaction = (transaction) => ({
     id: transaction.id,
     row: transaction.row,
@@ -605,7 +683,7 @@ module.exports = (config = {}, configDir = process.cwd()) => {
 
     const getData = async (date = new Date()) => {
         const parsed = await getParsed()
-        const { constants, transactions, monthly, warnings } = parsed
+        const { constants, transactions, monthly, warnings, headerMap } = parsed
         const year = date.getFullYear()
         const month = date.getMonth() + 1
         const day = date.getDate()
@@ -684,6 +762,9 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         return {
             currencies,
             categories: constants.categoryGroups,
+            transactionColumns: Object.entries(headerMap)
+                .sort((a, b) => a[1] - b[1])
+                .map(([header]) => header),
             history,
             warnings,
             writable: true,
@@ -787,6 +868,50 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         return serializeTransaction(stored)
     }
 
+    // Imports tab-separated rows positionally matched to the Transactions
+    // sheet's header row. Every line is validated before anything is written,
+    // so an invalid line rejects the whole batch.
+    const importTransactions = async (text) => {
+        const workbook = await loadWorkbook()
+        const date1904 = Boolean(workbook.properties.date1904)
+        const constants = readConstants(workbook)
+        const sheet = getSheet(workbook, transactionsSheetName, 'transactions')
+        const map = readHeaderMap(sheet)
+        const orderedHeaders = Object.entries(map)
+            .sort((a, b) => a[1] - b[1])
+            .map(([header]) => header)
+        const lines = parseImportLines(text)
+
+        const transactions = []
+        const errors = []
+        for (const line of lines) {
+            try {
+                transactions.push(validateTransactionInput(constants, parseImportLine(line, orderedHeaders)))
+            } catch (e) {
+                if (e instanceof ValidationError) {
+                    errors.push(`Line ${line.number}: ${e.message}`)
+                    continue
+                }
+                throw e
+            }
+        }
+        if (errors.length) {
+            throw new ValidationError(`Import failed:\n${errors.join('\n')}`)
+        }
+
+        const lastRow = findLastDataRow(sheet, map)
+        const template = findTemplateStyles(sheet, map)
+        const stored = []
+        transactions.forEach((transaction, index) => {
+            const row = lastRow + 1 + index
+            writeTransaction(sheet, map, { ...transaction, row }, template)
+            stored.push(parseTransactionRow(sheet.getRow(row), map, row, date1904))
+        })
+        const count = stored.length
+        await saveWorkbook(workbook, `D$CPLN: import ${count} transaction${count === 1 ? '' : 's'}`)
+        return { imported: count, transactions: stored.map(serializeTransaction) }
+    }
+
     const updateTransaction = async (id, input) => {
         const rowNumber = parseRowInput(id)
         const workbook = await loadWorkbook()
@@ -829,6 +954,7 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         getData,
         updateMonthlyBudget,
         addTransaction,
+        importTransactions,
         updateTransaction,
         deleteTransaction,
         suggestCategories,

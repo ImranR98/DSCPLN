@@ -336,37 +336,6 @@ h1 .accent {
     animation: spin 0.6s linear;
 }
 
-.fab {
-    position: fixed;
-    right: max(var(--space-4), env(safe-area-inset-right, 0px));
-    bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
-    z-index: 25;
-    display: none;
-    place-items: center;
-    width: 3.25rem;
-    height: 3.25rem;
-    border: 0;
-    border-radius: 50%;
-    background: var(--accent);
-    color: var(--accent-contrast);
-    box-shadow: var(--shadow-lg);
-    cursor: pointer;
-    transition: transform 0.12s ease, background-color 0.15s ease;
-}
-
-.fab svg {
-    width: 1.4rem;
-    height: 1.4rem;
-}
-
-.fab:hover {
-    background: var(--accent-hover);
-}
-
-.fab:active {
-    transform: scale(0.94);
-}
-
 /* ---------- Cards ---------- */
 
 .card {
@@ -735,7 +704,9 @@ details.card[open] > summary::after {
 
 .expenses__actions {
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
+    gap: var(--space-2);
     margin-top: var(--space-3);
 }
 
@@ -1020,6 +991,10 @@ details.card[open] > summary::after {
     box-shadow: var(--shadow-lg);
 }
 
+.dialog--wide {
+    width: min(34rem, calc(100vw - 2rem));
+}
+
 .dialog::backdrop {
     background: rgba(16, 24, 40, 0.45);
     backdrop-filter: blur(3px);
@@ -1070,6 +1045,30 @@ details.card[open] > summary::after {
 
 .dialog input:focus,
 .dialog select:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--surface);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.dialog__textarea {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+    min-height: 15rem;
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text);
+    resize: vertical;
+    tab-size: 8;
+    white-space: pre;
+    overflow-x: auto;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.dialog__textarea:focus {
     outline: none;
     border-color: var(--accent);
     background: var(--surface);
@@ -1139,6 +1138,7 @@ details.card[open] > summary::after {
     background: var(--over-soft);
     color: var(--over);
     font-size: var(--fs-sm);
+    white-space: pre-line;
 }
 
 .hint {
@@ -1286,14 +1286,6 @@ details.card[open] > summary::after {
 }
 
 @media (max-width: 47.99rem) {
-    .fab {
-        display: grid;
-    }
-
-    .expenses__actions {
-        display: none;
-    }
-
     .app-header__meta {
         font-size: var(--fs-xs);
     }

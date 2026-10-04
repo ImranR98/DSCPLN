@@ -37,6 +37,10 @@ const els = {
     monthEarnThis: $('monthEarnThis'),
     monthEarnPrev: $('monthEarnPrev'),
     monthEarnAvg: $('monthEarnAvg'),
+    monthConvLabel: $('monthConvLabel'),
+    monthConvThis: $('monthConvThis'),
+    monthConvPrev: $('monthConvPrev'),
+    monthConvAvg: $('monthConvAvg'),
     primaryBudgetButton: $('primaryBudgetButton'),
     otherCurrencies: $('otherCurrencies'),
     historyCard: $('historyCard'),
@@ -92,6 +96,7 @@ const THEME_KEY = 'dscpln-theme'
 const THEME_ORDER = ['auto', 'light', 'dark']
 const REFRESH_STALE_MS = 60 * 1000
 const INCOME_GROUP = 'Money In'
+const CONVERSION_GROUP = 'Conversions'
 
 const ICONS = {
     auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg>',
@@ -172,7 +177,8 @@ function isFractionalCurrency(code) {
         fractionalCurrencies = new Set()
         for (const entry of history) {
             for (const [currencyCode, totals] of Object.entries(entry.currencies || {})) {
-                if (hasSubCentPrecision(totals.spend) || hasSubCentPrecision(totals.income)) {
+                if (hasSubCentPrecision(totals.spend) || hasSubCentPrecision(totals.income) ||
+                    hasSubCentPrecision(totals.convertedOut) || hasSubCentPrecision(totals.convertedIn)) {
                     fractionalCurrencies.add(currencyCode)
                 }
             }
@@ -354,6 +360,23 @@ function renderMonth(currency) {
     setBreakableText(els.monthEarnPrev, `+${money(currency ? toNumber(currency.previousMonthsIncome) : 0, code)}`)
     setBreakableText(els.monthEarnAvg, `+${money(currency ? toNumber(currency.trailingIncomeAverage) : 0, code)}`)
 
+    const convertedThis = { out: toNumber(currency && currency.monthsConvertedOut), in: toNumber(currency && currency.monthsConvertedIn) }
+    const convertedPrev = { out: toNumber(currency && currency.previousMonthsConvertedOut), in: toNumber(currency && currency.previousMonthsConvertedIn) }
+    const convertedAvg = { out: toNumber(currency && currency.trailingConvertedOutAverage), in: toNumber(currency && currency.trailingConvertedInAverage) }
+    const setConvertedCell = (element, totals) => {
+        const net = Number.parseFloat((totals.in - totals.out).toPrecision(12))
+        setBreakableText(element, `${net > 0 ? '+' : net < 0 ? '−' : ''}${money(Math.abs(net), code)}`)
+        element.title = `out ${money(totals.out, code)} · in ${money(totals.in, code)}`
+    }
+    setConvertedCell(els.monthConvThis, convertedThis)
+    setConvertedCell(els.monthConvPrev, convertedPrev)
+    setConvertedCell(els.monthConvAvg, convertedAvg)
+    const hasConversions = [convertedThis, convertedPrev, convertedAvg]
+        .some((totals) => totals.out > 0 || totals.in > 0)
+    for (const cell of [els.monthConvLabel, els.monthConvThis, els.monthConvPrev, els.monthConvAvg]) {
+        cell.hidden = !hasConversions
+    }
+
     const expected = currency && currency.monthsExpectedSpend != null ? toNumber(currency.monthsExpectedSpend) : budget * (day / daysInMonth)
     setPace(els.monthPace, budget, spent, budget > 0 ? expected / budget : 0, code)
     setProgress(els.monthProgress, els.monthProgressFill, spent, budget)
@@ -419,6 +442,15 @@ function buildCurrencyCard(currency) {
     const earned = document.createElement('span')
     earned.className = 'currency-card__earned'
     earned.textContent = `+${money(toNumber(currency.monthsIncome), code)} in`
+    const convertedOut = toNumber(currency.monthsConvertedOut)
+    const convertedIn = toNumber(currency.monthsConvertedIn)
+    const convertedParts = []
+    if (convertedOut > 0) {
+        convertedParts.push(`−${money(convertedOut, code)}`)
+    }
+    if (convertedIn > 0) {
+        convertedParts.push(`+${money(convertedIn, code)}`)
+    }
     if (budget > 0) {
         const left = document.createElement('span')
         if (remaining >= 0) {
@@ -433,6 +465,12 @@ function buildCurrencyCard(currency) {
     }
 
     card.append(header, figure, progress, meta)
+    if (convertedParts.length) {
+        const converted = document.createElement('div')
+        converted.className = 'currency-card__converted'
+        converted.textContent = `${convertedParts.join(' / ')} converted`
+        card.append(converted)
+    }
     return card
 }
 
@@ -518,6 +556,21 @@ function buildHistoryTooltip(monthIndex, activeCurrencies) {
         inEl.textContent = `+${money(toNumber(totals.income), code)} in`
         row.append(codeEl, outEl, inEl)
         container.appendChild(row)
+        const convertedOut = toNumber(totals.convertedOut)
+        const convertedIn = toNumber(totals.convertedIn)
+        if (convertedOut > 0 || convertedIn > 0) {
+            const converted = document.createElement('div')
+            converted.className = 'history-tooltip__conv'
+            const parts = []
+            if (convertedOut > 0) {
+                parts.push(`−${money(convertedOut, code)}`)
+            }
+            if (convertedIn > 0) {
+                parts.push(`+${money(convertedIn, code)}`)
+            }
+            converted.textContent = `converted ${parts.join(' / ')}`
+            container.appendChild(converted)
+        }
     }
     return container
 }
@@ -540,7 +593,8 @@ function renderHistory() {
     const codes = (state.data.currencies || []).map((currency) => currency.code)
     const active = codes.filter((code) => history.some((entry) => {
         const totals = entry.currencies && entry.currencies[code]
-        return totals && (totals.spend > 0 || totals.income > 0)
+        return totals && (totals.spend > 0 || totals.income > 0 ||
+            totals.convertedOut > 0 || totals.convertedIn > 0)
     }))
 
     els.historyTooltip.hidden = true
@@ -622,18 +676,29 @@ function renderHistory() {
             sum + ((entry.currencies[code] || {}).spend || 0), 0).toPrecision(12))
         const totalIncome = Number.parseFloat(history.reduce((sum, entry) =>
             sum + ((entry.currencies[code] || {}).income || 0), 0).toPrecision(12))
-        const lines = []
-        for (const entry of [
+        const totalConvertedOut = Number.parseFloat(history.reduce((sum, entry) =>
+            sum + ((entry.currencies[code] || {}).convertedOut || 0), 0).toPrecision(12))
+        const totalConvertedIn = Number.parseFloat(history.reduce((sum, entry) =>
+            sum + ((entry.currencies[code] || {}).convertedIn || 0), 0).toPrecision(12))
+        const totalEntries = [
             { label: 'out', value: money(totalSpend, code), isIn: false },
             { label: 'in', value: `+${money(totalIncome, code)}`, isIn: true },
-        ]) {
+        ]
+        if (totalConvertedOut > 0) {
+            totalEntries.push({ label: 'conv out', value: `−${money(totalConvertedOut, code)}`, isConv: true })
+        }
+        if (totalConvertedIn > 0) {
+            totalEntries.push({ label: 'conv in', value: `+${money(totalConvertedIn, code)}`, isConv: true })
+        }
+        const lines = []
+        for (const entry of totalEntries) {
             const full = `${entry.label} ${entry.value}`
             if (measureTextWidth(full, 'history__total') <= totalTextWidth) {
-                lines.push({ text: full, isIn: entry.isIn })
+                lines.push({ text: full, isIn: entry.isIn, isConv: entry.isConv })
             } else {
-                lines.push({ text: entry.label, isIn: entry.isIn })
+                lines.push({ text: entry.label, isIn: entry.isIn, isConv: entry.isConv })
                 for (const part of breakTotalText(entry.value, 'history__total', totalTextWidth)) {
-                    lines.push({ text: part, isIn: entry.isIn })
+                    lines.push({ text: part, isIn: entry.isIn, isConv: entry.isConv })
                 }
             }
         }
@@ -756,7 +821,8 @@ function renderHistory() {
             const totalText = svgElement('text', {
                 x: width - rightPad,
                 y: totalStartY + lineIndex * totalLineHeight,
-                class: line.isIn ? 'history__total history__total--in' : 'history__total',
+                class: line.isConv ? 'history__total history__total--conv' :
+                    line.isIn ? 'history__total history__total--in' : 'history__total',
             })
             totalText.textContent = line.text
             svg.appendChild(totalText)
@@ -929,7 +995,9 @@ async function responseErrorMessage(response, fallback) {
 
 function renderCategoryOptions(kind) {
     const groups = (state.data.categories || []).filter((entry) =>
-        kind === 'income' ? entry.group === INCOME_GROUP : entry.group !== INCOME_GROUP)
+        kind === 'income'
+            ? entry.group === INCOME_GROUP || entry.group === CONVERSION_GROUP
+            : entry.group !== INCOME_GROUP)
     const previous = els.transactionCategorySelect.value
     els.transactionCategorySelect.textContent = ''
     const placeholder = document.createElement('option')

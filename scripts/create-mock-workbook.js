@@ -11,8 +11,9 @@ const OUTPUT = path.resolve(__dirname, '..', 'mock-data.xlsx')
 const CATEGORY_GROUPS = [
     ['Main Expenses', ['Rent', 'Subscriptions', 'Haircut', 'Phone Bills', 'Food Weekly', 'Food General', 'Transport Public', 'Transport Private', 'Necessity', 'Medical']],
     ['Extra Expenses', ['Entertainment', 'Clothes', 'Snacks', 'Other Extra Expense', 'Electronics']],
-    ['Special Expenses', ['School Fees', 'Other Special Expense', 'Parents Expenses', 'Loan Repayment', 'Conversion', 'Investment Buy']],
-    ['Money In', ['Job', 'From Parents', 'Tax Returns', 'Other Earnings', 'Loan', 'Other Money in', 'Conversion', 'Investment Sell', 'Dividend', 'Interest']],
+    ['Special Expenses', ['School Fees', 'Other Special Expense', 'Parents Expenses', 'Loan Repayment', 'Investment Buy']],
+    ['Money In', ['Job', 'From Parents', 'Tax Returns', 'Other Earnings', 'Loan', 'Other Money in', 'Investment Sell', 'Dividend', 'Interest']],
+    ['Conversions', ['Conversion']],
     ['Currencies', ['CAD', 'USD', 'XMR']],
 ]
 

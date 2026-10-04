@@ -61,6 +61,7 @@ test('serves workbook data with categories, currencies and income stats', async 
     assert.equal(data.history[11].currencies.CAD.spend, 1472.23)
     assert.equal(data.transactions.length, 6)
     assert.equal(data.categories.find((entry) => entry.group === 'Money In').categories.includes('Job'), true)
+    assert.deepEqual(data.conversionCategories, ['Conversion'])
 })
 
 test('supports transaction CRUD and category suggestions', async (t) => {

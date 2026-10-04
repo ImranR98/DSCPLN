@@ -70,7 +70,7 @@ Row 2 holds a header per column, and each column lists the allowed values for th
 | Subscriptions | Snacks | Loan Repayment | From Parents | USD |
 | ... | ... | ... | ... | XMR |
 
-- Category names and currencies are never hardcoded: edit this sheet to add, rename, or remove them (the `Money In` column defines income categories; everything else is an expense category).
+- Category names and currencies are never hardcoded: edit this sheet to add, rename, or remove them. Two group names are special: `Money In` defines income categories, and `Conversions` marks currency-conversion categories. Conversion categories are valid for both kinds and are tracked separately from spending/earning (see below); everything not in `Money In` is an expense category.
 - Budgets live below the table, one row per currency:
   ```
   Budgets
@@ -114,6 +114,7 @@ Everything is shown on one page, per currency:
 - **Last 12 months** charts money in and out per month for every currency with activity in that window, as small multiples (one lane per currency, each with its own scale), a 12-month Total column, and a hover tooltip. Each currency keeps a stable accent color across its tile, chips, and chart lane.
 - On wide screens the transactions list moves into a second column on the right; on narrow screens everything stacks in one column.
 - **This month** lists all currencies' transactions with the date shown on each row.
+- **Currency conversions** (categories in the `Conversions` group) do not count as spending or earning: they are excluded from the Spent/Earned figures, budgets, pace and notifications. The main card shows a net **Converted** row (in − out per period, hover for the out/in split), currency tiles show a compact converted line, and the chart's Total column lists `conv out`/`conv in` rows.
 - Each currency has its own budget, editable from the pencil button on its card. The first-day bias is available from day 1 and the rest of the budget accrues across the month.
 
 ## Insights
@@ -127,6 +128,18 @@ Everything is shown on one page, per currency:
   - A cumulative-spend chart with the budget pace line for single-month ranges, or monthly spend/income bars for longer ranges.
   - Forecasts: projected month-end spend/income vs budget when the range includes today, plus a next-30-days estimate from the trailing 3-month average.
   - Biggest category increases/decreases vs the previous period.
+- Conversion categories are de-selected by default in every section (they remain in the list and can be re-enabled).
+
+## Migrations
+
+Older workbooks can be migrated with:
+
+```bash
+node scripts/migrate-workbook.js --dry-run   # report what would change
+node scripts/migrate-workbook.js             # apply, save, and commit
+```
+
+It converts the legacy single `Budget` section into the per-currency `Budgets` table and moves conversion categories (default `Conversion`, override with `--categories "A,B"`) into a new `Conversions` group column. It is idempotent and leaves a `.bak` file next to the workbook.
 
 ## Backups and version control
 

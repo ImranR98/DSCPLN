@@ -120,6 +120,44 @@ test('supports transaction CRUD and category suggestions', async (t) => {
     assert.equal(response.status, 400)
 })
 
+test('suggests transaction details from history', async (t) => {
+    const { server, baseUrl } = await startServer()
+    t.after(() => new Promise((resolve) => server.close(resolve)))
+
+    let response = await fetch(`${baseUrl}/details-suggestions?q=net`)
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.suggestions[0].details, 'Netflix')
+
+    response = await fetch(`${baseUrl}/details-suggestions?q=net&kind=income`)
+    assert.equal(response.status, 200)
+    assert.deepEqual((await response.json()).suggestions, [])
+
+    response = await fetch(`${baseUrl}/details-suggestions?q=x&kind=transfer`)
+    assert.equal(response.status, 400)
+})
+
+test('serves transactions for a date range and the insights page', async (t) => {
+    const { server, baseUrl } = await startServer()
+    t.after(() => new Promise((resolve) => server.close(resolve)))
+
+    let response = await fetch(`${baseUrl}/transactions?start=2026-09-01&end=2026-09-30`)
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.transactions.length, 6)
+    assert.equal(body.transactions[0].date, '2026-09-01')
+
+    response = await fetch(`${baseUrl}/transactions?start=2026-09-30&end=2026-09-01`)
+    assert.equal(response.status, 400)
+
+    response = await fetch(`${baseUrl}/transactions`)
+    assert.equal(response.status, 400)
+
+    response = await fetch(`${baseUrl}/insights`)
+    assert.equal(response.status, 200)
+    assert.match(await response.text(), /<title>D\$CPLN Insights<\/title>/)
+})
+
 test('imports transactions and rejects invalid batches atomically', async (t) => {
     const { server, baseUrl } = await startServer()
     t.after(() => new Promise((resolve) => server.close(resolve)))

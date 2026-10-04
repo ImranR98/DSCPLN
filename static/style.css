@@ -1070,6 +1070,9 @@ details.card[open] > summary::after {
     box-shadow: var(--shadow-md);
     max-height: 14rem;
     overflow: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
 }
 
 .autocomplete__option {
@@ -1081,6 +1084,8 @@ details.card[open] > summary::after {
     border-radius: var(--radius-xs);
     cursor: pointer;
     font-size: var(--fs-sm);
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .autocomplete__option:hover,

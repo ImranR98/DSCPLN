@@ -562,6 +562,10 @@ h1 .accent {
     color: var(--ok);
 }
 
+.mini-grid__value--conv {
+    color: var(--text-muted);
+}
+
 .mini-grid--primary {
     gap: var(--space-2) var(--space-3);
     font-size: var(--fs-md);
@@ -657,6 +661,11 @@ h1 .accent {
 .currency-card__earned {
     color: var(--ok);
     font-weight: 600;
+}
+
+.currency-card__converted {
+    font-size: var(--fs-2xs);
+    color: var(--text-muted);
 }
 
 /* ---------- Transactions ---------- */
@@ -886,6 +895,10 @@ details.card[open] > summary::after {
     fill: var(--ok);
 }
 
+.history__total--conv {
+    fill: var(--text-muted);
+}
+
 .history__band {
     fill: var(--accent);
     opacity: 0.08;
@@ -977,6 +990,13 @@ details.card[open] > summary::after {
 
 .history-tooltip__in {
     color: var(--ok);
+}
+
+.history-tooltip__conv {
+    margin-top: -2px;
+    font-size: var(--fs-2xs);
+    color: var(--text-muted);
+    text-align: right;
 }
 
 /* ---------- Dialog ---------- */

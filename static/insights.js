@@ -295,8 +295,11 @@ function renderContent() {
 
 function buildSection(code, rangeTxs) {
     const currency = (state.reference.currencies || []).find((entry) => entry.code === code) || { code }
-    const excluded = state.excluded.get(code) || new Set()
-    state.excluded.set(code, excluded)
+    let excluded = state.excluded.get(code)
+    if (!excluded) {
+        excluded = new Set(state.reference.conversionCategories || [])
+        state.excluded.set(code, excluded)
+    }
 
     const included = rangeTxs.filter((transaction) => !excluded.has(transaction.category))
     const previousRange = IM.previousRange(state.range.start, state.range.end)

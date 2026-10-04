@@ -89,7 +89,7 @@ test('reads constants, categories, currencies and budget', async () => {
     assert.equal(usd.monthlyBudget, 500)
     assert.equal(usd.firstDayBias, 100)
     assert.equal(currencyOf(data, 'XMR').monthlyBudget, 0)
-    assert.deepEqual(data.categories.map((entry) => entry.group), ['Main Expenses', 'Extra Expenses', 'Special Expenses', 'Money In'])
+    assert.deepEqual(data.categories.map((entry) => entry.group), ['Main Expenses', 'Extra Expenses', 'Special Expenses', 'Money In', 'Conversions'])
     assert.equal(data.categories.find((entry) => entry.group === 'Money In').categories.includes('Job'), true)
 })
 
@@ -162,7 +162,7 @@ test('returns 12 months of per-currency history ending with the viewed month', a
     assert.deepEqual([data.history[11].year, data.history[11].month], [2026, 9])
     assert.equal(data.history[11].currencies.CAD.spend, 1472.23)
     assert.equal(data.history[11].currencies.CAD.income, 2645)
-    assert.deepEqual(data.history[0].currencies.XMR, { spend: 0, income: 0 })
+    assert.deepEqual(data.history[0].currencies.XMR, { spend: 0, income: 0, convertedOut: 0, convertedIn: 0 })
     const june = data.history.find((entry) => entry.year === 2026 && entry.month === 6)
     assert.equal(june.currencies.XMR.spend, 0.05)
 })
@@ -182,7 +182,7 @@ test('history zero-fills months without data', async () => {
     const january = data.history.find((entry) => entry.year === 2026 && entry.month === 1)
     assert.equal(january.currencies.CAD.spend, 100)
     const february = data.history.find((entry) => entry.year === 2026 && entry.month === 2)
-    assert.deepEqual(february.currencies.CAD, { spend: 0, income: 0 })
+    assert.deepEqual(february.currencies.CAD, { spend: 0, income: 0, convertedOut: 0, convertedIn: 0 })
 })
 
 test('preserves high-precision amounts like fractional XMR', async () => {
@@ -411,6 +411,49 @@ test('accepts ordinary decimal amounts without float-precision false positives',
     const tiny = await provider.addTransaction({ ...base, amount: 0.05, currency: 'XMR' })
     assert.equal(tiny.expenses, 0.05)
     await assert.rejects(provider.addTransaction({ ...base, amount: 1.1234567890123 }), ValidationError)
+})
+
+test('tracks currency conversions separately from spend and income', async () => {
+    const { provider } = setup()
+    await provider.addTransaction({
+        kind: 'expense', amount: 500, details: 'Convert to USD', date: '2026-09-10',
+        category: 'Conversion', currency: 'CAD', notes: '',
+    })
+    await provider.addTransaction({
+        kind: 'income', amount: 360, details: 'Convert from CAD', date: '2026-09-10',
+        category: 'Conversion', currency: 'USD', notes: '',
+    })
+    await provider.addTransaction({
+        kind: 'expense', amount: 120, details: 'Convert to USD', date: '2026-08-10',
+        category: 'Conversion', currency: 'CAD', notes: '',
+    })
+    const data = await provider.getData(new Date(2026, 8, 15))
+    const cad = currencyOf(data, 'CAD')
+    const usd = currencyOf(data, 'USD')
+    // Existing September spend/income exclude the conversions.
+    assert.equal(cad.monthsSpend, 1472.23)
+    assert.equal(cad.monthsIncome, 2645)
+    assert.equal(cad.monthsConvertedOut, 500)
+    assert.equal(cad.monthsConvertedIn, 0)
+    assert.equal(usd.monthsConvertedIn, 360)
+    assert.equal(usd.monthsIncome, 0)
+    assert.equal(usd.hasActivity, true)
+    assert.deepEqual(data.conversionCategories, ['Conversion'])
+    const september = data.history.find((entry) => entry.year === 2026 && entry.month === 9)
+    assert.equal(september.currencies.CAD.convertedOut, 500)
+    assert.equal(september.currencies.USD.convertedIn, 360)
+    assert.equal(cad.previousMonthsConvertedOut, 120)
+    assert.equal(cad.trailingConvertedOutAverage, 10)
+    // Conversions are valid for both kinds.
+    const incomeConversion = await provider.addTransaction({
+        kind: 'income', amount: 10, details: 'Convert in', date: '2026-09-11',
+        category: 'Conversion', currency: 'XMR', notes: '',
+    })
+    assert.equal(incomeConversion.kind, 'income')
+    await assert.rejects(provider.addTransaction({
+        kind: 'income', amount: 1, details: 'x', date: '2026-09-15',
+        category: 'Rent', currency: 'CAD', notes: '',
+    }), ValidationError)
 })
 
 test('writes per-currency budgets into the Constants sheet', async () => {

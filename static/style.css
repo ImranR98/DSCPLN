@@ -13,6 +13,13 @@
     --over: #d92d20;
     --shadow: 0 1px 2px rgba(21, 23, 28, 0.05), 0 4px 12px rgba(21, 23, 28, 0.05);
 
+    --chart-1: #2f6fed;
+    --chart-2: #17974a;
+    --chart-3: #b26205;
+    --chart-4: #8b5cf6;
+    --chart-5: #0891b2;
+    --chart-6: #d92d20;
+
     --radius: 14px;
     --radius-sm: 10px;
     --radius-pill: 999px;
@@ -46,6 +53,13 @@ html[data-theme="dark"] {
     --warn: #e8b44a;
     --over: #ff6b6b;
     --shadow: none;
+
+    --chart-1: #6ea1ff;
+    --chart-2: #4cc38a;
+    --chart-3: #e8b44a;
+    --chart-4: #b39dff;
+    --chart-5: #4cc9e0;
+    --chart-6: #ff6b6b;
 }
 
 * {
@@ -80,6 +94,40 @@ body {
 
 .muted {
     color: var(--text-muted);
+}
+
+/* ---------- Layout ---------- */
+
+.layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+    align-items: start;
+}
+
+.layout__main,
+.layout__side {
+    min-width: 0;
+}
+
+.layout__side {
+    container-type: inline-size;
+    container-name: side;
+}
+
+.layout__main > :last-child,
+.layout__side > :last-child {
+    margin-bottom: 0;
+}
+
+@media (min-width: 64rem) {
+    body {
+        max-width: 100rem;
+    }
+
+    .layout {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
 }
 
 /* ---------- Header ---------- */
@@ -437,7 +485,8 @@ details.card[open] > summary::after {
 
 .expense {
     display: grid;
-    grid-template-columns: 3.1rem minmax(0, 1fr) auto auto auto auto;
+    grid-template-columns: 3.1rem minmax(0, 1fr) auto auto auto;
+    grid-template-areas: "date desc meta amount actions";
     gap: var(--space-2);
     align-items: center;
     padding: var(--space-2) 0;
@@ -447,6 +496,31 @@ details.card[open] > summary::after {
 
 .expense:first-child {
     border-top: 0;
+}
+
+.expense__date {
+    grid-area: date;
+}
+
+.expense__desc {
+    grid-area: desc;
+}
+
+.expense__meta {
+    grid-area: meta;
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    min-width: 0;
+    gap: var(--space-1);
+}
+
+.expense__amount {
+    grid-area: amount;
+}
+
+.expense__actions {
+    grid-area: actions;
 }
 
 .expense__currency,
@@ -488,7 +562,8 @@ details.card[open] > summary::after {
 .expense__amount {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-    white-space: nowrap;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .expense__amount--in {
@@ -620,7 +695,7 @@ details.card[open] > summary::after {
     display: grid;
     grid-template-columns: auto repeat(3, minmax(0, 1fr));
     gap: var(--space-1) var(--space-3);
-    margin-top: var(--space-2);
+    margin-top: var(--space-3);
     font-size: var(--text-sm);
     font-variant-numeric: tabular-nums;
 }
@@ -639,7 +714,10 @@ details.card[open] > summary::after {
 }
 
 .mini-grid__value {
+    min-width: 0;
     text-align: right;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
 }
 
 .mini-grid__value--in {
@@ -648,7 +726,6 @@ details.card[open] > summary::after {
 
 .mini-grid--primary {
     gap: var(--space-1) var(--space-3);
-    margin-top: var(--space-5);
     font-size: var(--text-lg);
 }
 
@@ -691,6 +768,178 @@ details.card[open] > summary::after {
         font-size: 0.65rem;
         letter-spacing: 0.04em;
     }
+
+    #historyCard .card__header {
+        flex-wrap: wrap;
+        row-gap: var(--space-1);
+    }
+}
+
+/* Transaction rows use a two-line layout whenever their own column is narrow
+   (mobile, or a cramped side column), regardless of the viewport width. */
+@container side (max-width: 32rem) {
+    .expense {
+        grid-template-columns: 3.1rem minmax(0, 1fr) auto;
+        grid-template-areas:
+            "date desc amount"
+            "date meta actions";
+        row-gap: var(--space-1);
+    }
+}
+
+/* Fallback for browsers without container queries. */
+@supports not (container-type: inline-size) {
+    @media (max-width: 30rem), (min-width: 64rem) {
+        .expense {
+            grid-template-columns: 3.1rem minmax(0, 1fr) auto;
+            grid-template-areas:
+                "date desc amount"
+                "date meta actions";
+            row-gap: var(--space-1);
+        }
+    }
+}
+
+/* ---------- History chart ---------- */
+
+#historyCard {
+    position: relative;
+}
+
+.history {
+    position: relative;
+}
+
+.history__svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.history__grid {
+    stroke: var(--border);
+    stroke-width: 1;
+}
+
+.history__baseline {
+    stroke: var(--border);
+    stroke-width: 1.5;
+}
+
+.history__tick {
+    font-size: 11px;
+    fill: var(--text-muted);
+    text-anchor: end;
+}
+
+.history__lane-label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    fill: var(--text-muted);
+}
+
+.history__label {
+    font-size: 11px;
+    fill: var(--text-muted);
+    text-anchor: middle;
+}
+
+.history__divider {
+    stroke: var(--border);
+    stroke-width: 1;
+}
+
+.history__total {
+    font-size: 11px;
+    fill: var(--text);
+    text-anchor: end;
+    font-variant-numeric: tabular-nums;
+}
+
+.history__total--in {
+    fill: var(--ok);
+}
+
+.history__band {
+    fill: var(--accent);
+    opacity: 0.08;
+}
+
+.history__hit {
+    fill: transparent;
+}
+
+.history__bar--in {
+    fill-opacity: 0.35;
+    stroke-width: 1;
+}
+
+.history-legend {
+    display: inline-flex;
+    gap: var(--space-3);
+    font-size: var(--text-xs);
+    font-weight: 400;
+    color: var(--text-muted);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.history-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.history-legend__swatch {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 3px;
+    background: var(--text-muted);
+}
+
+.history-legend__swatch--in {
+    opacity: 0.35;
+}
+
+.history-tooltip {
+    position: absolute;
+    z-index: 3;
+    pointer-events: none;
+    min-width: 10rem;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    font-size: var(--text-xs);
+    color: var(--text);
+}
+
+.history-tooltip__title {
+    display: block;
+    margin-bottom: var(--space-1);
+}
+
+.history-tooltip__row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: var(--space-2);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.history-tooltip__code {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.history-tooltip__out,
+.history-tooltip__in {
+    text-align: right;
+}
+
+.history-tooltip__in {
+    color: var(--ok);
 }
 
 /* ---------- Toasts ---------- */

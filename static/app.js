@@ -35,6 +35,10 @@ const els = {
     monthEarnAvg: $('monthEarnAvg'),
     primaryBudgetButton: $('primaryBudgetButton'),
     otherCurrencies: $('otherCurrencies'),
+    historyCard: $('historyCard'),
+    historyRange: $('historyRange'),
+    historyChart: $('historyChart'),
+    historyTooltip: $('historyTooltip'),
     expensesList: $('expensesList'),
     expensesMeta: $('expensesMeta'),
     expensesEmpty: $('expensesEmpty'),
@@ -105,6 +109,7 @@ const state = {
 }
 
 let suggestionTimer = null
+let historyResizeTimer = null
 let fetchSequence = 0
 
 function startOfDay(date) {
@@ -138,20 +143,83 @@ function toNumber(value) {
     return Number.isFinite(n) ? n : 0
 }
 
-// Shows at least 2 decimals, plus more when the value is smaller than a cent
-// (e.g. fractional XMR), without excessive trailing zeros.
-function money(value) {
+// Shows at least 2 decimals and enough more to keep the value's significant
+// digits (e.g. fractional XMR), without excessive trailing zeros.
+function fractionDigitsFor(value, significantDigits) {
+    const absolute = Math.abs(value)
+    if (!Number.isFinite(absolute) || absolute === 0) {
+        return 2
+    }
+    return Math.min(12, Math.max(2, significantDigits - 1 - Math.floor(Math.log10(absolute))))
+}
+
+// Currencies whose data needs more than cents (e.g. XMR) keep significant
+// digits even for values of 1 or more; everything else uses plain 2 decimals.
+let fractionalCurrencies = new Set()
+let fractionalCurrenciesSource = null
+
+function hasSubCentPrecision(value) {
+    const amount = Number(value)
+    return Number.isFinite(amount) && Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6
+}
+
+function isFractionalCurrency(code) {
+    const history = (state.data && state.data.history) || []
+    if (fractionalCurrenciesSource !== history) {
+        fractionalCurrencies = new Set()
+        for (const entry of history) {
+            for (const [currencyCode, totals] of Object.entries(entry.currencies || {})) {
+                if (hasSubCentPrecision(totals.spend) || hasSubCentPrecision(totals.income)) {
+                    fractionalCurrencies.add(currencyCode)
+                }
+            }
+        }
+        fractionalCurrenciesSource = history
+    }
+    return code ? fractionalCurrencies.has(code) : false
+}
+
+function money(value, code) {
     const amount = Number.isFinite(value) ? value : 0
-    const absolute = Math.abs(amount)
-    const decimals = absolute === 0 || absolute >= 0.01 ?
-        2 :
-        Math.min(12, 3 - Math.floor(Math.log10(absolute)))
+    const decimals = code && isFractionalCurrency(code) ?
+        fractionDigitsFor(amount, 12) :
+        (Math.abs(amount) < 1 ? fractionDigitsFor(amount, 8) : 2)
     let formatter = moneyFormatters.get(decimals)
     if (!formatter) {
         formatter = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: decimals })
         moneyFormatters.set(decimals, formatter)
     }
     return `$${formatter.format(amount)}`
+}
+
+// Inserts <wbr> after thousands separators, decimal points and every third
+// fraction digit, so long money values wrap at sensible points instead of
+// mid-digit when space is tight.
+function setBreakableText(element, text) {
+    element.textContent = ''
+    let start = 0
+    let inFraction = false
+    let sinceBreak = 0
+    const addBreak = (index) => {
+        element.append(document.createTextNode(text.slice(start, index + 1)))
+        element.append(document.createElement('wbr'))
+        start = index + 1
+    }
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i]
+        if (char === ',' || char === '.') {
+            inFraction = char === '.'
+            sinceBreak = 0
+            addBreak(i)
+        } else if (inFraction && char >= '0' && char <= '9') {
+            sinceBreak += 1
+            if (sinceBreak === 3) {
+                sinceBreak = 0
+                addBreak(i)
+            }
+        }
+    }
+    element.append(document.createTextNode(text.slice(start)))
 }
 
 function getSelectedKind() {
@@ -232,6 +300,7 @@ function render() {
     renderContext()
     renderMonth(primaryCurrency())
     renderOtherCurrencies()
+    renderHistory()
     renderExpenses()
     syncControls()
 }
@@ -264,20 +333,21 @@ function setProgress(bar, fill, spent, budget) {
     bar.setAttribute('aria-valuetext', budget > 0 ? `${Math.round(pct)}% of budget used` : 'No budget set')
 }
 
-function setPace(el, budget, spent, fraction) {
+function setPace(el, budget, spent, fraction, code) {
     if (budget <= 0) {
         el.textContent = ''
         el.className = 'pace'
         return
     }
     const delta = budget * fraction - spent
-    el.textContent = `${money(Math.abs(delta))} ${delta >= 0 ? 'less' : 'more'} than expected`
+    el.textContent = `${money(Math.abs(delta), code)} ${delta >= 0 ? 'less' : 'more'} than expected`
     el.className = `pace ${delta >= 0 ? 'pace--ok' : 'pace--over'}`
 }
 
 function renderMonth(currency) {
     const budget = currency ? toNumber(currency.monthlyBudget) : 0
     const spent = currency ? toNumber(currency.monthsSpend) : 0
+    const code = currency ? currency.code : null
     const date = state.viewDate
     const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
     const day = date.getDate()
@@ -286,27 +356,27 @@ function renderMonth(currency) {
 
     els.monthHeading.textContent = currency ? currency.code : 'Main'
     els.monthName.textContent = monthFormat.format(date)
-    els.monthSpend.textContent = money(spent)
-    els.monthBudget.textContent = budget > 0 ? money(budget) : 'no budget'
+    setBreakableText(els.monthSpend, money(spent, code))
+    setBreakableText(els.monthBudget, budget > 0 ? money(budget, code) : 'no budget')
     if (budget <= 0) {
         els.monthRemaining.textContent = 'Set a budget to track your spending.'
         els.monthDaily.textContent = ''
     } else if (remaining >= 0) {
-        els.monthRemaining.textContent = `${money(remaining)} left`
-        els.monthDaily.textContent = `${money(remaining / daysLeft)}/day · ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left`
+        els.monthRemaining.textContent = `${money(remaining, code)} left`
+        els.monthDaily.textContent = `${money(remaining / daysLeft, code)}/day · ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left`
     } else {
-        els.monthRemaining.textContent = `${money(-remaining)} over`
+        els.monthRemaining.textContent = `${money(-remaining, code)} over`
         els.monthDaily.textContent = ''
     }
-    els.monthSpentThis.textContent = money(spent)
-    els.monthSpentPrev.textContent = money(currency ? toNumber(currency.previousMonthsSpend) : 0)
-    els.monthSpentAvg.textContent = money(currency ? toNumber(currency.trailingSpendAverage) : 0)
-    els.monthEarnThis.textContent = `+${money(currency ? toNumber(currency.monthsIncome) : 0)}`
-    els.monthEarnPrev.textContent = `+${money(currency ? toNumber(currency.previousMonthsIncome) : 0)}`
-    els.monthEarnAvg.textContent = `+${money(currency ? toNumber(currency.trailingIncomeAverage) : 0)}`
+    setBreakableText(els.monthSpentThis, money(spent, code))
+    setBreakableText(els.monthSpentPrev, money(currency ? toNumber(currency.previousMonthsSpend) : 0, code))
+    setBreakableText(els.monthSpentAvg, money(currency ? toNumber(currency.trailingSpendAverage) : 0, code))
+    setBreakableText(els.monthEarnThis, `+${money(currency ? toNumber(currency.monthsIncome) : 0, code)}`)
+    setBreakableText(els.monthEarnPrev, `+${money(currency ? toNumber(currency.previousMonthsIncome) : 0, code)}`)
+    setBreakableText(els.monthEarnAvg, `+${money(currency ? toNumber(currency.trailingIncomeAverage) : 0, code)}`)
 
     const expected = currency && currency.monthsExpectedSpend != null ? toNumber(currency.monthsExpectedSpend) : budget * (day / daysInMonth)
-    setPace(els.monthPace, budget, spent, budget > 0 ? expected / budget : 0)
+    setPace(els.monthPace, budget, spent, budget > 0 ? expected / budget : 0, code)
     setProgress(els.monthProgress, els.monthProgressFill, spent, budget)
     setCardState(els.monthCard, spent, budget)
 }
@@ -332,18 +402,19 @@ function buildCurrencyCard(currency) {
     const budget = toNumber(currency.monthlyBudget)
     const spent = toNumber(currency.monthsSpend)
     const remaining = budget - spent
+    const code = currency.code
 
     const figure = document.createElement('p')
     figure.className = 'figure'
     const spendEl = document.createElement('span')
     spendEl.className = 'figure__spend'
-    spendEl.textContent = money(spent)
+    setBreakableText(spendEl, money(spent, code))
     const ofEl = document.createElement('span')
     ofEl.className = 'figure__of'
     ofEl.textContent = budget > 0 ? 'of' : ''
     const budgetEl = document.createElement('span')
     budgetEl.className = 'figure__budget'
-    budgetEl.textContent = budget > 0 ? money(budget) : 'no budget'
+    setBreakableText(budgetEl, budget > 0 ? money(budget, code) : 'no budget')
     figure.append(spendEl, ofEl, budgetEl)
 
     const progress = document.createElement('div')
@@ -366,13 +437,13 @@ function buildCurrencyCard(currency) {
     if (budget <= 0) {
         statsMain.textContent = 'No budget'
     } else {
-        statsMain.textContent = remaining >= 0 ? `${money(remaining)} left` : `${money(-remaining)} over`
+        statsMain.textContent = remaining >= 0 ? `${money(remaining, code)} left` : `${money(-remaining, code)} over`
     }
     const pace = document.createElement('span')
     pace.className = 'pace'
     if (budget > 0 && currency.monthsExpectedSpend != null) {
         const delta = toNumber(currency.monthsExpectedSpend) - spent
-        pace.textContent = `${money(Math.abs(delta))} ${delta >= 0 ? 'less' : 'more'} than expected`
+        pace.textContent = `${money(Math.abs(delta), code)} ${delta >= 0 ? 'less' : 'more'} than expected`
         pace.className = `pace ${delta >= 0 ? 'pace--ok' : 'pace--over'}`
     }
     stats.append(statsMain, pace)
@@ -382,7 +453,11 @@ function buildCurrencyCard(currency) {
     const addCell = (text, className) => {
         const cell = document.createElement('span')
         cell.className = className
-        cell.textContent = text
+        if (className.includes('mini-grid__value')) {
+            setBreakableText(cell, text)
+        } else {
+            cell.textContent = text
+        }
         grid.appendChild(cell)
     }
     addCell('', 'mini-grid__label')
@@ -390,13 +465,13 @@ function buildCurrencyCard(currency) {
     addCell('Last month', 'mini-grid__header')
     addCell('12-mo avg', 'mini-grid__header')
     addCell('Spent', 'mini-grid__label')
-    addCell(money(spent), 'mini-grid__value')
-    addCell(money(toNumber(currency.previousMonthsSpend)), 'mini-grid__value')
-    addCell(money(toNumber(currency.trailingSpendAverage)), 'mini-grid__value')
+    addCell(money(spent, code), 'mini-grid__value')
+    addCell(money(toNumber(currency.previousMonthsSpend), code), 'mini-grid__value')
+    addCell(money(toNumber(currency.trailingSpendAverage), code), 'mini-grid__value')
     addCell('Earned', 'mini-grid__label')
-    addCell(`+${money(toNumber(currency.monthsIncome))}`, 'mini-grid__value mini-grid__value--in')
-    addCell(`+${money(toNumber(currency.previousMonthsIncome))}`, 'mini-grid__value mini-grid__value--in')
-    addCell(`+${money(toNumber(currency.trailingIncomeAverage))}`, 'mini-grid__value mini-grid__value--in')
+    addCell(`+${money(toNumber(currency.monthsIncome), code)}`, 'mini-grid__value mini-grid__value--in')
+    addCell(`+${money(toNumber(currency.previousMonthsIncome), code)}`, 'mini-grid__value mini-grid__value--in')
+    addCell(`+${money(toNumber(currency.trailingIncomeAverage), code)}`, 'mini-grid__value mini-grid__value--in')
 
     card.append(header, figure, progress, stats, grid)
     return card
@@ -409,6 +484,355 @@ function renderOtherCurrencies() {
     for (const currency of currencies) {
         els.otherCurrencies.appendChild(buildCurrencyCard(currency))
     }
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg'
+const monthYearFormat = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' })
+const compactNumberFormat = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 })
+
+function svgElement(tag, attributes = {}) {
+    const element = document.createElementNS(SVG_NS, tag)
+    for (const [name, value] of Object.entries(attributes)) {
+        element.setAttribute(name, value)
+    }
+    return element
+}
+
+function niceMax(value) {
+    if (!Number.isFinite(value) || value <= 0) {
+        return 0
+    }
+    const exponent = Math.floor(Math.log10(value))
+    const base = 10 ** exponent
+    const fraction = value / base
+    const nice = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10
+    return nice * base
+}
+
+function tickMoney(value) {
+    const amount = Number.isFinite(value) ? value : 0
+    const absolute = Math.abs(amount)
+    if (absolute >= 1000) {
+        return `$${compactNumberFormat.format(amount)}`
+    }
+    if (absolute >= 1) {
+        return `$${Math.round(amount).toLocaleString()}`
+    }
+    const decimals = fractionDigitsFor(amount, 3)
+    return `$${amount.toFixed(decimals).replace(/0+$/, '').replace(/\.$/, '')}`
+}
+
+function historyMonthLabel(entry, index) {
+    const date = new Date(entry.year, entry.month - 1, 1)
+    const base = monthYearFormat.formatToParts(date).find((part) => part.type === 'month').value
+    if (index === 0 || entry.month === 1) {
+        return `${base} '${String(entry.year).slice(-2)}`
+    }
+    return base
+}
+
+function buildHistoryTooltip(monthIndex, activeCurrencies) {
+    const entry = state.data.history[monthIndex]
+    const container = document.createElement('div')
+    const title = document.createElement('strong')
+    title.className = 'history-tooltip__title'
+    title.textContent = monthYearFormat.format(new Date(entry.year, entry.month - 1, 1))
+    container.appendChild(title)
+    for (const code of activeCurrencies) {
+        const totals = entry.currencies[code] || { spend: 0, income: 0 }
+        const row = document.createElement('div')
+        row.className = 'history-tooltip__row'
+        const codeEl = document.createElement('span')
+        codeEl.className = 'history-tooltip__code'
+        codeEl.textContent = code
+        const outEl = document.createElement('span')
+        outEl.className = 'history-tooltip__out'
+        outEl.textContent = `${money(toNumber(totals.spend), code)} out`
+        const inEl = document.createElement('span')
+        inEl.className = 'history-tooltip__in'
+        inEl.textContent = `+${money(toNumber(totals.income), code)} in`
+        row.append(codeEl, outEl, inEl)
+        container.appendChild(row)
+    }
+    return container
+}
+
+function measureTextWidth(text, className) {
+    const span = document.createElement('span')
+    span.className = className
+    span.textContent = text
+    span.style.position = 'absolute'
+    span.style.visibility = 'hidden'
+    span.style.whiteSpace = 'nowrap'
+    els.historyCard.appendChild(span)
+    const width = span.getBoundingClientRect().width
+    span.remove()
+    return width
+}
+
+function renderHistory() {
+    const history = state.data.history || []
+    const codes = (state.data.currencies || []).map((currency) => currency.code)
+    const active = codes.filter((code) => history.some((entry) => {
+        const totals = entry.currencies && entry.currencies[code]
+        return totals && (totals.spend > 0 || totals.income > 0)
+    }))
+
+    els.historyTooltip.hidden = true
+    els.historyChart.textContent = ''
+    els.historyCard.hidden = history.length === 0 || active.length === 0
+    if (els.historyCard.hidden) {
+        return
+    }
+
+    const first = history[0]
+    const last = history[history.length - 1]
+    els.historyRange.textContent = active.length ?
+        `${monthYearFormat.format(new Date(first.year, first.month - 1, 1))} – ${monthYearFormat.format(new Date(last.year, last.month - 1, 1))}` :
+        ''
+
+    // The SVG is built in real pixels (viewBox matches the rendered width), so
+    // text stays legible on small screens. Column widths that hold numbers are
+    // measured from the actual text so long values can't be clipped.
+    const width = Math.max(240, Math.round(els.historyChart.clientWidth || 720))
+    const topPad = 6
+    const laneHeight = 92
+    const axisHeight = 26
+
+    const laneMax = new Map()
+    let maxTickWidth = 0
+    for (const code of active) {
+        const max = niceMax(Math.max(...history.map((entry) => {
+            const totals = entry.currencies[code] || { spend: 0, income: 0 }
+            return Math.max(totals.spend, totals.income)
+        })))
+        for (const factor of [0.5, 1]) {
+            if (max > 0) {
+                maxTickWidth = Math.max(maxTickWidth, measureTextWidth(tickMoney(max * factor), 'history__tick'))
+            }
+        }
+        laneMax.set(code, max)
+    }
+
+    // The Total column is capped (30% of the chart) so long fractional-currency
+    // values can't shrink the plot. Values that don't fit wrap onto their own
+    // line beneath the "out"/"in" label.
+    const totalColumnCap = Math.max(84, Math.round(width * 0.3))
+    const totalTextWidth = totalColumnCap - 12
+    const totalLinesByCode = new Map()
+    let maxTotalLineWidth = 0
+    const breakTotalText = (text, className, maxWidth) => {
+        if (measureTextWidth(text, className) <= maxWidth) return [text]
+        // Prefer breaking after the decimal point so the whole part stays intact.
+        const dotIndex = text.lastIndexOf('.')
+        if (dotIndex > 0) {
+            const whole = text.slice(0, dotIndex + 1)
+            const fraction = text.slice(dotIndex + 1)
+            if (measureTextWidth(whole, className) <= maxWidth && measureTextWidth(fraction, className) <= maxWidth) {
+                return [whole, fraction]
+            }
+        }
+        // Otherwise split into the fewest balanced lines that each fit.
+        const totalWidth = measureTextWidth(text, className)
+        const lineCount = Math.ceil(totalWidth / maxWidth)
+        const targetWidth = totalWidth / lineCount
+        const parts = []
+        let current = ''
+        for (const char of text) {
+            const candidate = current + char
+            if (current && parts.length < lineCount - 1 && measureTextWidth(candidate, className) > targetWidth) {
+                parts.push(current)
+                current = char
+            } else {
+                current = candidate
+            }
+        }
+        if (current) parts.push(current)
+        return parts
+    }
+    for (const code of active) {
+        const totalSpend = Number.parseFloat(history.reduce((sum, entry) =>
+            sum + ((entry.currencies[code] || {}).spend || 0), 0).toPrecision(12))
+        const totalIncome = Number.parseFloat(history.reduce((sum, entry) =>
+            sum + ((entry.currencies[code] || {}).income || 0), 0).toPrecision(12))
+        const lines = []
+        for (const entry of [
+            { label: 'out', value: money(totalSpend, code), isIn: false },
+            { label: 'in', value: `+${money(totalIncome, code)}`, isIn: true },
+        ]) {
+            const full = `${entry.label} ${entry.value}`
+            if (measureTextWidth(full, 'history__total') <= totalTextWidth) {
+                lines.push({ text: full, isIn: entry.isIn })
+            } else {
+                lines.push({ text: entry.label, isIn: entry.isIn })
+                for (const part of breakTotalText(entry.value, 'history__total', totalTextWidth)) {
+                    lines.push({ text: part, isIn: entry.isIn })
+                }
+            }
+        }
+        for (const line of lines) {
+            maxTotalLineWidth = Math.max(maxTotalLineWidth, measureTextWidth(line.text, 'history__total'))
+        }
+        totalLinesByCode.set(code, lines)
+    }
+
+    const leftPad = Math.max(40, Math.ceil(maxTickWidth) + 10)
+    const rightPad = 6
+    const totalColumnWidth = Math.min(Math.max(84, Math.ceil(maxTotalLineWidth) + 12), totalColumnCap)
+    const plotWidth = Math.max(40, width - leftPad - rightPad - totalColumnWidth)
+    const dividerX = leftPad + plotWidth
+    const columnWidth = plotWidth / history.length
+    const labelStep = columnWidth < 34 ? 3 : columnWidth < 46 ? 2 : 1
+    const groupWidth = columnWidth * 0.7
+    const barGap = 1.5
+    const barWidth = Math.max(1, (groupWidth - barGap) / 2)
+    const height = topPad + active.length * laneHeight + axisHeight
+
+    const svg = svgElement('svg', {
+        viewBox: `0 0 ${width} ${height}`,
+        class: 'history__svg',
+        role: 'img',
+        'aria-label': `Monthly money in and out over the last ${history.length} months for ${active.join(', ')}`,
+    })
+
+    const band = svgElement('rect', {
+        class: 'history__band',
+        y: topPad,
+        width: columnWidth,
+        height: active.length * laneHeight,
+    })
+    band.style.display = 'none'
+    svg.appendChild(band)
+
+    active.forEach((code, laneIndex) => {
+        const laneTop = topPad + laneIndex * laneHeight
+        const plotTop = laneTop + 24
+        const baseline = laneTop + laneHeight - 8
+        const plotHeight = baseline - plotTop
+        const max = laneMax.get(code)
+
+        const laneLabel = svgElement('text', { x: 4, y: laneTop + 10, class: 'history__lane-label' })
+        laneLabel.textContent = code
+        svg.appendChild(laneLabel)
+
+        for (const factor of [0, 0.5, 1]) {
+            const y = baseline - plotHeight * factor
+            svg.appendChild(svgElement('line', {
+                x1: leftPad,
+                x2: dividerX,
+                y1: y,
+                y2: y,
+                class: factor === 0 ? 'history__baseline' : 'history__grid',
+            }))
+            if (factor > 0 && max > 0) {
+                const tick = svgElement('text', { x: leftPad - 6, y: y + 3.5, class: 'history__tick' })
+                tick.textContent = tickMoney(max * factor)
+                svg.appendChild(tick)
+            }
+        }
+
+        history.forEach((entry, monthIndex) => {
+            const totals = entry.currencies[code] || { spend: 0, income: 0 }
+            const groupLeft = leftPad + monthIndex * columnWidth + (columnWidth - groupWidth) / 2
+            const outHeight = max > 0 ? (totals.spend / max) * plotHeight : 0
+            const inHeight = max > 0 ? (totals.income / max) * plotHeight : 0
+            if (outHeight > 0) {
+                const bar = svgElement('rect', {
+                    x: groupLeft,
+                    y: baseline - outHeight,
+                    width: barWidth,
+                    height: outHeight,
+                    class: 'history__bar',
+                })
+                bar.style.fill = `var(--chart-${(laneIndex % 6) + 1})`
+                svg.appendChild(bar)
+            }
+            if (inHeight > 0) {
+                const bar = svgElement('rect', {
+                    x: groupLeft + barWidth + barGap,
+                    y: baseline - inHeight,
+                    width: barWidth,
+                    height: inHeight,
+                    class: 'history__bar history__bar--in',
+                })
+                bar.style.fill = `var(--chart-${(laneIndex % 6) + 1})`
+                bar.style.stroke = `var(--chart-${(laneIndex % 6) + 1})`
+                svg.appendChild(bar)
+            }
+            if (laneIndex === active.length - 1 && monthIndex % labelStep === 0) {
+                const label = svgElement('text', {
+                    x: leftPad + monthIndex * columnWidth + columnWidth / 2,
+                    y: height - 8,
+                    class: 'history__label',
+                })
+                label.textContent = historyMonthLabel(entry, monthIndex)
+                svg.appendChild(label)
+            }
+        })
+
+        const totalLines = totalLinesByCode.get(code)
+        const totalLineHeight = 14
+        const totalStartY = laneTop + (laneHeight - totalLines.length * totalLineHeight) / 2 + 11
+        totalLines.forEach((line, lineIndex) => {
+            const totalText = svgElement('text', {
+                x: width - rightPad,
+                y: totalStartY + lineIndex * totalLineHeight,
+                class: line.isIn ? 'history__total history__total--in' : 'history__total',
+            })
+            totalText.textContent = line.text
+            svg.appendChild(totalText)
+        })
+    })
+
+    svg.appendChild(svgElement('line', {
+        x1: dividerX,
+        x2: dividerX,
+        y1: topPad,
+        y2: topPad + active.length * laneHeight,
+        class: 'history__divider',
+    }))
+    const totalHeader = svgElement('text', {
+        x: dividerX + totalColumnWidth / 2,
+        y: height - 7,
+        class: 'history__label',
+    })
+    totalHeader.textContent = 'Total'
+    svg.appendChild(totalHeader)
+
+    history.forEach((entry, monthIndex) => {
+        const hit = svgElement('rect', {
+            x: leftPad + monthIndex * columnWidth,
+            y: topPad,
+            width: columnWidth,
+            height: active.length * laneHeight,
+            class: 'history__hit',
+        })
+        const show = (event) => {
+            band.style.display = ''
+            band.setAttribute('x', leftPad + monthIndex * columnWidth)
+            els.historyTooltip.textContent = ''
+            els.historyTooltip.appendChild(buildHistoryTooltip(monthIndex, active))
+            els.historyTooltip.hidden = false
+            const cardRect = els.historyCard.getBoundingClientRect()
+            const tooltipWidth = els.historyTooltip.offsetWidth
+            const tooltipHeight = els.historyTooltip.offsetHeight
+            const relativeX = event.clientX - cardRect.left
+            const relativeY = event.clientY - cardRect.top
+            const left = Math.max(4, Math.min(relativeX + 12, cardRect.width - tooltipWidth - 4))
+            const top = Math.max(4, Math.min(relativeY + 12, cardRect.height - tooltipHeight - 4))
+            els.historyTooltip.style.left = `${left}px`
+            els.historyTooltip.style.top = `${top}px`
+        }
+        hit.addEventListener('mouseenter', show)
+        hit.addEventListener('mousemove', show)
+        hit.addEventListener('mouseleave', () => {
+            band.style.display = 'none'
+            els.historyTooltip.hidden = true
+        })
+        svg.appendChild(hit)
+    })
+
+    els.historyChart.appendChild(svg)
 }
 
 function buildExpenseActions(transaction) {
@@ -460,6 +884,8 @@ function buildExpenseRow(transaction, writable) {
         notesEl.textContent = transaction.notes
         descEl.appendChild(notesEl)
     }
+    const metaEl = document.createElement('span')
+    metaEl.className = 'expense__meta'
     const currencyEl = document.createElement('span')
     currencyEl.className = 'expense__currency'
     currencyEl.textContent = transaction.currency || ''
@@ -467,11 +893,14 @@ function buildExpenseRow(transaction, writable) {
     const categoryEl = document.createElement('span')
     categoryEl.className = 'expense__category'
     categoryEl.textContent = transaction.category || ''
+    metaEl.append(currencyEl, categoryEl)
     const amountEl = document.createElement('span')
     amountEl.className = transaction.kind === 'income' ? 'expense__amount expense__amount--in' : 'expense__amount'
     const amount = transaction.kind === 'income' ? transaction.moneyIn : transaction.expenses
-    amountEl.textContent = transaction.kind === 'income' ? `+${money(amount || 0)}` : money(amount || 0)
-    li.append(dateEl, descEl, currencyEl, categoryEl, amountEl)
+    setBreakableText(amountEl, transaction.kind === 'income' ?
+        `+${money(amount || 0, transaction.currency)}` :
+        money(amount || 0, transaction.currency))
+    li.append(dateEl, descEl, metaEl, amountEl)
     if (writable) {
         li.append(buildExpenseActions(transaction))
     }
@@ -665,7 +1094,7 @@ async function submitTransaction(event) {
 function openDeleteTransactionDialog(transaction) {
     state.pendingDelete = transaction
     const amount = transaction.kind === 'income' ? transaction.moneyIn : transaction.expenses
-    els.deleteDialogText.textContent = `${money(amount || 0)} · ${transaction.details || 'No details'}`
+    els.deleteDialogText.textContent = `${money(amount || 0, transaction.currency)} · ${transaction.details || 'No details'}`
     els.deleteDialogError.hidden = true
     els.deleteDialog.showModal()
 }
@@ -862,6 +1291,15 @@ els.pretendDialog.addEventListener('click', (event) => {
 })
 els.pretendTodayButton.addEventListener('click', viewToday)
 els.bannerTodayButton.addEventListener('click', viewToday)
+
+window.addEventListener('resize', () => {
+    window.clearTimeout(historyResizeTimer)
+    historyResizeTimer = window.setTimeout(() => {
+        if (state.data && !els.historyCard.hidden) {
+            renderHistory()
+        }
+    }, 150)
+})
 
 prefersDark.addEventListener('change', () => {
     if (state.theme === 'auto') applyTheme()

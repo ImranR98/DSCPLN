@@ -53,6 +53,10 @@ const createApp = (config) => {
     app.use(express.static(path.join(__dirname, 'static')))
     app.use(express.json())
 
+    app.get('/insights', (req, res) => {
+        res.sendFile(path.join(__dirname, 'static', 'insights.html'))
+    })
+
     app.get('/data', asyncRoute(async (req, res) => {
         res.send(await dataProvider.getData(parseDateQuery(req.query['date'])))
     }))
@@ -78,6 +82,15 @@ const createApp = (config) => {
         next()
     }
 
+    app.get('/transactions', requireProviderMethod('getTransactions'), asyncRoute(async (req, res) => {
+        const start = req.query['start']
+        const end = req.query['end']
+        if (!start || !end) {
+            throw new ValidationError('start and end query parameters are required')
+        }
+        res.send(await dataProvider.getTransactions(start, end))
+    }))
+
     app.post('/transactions', requireProviderMethod('addTransaction'), asyncRoute(async (req, res) => {
         res.status(201).send(await dataProvider.addTransaction(req.body))
     }))
@@ -93,6 +106,10 @@ const createApp = (config) => {
     app.delete('/transactions/:id', requireProviderMethod('deleteTransaction'), asyncRoute(async (req, res) => {
         await dataProvider.deleteTransaction(req.params['id'])
         res.status(204).send()
+    }))
+
+    app.get('/details-suggestions', requireProviderMethod('suggestDetails'), asyncRoute(async (req, res) => {
+        res.send(await dataProvider.suggestDetails(req.query['q'], req.query['kind']))
     }))
 
     app.get('/category-suggestions', asyncRoute(async (req, res) => {

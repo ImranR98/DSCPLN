@@ -1,5 +1,7 @@
 'use strict'
 
+const { fractionDigitsFor, hasSubCentPrecision, currencyColor, setBreakableText } = DSCPLNFormat
+
 const $ = (id) => document.getElementById(id)
 
 const els = {
@@ -69,6 +71,7 @@ const els = {
     transactionKindInputs: [...document.querySelectorAll('input[name="kind"]')],
     transactionAmountInput: $('transactionAmountInput'),
     transactionDetailsInput: $('transactionDetailsInput'),
+    detailsSuggestions: $('detailsSuggestions'),
     transactionDateInput: $('transactionDateInput'),
     transactionCategorySelect: $('transactionCategorySelect'),
     transactionCategoryHint: $('transactionCategoryHint'),
@@ -100,7 +103,6 @@ const ICONS = {
     alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>',
 }
 
-const moneyFormatters = new Map()
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
 const dayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
 const fullDayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
@@ -121,6 +123,10 @@ const state = {
 }
 
 let suggestionTimer = null
+let detailsSuggestionTimer = null
+let detailsSuggestionSequence = 0
+let detailsSuggestions = []
+let detailsSuggestionIndex = -1
 let historyResizeTimer = null
 let fetchSequence = 0
 
@@ -155,25 +161,10 @@ function toNumber(value) {
     return Number.isFinite(n) ? n : 0
 }
 
-// Shows at least 2 decimals and enough more to keep the value's significant
-// digits (e.g. fractional XMR), without excessive trailing zeros.
-function fractionDigitsFor(value, significantDigits) {
-    const absolute = Math.abs(value)
-    if (!Number.isFinite(absolute) || absolute === 0) {
-        return 2
-    }
-    return Math.min(12, Math.max(2, significantDigits - 1 - Math.floor(Math.log10(absolute))))
-}
-
 // Currencies whose data needs more than cents (e.g. XMR) keep significant
 // digits even for values of 1 or more; everything else uses plain 2 decimals.
 let fractionalCurrencies = new Set()
 let fractionalCurrenciesSource = null
-
-function hasSubCentPrecision(value) {
-    const amount = Number(value)
-    return Number.isFinite(amount) && Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6
-}
 
 function isFractionalCurrency(code) {
     const history = (state.data && state.data.history) || []
@@ -192,65 +183,7 @@ function isFractionalCurrency(code) {
 }
 
 function money(value, code) {
-    const amount = Number.isFinite(value) ? value : 0
-    const decimals = code && isFractionalCurrency(code) ?
-        fractionDigitsFor(amount, 12) :
-        (Math.abs(amount) < 1 ? fractionDigitsFor(amount, 8) : 2)
-    let formatter = moneyFormatters.get(decimals)
-    if (!formatter) {
-        formatter = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: decimals })
-        moneyFormatters.set(decimals, formatter)
-    }
-    return `$${formatter.format(amount)}`
-}
-
-// Inserts <wbr> after thousands separators, decimal points and every third
-// fraction digit, so long money values wrap at sensible points instead of
-// mid-digit when space is tight.
-function setBreakableText(element, text) {
-    element.textContent = ''
-    let start = 0
-    let inFraction = false
-    let sinceBreak = 0
-    const addBreak = (index) => {
-        element.append(document.createTextNode(text.slice(start, index + 1)))
-        element.append(document.createElement('wbr'))
-        start = index + 1
-    }
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i]
-        if (char === ',' || char === '.') {
-            inFraction = char === '.'
-            sinceBreak = 0
-            addBreak(i)
-        } else if (inFraction && char >= '0' && char <= '9') {
-            sinceBreak += 1
-            if (sinceBreak === 3) {
-                sinceBreak = 0
-                addBreak(i)
-            }
-        }
-    }
-    element.append(document.createTextNode(text.slice(start)))
-}
-
-// Deterministic accent per currency so cards, chips and chart lanes stay
-// recognizable; known currencies get hand-picked colors.
-const CURRENCY_ACCENTS = {
-    CAD: '#dc2626',
-    USD: '#16a34a',
-    GBP: '#2563eb',
-    TZS: '#d4a017',
-    XMR: '#ea7a1a',
-}
-const FALLBACK_ACCENTS = ['#7c3aed', '#0891b2', '#db2777', '#65a30d', '#9333ea', '#0d9488', '#f59e0b', '#4f46e5']
-
-function currencyColor(code) {
-    if (!code) return null
-    if (CURRENCY_ACCENTS[code]) return CURRENCY_ACCENTS[code]
-    let hash = 0
-    for (const char of code) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
-    return FALLBACK_ACCENTS[hash % FALLBACK_ACCENTS.length]
+    return DSCPLNFormat.money(value, code, Boolean(code) && isFractionalCurrency(code))
 }
 
 function applyCurrencyAccent(element, code) {
@@ -1036,6 +969,102 @@ function renderCurrencyOptions() {
     }
 }
 
+function hideDetailsSuggestions() {
+    detailsSuggestions = []
+    detailsSuggestionIndex = -1
+    els.detailsSuggestions.hidden = true
+    els.detailsSuggestions.textContent = ''
+    els.transactionDetailsInput.setAttribute('aria-expanded', 'false')
+    els.transactionDetailsInput.removeAttribute('aria-activedescendant')
+}
+
+function scheduleDetailsSuggestion() {
+    window.clearTimeout(detailsSuggestionTimer)
+    detailsSuggestionTimer = window.setTimeout(fetchDetailsSuggestions, 150)
+}
+
+async function fetchDetailsSuggestions() {
+    const sequence = ++detailsSuggestionSequence
+    try {
+        const params = new URLSearchParams({ q: els.transactionDetailsInput.value, kind: getSelectedKind() })
+        const response = await fetch(`/details-suggestions?${params}`, { headers: { Accept: 'application/json' } })
+        if (!response.ok || sequence !== detailsSuggestionSequence || !els.transactionDialog.open) {
+            return
+        }
+        const data = await response.json()
+        renderDetailsSuggestions(data.suggestions || [])
+    } catch (e) {
+        // Autocomplete is best-effort; ignore failures.
+    }
+}
+
+function renderDetailsSuggestions(suggestions) {
+    detailsSuggestions = suggestions
+    detailsSuggestionIndex = -1
+    els.detailsSuggestions.textContent = ''
+    if (suggestions.length === 0) {
+        hideDetailsSuggestions()
+        return
+    }
+    suggestions.forEach((suggestion, index) => {
+        const item = document.createElement('li')
+        item.className = 'autocomplete__option'
+        item.id = `detailsSuggestion-${index}`
+        item.setAttribute('role', 'option')
+        item.setAttribute('aria-selected', 'false')
+        const detailsEl = document.createElement('span')
+        detailsEl.className = 'autocomplete__option-details'
+        detailsEl.textContent = suggestion.details
+        const categoryEl = document.createElement('span')
+        categoryEl.className = 'autocomplete__option-category'
+        categoryEl.textContent = suggestion.category || ''
+        item.append(detailsEl, categoryEl)
+        item.addEventListener('pointerdown', (event) => {
+            event.preventDefault()
+            selectDetailsSuggestion(index)
+        })
+        els.detailsSuggestions.appendChild(item)
+    })
+    els.detailsSuggestions.hidden = false
+    els.transactionDetailsInput.setAttribute('aria-expanded', 'true')
+}
+
+function setActiveDetailsSuggestion(index) {
+    detailsSuggestionIndex = index
+    const options = [...els.detailsSuggestions.children]
+    options.forEach((option, optionIndex) => {
+        const active = optionIndex === index
+        option.classList.toggle('is-active', active)
+        option.setAttribute('aria-selected', active ? 'true' : 'false')
+    })
+    const active = options[index]
+    if (active) {
+        els.transactionDetailsInput.setAttribute('aria-activedescendant', active.id)
+        active.scrollIntoView({ block: 'nearest' })
+    } else {
+        els.transactionDetailsInput.removeAttribute('aria-activedescendant')
+    }
+}
+
+function selectDetailsSuggestion(index) {
+    const suggestion = detailsSuggestions[index]
+    if (!suggestion) {
+        return
+    }
+    els.transactionDetailsInput.value = suggestion.details
+    if (!state.categoryTouched && suggestion.category) {
+        const hasOption = [...els.transactionCategorySelect.options]
+            .some((option) => option.value === suggestion.category)
+        if (hasOption) {
+            els.transactionCategorySelect.value = suggestion.category
+        }
+        state.categoryTouched = true
+        els.transactionCategoryHint.hidden = true
+    }
+    hideDetailsSuggestions()
+    els.transactionDetailsInput.focus()
+}
+
 function scheduleCategorySuggestion() {
     window.clearTimeout(suggestionTimer)
     suggestionTimer = window.setTimeout(fetchCategorySuggestions, 250)
@@ -1084,6 +1113,7 @@ function openAddTransactionDialog() {
     els.transactionDateInput.value = toDateInputValue(state.viewDate)
     els.transactionCategoryHint.hidden = true
     els.transactionFormError.hidden = true
+    hideDetailsSuggestions()
     els.transactionDialog.showModal()
     els.transactionDetailsInput.focus()
 }
@@ -1106,6 +1136,7 @@ function openEditTransactionDialog(transaction) {
     els.transactionNotesInput.value = transaction.notes || ''
     els.transactionCategoryHint.hidden = true
     els.transactionFormError.hidden = true
+    hideDetailsSuggestions()
     els.transactionDialog.showModal()
     els.transactionAmountInput.focus()
 }
@@ -1372,6 +1403,9 @@ for (const input of els.transactionKindInputs) {
         state.categoryTouched = false
         renderCategoryOptions(getSelectedKind())
         scheduleCategorySuggestion()
+        if (!els.detailsSuggestions.hidden) {
+            scheduleDetailsSuggestion()
+        }
     })
 }
 els.transactionDetailsInput.addEventListener('input', () => {
@@ -1379,11 +1413,39 @@ els.transactionDetailsInput.addEventListener('input', () => {
         els.transactionCategorySelect.value = ''
     }
     scheduleCategorySuggestion()
+    scheduleDetailsSuggestion()
+})
+els.transactionDetailsInput.addEventListener('focus', scheduleDetailsSuggestion)
+els.transactionDetailsInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        if (!els.detailsSuggestions.hidden) {
+            event.preventDefault()
+            hideDetailsSuggestions()
+        }
+        return
+    }
+    if (els.detailsSuggestions.hidden) {
+        return
+    }
+    if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setActiveDetailsSuggestion(Math.min(detailsSuggestionIndex + 1, detailsSuggestions.length - 1))
+    } else if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setActiveDetailsSuggestion(Math.max(detailsSuggestionIndex - 1, 0))
+    } else if (event.key === 'Enter' && detailsSuggestionIndex >= 0) {
+        event.preventDefault()
+        selectDetailsSuggestion(detailsSuggestionIndex)
+    }
+})
+els.transactionDetailsInput.addEventListener('blur', () => {
+    window.setTimeout(hideDetailsSuggestions, 0)
 })
 els.transactionCategorySelect.addEventListener('change', () => {
     state.categoryTouched = true
     els.transactionCategoryHint.hidden = true
 })
+els.transactionDialog.addEventListener('close', hideDetailsSuggestions)
 
 els.deleteConfirmButton.addEventListener('click', confirmDeleteTransaction)
 els.deleteCancelButton.addEventListener('click', () => {

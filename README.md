@@ -83,6 +83,7 @@ Row 2 holds a header per column, and each column lists the allowed values for th
 ## Transactions
 
 - **Add**: open "This month", click "Add transaction", and fill in Expense/Income, amount, details, date, category, currency, and optional notes. The date defaults to the day you are viewing, and the currency defaults to the main (first) Constants currency.
+- **Details autocomplete**: as you type in Details, previously used descriptions appear in a suggestion menu (ranked by prefix/token match, use count and recency). Picking one also fills the category with the last one used for that description.
 - **Category suggestions**: as you type details, the app scores them against all past transactions of the same kind (fuzzy token/trigram/edit-distance matching, weighted by how often and how recently a category was used). It auto-selects the category when the match is confident, and always shows the top suggestions so you can pick a different one.
 - **Import**: click "Import" and paste one transaction per line, tab-separated, using the Transactions sheet's column order (shown in the dialog). Exactly one of Money In / Expenses must be filled. Every line is validated first: if any line is invalid the whole paste is rejected with per-line errors and nothing is written. A successful import is one git commit.
 - **Edit / delete**: use the buttons on each row. Deleting shifts the remaining rows up, like deleting a row in Excel.
@@ -93,6 +94,8 @@ The same actions are available over HTTP:
 | --- | --- | --- |
 | `GET` | `/data?date=YYYY-MM-DD` | - |
 | `GET` | `/category-suggestions?q=details&kind=expense` | - |
+| `GET` | `/details-suggestions?q=details&kind=expense` | - |
+| `GET` | `/transactions?start=YYYY-MM-DD&end=YYYY-MM-DD` | - |
 | `POST` | `/transactions` | `{ "kind", "amount", "details", "date", "category", "currency", "notes" }` |
 | `POST` | `/transactions/import` | `{ "text" }` — tab-separated rows in the sheet's column order |
 | `PUT` | `/transactions/:id` | `{ "kind", "amount", "details", "date", "category", "currency", "notes" }` |
@@ -112,6 +115,18 @@ Everything is shown on one page, per currency:
 - On wide screens the transactions list moves into a second column on the right; on narrow screens everything stacks in one column.
 - **This month** lists all currencies' transactions with the date shown on each row.
 - Each currency has its own budget, editable from the pencil button on its card. The first-day bias is available from day 1 and the rest of the budget accrues across the month.
+
+## Insights
+
+`/insights` (linked from the dashboard header) analyzes an arbitrary date range, per currency:
+
+- **Filters**: start/end date pickers, a month picker that selects a whole month, and quick ranges (this/last month, 3/6/12 months, YTD). The range is kept in the URL.
+- **Per-currency sections** (primary first, then by volume), each with:
+  - KPI tiles for spent, earned, net, average spend per day and transaction count, each compared with the preceding equal-length period.
+  - Category breakdowns for spending and earning with include/exclude checkboxes that recompute the totals, percentages, charts and forecast (select all/none included).
+  - A cumulative-spend chart with the budget pace line for single-month ranges, or monthly spend/income bars for longer ranges.
+  - Forecasts: projected month-end spend/income vs budget when the range includes today, plus a next-30-days estimate from the trailing 3-month average.
+  - Biggest category increases/decreases vs the previous period.
 
 ## Backups and version control
 

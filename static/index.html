@@ -31,6 +31,13 @@
         <div class="app-header__top">
             <h1>D<span class="accent">$</span>CPLN</h1>
             <div class="app-header__actions">
+                <a class="icon-button" href="/insights" title="Insights" aria-label="Insights">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 20h18" />
+                        <path d="M7 20v-6M12 20V8M17 20V4" />
+                    </svg>
+                </a>
                 <button id="refreshButton" class="icon-button" type="button" title="Refresh"
                     aria-label="Refresh data">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
@@ -203,7 +210,13 @@
                 <input id="transactionAmountInput" name="amount" type="number" step="any" min="0.000000000001"
                     inputmode="decimal" autocomplete="off" required>
                 <label for="transactionDetailsInput">Details</label>
-                <input id="transactionDetailsInput" name="details" type="text" autocomplete="off" required>
+                <div class="autocomplete">
+                    <input id="transactionDetailsInput" name="details" type="text" autocomplete="off" required
+                        role="combobox" aria-expanded="false" aria-autocomplete="list"
+                        aria-controls="detailsSuggestions">
+                    <ul id="detailsSuggestions" class="autocomplete__menu" role="listbox"
+                        aria-label="Previously used details" hidden></ul>
+                </div>
                 <label for="transactionDateInput">Date</label>
                 <input id="transactionDateInput" name="date" type="date" required>
                 <label for="transactionCategorySelect">Category</label>
@@ -270,6 +283,7 @@
 
     <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
 
+    <script src="format.js"></script>
     <script src="app.js"></script>
 </body>
 

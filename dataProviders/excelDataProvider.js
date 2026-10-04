@@ -139,8 +139,12 @@ const validateAmount = (value) => {
     if (!Number.isFinite(amount) || amount <= 0) {
         throw new ValidationError('Amount must be greater than 0')
     }
+    // The tolerance is relative to the scaled value so binary floating point
+    // noise (e.g. 16.99 storing as 16.989999…) doesn't look like over-precision,
+    // while a genuine extra decimal place is still rejected.
     const scaled = amount * (10 ** MAX_AMOUNT_DECIMALS)
-    if (Math.abs(scaled - Math.round(scaled)) > 1e-6) {
+    const tolerance = Math.max(1e-6, Math.abs(scaled) * Number.EPSILON * 4)
+    if (Math.abs(scaled - Math.round(scaled)) > tolerance) {
         throw new ValidationError(`Amount can have at most ${MAX_AMOUNT_DECIMALS} decimal places`)
     }
     return Number.parseFloat(amount.toFixed(MAX_AMOUNT_DECIMALS))
@@ -772,6 +776,28 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         }
     }
 
+    // Returns serialized transactions whose date falls within [start, end]
+    // (inclusive), sorted by date then workbook row.
+    const getTransactions = async (start, end) => {
+        const startDate = parseDateInput(start)
+        const endDate = parseDateInput(end)
+        const startIso = datePartsToIso(startDate)
+        const endIso = datePartsToIso(endDate)
+        if (startIso > endIso) {
+            throw new ValidationError('Start date must not be after the end date')
+        }
+        const parsed = await getParsed()
+        return {
+            start: startIso,
+            end: endIso,
+            transactions: parsed.transactions
+                .filter((transaction) => !transaction.invalidDate &&
+                    transaction.dateIso >= startIso && transaction.dateIso <= endIso)
+                .sort((a, b) => (a.dateIso === b.dateIso ? a.row - b.row : a.dateIso < b.dateIso ? -1 : 1))
+                .map(serializeTransaction),
+        }
+    }
+
     const updateMonthlyBudget = async (monthlyBudget, firstDayBias, currency) => {
         const budget = Number.parseFloat(monthlyBudget)
         const bias = Number.parseFloat(firstDayBias)
@@ -950,13 +976,81 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         return computeSuggestions(query, parsed.samplesByKind[kind])
     }
 
+    // Autocomplete for the Details field: previously used description strings
+    // seen more than three times, ranked by match quality, then use count and
+    // recency.
+    const suggestDetails = async (query, kind) => {
+        if (kind != null && kind !== '' && kind !== 'expense' && kind !== 'income') {
+            throw new ValidationError('Kind must be "expense" or "income"')
+        }
+        const text = typeof query === 'string' ? query.trim().toLowerCase() : ''
+        const tokens = text.split(/\s+/).filter(Boolean)
+        const parsed = await getParsed()
+
+        const used = new Map()
+        for (const transaction of parsed.transactions) {
+            if (!transaction.details || transaction.invalidDate) {
+                continue
+            }
+            if (kind && transaction.kind !== kind) {
+                continue
+            }
+            let entry = used.get(transaction.details)
+            if (!entry) {
+                entry = {
+                    details: transaction.details,
+                    category: transaction.category,
+                    kind: transaction.kind,
+                    count: 0,
+                    lastDate: '',
+                }
+                used.set(transaction.details, entry)
+            }
+            entry.count += 1
+            if (transaction.dateIso && transaction.dateIso >= entry.lastDate) {
+                entry.lastDate = transaction.dateIso
+                entry.category = transaction.category
+                entry.kind = transaction.kind
+            }
+        }
+
+        const suggestions = []
+        for (const entry of used.values()) {
+            if (entry.count <= 3) {
+                continue
+            }
+            const haystack = entry.details.toLowerCase()
+            let score
+            if (!text) {
+                score = 0
+            } else if (haystack === text) {
+                score = 1000
+            } else if (haystack.startsWith(text)) {
+                score = 500
+            } else if (tokens.every((token) => haystack.includes(token))) {
+                score = 100
+            } else {
+                continue
+            }
+            suggestions.push({ ...entry, score: score + entry.count * 5 })
+        }
+        suggestions.sort((a, b) =>
+            b.score - a.score ||
+            (a.lastDate === b.lastDate ? 0 : a.lastDate < b.lastDate ? 1 : -1))
+        return {
+            suggestions: suggestions.slice(0, 8).map(({ score, ...entry }) => entry),
+        }
+    }
+
     return {
         getData,
+        getTransactions,
         updateMonthlyBudget,
         addTransaction,
         importTransactions,
         updateTransaction,
         deleteTransaction,
         suggestCategories,
+        suggestDetails,
     }
 }

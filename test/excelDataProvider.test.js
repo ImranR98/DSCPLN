@@ -389,6 +389,30 @@ test('validates import lines', async () => {
     await assert.rejects(provider.importTransactions('   \n\n'), ValidationError)
 })
 
+test('returns transactions for a date range inclusive, sorted', async () => {
+    const { provider } = setup()
+    const month = await provider.getTransactions('2026-09-01', '2026-09-30')
+    assert.equal(month.start, '2026-09-01')
+    assert.equal(month.end, '2026-09-30')
+    assert.deepEqual(month.transactions.map((transaction) => transaction.date), [
+        '2026-09-01', '2026-09-03', '2026-09-06', '2026-09-09', '2026-09-12', '2026-09-15',
+    ])
+    const narrow = await provider.getTransactions('2026-09-03', '2026-09-09')
+    assert.deepEqual(narrow.transactions.map((transaction) => transaction.details), ['Job', 'Groceries', 'Netflix'])
+    await assert.rejects(provider.getTransactions('2026-09-30', '2026-09-01'), ValidationError)
+    await assert.rejects(provider.getTransactions('nope', '2026-09-01'), ValidationError)
+})
+
+test('accepts ordinary decimal amounts without float-precision false positives', async () => {
+    const { provider } = setup()
+    const base = { kind: 'expense', details: 'Precision', date: '2026-09-15', category: 'Snacks', currency: 'CAD', notes: '' }
+    const created = await provider.addTransaction({ ...base, amount: 16.99 })
+    assert.equal(created.expenses, 16.99)
+    const tiny = await provider.addTransaction({ ...base, amount: 0.05, currency: 'XMR' })
+    assert.equal(tiny.expenses, 0.05)
+    await assert.rejects(provider.addTransaction({ ...base, amount: 1.1234567890123 }), ValidationError)
+})
+
 test('writes per-currency budgets into the Constants sheet', async () => {
     const { provider, workbookFile } = setup()
     await provider.updateMonthlyBudget(2500, 900, 'CAD')
@@ -443,6 +467,42 @@ test('commits changes with the app identity, ignoring existing signing config', 
     // The repository's own config (including the hostile signing settings) is left untouched.
     assert.equal(git(['config', '--local', 'commit.gpgsign'], dir).trim(), 'true')
     assert.equal(git(['config', '--local', 'user.name'], dir).trim(), 'Someone Else')
+})
+
+test('suggests previously used transaction details', async () => {
+    const { provider } = setup()
+    const netflix = await provider.suggestDetails('net')
+    assert.equal(netflix.suggestions[0].details, 'Netflix')
+    assert.equal(netflix.suggestions[0].category, 'Subscriptions')
+    assert.equal(netflix.suggestions[0].kind, 'expense')
+
+    const job = await provider.suggestDetails('job', 'income')
+    assert.equal(job.suggestions[0].details, 'Job')
+    assert.equal(job.suggestions[0].category, 'Job')
+    assert.equal(job.suggestions[0].lastDate, '2026-09-03')
+
+    const incomeOnly = await provider.suggestDetails('net', 'income')
+    assert.deepEqual(incomeOnly.suggestions, [])
+
+    const tokens = await provider.suggestDetails('coffee beans')
+    assert.equal(tokens.suggestions[0].details, 'Coffee beans')
+
+    const recent = await provider.suggestDetails('')
+    assert.ok(recent.suggestions.length > 0 && recent.suggestions.length <= 8)
+    assert.equal(recent.suggestions.some((entry) => entry.details === 'Job'), true)
+
+    // Descriptions used three times or fewer are not suggested.
+    const rare = { kind: 'expense', amount: 1, details: 'Rare thing', date: '2026-09-16', category: 'Snacks', currency: 'CAD', notes: '' }
+    await provider.addTransaction(rare)
+    assert.deepEqual((await provider.suggestDetails('rare')).suggestions, [])
+    for (let i = 0; i < 3; i++) {
+        await provider.addTransaction(rare)
+    }
+    const frequent = await provider.suggestDetails('rare')
+    assert.equal(frequent.suggestions[0].details, 'Rare thing')
+    assert.equal(frequent.suggestions[0].count, 4)
+
+    await assert.rejects(provider.suggestDetails('x', 'transfer'), ValidationError)
 })
 
 test('suggests categories from history per kind', async () => {

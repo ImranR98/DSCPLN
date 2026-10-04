@@ -105,10 +105,10 @@ Everything is shown on one page, per currency:
 
 - The **main currency** (the first one in Constants) gets the full Month card: spend against its budget with progress, pace, remaining/day, previous-month spend, and 12-month average spend.
 - **Earnings** for the main currency: `Money In` for the viewed month, the previous calendar month, and the running average of the 12 complete months before the viewed month (missing months count as $0).
-- **Other currencies** appear as compact cards below, each with spend vs budget, a progress bar, income, and the same trend figures. Currencies with no spending or income on the viewed date are hidden; the main currency is always shown.
-- **Last 12 months** charts money in and out per month for every currency with activity in that window, as small multiples (one lane per currency, each with its own scale), a 12-month Total column, and a hover tooltip.
+- **Other currencies** appear as compact tiles below, each with spend vs budget, a progress bar, remaining, and income. Currencies with no spending or income on the viewed date are hidden; the main currency is always shown.
+- **Last 12 months** charts money in and out per month for every currency with activity in that window, as small multiples (one lane per currency, each with its own scale), a 12-month Total column, and a hover tooltip. Each currency keeps a stable accent color across its tile, chips, and chart lane.
 - On wide screens the transactions list moves into a second column on the right; on narrow screens everything stacks in one column.
-- **This month** lists all currencies' transactions, grouped by currency with per-currency out/in totals.
+- **This month** lists all currencies' transactions with the date shown on each row.
 - Each currency has its own budget, editable from the pencil button on its card. The first-day bias is available from day 1 and the rest of the budget accrues across the month.
 
 ## Backups and version control

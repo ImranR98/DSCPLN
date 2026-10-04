@@ -21,6 +21,7 @@
             } catch (e) { }
         })()
     </script>
+    <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -65,9 +66,11 @@
 
     <main class="layout">
         <div class="layout__main">
-        <section class="card" id="monthCard" aria-labelledby="monthHeading">
+        <section class="card card--hero" id="monthCard" aria-labelledby="monthHeading">
             <div class="card__header">
-                <h2 id="monthHeading">Main</h2>
+                <h2 class="currency-badge">
+                    <span id="monthHeading">Main</span>
+                </h2>
                 <span class="card__header-tools">
                     <span id="monthName" class="card__context"></span>
                     <button id="primaryBudgetButton" class="icon-button icon-button--small" type="button"
@@ -82,17 +85,30 @@
             </div>
             <p class="figure">
                 <span id="monthSpend" class="figure__spend">—</span>
-                <span id="monthOf" class="figure__of">of</span>
-                <span id="monthBudget" class="figure__budget">—</span>
+                <span class="figure__meta">
+                    <span id="monthOf" class="figure__of">of</span>
+                    <span id="monthBudget" class="figure__budget">—</span>
+                </span>
             </p>
             <div class="progress" id="monthProgress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
                 aria-valuenow="0">
                 <div class="progress__fill" id="monthProgressFill"></div>
+                <div class="progress__pace" id="monthPaceMarker" hidden></div>
             </div>
-            <div class="card__stats">
-                <span id="monthRemaining"></span>
-                <span id="monthDaily"></span>
-                <span id="monthPace" class="pace"></span>
+            <p id="monthPace" class="pace"></p>
+            <div class="stat-tiles">
+                <div class="stat-tile">
+                    <span class="stat-tile__label">Left</span>
+                    <span id="monthRemaining" class="stat-tile__value">—</span>
+                </div>
+                <div class="stat-tile">
+                    <span class="stat-tile__label">Per day</span>
+                    <span id="monthDaily" class="stat-tile__value">—</span>
+                </div>
+                <div class="stat-tile">
+                    <span class="stat-tile__label">Days left</span>
+                    <span id="monthDaysLeft" class="stat-tile__value">—</span>
+                </div>
             </div>
             <div class="mini-grid mini-grid--primary">
                 <span class="mini-grid__label"></span>
@@ -110,7 +126,7 @@
             </div>
         </section>
 
-        <div id="otherCurrencies"></div>
+        <div id="otherCurrencies" class="currency-grid"></div>
 
         <section class="card" id="historyCard" aria-labelledby="historyHeading" hidden>
             <div class="card__header">
@@ -149,16 +165,18 @@
 
     <dialog id="budgetDialog" class="dialog" aria-labelledby="budgetDialogTitle">
         <form id="budgetForm" novalidate>
-            <h2 id="budgetDialogTitle">Edit budget</h2>
-            <p id="budgetCurrencyNote" class="hint"></p>
-            <label for="monthlyBudgetInput">Monthly budget</label>
-            <input id="monthlyBudgetInput" name="monthlyBudget" type="number" step="0.01" min="0.01"
-                inputmode="decimal" autocomplete="off" required>
-            <label for="firstDayBiasInput">First day bias</label>
-            <input id="firstDayBiasInput" name="firstDayBias" type="number" step="0.01" min="0"
-                inputmode="decimal" autocomplete="off" required>
-            <p class="hint">Extra amount assigned to the first day of the month.</p>
-            <p id="budgetFormError" class="form-error" hidden></p>
+            <div class="dialog__body">
+                <h2 id="budgetDialogTitle">Edit budget</h2>
+                <p id="budgetCurrencyNote" class="hint"></p>
+                <label for="monthlyBudgetInput">Monthly budget</label>
+                <input id="monthlyBudgetInput" name="monthlyBudget" type="number" step="0.01" min="0.01"
+                    inputmode="decimal" autocomplete="off" required>
+                <label for="firstDayBiasInput">First day bias</label>
+                <input id="firstDayBiasInput" name="firstDayBias" type="number" step="0.01" min="0"
+                    inputmode="decimal" autocomplete="off" required>
+                <p class="hint">Extra amount assigned to the first day of the month.</p>
+                <p id="budgetFormError" class="form-error" hidden></p>
+            </div>
             <div class="dialog__actions">
                 <button id="budgetCancelButton" class="button" type="button">Cancel</button>
                 <button id="budgetSaveButton" class="button button--primary" type="submit">Save</button>
@@ -168,32 +186,34 @@
 
     <dialog id="transactionDialog" class="dialog" aria-labelledby="transactionDialogTitle">
         <form id="transactionForm">
-            <h2 id="transactionDialogTitle">Add transaction</h2>
-            <div class="segmented" role="radiogroup" aria-label="Transaction kind">
-                <label class="segmented__option">
-                    <input type="radio" name="kind" value="expense" checked>
-                    <span>Expense</span>
-                </label>
-                <label class="segmented__option">
-                    <input type="radio" name="kind" value="income">
-                    <span>Income</span>
-                </label>
+            <div class="dialog__body">
+                <h2 id="transactionDialogTitle">Add transaction</h2>
+                <div class="segmented" role="radiogroup" aria-label="Transaction kind">
+                    <label class="segmented__option">
+                        <input type="radio" name="kind" value="expense" checked>
+                        <span>Expense</span>
+                    </label>
+                    <label class="segmented__option">
+                        <input type="radio" name="kind" value="income">
+                        <span>Income</span>
+                    </label>
+                </div>
+                <label for="transactionAmountInput">Amount</label>
+                <input id="transactionAmountInput" name="amount" type="number" step="any" min="0.000000000001"
+                    inputmode="decimal" autocomplete="off" required>
+                <label for="transactionDetailsInput">Details</label>
+                <input id="transactionDetailsInput" name="details" type="text" autocomplete="off" required>
+                <label for="transactionDateInput">Date</label>
+                <input id="transactionDateInput" name="date" type="date" required>
+                <label for="transactionCategorySelect">Category</label>
+                <select id="transactionCategorySelect" name="category" required></select>
+                <p id="transactionCategoryHint" class="hint" hidden></p>
+                <label for="transactionCurrencySelect">Currency</label>
+                <select id="transactionCurrencySelect" name="currency" required></select>
+                <label for="transactionNotesInput">Notes <span class="label-optional">(optional)</span></label>
+                <input id="transactionNotesInput" name="notes" type="text" autocomplete="off">
+                <p id="transactionFormError" class="form-error" hidden></p>
             </div>
-            <label for="transactionAmountInput">Amount</label>
-            <input id="transactionAmountInput" name="amount" type="number" step="any" min="0.000000000001"
-                inputmode="decimal" autocomplete="off" required>
-            <label for="transactionDetailsInput">Details</label>
-            <input id="transactionDetailsInput" name="details" type="text" autocomplete="off" required>
-            <label for="transactionDateInput">Date</label>
-            <input id="transactionDateInput" name="date" type="date" required>
-            <label for="transactionCategorySelect">Category</label>
-            <select id="transactionCategorySelect" name="category" required></select>
-            <p id="transactionCategoryHint" class="hint" hidden></p>
-            <label for="transactionCurrencySelect">Currency</label>
-            <select id="transactionCurrencySelect" name="currency" required></select>
-            <label for="transactionNotesInput">Notes <span class="label-optional">(optional)</span></label>
-            <input id="transactionNotesInput" name="notes" type="text" autocomplete="off">
-            <p id="transactionFormError" class="form-error" hidden></p>
             <div class="dialog__actions">
                 <button id="transactionCancelButton" class="button" type="button">Cancel</button>
                 <button id="transactionSaveButton" class="button button--primary" type="submit">Save</button>
@@ -203,9 +223,11 @@
 
     <dialog id="deleteDialog" class="dialog" aria-labelledby="deleteDialogTitle">
         <div class="dialog__content">
-            <h2 id="deleteDialogTitle">Delete transaction</h2>
-            <p id="deleteDialogText" class="muted"></p>
-            <p id="deleteDialogError" class="form-error" hidden></p>
+            <div class="dialog__body">
+                <h2 id="deleteDialogTitle">Delete transaction</h2>
+                <p id="deleteDialogText" class="muted"></p>
+                <p id="deleteDialogError" class="form-error" hidden></p>
+            </div>
             <div class="dialog__actions">
                 <button id="deleteCancelButton" class="button" type="button">Cancel</button>
                 <button id="deleteConfirmButton" class="button button--danger" type="button">Delete</button>
@@ -215,10 +237,12 @@
 
     <dialog id="pretendDialog" class="dialog" aria-labelledby="pretendDialogTitle">
         <form id="pretendForm">
-            <h2 id="pretendDialogTitle">Pretend it's</h2>
-            <label for="pretendDateInput">Date</label>
-            <input id="pretendDateInput" name="date" type="date" required>
-            <p id="pretendFormError" class="form-error" hidden></p>
+            <div class="dialog__body">
+                <h2 id="pretendDialogTitle">Pretend it's</h2>
+                <label for="pretendDateInput">Date</label>
+                <input id="pretendDateInput" name="date" type="date" required>
+                <p id="pretendFormError" class="form-error" hidden></p>
+            </div>
             <div class="dialog__actions">
                 <button id="pretendCancelButton" class="button" type="button">Cancel</button>
                 <button id="pretendTodayButton" class="button" type="button">Today</button>
@@ -226,6 +250,12 @@
             </div>
         </form>
     </dialog>
+
+    <button id="fabAdd" class="fab" type="button" aria-label="Add transaction">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M12 5v14M5 12h14" />
+        </svg>
+    </button>
 
     <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
 

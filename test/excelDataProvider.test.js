@@ -314,6 +314,81 @@ test('validates transaction input', async () => {
     await assert.rejects(provider.addTransaction({ ...base, kind: 'income', category: 'Snacks' }), ValidationError)
 })
 
+test('reports transaction column order for imports', async () => {
+    const { provider } = setup()
+    const data = await provider.getData(new Date(2026, 8, 15))
+    assert.deepEqual(data.transactionColumns, ['Date', 'Details', 'Money In', 'Expenses', 'Currency', 'Type', 'Notes'])
+})
+
+test('imports tab-separated transactions positionally', async () => {
+    const { provider, dir } = setup()
+    const text = [
+        '2026-09-08\tCASH Dividend\t29.77\t\tCAD\tDividend',
+        '2026-09-29\tXBAL Dividend\t52.21\t\tCAD\tDividend',
+        '2026-09-30\tXBAL Dividend reinvested\t\t52.21\tCAD\tInvestment Buy',
+    ].join('\n')
+    const result = await provider.importTransactions(text)
+    assert.equal(result.imported, 3)
+    assert.equal(result.transactions[0].kind, 'income')
+    assert.equal(result.transactions[0].moneyIn, 29.77)
+    assert.equal(result.transactions[0].category, 'Dividend')
+    assert.equal(result.transactions[2].kind, 'expense')
+    assert.equal(result.transactions[2].expenses, 52.21)
+    assert.equal(result.transactions[2].category, 'Investment Buy')
+    const data = await provider.getData(new Date(2026, 8, 15))
+    assert.equal(data.transactions.length, 9)
+    assert.equal(git(['log', '-1', '--format=%s'], dir).trim(), 'D$CPLN: import 3 transactions')
+})
+
+test('imports notes and comma-grouped amounts', async () => {
+    const { provider } = setup()
+    const result = await provider.importTransactions('2026-09-11\tSalary\t1,234.56\t\tCAD\tJob\tSeptember pay\n')
+    assert.equal(result.imported, 1)
+    assert.equal(result.transactions[0].moneyIn, 1234.56)
+    assert.equal(result.transactions[0].notes, 'September pay')
+})
+
+test('rejects the whole import when any line is invalid, writing nothing', async () => {
+    const { provider, workbookFile } = setup()
+    const before = fs.readFileSync(workbookFile)
+    const text = [
+        '2026-09-08\tCASH Dividend\t29.77\t\tCAD\tDividend',
+        '2026-09-08\tNo amount\t\t\tCAD\tDividend',
+    ].join('\n')
+    await assert.rejects(provider.importTransactions(text), (e) => {
+        assert.equal(e instanceof ValidationError, true)
+        assert.match(e.message, /^Import failed:\nLine 2: Fill one of Money In or Expenses/)
+        return true
+    })
+    assert.deepEqual(fs.readFileSync(workbookFile), before)
+    const data = await provider.getData(new Date(2026, 8, 15))
+    assert.equal(data.transactions.length, 6)
+})
+
+test('validates import lines', async () => {
+    const { provider } = setup()
+    const cases = [
+        ['2026-09-08\tBoth\t1\t2\tCAD\tDividend', /Line 1: Fill only one of Money In or Expenses/],
+        ['2026-09-08\tNo amount\t\t\tCAD\tDividend', /Line 1: Fill one of Money In or Expenses/],
+        ['2026-09-08\tBad category\t1\t\tCAD\tNope', /Line 1: Category must be one of the Money In categories/],
+        ['2026-09-08\tIncome with expense category\t1\t\tCAD\tSnacks', /Line 1: Category must be one of the Money In categories/],
+        ['2026-09-08\tUnknown currency\t1\t\tEUR\tDividend', /Line 1: Currency must be one of/],
+        ['2026-02-30\tBad date\t1\t\tCAD\tDividend', /Line 1: Date is not a valid calendar date/],
+        ['08/09/2026\tBad format\t1\t\tCAD\tDividend', /Line 1: Date must be a YYYY-MM-DD string/],
+        ['2026-09-08\t\t1\t\tCAD\tDividend', /Line 1: Details is required/],
+        ['2026-09-08\tNot a number\tabc\t\tCAD\tDividend', /Line 1: Money In must be a number/],
+        ['2026-09-08\tToo many columns\t1\t\tCAD\tDividend\tnote\textra', /Line 1: Unexpected value in column 8/],
+    ]
+    for (const [line, pattern] of cases) {
+        await assert.rejects(provider.importTransactions(line), (e) => {
+            assert.equal(e instanceof ValidationError, true)
+            assert.match(e.message, pattern)
+            return true
+        })
+    }
+    await assert.rejects(provider.importTransactions('   \n\n'), ValidationError)
+})
+
 test('writes per-currency budgets into the Constants sheet', async () => {
     const { provider, workbookFile } = setup()
     await provider.updateMonthlyBudget(2500, 900, 'CAD')

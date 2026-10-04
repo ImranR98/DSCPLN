@@ -84,6 +84,7 @@ Row 2 holds a header per column, and each column lists the allowed values for th
 
 - **Add**: open "This month", click "Add transaction", and fill in Expense/Income, amount, details, date, category, currency, and optional notes. The date defaults to the day you are viewing, and the currency defaults to the main (first) Constants currency.
 - **Category suggestions**: as you type details, the app scores them against all past transactions of the same kind (fuzzy token/trigram/edit-distance matching, weighted by how often and how recently a category was used). It auto-selects the category when the match is confident, and always shows the top suggestions so you can pick a different one.
+- **Import**: click "Import" and paste one transaction per line, tab-separated, using the Transactions sheet's column order (shown in the dialog). Exactly one of Money In / Expenses must be filled. Every line is validated first: if any line is invalid the whole paste is rejected with per-line errors and nothing is written. A successful import is one git commit.
 - **Edit / delete**: use the buttons on each row. Deleting shifts the remaining rows up, like deleting a row in Excel.
 
 The same actions are available over HTTP:
@@ -93,6 +94,7 @@ The same actions are available over HTTP:
 | `GET` | `/data?date=YYYY-MM-DD` | - |
 | `GET` | `/category-suggestions?q=details&kind=expense` | - |
 | `POST` | `/transactions` | `{ "kind", "amount", "details", "date", "category", "currency", "notes" }` |
+| `POST` | `/transactions/import` | `{ "text" }` — tab-separated rows in the sheet's column order |
 | `PUT` | `/transactions/:id` | `{ "kind", "amount", "details", "date", "category", "currency", "notes" }` |
 | `DELETE` | `/transactions/:id` | - |
 | `POST` | `/budget` | `{ "monthlyBudget", "firstDayBias", "currency" }` |

@@ -82,6 +82,10 @@ const createApp = (config) => {
         res.status(201).send(await dataProvider.addTransaction(req.body))
     }))
 
+    app.post('/transactions/import', requireProviderMethod('importTransactions'), asyncRoute(async (req, res) => {
+        res.status(201).send(await dataProvider.importTransactions(req.body?.text))
+    }))
+
     app.put('/transactions/:id', requireProviderMethod('updateTransaction'), asyncRoute(async (req, res) => {
         res.send(await dataProvider.updateTransaction(req.params['id'], req.body))
     }))

@@ -45,7 +45,14 @@ const els = {
     expensesMeta: $('expensesMeta'),
     expensesEmpty: $('expensesEmpty'),
     addTransactionButton: $('addTransactionButton'),
-    fabAdd: $('fabAdd'),
+    importButton: $('importButton'),
+    importDialog: $('importDialog'),
+    importForm: $('importForm'),
+    importTextarea: $('importTextarea'),
+    importHint: $('importHint'),
+    importFormError: $('importFormError'),
+    importCancelButton: $('importCancelButton'),
+    importSubmitButton: $('importSubmitButton'),
     pretendDateInput: $('pretendDateInput'),
     pretendTodayButton: $('pretendTodayButton'),
     budgetDialog: $('budgetDialog'),
@@ -967,7 +974,7 @@ function renderExpenses() {
     const writable = state.data.writable !== false
 
     els.addTransactionButton.hidden = !writable
-    els.fabAdd.hidden = !writable
+    els.importButton.hidden = !writable
     els.expensesList.textContent = ''
     els.expensesList.hidden = count === 0
     els.expensesMeta.textContent = count ? `${count} ${count === 1 ? 'transaction' : 'transactions'}` : ''
@@ -1146,6 +1153,52 @@ async function submitTransaction(event) {
     }
 }
 
+function openImportDialog() {
+    if (!state.data || state.data.writable === false) return
+    const columns = state.data.transactionColumns && state.data.transactionColumns.length ?
+        state.data.transactionColumns :
+        ['Date', 'Details', 'Money In', 'Expenses', 'Currency', 'Type', 'Notes']
+    els.importHint.textContent = `One transaction per line, tab-separated, in this column order: ${columns.join(' · ')}. Fill either Money In or Expenses.`
+    els.importTextarea.value = ''
+    els.importFormError.hidden = true
+    els.importDialog.showModal()
+    els.importTextarea.focus()
+}
+
+async function submitImport(event) {
+    event.preventDefault()
+    const text = els.importTextarea.value
+    if (!text.trim()) {
+        els.importFormError.textContent = 'Paste at least one transaction line.'
+        els.importFormError.hidden = false
+        return
+    }
+    els.importSubmitButton.disabled = true
+    try {
+        const response = await fetch('/transactions/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+        })
+        if (!response.ok) {
+            const message = await responseErrorMessage(response, `Import failed (${response.status})`)
+            els.importFormError.textContent = message
+            els.importFormError.hidden = false
+            return
+        }
+        const result = await response.json()
+        els.importDialog.close()
+        toast(`Imported ${result.imported} ${result.imported === 1 ? 'transaction' : 'transactions'}`)
+        await fetchData({ silent: true })
+    } catch (e) {
+        console.error(e)
+        els.importFormError.textContent = 'Could not import transactions. Check the server logs.'
+        els.importFormError.hidden = false
+    } finally {
+        els.importSubmitButton.disabled = false
+    }
+}
+
 function openDeleteTransactionDialog(transaction) {
     state.pendingDelete = transaction
     const amount = transaction.kind === 'income' ? transaction.moneyIn : transaction.expenses
@@ -1302,7 +1355,12 @@ els.budgetDialog.addEventListener('click', (event) => {
 })
 
 els.addTransactionButton.addEventListener('click', openAddTransactionDialog)
-els.fabAdd.addEventListener('click', openAddTransactionDialog)
+els.importButton.addEventListener('click', openImportDialog)
+els.importForm.addEventListener('submit', submitImport)
+els.importCancelButton.addEventListener('click', () => els.importDialog.close())
+els.importDialog.addEventListener('click', (event) => {
+    if (event.target === els.importDialog) els.importDialog.close()
+})
 els.transactionForm.addEventListener('submit', submitTransaction)
 els.transactionCancelButton.addEventListener('click', () => els.transactionDialog.close())
 els.transactionDialog.addEventListener('click', (event) => {

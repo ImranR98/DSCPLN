@@ -120,6 +120,30 @@ test('supports transaction CRUD and category suggestions', async (t) => {
     assert.equal(response.status, 400)
 })
 
+test('imports transactions and rejects invalid batches atomically', async (t) => {
+    const { server, baseUrl } = await startServer()
+    t.after(() => new Promise((resolve) => server.close(resolve)))
+
+    let response = await jsonRequest(baseUrl, '/transactions/import', {
+        text: '2026-09-08\tCASH Dividend\t29.77\t\tCAD\tDividend\n2026-09-09\tNo amount\t\t\tCAD\tDividend',
+    })
+    assert.equal(response.status, 400)
+    assert.match(await response.text(), /Line 2: Fill one of Money In or Expenses/)
+    let data = await (await fetch(`${baseUrl}/data?date=2026-09-15`)).json()
+    assert.equal(data.transactions.length, 6)
+
+    response = await jsonRequest(baseUrl, '/transactions/import', {
+        text: '2026-09-08\tCASH Dividend\t29.77\t\tCAD\tDividend\n2026-09-30\tXBAL Dividend reinvested\t\t52.21\tCAD\tInvestment Buy',
+    })
+    assert.equal(response.status, 201)
+    const result = await response.json()
+    assert.equal(result.imported, 2)
+    data = await (await fetch(`${baseUrl}/data?date=2026-09-15`)).json()
+    assert.equal(data.transactions.length, 8)
+    assert.equal(data.transactions.some((transaction) => transaction.details === 'XBAL Dividend reinvested'), true)
+    assert.deepEqual(data.transactionColumns, ['Date', 'Details', 'Money In', 'Expenses', 'Currency', 'Type', 'Notes'])
+})
+
 test('writes per-currency budget updates to the Constants sheet', async (t) => {
     const { server, baseUrl } = await startServer()
     t.after(() => new Promise((resolve) => server.close(resolve)))

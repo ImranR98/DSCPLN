@@ -155,6 +155,7 @@
                 <span id="expensesMeta" class="muted"></span>
             </summary>
             <div class="expenses__actions">
+                <button id="importButton" class="button button--small" type="button" hidden>Import</button>
                 <button id="addTransactionButton" class="button button--primary button--small" type="button" hidden>Add transaction</button>
             </div>
             <ul id="expensesList" class="expenses__list"></ul>
@@ -221,6 +222,22 @@
         </form>
     </dialog>
 
+    <dialog id="importDialog" class="dialog dialog--wide" aria-labelledby="importDialogTitle">
+        <form id="importForm">
+            <div class="dialog__body">
+                <h2 id="importDialogTitle">Import transactions</h2>
+                <p id="importHint" class="hint"></p>
+                <textarea id="importTextarea" class="dialog__textarea" rows="14" spellcheck="false" autocapitalize="off"
+                    autocomplete="off" placeholder="2026-09-08	CASH Dividend	29.77		CAD	Dividend"></textarea>
+                <p id="importFormError" class="form-error" hidden></p>
+            </div>
+            <div class="dialog__actions">
+                <button id="importCancelButton" class="button" type="button">Cancel</button>
+                <button id="importSubmitButton" class="button button--primary" type="submit">Import</button>
+            </div>
+        </form>
+    </dialog>
+
     <dialog id="deleteDialog" class="dialog" aria-labelledby="deleteDialogTitle">
         <div class="dialog__content">
             <div class="dialog__body">
@@ -250,12 +267,6 @@
             </div>
         </form>
     </dialog>
-
-    <button id="fabAdd" class="fab" type="button" aria-label="Add transaction">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M12 5v14M5 12h14" />
-        </svg>
-    </button>
 
     <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
 

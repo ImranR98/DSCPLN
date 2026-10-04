@@ -30,7 +30,7 @@ Tasks have **no automatic timeouts** — a run goes until it finishes or you sto
 
 Placeholders like `{{maindir}}` or `{{hosts.bigpc.host}}` inside command strings are resolved from the same file's exported values at run time; values may reference other tokens (resolution loops until stable). Built-in tokens: `{{repo_dir}}` (this repository's root, env-overridable via `BACKUPCTL_REPO_DIR`) and `{{lib}}` (the packaged `lib.sh`). `~` and env vars are expanded on resolved *paths*. Every task needs `state_dir:` — run state is stored there as `.backup-state-<task>.json`.
 
-**Personal scripts live as git submodules** under `scripts/` in this repo. Tasks that need one (e.g. a Balance-format parser) reference it via the `{{scriptroot}}` token — see `config.mjs` for real examples.
+**Personal scripts live as git submodules** under `scripts/` in this repo. Tasks that need one (e.g. a statement parser) reference it via the `{{scriptroot}}` token — see `config.mjs` for real examples.
 
 ### Task fields
 

@@ -1,6 +1,3 @@
-[submodule "scripts/Balance"]
-	path = scripts/Balance
-	url = git@github.com:ImranR98/Balance.git
 [submodule "scripts/WhatsAppTXT"]
 	path = scripts/WhatsAppTXT
 	url = git@github.com:ImranR98/WhatsAppTXT.git

@@ -287,21 +287,6 @@ log "Import completed; originals deleted"
           ],
         },
 
-        // Parse the newest transaction notes into Balance.xlsx, paste the output,
-        // then press Done to commit.
-        {
-          name: 'Balance',
-          state_dir: '{{maindir}}/Documents/Balance',
-          cwd: '{{scriptroot}}/Balance',
-          commit_dir: '{{maindir}}/Documents/Balance',
-          capture: true,
-          note: 'You still need to manually add Transaction Types, sort entries, and remove duplicates. Press "Done" to commit the Balance.xlsx change to git.',
-          commands: [
-            'npm i >/dev/null',
-            "node '{{scriptroot}}/Balance/accMDToXLSX.js' \"$(cat \"$(ls '{{maindir}}/Notes/Transactions'/Acc*.md | tail -1)\")\" '{{maindir}}/Documents/Balance/Balance.xlsx'",
-          ],
-        },
-
         // Pull recent Wealthsimple transactions; paste into Balance.xlsx.
         {
           name: 'Wealthsimple Recents to Balance',

@@ -1019,10 +1019,11 @@ function renderDetailsSuggestions(suggestions) {
         categoryEl.className = 'autocomplete__option-category'
         categoryEl.textContent = suggestion.category || ''
         item.append(detailsEl, categoryEl)
-        item.addEventListener('pointerdown', (event) => {
-            event.preventDefault()
-            selectDetailsSuggestion(index)
-        })
+        // Keep focus in the input while tapping/clicking (prevents the blur
+        // that would close the menu); selection happens on click, so a touch
+        // that turns into a scroll gesture doesn't select a suggestion.
+        item.addEventListener('mousedown', (event) => event.preventDefault())
+        item.addEventListener('click', () => selectDetailsSuggestion(index))
         els.detailsSuggestions.appendChild(item)
     })
     els.detailsSuggestions.hidden = false
@@ -1438,8 +1439,15 @@ els.transactionDetailsInput.addEventListener('keydown', (event) => {
         selectDetailsSuggestion(detailsSuggestionIndex)
     }
 })
-els.transactionDetailsInput.addEventListener('blur', () => {
-    window.setTimeout(hideDetailsSuggestions, 0)
+els.transactionDetailsInput.addEventListener('blur', (event) => {
+    if (event.relatedTarget && els.detailsSuggestions.contains(event.relatedTarget)) {
+        return
+    }
+    window.setTimeout(() => {
+        if (!els.detailsSuggestions.contains(document.activeElement)) {
+            hideDetailsSuggestions()
+        }
+    }, 120)
 })
 els.transactionCategorySelect.addEventListener('change', () => {
     state.categoryTouched = true

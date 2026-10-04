@@ -99,6 +99,7 @@ const state = {
 }
 
 let suggestionTimer = null
+let pretendDateTimer = null
 let fetchSequence = 0
 
 function startOfDay(date) {
@@ -710,6 +711,7 @@ function syncControls() {
 }
 
 function viewToday() {
+    window.clearTimeout(pretendDateTimer)
     state.viewDate = startOfDay(new Date())
     syncControls()
     fetchData({ silent: true })
@@ -845,7 +847,10 @@ els.deleteDialog.addEventListener('click', (event) => {
     }
 })
 
-els.pretendDateInput.addEventListener('change', applyPretendDate)
+els.pretendDateInput.addEventListener('change', () => {
+    window.clearTimeout(pretendDateTimer)
+    pretendDateTimer = window.setTimeout(applyPretendDate, 150)
+})
 els.pretendTodayButton.addEventListener('click', viewToday)
 els.bannerTodayButton.addEventListener('click', viewToday)
 

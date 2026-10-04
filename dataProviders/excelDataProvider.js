@@ -712,8 +712,10 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         const previousMonthDate = new Date(year, month - 2, 1)
         const previousYear = previousMonthDate.getFullYear()
         const previousMonth = previousMonthDate.getMonth() + 1
-        const monthTransactions = transactions.filter((transaction) =>
-            transaction.date.year === year && transaction.date.month === month)
+        // Newest first for the transactions list: by date, then by workbook row.
+        const monthTransactions = transactions
+            .filter((transaction) => transaction.date.year === year && transaction.date.month === month)
+            .sort((a, b) => (a.dateIso === b.dateIso ? b.row - a.row : a.dateIso < b.dateIso ? 1 : -1))
 
         const currentByCurrency = new Map()
         for (const transaction of monthTransactions) {

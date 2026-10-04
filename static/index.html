@@ -52,7 +52,10 @@
         </div>
         <div class="app-header__meta">
             <span id="contextLabel"></span>
-            <span id="updatedLabel" class="muted"></span>
+            <span class="app-header__meta-tools">
+                <select id="currencySelect" class="currency-select" aria-label="Currency view" hidden></select>
+                <span id="updatedLabel" class="muted"></span>
+            </span>
         </div>
     </header>
 
@@ -69,7 +72,7 @@
             </div>
             <p class="figure">
                 <span id="monthSpend" class="figure__spend">—</span>
-                <span class="figure__of">of</span>
+                <span id="monthOf" class="figure__of">of</span>
                 <span id="monthBudget" class="figure__budget">—</span>
             </p>
             <div class="progress" id="monthProgress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
@@ -80,18 +83,18 @@
                 <span id="monthRemaining"></span>
                 <span id="monthDaily"></span>
                 <span id="monthPace" class="pace"></span>
+                <span id="monthCurrencyNote" class="muted" hidden></span>
             </div>
         </section>
 
-        <section class="card" id="weekCard" aria-labelledby="weekHeading">
+        <section class="card card--compact" id="weekCard" aria-labelledby="weekHeading">
             <div class="card__header">
                 <h2 id="weekHeading">Week</h2>
                 <span id="weekRange" class="card__context"></span>
             </div>
-            <p id="weekBadge" class="badge" hidden></p>
             <p class="figure">
                 <span id="weekSpend" class="figure__spend">—</span>
-                <span class="figure__of">of</span>
+                <span id="weekOf" class="figure__of">of</span>
                 <span id="weekBudget" class="figure__budget">—</span>
             </p>
             <div class="progress" id="weekProgress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
@@ -105,11 +108,14 @@
             </div>
         </section>
 
-        <details class="card" id="expensesCard">
+        <details class="card" id="expensesCard" open>
             <summary>
                 <span>This month</span>
                 <span id="expensesMeta" class="muted"></span>
             </summary>
+            <div class="expenses__actions">
+                <button id="addTransactionButton" class="button button--primary" type="button" hidden>Add transaction</button>
+            </div>
             <ul id="expensesList" class="expenses__list"></ul>
             <p id="expensesEmpty" class="muted" hidden>No expenses recorded this month.</p>
         </details>
@@ -131,16 +137,50 @@
             <label for="monthlyBudgetInput">Monthly budget</label>
             <input id="monthlyBudgetInput" name="monthlyBudget" type="number" step="0.01" min="0.01"
                 inputmode="decimal" autocomplete="off" required>
-            <label for="firstWeekBiasInput">First week bias</label>
-            <input id="firstWeekBiasInput" name="firstWeekBias" type="number" step="0.01" min="0"
+            <label for="firstDayBiasInput">First day bias</label>
+            <input id="firstDayBiasInput" name="firstDayBias" type="number" step="0.01" min="0"
                 inputmode="decimal" autocomplete="off" required>
-            <p class="hint">Extra amount assigned to the first week of the month.</p>
+            <p class="hint">Extra amount assigned to the first day of the month.</p>
             <p id="budgetFormError" class="form-error" hidden></p>
             <div class="dialog__actions">
                 <button id="budgetCancelButton" class="button" type="button">Cancel</button>
                 <button id="budgetSaveButton" class="button button--primary" type="submit">Save</button>
             </div>
         </form>
+    </dialog>
+
+    <dialog id="transactionDialog" class="dialog" aria-labelledby="transactionDialogTitle">
+        <form id="transactionForm">
+            <h2 id="transactionDialogTitle">Add transaction</h2>
+            <label for="transactionAmountInput">Amount</label>
+            <input id="transactionAmountInput" name="amount" type="number" step="0.01" min="0.01"
+                inputmode="decimal" autocomplete="off" required>
+            <label for="transactionDescriptionInput">Description</label>
+            <input id="transactionDescriptionInput" name="description" type="text" autocomplete="off" required>
+            <label for="transactionCurrencyInput">Currency <span class="label-optional">(optional)</span></label>
+            <input id="transactionCurrencyInput" name="currency" type="text" maxlength="3" list="currencyOptions"
+                autocomplete="off" spellcheck="false" placeholder="Local">
+            <datalist id="currencyOptions"></datalist>
+            <label for="transactionDateInput">Date</label>
+            <input id="transactionDateInput" name="date" type="date" required>
+            <p id="transactionFormError" class="form-error" hidden></p>
+            <div class="dialog__actions">
+                <button id="transactionCancelButton" class="button" type="button">Cancel</button>
+                <button id="transactionSaveButton" class="button button--primary" type="submit">Save</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="deleteDialog" class="dialog" aria-labelledby="deleteDialogTitle">
+        <div class="dialog__content">
+            <h2 id="deleteDialogTitle">Delete transaction</h2>
+            <p id="deleteDialogText" class="muted"></p>
+            <p id="deleteDialogError" class="form-error" hidden></p>
+            <div class="dialog__actions">
+                <button id="deleteCancelButton" class="button" type="button">Cancel</button>
+                <button id="deleteConfirmButton" class="button button--danger" type="button">Delete</button>
+            </div>
+        </div>
     </dialog>
 
     <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>

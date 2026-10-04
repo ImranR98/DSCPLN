@@ -1,25 +1,17 @@
-require('dotenv').config()
+'use strict'
+
 const express = require('express')
 const path = require('path')
 const axios = require('axios')
+const { loadConfig } = require('./config')
+const { ValidationError } = require('./errors')
 
-process.env['DATA_PROVIDER'] = process.env['DATA_PROVIDER'] || 'textFileDataProvider'
-
-const dataProvider = require(`./dataProviders/${process.env['DATA_PROVIDER']}`)
-const monthlyLimitNtfyURL = process.env['MONTHLY_LIMIT_NTFY_URL']
-const weeklyLimitNtfyURL = process.env['WEEKLY_LIMIT_NTFY_URL']
-const ntfyCheckIntervalMinutes = Number.parseFloat(process.env['NTFY_CHECK_INTERVAL_MINUTES'] || 30)
-const ntfyAuthHeader = process.env['NTFY_TOKEN'] ? `Basic ${Buffer.from(`:${process.env['NTFY_TOKEN']}`).toString('base64')}` : null
-const onlyWarnOnce = process.env['ONLY_WARN_ONCE'] != 'false' && process.env['ONLY_WARN_ONCE'] != false
-
-const app = express()
-const port = process.env.PORT || 3300
-
-app.use(express.static(path.join(__dirname, 'static')))
-app.use(express.json())
+const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 
 const parseDateQuery = (dateStr) => {
-    if (!dateStr) return new Date()
+    if (!dateStr) {
+        return new Date()
+    }
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr)
     const date = match ?
         new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) :
@@ -28,46 +20,88 @@ const parseDateQuery = (dateStr) => {
         (match && (date.getFullYear() != Number(match[1]) ||
             date.getMonth() != Number(match[2]) - 1 ||
             date.getDate() != Number(match[3])))) {
-        throw new Error('Invalid date')
+        throw new ValidationError('Invalid date')
     }
     return date
 }
 
-app.get('/data', async (req, res) => {
-    let date
+const createApp = (config) => {
+    let providerFactory
     try {
-        date = parseDateQuery(req.query['date'])
+        providerFactory = require(path.join(__dirname, 'dataProviders', config.dataProvider))
     } catch (e) {
-        res.status(400).send('Invalid date')
-        return
+        throw new Error(`Could not load data provider "${config.dataProvider}": ${e.message}`)
     }
-    try {
-        res.send(await dataProvider.getData(date))
-    } catch (e) {
-        console.error(e)
-        res.status(500).send('Internal server error')
+    if (typeof providerFactory !== 'function') {
+        throw new Error(`Data provider "${config.dataProvider}" must export a factory function`)
     }
-})
+    const dataProvider = providerFactory(config.providers[config.dataProvider] || {}, config.configDir || process.cwd())
 
-app.post('/budget', async (req, res) => {
-    const monthlyBudget = Number.parseFloat(req.body?.monthlyBudget)
-    const firstWeekBias = Number.parseFloat(req.body?.firstWeekBias ?? 0)
-    if (!Number.isFinite(monthlyBudget) || monthlyBudget <= 0 ||
-        !Number.isFinite(firstWeekBias) || firstWeekBias < 0 || firstWeekBias > monthlyBudget) {
-        res.status(400).send('Invalid budget values')
-        return
-    }
-    try {
-        await dataProvider.updateMonthlyBudget(monthlyBudget, firstWeekBias)
+    const app = express()
+    app.use(express.static(path.join(__dirname, 'static')))
+    app.use(express.json())
+
+    app.get('/data', asyncRoute(async (req, res) => {
+        res.send(await dataProvider.getData(parseDateQuery(req.query['date']), req.query['currency']))
+    }))
+
+    app.post('/budget', asyncRoute(async (req, res) => {
+        const monthlyBudget = Number.parseFloat(req.body?.monthlyBudget)
+        const firstDayBias = Number.parseFloat(req.body?.firstDayBias ?? 0)
+        if (!Number.isFinite(monthlyBudget) || monthlyBudget <= 0 ||
+            !Number.isFinite(firstDayBias) || firstDayBias < 0 || firstDayBias > monthlyBudget) {
+            res.status(400).send('Invalid budget values')
+            return
+        }
+        await dataProvider.updateMonthlyBudget(monthlyBudget, firstDayBias)
         res.send()
-    } catch (e) {
-        console.error(e)
-        res.status(500).send('Internal server error')
-    }
-})
+    }))
 
-app.listen(port, async () => {
-    console.log(`Server is running on port ${port}`)
+    const requireProviderMethod = (method) => (req, res, next) => {
+        if (typeof dataProvider[method] !== 'function') {
+            res.status(501).send('This data provider does not support transactions')
+            return
+        }
+        next()
+    }
+
+    app.post('/transactions', requireProviderMethod('addTransaction'), asyncRoute(async (req, res) => {
+        res.status(201).send(await dataProvider.addTransaction(req.body))
+    }))
+
+    app.put('/transactions/:id', requireProviderMethod('updateTransaction'), asyncRoute(async (req, res) => {
+        res.send(await dataProvider.updateTransaction(req.params['id'], req.body))
+    }))
+
+    app.delete('/transactions/:id', requireProviderMethod('deleteTransaction'), asyncRoute(async (req, res) => {
+        await dataProvider.deleteTransaction(req.params['id'])
+        res.status(204).send()
+    }))
+
+    app.use((err, req, res, next) => {
+        if (err.type === 'entity.parse.failed') {
+            res.status(400).send('Invalid JSON body')
+            return
+        }
+        if (err.statusCode) {
+            res.status(err.statusCode).send(err.message)
+            return
+        }
+        console.error(err)
+        res.status(500).send('Internal server error')
+    })
+
+    return { app, dataProvider }
+}
+
+const startNotifications = (config, dataProvider) => {
+    const { monthlyLimitUrl, weeklyLimitUrl, ntfyToken, checkIntervalMinutes } = config.notifications
+    const onlyWarnOnce = config.notifications.onlyWarnOnce !== false
+    if (!monthlyLimitUrl && !weeklyLimitUrl) {
+        return
+    }
+    const ntfyAuthHeader = ntfyToken ? `Basic ${Buffer.from(`:${ntfyToken}`).toString('base64')}` : null
+    const intervalMs = (checkIntervalMinutes > 0 ? checkIntervalMinutes : 30) * 60 * 1000
     let didWarnMonthly = false
     let didWarnWeekly = false
     let prevMonthSpend = -1
@@ -87,40 +121,53 @@ app.listen(port, async () => {
             return false
         }
     }
-    if (monthlyLimitNtfyURL || weeklyLimitNtfyURL) {
-        const checkLimit = async () => {
-            try {
-                const data = await dataProvider.getData()
-                if (data.monthlyBudget <= data.monthsSpend) {
-                    if (monthlyLimitNtfyURL && !(didWarnMonthly && onlyWarnOnce) && data.monthsSpend != prevMonthSpend) {
-                        if (await sendNotification(monthlyLimitNtfyURL,
-                            `$${data.monthsSpend.toFixed(2)} of $${data.monthlyBudget.toFixed(2)}`,
-                            'Monthly Budget Limit Reached')) {
-                            didWarnMonthly = true
-                        }
+    const checkLimit = async () => {
+        try {
+            const data = await dataProvider.getData()
+            if (data.monthlyBudget <= data.monthsSpend) {
+                if (monthlyLimitUrl && !(didWarnMonthly && onlyWarnOnce) && data.monthsSpend != prevMonthSpend) {
+                    if (await sendNotification(monthlyLimitUrl,
+                        `$${data.monthsSpend.toFixed(2)} of $${data.monthlyBudget.toFixed(2)}`,
+                        'Monthly Budget Limit Reached')) {
+                        didWarnMonthly = true
                     }
-                } else {
-                    didWarnMonthly = false
                 }
-                if (data.weeklyBudget <= data.weeksSpend) {
-                    if (weeklyLimitNtfyURL && !(didWarnWeekly && onlyWarnOnce) && data.weeksSpend != prevWeekSpend) {
-                        if (await sendNotification(weeklyLimitNtfyURL,
-                            `$${data.weeksSpend.toFixed(2)} of $${data.weeklyBudget.toFixed(2)}`,
-                            'Weekly Budget Limit Reached')) {
-                            didWarnWeekly = true
-                        }
-                    }
-                } else {
-                    didWarnWeekly = false
-                }
-                prevMonthSpend = data.monthsSpend
-                prevWeekSpend = data.weeksSpend
-            } catch (e) {
-                console.error(e)
+            } else {
+                didWarnMonthly = false
             }
+            if (data.weeklyBudget <= data.weeksSpend) {
+                if (weeklyLimitUrl && !(didWarnWeekly && onlyWarnOnce) && data.weeksSpend != prevWeekSpend) {
+                    if (await sendNotification(weeklyLimitUrl,
+                        `$${data.weeksSpend.toFixed(2)} of $${data.weeklyBudget.toFixed(2)}`,
+                        'Weekly Budget Limit Reached')) {
+                        didWarnWeekly = true
+                    }
+                }
+            } else {
+                didWarnWeekly = false
+            }
+            prevMonthSpend = data.monthsSpend
+            prevWeekSpend = data.weeksSpend
+        } catch (e) {
+            console.error(e)
         }
-        await checkLimit()
-        const checkIntervalMs = (Number.isFinite(ntfyCheckIntervalMinutes) && ntfyCheckIntervalMinutes > 0 ? ntfyCheckIntervalMinutes : 30) * 60 * 1000
-        setInterval(checkLimit, checkIntervalMs)
     }
-})
+    checkLimit()
+    setInterval(checkLimit, intervalMs)
+}
+
+const start = (config) => {
+    const { app, dataProvider } = createApp(config)
+    const server = app.listen(config.port, () => {
+        console.log(`Server is running on port ${config.port}`)
+        startNotifications(config, dataProvider)
+    })
+    return server
+}
+
+if (require.main === module) {
+    const config = loadConfig()
+    start(config)
+}
+
+module.exports = { createApp, start, startNotifications }

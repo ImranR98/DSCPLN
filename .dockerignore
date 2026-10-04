@@ -1,6 +1,6 @@
-node_modules/
-.env
 Dockerfile
 .git/
 budget.txt
 data.txt
+node_modules/
+config.json

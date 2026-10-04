@@ -95,8 +95,10 @@ Transaction ids embed the line number and a hash of the line. If the file change
 
 ```sh
 docker build -t dscpln .
-docker run -p 3300:3300 -v ~/expenses.md:/app/data.txt -v ./config.json:/app/config.json dscpln
+docker run -p 3300:3300 -v ./config.json:/app/config.json -v ./dscpln-data:/data dscpln
 ```
+
+The image runs as the non-root `node` user (uid 1000), so `dataFile` and `budgetFile` in `config.json` must point at a writable directory (for example `/data/data.txt` and `/data/budget.txt`), and the mounted directory must be writable by uid 1000. `./build.sh` builds and pushes `imranrdev/dscpln:latest` for linux/amd64 and prints the digest to pin in your deployment.
 
 ## Tests
 

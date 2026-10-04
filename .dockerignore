@@ -1,6 +1,8 @@
 Dockerfile
+build.sh
 .git/
 budget.txt
 data.txt
 node_modules/
 config.json
+test/

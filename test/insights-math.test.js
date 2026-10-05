@@ -23,21 +23,42 @@ test('parses and formats ISO dates', () => {
     assert.equal(math.daysInclusive(new Date(2026, 8, 1), new Date(2026, 8, 30)), 30)
 })
 
-test('computes the preceding range, snapping whole months', () => {
-    // Whole months snap to whole months even when lengths differ.
-    const month = math.previousRange(new Date(2026, 8, 1), new Date(2026, 8, 30))
-    assert.equal(math.toIsoDate(month.start), '2026-08-01')
-    assert.equal(math.toIsoDate(month.end), '2026-08-31')
-    const quarter = math.previousRange(new Date(2026, 6, 1), new Date(2026, 8, 30))
-    assert.equal(math.toIsoDate(quarter.start), '2026-04-01')
-    assert.equal(math.toIsoDate(quarter.end), '2026-06-30')
-    // Partial ranges stay equal-length.
-    const partial = math.previousRange(new Date(2026, 8, 15), new Date(2026, 9, 4))
-    assert.equal(math.toIsoDate(partial.start), '2026-08-26')
-    assert.equal(math.toIsoDate(partial.end), '2026-09-14')
-    const single = math.previousRange(new Date(2026, 9, 4), new Date(2026, 9, 4))
-    assert.equal(math.toIsoDate(single.start), '2026-10-03')
-    assert.equal(math.toIsoDate(single.end), '2026-10-03')
+test('computes the preceding range, calendar-aligned', () => {
+    const range = (start, end) => math.previousRange(
+        new Date(start[0], start[1] - 1, start[2]),
+        new Date(end[0], end[1] - 1, end[2]))
+    const iso = (value) => [math.toIsoDate(value.start), math.toIsoDate(value.end)]
+
+    // Whole months snap to the same number of whole months even when lengths differ.
+    assert.deepEqual(iso(range([2026, 9, 1], [2026, 9, 30])), ['2026-08-01', '2026-08-31'])
+    assert.deepEqual(iso(range([2026, 7, 1], [2026, 9, 30])), ['2026-04-01', '2026-06-30'])
+    assert.deepEqual(iso(range([2026, 1, 1], [2026, 2, 28])), ['2025-11-01', '2025-12-31'])
+
+    // Partial months match the same calendar days of the previous month.
+    assert.deepEqual(iso(range([2026, 10, 1], [2026, 10, 5])), ['2026-09-01', '2026-09-05'])
+    assert.deepEqual(iso(range([2026, 10, 5], [2026, 10, 20])), ['2026-09-05', '2026-09-20'])
+    assert.deepEqual(iso(range([2026, 12, 5], [2027, 1, 5])), ['2026-10-05', '2026-11-05'])
+
+    // Month-end ranges keep the previous month-end and the same day count.
+    assert.deepEqual(iso(range([2026, 10, 25], [2026, 10, 31])), ['2026-09-24', '2026-09-30'])
+    assert.deepEqual(iso(range([2026, 10, 29], [2026, 10, 31])), ['2026-09-28', '2026-09-30'])
+
+    // Single days and short months clamp cleanly.
+    assert.deepEqual(iso(range([2026, 10, 5], [2026, 10, 5])), ['2026-09-05', '2026-09-05'])
+    assert.deepEqual(iso(range([2026, 1, 31], [2026, 1, 31])), ['2025-12-31', '2025-12-31'])
+    assert.deepEqual(iso(range([2026, 3, 31], [2026, 3, 31])), ['2026-02-28', '2026-02-28'])
+    assert.deepEqual(iso(range([2026, 3, 29], [2026, 3, 30])), ['2026-02-27', '2026-02-28'])
+
+    // Multi-month partials shift by the months they span.
+    assert.deepEqual(iso(range([2026, 9, 1], [2026, 10, 5])), ['2026-07-01', '2026-08-04'])
+    assert.deepEqual(iso(range([2026, 9, 15], [2026, 10, 4])), ['2026-07-16', '2026-08-04'])
+})
+
+test('shiftMonths preserves the day and month-end anchoring', () => {
+    assert.equal(math.toIsoDate(math.shiftMonths(new Date(2026, 8, 30), -1)), '2026-08-31')
+    assert.equal(math.toIsoDate(math.shiftMonths(new Date(2026, 0, 31), 1)), '2026-02-28')
+    assert.equal(math.toIsoDate(math.shiftMonths(new Date(2024, 1, 29), -12)), '2023-02-28')
+    assert.equal(math.toIsoDate(math.shiftMonths(new Date(2026, 9, 5), -1)), '2026-09-05')
 })
 
 test('filters by range, currency and excluded categories', () => {
@@ -134,6 +155,16 @@ test('builds complete-month presets and comparison windows', () => {
     assert.equal(math.toIsoDate(avg.end), '2026-08-31')
     assert.equal(Number(math.comparisonFactor(avg, range).toFixed(6)), Number((20 / 92).toFixed(6)))
     assert.equal(math.comparisonFactor(prev, range), 1)
+})
+
+test('compares year-to-date against the same period last year', () => {
+    const ytd = math.comparisonWindow('prev', { start: new Date(2026, 0, 1), end: new Date(2026, 9, 5) })
+    assert.equal(math.toIsoDate(ytd.start), '2025-01-01')
+    assert.equal(math.toIsoDate(ytd.end), '2025-10-05')
+    // January month-to-date still compares with the previous month.
+    const january = math.comparisonWindow('prev', { start: new Date(2026, 0, 1), end: new Date(2026, 0, 5) })
+    assert.equal(math.toIsoDate(january.start), '2025-12-01')
+    assert.equal(math.toIsoDate(january.end), '2025-12-05')
 })
 
 test('flags partial and multi-month ranges', () => {

@@ -125,7 +125,10 @@ function comparisonShortLabel() {
     if (window.kind === 'average') {
         return `${window.count}-mo avg`
     }
-    return state.comparison === 'yoy' ? 'last year' : 'previous period'
+    if (window.start.getFullYear() !== state.range.start.getFullYear()) {
+        return 'last year'
+    }
+    return IM.spansMultipleMonths(state.range.start, state.range.end) ? 'previous period' : 'previous month'
 }
 
 function comparisonLongLabel() {
@@ -149,8 +152,11 @@ function updateCompareNote() {
     } else {
         text = `Comparing ${rangeLabel} (${rangeDays} days) with ${comparisonLongLabel()} (${IM.daysInclusive(window.start, window.end)} days).`
     }
-    if (!isWholeMonths(state.range)) {
-        text += ' The selected range covers partial months.'
+    if (window.kind !== 'average' && !isWholeMonths(state.range)) {
+        const sameYear = window.start.getFullYear() === state.range.start.getFullYear()
+        text += sameYear ?
+            ' Partial months are compared with the matching calendar days of the previous month.' :
+            ' Partial months are compared with the matching calendar days of the previous year.'
     }
     els.compareNote.textContent = text
 }

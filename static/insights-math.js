@@ -20,19 +20,22 @@
             toIsoDate(end) === toIsoDate(endOfMonth(end))
     }
 
-    // Range immediately before [start, end]. When the range covers whole
-    // calendar months, the previous period snaps to the same number of whole
-    // months (e.g. September -> August, not Aug 2 - Aug 31); otherwise it is
-    // the equal-length window immediately before.
+    // Range compared against for the previous period. Whole calendar months
+    // snap to the same number of whole months before (September -> August);
+    // partial months keep their anchor (the 1st, the month end, or the same
+    // day-of-month) and their length, so the totals stay comparable (e.g.
+    // Oct 1 - Oct 5 -> Sep 1 - Sep 5).
     function previousRange(start, end) {
+        const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
         if (isWholeMonthsRange(start, end)) {
-            const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
-            const previousEnd = new Date(start.getFullYear(), start.getMonth(), 0)
-            const previousStart = new Date(previousEnd.getFullYear(), previousEnd.getMonth() - (months - 1), 1)
-            return { start: previousStart, end: previousEnd }
+            return { start: shiftMonths(start, -months), end: shiftMonths(end, -months) }
         }
         const length = daysInclusive(start, end)
-        const previousEnd = addDays(start, -1)
+        if (start.getDate() === 1) {
+            const previousStart = shiftMonths(start, -months)
+            return { start: previousStart, end: addDays(previousStart, length - 1) }
+        }
+        const previousEnd = shiftMonths(end, -months)
         return { start: addDays(previousEnd, -(length - 1)), end: previousEnd }
     }
 
@@ -142,6 +145,18 @@
         return { start, end }
     }
 
+    // Shifts by whole months, preserving the day-of-month (clamped to the
+    // target month's length, and mapping a month-end date to the target
+    // month-end, so Sep 30 -> Aug 31).
+    function shiftMonths(date, months) {
+        const target = new Date(date.getFullYear(), date.getMonth() + months, 1)
+        const lastDay = endOfMonth(target).getDate()
+        const day = date.getDate() === endOfMonth(date).getDate() ?
+            lastDay :
+            Math.min(date.getDate(), lastDay)
+        return new Date(target.getFullYear(), target.getMonth(), day)
+    }
+
     function shiftYear(date) {
         const year = date.getFullYear() - 1
         const month = date.getMonth()
@@ -171,6 +186,11 @@
         return months
     }
 
+    // A multi-month range starting on Jan 1 (Year to date) compares against
+    // the same window a year earlier.
+    const isYtdRange = (start, end) => start.getMonth() === 0 && start.getDate() === 1 &&
+        end.getFullYear() === start.getFullYear() && end.getMonth() > 0
+
     // Window compared against for a mode: 'prev', 'yoy', 'avg3', 'avg6', 'avg12'.
     function comparisonWindow(mode, range) {
         if (mode === 'yoy') {
@@ -180,11 +200,14 @@
             const count = Number(mode.slice(3))
             return { kind: 'average', mode, count, ...lastCompleteMonths(count, range.start) }
         }
+        if (isYtdRange(range.start, range.end)) {
+            return { kind: 'range', mode: 'prev', start: shiftYear(range.start), end: shiftYear(range.end) }
+        }
         return { kind: 'range', mode: 'prev', ...previousRange(range.start, range.end) }
     }
 
-    // Range-mode windows are equal-length; average-mode windows scale to the
-    // range length so per-day rates are compared fairly.
+    // Average-mode windows scale to the range length so per-day rates are
+    // compared fairly; range-mode windows are compared as raw totals.
     function comparisonFactor(window, range) {
         if (window.kind !== 'average') {
             return 1
@@ -230,6 +253,7 @@
         projectMonthEnd,
         categoryMovers,
         lastCompleteMonths,
+        shiftMonths,
         shiftYear,
         spansMultipleMonths,
         monthPartials,

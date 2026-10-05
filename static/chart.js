@@ -1,22 +1,13 @@
 'use strict'
 
-// Shared monthly money in/out chart. Used by the dashboard (last 12 months)
-// and by the insights page (the selected range). Months flagged `partial` are
-// marked with an asterisk on the axis and noted below the chart.
-//
-// months: [{ year, month, partial?, currencies: { CODE: { spend, income,
-//           convertedOut, convertedIn } } }]
+// SVG charts: the shared monthly money in/out chart (dashboard and insights)
+// and the cumulative spent/earned line chart used by the insights sections.
 ;(function (global) {
-    const { money, currencyColor, fractionDigitsFor } = DSCPLNFormat
+    const { formats, number, currencyColor, fractionDigits, moneyFor } = DSCPLN
 
     const SVG_NS = 'http://www.w3.org/2000/svg'
-    const monthYearFormat = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' })
-    const compactNumberFormat = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 })
-
-    const toNumber = (value) => {
-        const amount = Number.parseFloat(value)
-        return Number.isFinite(amount) ? amount : 0
-    }
+    const monthYearFormat = formats.monthYear
+    const compactNumberFormat = formats.compact
 
     const svgElement = (tag, attributes = {}) => {
         const element = document.createElementNS(SVG_NS, tag)
@@ -46,7 +37,7 @@
         if (absolute >= 1) {
             return `$${Math.round(amount).toLocaleString()}`
         }
-        const decimals = fractionDigitsFor(amount, 3)
+        const decimals = fractionDigits(amount, 3)
         return `$${amount.toFixed(decimals).replace(/0+$/, '').replace(/\.$/, '')}`
     }
 
@@ -57,10 +48,10 @@
         return entry.partial ? `${label}*` : label
     }
 
-    const buildTooltip = (entry, activeCurrencies) => {
+    const buildTooltip = (entry, activeCurrencies, money) => {
         const container = document.createElement('div')
         const title = document.createElement('strong')
-        title.className = 'history-tooltip__title'
+        title.className = 'chart-tooltip__title'
         title.textContent = entry.partial ?
             `${monthYearFormat.format(new Date(entry.year, entry.month - 1, 1))} (partial month)` :
             monthYearFormat.format(new Date(entry.year, entry.month - 1, 1))
@@ -68,29 +59,29 @@
         for (const code of activeCurrencies) {
             const totals = entry.currencies[code] || { spend: 0, income: 0 }
             const row = document.createElement('div')
-            row.className = 'history-tooltip__row'
+            row.className = 'chart-tooltip__row'
             const codeEl = document.createElement('span')
-            codeEl.className = 'history-tooltip__code'
+            codeEl.className = 'chart-tooltip__code'
             const dot = document.createElement('span')
-            dot.className = 'history-tooltip__dot'
+            dot.className = 'chart-tooltip__dot'
             const color = currencyColor(code)
             if (color) dot.style.background = color
             const codeText = document.createElement('span')
             codeText.textContent = code
             codeEl.append(dot, codeText)
             const outEl = document.createElement('span')
-            outEl.className = 'history-tooltip__out'
-            outEl.textContent = `${money(toNumber(totals.spend), code)} out`
+            outEl.className = 'chart-tooltip__out'
+            outEl.textContent = `${money(number(totals.spend), code)} out`
             const inEl = document.createElement('span')
-            inEl.className = 'history-tooltip__in'
-            inEl.textContent = `+${money(toNumber(totals.income), code)} in`
+            inEl.className = 'chart-tooltip__in'
+            inEl.textContent = `+${money(number(totals.income), code)} in`
             row.append(codeEl, outEl, inEl)
             container.appendChild(row)
-            const convertedOut = toNumber(totals.convertedOut)
-            const convertedIn = toNumber(totals.convertedIn)
+            const convertedOut = number(totals.convertedOut)
+            const convertedIn = number(totals.convertedIn)
             if (convertedOut > 0 || convertedIn > 0) {
                 const converted = document.createElement('div')
-                converted.className = 'history-tooltip__conv'
+                converted.className = 'chart-tooltip__conv'
                 const parts = []
                 if (convertedOut > 0) {
                     parts.push(`−${money(convertedOut, code)}`)
@@ -135,7 +126,7 @@
         }))
     }
 
-    const draw = (container, tooltipEl, months, active) => {
+    const draw = (container, tooltipEl, months, active, money) => {
         const history = months
         const width = Math.max(240, Math.round(container.clientWidth || 720))
         const topPad = 6
@@ -155,7 +146,7 @@
             })))
             for (const factor of [0.5, 1]) {
                 if (max > 0) {
-                    maxTickWidth = Math.max(maxTickWidth, measureTextWidth(tickMoney(max * factor), 'history__tick'))
+                    maxTickWidth = Math.max(maxTickWidth, measureTextWidth(tickMoney(max * factor), 'chart__tick'))
                 }
             }
             laneMax.set(code, max)
@@ -217,17 +208,17 @@
             const lines = []
             for (const entry of totalEntries) {
                 const full = `${entry.label} ${entry.value}`
-                if (measureTextWidth(full, 'history__total') <= totalTextWidth) {
+                if (measureTextWidth(full, 'chart__total') <= totalTextWidth) {
                     lines.push({ text: full, isIn: entry.isIn, isConv: entry.isConv })
                 } else {
                     lines.push({ text: entry.label, isIn: entry.isIn, isConv: entry.isConv })
-                    for (const part of breakTotalText(entry.value, 'history__total', totalTextWidth)) {
+                    for (const part of breakTotalText(entry.value, 'chart__total', totalTextWidth)) {
                         lines.push({ text: part, isIn: entry.isIn, isConv: entry.isConv })
                     }
                 }
             }
             for (const line of lines) {
-                maxTotalLineWidth = Math.max(maxTotalLineWidth, measureTextWidth(line.text, 'history__total'))
+                maxTotalLineWidth = Math.max(maxTotalLineWidth, measureTextWidth(line.text, 'chart__total'))
             }
             totalLinesByCode.set(code, lines)
         }
@@ -246,13 +237,13 @@
 
         const svg = svgElement('svg', {
             viewBox: `0 0 ${width} ${height}`,
-            class: 'history__svg',
+            class: 'chart__svg',
             role: 'img',
             'aria-label': `Monthly money in and out over ${history.length} months for ${active.join(', ')}`,
         })
 
         const band = svgElement('rect', {
-            class: 'history__band',
+            class: 'chart__band',
             y: topPad,
             width: columnWidth,
             height: active.length * laneStride - laneGap,
@@ -272,12 +263,12 @@
                 cx: 3.5,
                 cy: laneTop + 6,
                 r: 3.5,
-                class: 'history__lane-dot',
+                class: 'chart__lane-dot',
                 fill: laneColor,
             })
             svg.appendChild(laneDot)
 
-            const laneLabel = svgElement('text', { x: 12, y: laneTop + 10, class: 'history__lane-label' })
+            const laneLabel = svgElement('text', { x: 12, y: laneTop + 10, class: 'chart__lane-label' })
             laneLabel.textContent = code
             svg.appendChild(laneLabel)
 
@@ -288,10 +279,10 @@
                     x2: dividerX,
                     y1: y,
                     y2: y,
-                    class: factor === 0 ? 'history__baseline' : 'history__grid',
+                    class: factor === 0 ? 'chart__baseline' : 'chart__grid',
                 }))
                 if (factor > 0 && max > 0) {
-                    const tick = svgElement('text', { x: leftPad - 6, y: y + 3.5, class: 'history__tick' })
+                    const tick = svgElement('text', { x: leftPad - 6, y: y + 3.5, class: 'chart__tick' })
                     tick.textContent = tickMoney(max * factor)
                     svg.appendChild(tick)
                 }
@@ -309,7 +300,7 @@
                         width: barWidth,
                         height: outHeight,
                         rx: Math.min(2.5, barWidth / 2).toFixed(2),
-                        class: 'history__bar',
+                        class: 'chart__bar',
                     })
                     bar.style.fill = laneColor
                     svg.appendChild(bar)
@@ -321,7 +312,7 @@
                         width: barWidth,
                         height: inHeight,
                         rx: Math.min(2.5, barWidth / 2).toFixed(2),
-                        class: 'history__bar history__bar--in',
+                        class: 'chart__bar chart__bar--in',
                     })
                     bar.style.fill = laneColor
                     bar.style.stroke = laneColor
@@ -331,7 +322,7 @@
                     const label = svgElement('text', {
                         x: leftPad + monthIndex * columnWidth + columnWidth / 2,
                         y: height - 8,
-                        class: 'history__label',
+                        class: 'chart__label',
                     })
                     label.textContent = historyMonthLabel(entry, monthIndex)
                     svg.appendChild(label)
@@ -345,8 +336,8 @@
                 const totalText = svgElement('text', {
                     x: width - rightPad,
                     y: totalStartY + lineIndex * totalLineHeight,
-                    class: line.isConv ? 'history__total history__total--conv' :
-                        line.isIn ? 'history__total history__total--in' : 'history__total',
+                    class: line.isConv ? 'chart__total chart__total--conv' :
+                        line.isIn ? 'chart__total chart__total--in' : 'chart__total',
                 })
                 totalText.textContent = line.text
                 svg.appendChild(totalText)
@@ -358,12 +349,12 @@
             x2: dividerX,
             y1: topPad,
             y2: topPad + active.length * laneStride - laneGap,
-            class: 'history__divider',
+            class: 'chart__divider',
         }))
         const totalHeader = svgElement('text', {
             x: dividerX + totalColumnWidth / 2,
             y: height - 7,
-            class: 'history__label',
+            class: 'chart__label',
         })
         totalHeader.textContent = 'Total'
         svg.appendChild(totalHeader)
@@ -374,13 +365,13 @@
                 y: topPad,
                 width: columnWidth,
                 height: active.length * laneStride - laneGap,
-                class: 'history__hit',
+                class: 'chart__hit',
             })
             const show = (event) => {
                 band.style.display = ''
                 band.setAttribute('x', leftPad + monthIndex * columnWidth)
                 tooltipEl.textContent = ''
-                tooltipEl.appendChild(buildTooltip(entry, active))
+                tooltipEl.appendChild(buildTooltip(entry, active, money))
                 tooltipEl.hidden = false
                 const cardRect = tooltipEl.parentElement.getBoundingClientRect()
                 const tooltipWidth = tooltipEl.offsetWidth
@@ -404,60 +395,135 @@
         container.appendChild(svg)
         if (history.some((entry) => entry.partial)) {
             const note = document.createElement('p')
-            note.className = 'history__note muted'
+            note.className = 'chart__note muted'
             note.textContent = '* partial month (the selected range covers only part of it)'
             container.appendChild(note)
         }
     }
 
-    // Renders (or re-renders) the chart into `container`, using `tooltipEl`
-    // (inside a positioned ancestor) for hover details. Re-renders when the
-    // container's width changes.
-    const render = (container, tooltipEl, options = {}) => {
-        const months = options.months || []
-        tooltipEl.hidden = true
-        container.textContent = ''
-        if (months.length === 0) {
-            if (container.__historyObserver) {
-                container.__historyObserver.disconnect()
-                container.__historyObserver = null
-            }
-            return false
-        }
-        const active = activeCodesFor(months, options.codes)
-        if (active.length === 0) {
-            if (container.__historyObserver) {
-                container.__historyObserver.disconnect()
-                container.__historyObserver = null
-            }
-            return false
-        }
-
-        let lastWidth = 0
-        const redraw = () => {
-            container.textContent = ''
-            tooltipEl.hidden = true
-            draw(container, tooltipEl, months, active)
-            lastWidth = container.clientWidth
-        }
-        redraw()
-
-        if (container.__historyObserver) {
-            container.__historyObserver.disconnect()
+    // Re-draws whenever the element's width changes (charts are drawn at real
+    // pixel sizes, so they must re-render rather than scale).
+    const observeWidth = (element, redraw) => {
+        let lastWidth = element.clientWidth
+        if (element.__widthObserver) {
+            element.__widthObserver.disconnect()
         }
         const observer = new ResizeObserver(() => {
-            if (Math.abs(container.clientWidth - lastWidth) > 0.5) {
+            if (Math.abs(element.clientWidth - lastWidth) > 0.5) {
+                lastWidth = element.clientWidth
                 redraw()
             }
         })
-        observer.observe(container)
-        container.__historyObserver = observer
+        observer.observe(element)
+        element.__widthObserver = observer
+    }
+
+    /* ---------- Public drawing ---------- */
+
+    // Draws at the host's real width on the next frame, then re-draws whenever
+    // the width changes.
+    const queue = (host, drawAtWidth) => {
+        window.requestAnimationFrame(() => {
+            const redraw = () => drawAtWidth(Math.max(240, Math.round(host.clientWidth || 480)))
+            redraw()
+            observeWidth(host, redraw)
+        })
+    }
+
+    // The multi-currency monthly bars with lane labels, a Total column and a
+    // hover tooltip. Returns false when there is nothing to draw.
+    const renderMonthly = (container, tooltipEl, options = {}) => {
+        const months = options.months || []
+        const money = options.money || moneyFor(() => false)
+        tooltipEl.hidden = true
+        container.textContent = ''
+        if (container.__widthObserver) {
+            container.__widthObserver.disconnect()
+            container.__widthObserver = null
+        }
+        const active = activeCodesFor(months, options.codes)
+        if (months.length === 0 || active.length === 0) {
+            return false
+        }
+        const redraw = () => {
+            container.textContent = ''
+            tooltipEl.hidden = true
+            draw(container, tooltipEl, months, active, money)
+        }
+        redraw()
+        observeWidth(container, redraw)
         return true
     }
 
-    const api = { render }
-    if (typeof module !== 'undefined' && module.exports) {
-        module.exports = api
+    // Cumulative spent/earned lines for one currency with the comparison
+    // baselines (dashed).
+    const renderCumulative = (host, data) => {
+        queue(host, (width) => {
+            host.textContent = ''
+            const height = 210
+            const pad = { top: 12, right: 10, bottom: 26, left: 48 }
+            const plotWidth = width - pad.left - pad.right
+            const plotHeight = height - pad.top - pad.bottom
+            const baselineSpend = data.baselineSpend || []
+            const baselineIncome = data.baselineIncome || []
+            const max = niceMax(Math.max(
+                ...data.spendCumulative,
+                ...data.incomeCumulative,
+                ...baselineSpend,
+                ...baselineIncome,
+                0
+            )) || 1
+            const svg = svgElement('svg', {
+                viewBox: `0 0 ${width} ${height}`,
+                class: 'chart-line',
+                role: 'img',
+                'aria-label': `Cumulative spent and earned for ${data.currency}`,
+            })
+            const x = (index) => pad.left + (index / (data.daily.length - 1 || 1)) * plotWidth
+            const y = (value) => pad.top + plotHeight - (value / max) * plotHeight
+
+            for (const factor of [0, 0.5, 1]) {
+                const lineY = y(max * factor)
+                svg.appendChild(svgElement('line', {
+                    x1: pad.left, x2: pad.left + plotWidth, y1: lineY, y2: lineY,
+                    class: factor === 0 ? 'chart__baseline' : 'chart__grid',
+                }))
+                const tick = svgElement('text', { x: pad.left - 6, y: lineY + 3.5, class: 'chart__tick' })
+                tick.textContent = tickMoney(max * factor)
+                svg.appendChild(tick)
+            }
+
+            if (baselineSpend.length > 0) {
+                const points = baselineSpend.map((value, index) => `${x(index)},${y(value)}`).join(' ')
+                svg.appendChild(svgElement('polyline', { points, class: 'chart-line__baseline' }))
+            }
+            if (baselineIncome.length > 0) {
+                const points = baselineIncome.map((value, index) => `${x(index)},${y(value)}`).join(' ')
+                svg.appendChild(svgElement('polyline', { points, class: 'chart-line__baseline chart-line__baseline--earned' }))
+            }
+
+            const spendPoints = data.spendCumulative.map((value, index) => `${x(index)},${y(value)}`)
+            if (spendPoints.length > 0) {
+                svg.appendChild(svgElement('polyline', { points: spendPoints.join(' '), class: 'chart-line__line' }))
+            }
+            const incomePoints = data.incomeCumulative.map((value, index) => `${x(index)},${y(value)}`)
+            if (incomePoints.length > 0) {
+                svg.appendChild(svgElement('polyline', { points: incomePoints.join(' '), class: 'chart-line__line chart-line__line--earned' }))
+            }
+
+            const labelIndexes = [0, Math.floor((data.daily.length - 1) / 2), data.daily.length - 1]
+            const axisLabels = data.axisLabels || []
+            labelIndexes.forEach((index, position) => {
+                const label = svgElement('text', {
+                    x: x(index), y: height - 8, class: 'chart__label',
+                    'text-anchor': index === 0 ? 'start' : index === data.daily.length - 1 ? 'end' : 'middle',
+                })
+                label.textContent = axisLabels[position] || String(index + 1)
+                svg.appendChild(label)
+            })
+            host.appendChild(svg)
+        })
     }
-    global.DSCPLNHistory = api
+
+    global.DSCPLN.chart = { renderMonthly, renderCumulative }
 })(typeof window !== 'undefined' ? window : globalThis)

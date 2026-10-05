@@ -2,41 +2,7 @@
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
-const { execFileSync } = require('child_process')
-const { loadConfig } = require('../config')
-const { createApp } = require('../server')
-
-const startServer = async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dscpln-server-'))
-    fs.copyFileSync(path.join(__dirname, '..', 'mock-data.xlsx'), path.join(dir, 'mock.xlsx'))
-    execFileSync('git', ['init', '-q'], { cwd: dir })
-    fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
-        port: 3300,
-        dataProvider: 'excelDataProvider',
-        providers: {
-            excelDataProvider: {
-                workbookFile: './mock.xlsx',
-            },
-        },
-    }))
-    const config = loadConfig(path.join(dir, 'config.json'))
-    const { app } = createApp(config)
-    const server = app.listen(0)
-    await new Promise((resolve) => server.once('listening', resolve))
-    return {
-        server,
-        baseUrl: `http://127.0.0.1:${server.address().port}`,
-    }
-}
-
-const jsonRequest = (baseUrl, url, body, method = 'POST') => fetch(`${baseUrl}${url}`, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-})
+const { startServer, jsonRequest } = require('./helpers')
 
 test('serves workbook data with categories, currencies and income stats', async (t) => {
     const { server, baseUrl } = await startServer()

@@ -1,45 +1,18 @@
 'use strict'
 
-// Pure date/aggregation math for the insights page. Loaded as a plain script
-// (window.DSCPLNInsights) and exported for Node tests.
+// Pure aggregation and comparison math for the insights page. Attached to
+// `DSCPLN.math` in the browser and exported for Node tests (core supplies the
+// date helpers).
 ;(function (global) {
-    const DAY_MS = 24 * 60 * 60 * 1000
-
-    function parseIsoDate(value) {
-        const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value == null ? '' : value))
-        if (!match) {
-            return null
-        }
-        const year = Number(match[1])
-        const month = Number(match[2])
-        const day = Number(match[3])
-        const date = new Date(year, month - 1, day)
-        if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
-            return null
-        }
-        return date
-    }
-
-    function toIsoDate(date) {
-        const pad = (value) => String(value).padStart(2, '0')
-        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-    }
-
-    function addDays(date, days) {
-        return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days)
-    }
-
-    function startOfMonth(date) {
-        return new Date(date.getFullYear(), date.getMonth(), 1)
-    }
-
-    function endOfMonth(date) {
-        return new Date(date.getFullYear(), date.getMonth() + 1, 0)
-    }
-
-    function daysInclusive(start, end) {
-        return Math.round((end - start) / DAY_MS) + 1
-    }
+    const core = global.DSCPLN || require('./core')
+    const {
+        parseIso: parseIsoDate,
+        iso: toIsoDate,
+        addDays,
+        startOfMonth,
+        endOfMonth,
+        daysBetween: daysInclusive,
+    } = core.dates
 
     function isWholeMonthsRange(start, end) {
         return toIsoDate(start) === toIsoDate(startOfMonth(start)) &&
@@ -159,36 +132,7 @@
         return days
     }
 
-    function monthlySeries(transactions) {
-        const map = new Map()
-        for (const transaction of transactions) {
-            const month = transaction.date.slice(0, 7)
-            let entry = map.get(month)
-            if (!entry) {
-                entry = { month, spend: 0, income: 0 }
-                map.set(month, entry)
-            }
-            if (transaction.kind === 'income') {
-                entry.income += amountOf(transaction)
-            } else {
-                entry.spend += amountOf(transaction)
-            }
-        }
-        return [...map.values()]
-            .sort((a, b) => (a.month < b.month ? -1 : 1))
-            .map((entry) => ({ ...entry, spend: clean(entry.spend), income: clean(entry.income) }))
-    }
-
     // Same formula as the dashboard: first-day bias plus accrual to the day.
-    function monthExpectedSpend(monthlyBudget, firstDayBias, day, daysInMonth) {
-        if (monthlyBudget <= 0) {
-            return 0
-        }
-        const bias = Math.min(Math.max(firstDayBias, 0), monthlyBudget)
-        const expected = bias + (monthlyBudget - bias) * (day / daysInMonth)
-        return Math.min(monthlyBudget, Math.max(0, expected))
-    }
-
     function projectMonthEnd({ spend, income, elapsedDays, daysInMonth }) {
         const factor = elapsedDays > 0 ? daysInMonth / elapsedDays : 0
         return { spend: clean(spend * factor), income: clean(income * factor) }
@@ -253,31 +197,6 @@
         return windowDays > 0 ? rangeDays / windowDays : 0
     }
 
-    // Average per complete calendar month over the `months` months before endDate's month.
-    function trailingAverage(transactions, endDate, months) {
-        let spend = 0
-        let income = 0
-        let counted = 0
-        for (let offset = 1; offset <= months; offset++) {
-            const monthStart = new Date(endDate.getFullYear(), endDate.getMonth() - offset, 1)
-            const monthEnd = new Date(endDate.getFullYear(), endDate.getMonth() - offset + 1, 0)
-            const startIso = toIsoDate(monthStart)
-            const endIso = toIsoDate(monthEnd)
-            for (const transaction of transactions) {
-                if (transaction.date < startIso || transaction.date > endIso) {
-                    continue
-                }
-                if (transaction.kind === 'income') {
-                    income += amountOf(transaction)
-                } else {
-                    spend += amountOf(transaction)
-                }
-            }
-            counted += 1
-        }
-        return counted ? { spend: clean(spend / counted), income: clean(income / counted) } : { spend: 0, income: 0 }
-    }
-
     function categoryMovers(currentMap, previousMap, limit = 3) {
         const categories = new Set([...Object.keys(currentMap), ...Object.keys(previousMap)])
         const movers = []
@@ -305,17 +224,13 @@
         daysInclusive,
         previousRange,
         clean,
-        amountOf,
         filterTransactions,
         totals,
         aggregateByCategory,
         categoryTotalsMap,
         delta,
         dailySeries,
-        monthlySeries,
-        monthExpectedSpend,
         projectMonthEnd,
-        trailingAverage,
         categoryMovers,
         lastCompleteMonths,
         shiftYear,
@@ -328,5 +243,5 @@
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api
     }
-    global.DSCPLNInsights = api
+    global.DSCPLN = Object.assign(global.DSCPLN || {}, { math: api })
 })(typeof window !== 'undefined' ? window : globalThis)

@@ -5,39 +5,10 @@ const assert = require('node:assert/strict')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { execFileSync } = require('child_process')
 const ExcelJS = require('exceljs')
-const createProvider = require('../dataProviders/excelDataProvider')
 const { ValidationError, ConflictError } = require('../errors')
-
-const MOCK = path.join(__dirname, '..', 'mock-data.xlsx')
-
-const git = (args, cwd) => execFileSync('git', args, {
-    cwd,
-    encoding: 'utf8',
-    env: {
-        ...process.env,
-        GIT_AUTHOR_NAME: 'test',
-        GIT_AUTHOR_EMAIL: 'test@test',
-        GIT_COMMITTER_NAME: 'test',
-        GIT_COMMITTER_EMAIL: 'test@test',
-        GIT_CONFIG_COUNT: '1',
-        GIT_CONFIG_KEY_0: 'commit.gpgsign',
-        GIT_CONFIG_VALUE_0: 'false',
-    },
-})
-
-const initGitRepo = (dir) => {
-    git(['init', '-q'], dir)
-}
-
-const setup = () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dscpln-xlsx-'))
-    const workbookFile = path.join(dir, 'mock.xlsx')
-    fs.copyFileSync(MOCK, workbookFile)
-    initGitRepo(dir)
-    return { dir, workbookFile, provider: createProvider({ workbookFile }, dir) }
-}
+const createProvider = require('../dataProviders/excelDataProvider')
+const { git, createWorkbookRepo, createTestProvider } = require('./helpers')
 
 const createCustomWorkbook = async (file, rows, options = {}) => {
     const workbook = new ExcelJS.Workbook()
@@ -77,7 +48,7 @@ const createCustomWorkbook = async (file, rows, options = {}) => {
 const currencyOf = (data, code) => data.currencies.find((entry) => entry.code === code)
 
 test('reads constants, categories, currencies and budget', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const data = await provider.getData(new Date(2026, 8, 15))
     assert.deepEqual(data.currencies.map((entry) => entry.code), ['CAD', 'USD', 'XMR'])
     const cad = currencyOf(data, 'CAD')
@@ -94,7 +65,7 @@ test('reads constants, categories, currencies and budget', async () => {
 })
 
 test('parses transactions with full dates and counts expenses only', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const data = await provider.getData(new Date(2026, 8, 15))
     assert.equal(data.transactions.length, 6)
     const rent = data.transactions.find((transaction) => transaction.details === 'Rent September')
@@ -113,13 +84,13 @@ test('parses transactions with full dates and counts expenses only', async () =>
 })
 
 test('reports the first and last transaction dates', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const data = await provider.getData(new Date(2026, 8, 15))
     assert.deepEqual(data.transactionRange, { first: '2025-01-01', last: '2026-09-15' })
 })
 
 test('returns the viewed month newest first', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const data = await provider.getData(new Date(2026, 8, 15))
     assert.deepEqual(data.transactions.map((transaction) => transaction.date), [
         '2026-09-15', '2026-09-12', '2026-09-09', '2026-09-06', '2026-09-03', '2026-09-01',
@@ -127,14 +98,13 @@ test('returns the viewed month newest first', async () => {
 })
 
 test('computes previous month and trailing 12 month averages', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const data = await provider.getData(new Date(2026, 8, 15))
     const cad = currencyOf(data, 'CAD')
     assert.equal(cad.previousMonthsIncome, 2640)
     assert.equal(cad.trailingIncomeAverage, 2632.5)
 
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dscpln-xlsx-'))
-    const file = path.join(dir, 'custom.xlsx')
+    const { dir, workbookFile: file } = createWorkbookRepo()
     await createCustomWorkbook(file, [
         { year: 2025, month: 12, day: 6, details: 'Rent', expenses: 100, category: 'Rent' },
         { year: 2025, month: 12, day: 20, details: 'Job', moneyIn: 100, category: 'Job' },
@@ -145,7 +115,6 @@ test('computes previous month and trailing 12 month averages', async () => {
         { year: 2026, month: 3, day: 6, details: 'Rent', expenses: 400, category: 'Rent' },
         { year: 2026, month: 3, day: 20, details: 'Job', moneyIn: 400, category: 'Job' },
     ])
-    initGitRepo(dir)
     const custom = createProvider({ workbookFile: file }, dir)
     const data2026 = currencyOf(await custom.getData(new Date(2026, 2, 15)), 'CAD')
     assert.equal(data2026.monthsIncome, 0)
@@ -169,7 +138,7 @@ test('computes previous month and trailing 12 month averages', async () => {
 })
 
 test('returns 12 months of per-currency history ending with the viewed month', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const data = await provider.getData(new Date(2026, 8, 15))
     assert.equal(data.history.length, 12)
     assert.deepEqual([data.history[0].year, data.history[0].month], [2025, 10])
@@ -182,12 +151,10 @@ test('returns 12 months of per-currency history ending with the viewed month', a
 })
 
 test('history zero-fills months without data', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dscpln-xlsx-'))
-    const file = path.join(dir, 'custom.xlsx')
+    const { dir, workbookFile: file } = createWorkbookRepo()
     await createCustomWorkbook(file, [
         { year: 2026, month: 1, day: 6, details: 'Rent', expenses: 100, category: 'Rent' },
     ])
-    initGitRepo(dir)
     const provider = createProvider({ workbookFile: file }, dir)
     const data = await provider.getData(new Date(2026, 2, 15))
     assert.equal(data.history.length, 12)
@@ -200,7 +167,7 @@ test('history zero-fills months without data', async () => {
 })
 
 test('preserves high-precision amounts like fractional XMR', async () => {
-    const { provider, workbookFile } = setup()
+    const { provider, workbookFile } = createTestProvider()
     const created = await provider.addTransaction({
         kind: 'expense',
         amount: 0.000001,
@@ -222,12 +189,10 @@ test('preserves high-precision amounts like fractional XMR', async () => {
 })
 
 test('ignores a bloated sheet dimension', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dscpln-xlsx-'))
-    const file = path.join(dir, 'bloated.xlsx')
+    const { dir, workbookFile: file } = createWorkbookRepo()
     await createCustomWorkbook(file, [
         { year: 2026, month: 9, day: 1, details: 'Rent', expenses: 100, category: 'Rent' },
     ], { bloated: true })
-    initGitRepo(dir)
     const provider = createProvider({ workbookFile: file }, dir)
     const data = await Promise.race([
         provider.getData(new Date(2026, 8, 15)),
@@ -238,7 +203,7 @@ test('ignores a bloated sheet dimension', async () => {
 })
 
 test('picks up external workbook changes despite the cache', async () => {
-    const { provider, workbookFile } = setup()
+    const { provider, workbookFile } = createTestProvider()
     const before = await provider.getData(new Date(2026, 8, 15))
     assert.equal(before.transactions.length, 6)
 
@@ -254,7 +219,7 @@ test('picks up external workbook changes despite the cache', async () => {
 })
 
 test('reports every currency with its own activity', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const august = await provider.getData(new Date(2026, 7, 20))
     assert.equal(currencyOf(august, 'CAD').hasActivity, true)
     assert.equal(currencyOf(august, 'USD').monthsSpend, 21.5)
@@ -267,7 +232,7 @@ test('reports every currency with its own activity', async () => {
 })
 
 test('adds, edits and deletes transactions, preserving styles', async () => {
-    const { provider, workbookFile } = setup()
+    const { provider, workbookFile } = createTestProvider()
     const created = await provider.addTransaction({
         kind: 'expense',
         amount: 9.5,
@@ -316,7 +281,7 @@ test('adds, edits and deletes transactions, preserving styles', async () => {
 })
 
 test('validates transaction input', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const base = { kind: 'expense', amount: 5, details: 'x', date: '2026-09-15', category: 'Snacks', currency: 'CAD', notes: '' }
     await assert.rejects(provider.addTransaction({ ...base, kind: 'transfer' }), ValidationError)
     await assert.rejects(provider.addTransaction({ ...base, category: 'Nope' }), ValidationError)
@@ -329,13 +294,13 @@ test('validates transaction input', async () => {
 })
 
 test('reports transaction column order for imports', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const data = await provider.getData(new Date(2026, 8, 15))
     assert.deepEqual(data.transactionColumns, ['Date', 'Details', 'Money In', 'Expenses', 'Currency', 'Type', 'Notes'])
 })
 
 test('imports tab-separated transactions positionally', async () => {
-    const { provider, dir } = setup()
+    const { provider, dir } = createTestProvider()
     const text = [
         '2026-09-08\tCASH Dividend\t29.77\t\tCAD\tDividend',
         '2026-09-29\tXBAL Dividend\t52.21\t\tCAD\tDividend',
@@ -355,7 +320,7 @@ test('imports tab-separated transactions positionally', async () => {
 })
 
 test('imports notes and comma-grouped amounts', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const result = await provider.importTransactions('2026-09-11\tSalary\t1,234.56\t\tCAD\tJob\tSeptember pay\n')
     assert.equal(result.imported, 1)
     assert.equal(result.transactions[0].moneyIn, 1234.56)
@@ -363,7 +328,7 @@ test('imports notes and comma-grouped amounts', async () => {
 })
 
 test('rejects the whole import when any line is invalid, writing nothing', async () => {
-    const { provider, workbookFile } = setup()
+    const { provider, workbookFile } = createTestProvider()
     const before = fs.readFileSync(workbookFile)
     const text = [
         '2026-09-08\tCASH Dividend\t29.77\t\tCAD\tDividend',
@@ -380,7 +345,7 @@ test('rejects the whole import when any line is invalid, writing nothing', async
 })
 
 test('validates import lines', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const cases = [
         ['2026-09-08\tBoth\t1\t2\tCAD\tDividend', /Line 1: Fill only one of Money In or Expenses/],
         ['2026-09-08\tNo amount\t\t\tCAD\tDividend', /Line 1: Fill one of Money In or Expenses/],
@@ -404,7 +369,7 @@ test('validates import lines', async () => {
 })
 
 test('returns transactions for a date range inclusive, sorted', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const month = await provider.getTransactions('2026-09-01', '2026-09-30')
     assert.equal(month.start, '2026-09-01')
     assert.equal(month.end, '2026-09-30')
@@ -418,7 +383,7 @@ test('returns transactions for a date range inclusive, sorted', async () => {
 })
 
 test('accepts ordinary decimal amounts without float-precision false positives', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const base = { kind: 'expense', details: 'Precision', date: '2026-09-15', category: 'Snacks', currency: 'CAD', notes: '' }
     const created = await provider.addTransaction({ ...base, amount: 16.99 })
     assert.equal(created.expenses, 16.99)
@@ -428,7 +393,7 @@ test('accepts ordinary decimal amounts without float-precision false positives',
 })
 
 test('tracks currency conversions separately from spend and income', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     await provider.addTransaction({
         kind: 'expense', amount: 500, details: 'Convert to USD', date: '2026-09-10',
         category: 'Conversion', currency: 'CAD', notes: '',
@@ -471,7 +436,7 @@ test('tracks currency conversions separately from spend and income', async () =>
 })
 
 test('writes per-currency budgets into the Constants sheet', async () => {
-    const { provider, workbookFile } = setup()
+    const { provider, workbookFile } = createTestProvider()
     await provider.updateMonthlyBudget(2500, 900, 'CAD')
     await provider.updateMonthlyBudget(700, 50, 'USD')
     const workbook = new ExcelJS.Workbook()
@@ -502,7 +467,7 @@ test('requires the workbook directory to be a git repository', () => {
 })
 
 test('commits changes with the app identity, ignoring existing signing config', async () => {
-    const { provider, dir } = setup()
+    const { provider, dir } = createTestProvider()
     git(['config', 'commit.gpgsign', 'true'], dir)
     git(['config', 'user.signingkey', 'DEADBEEF'], dir)
     git(['config', 'user.name', 'Someone Else'], dir)
@@ -527,7 +492,7 @@ test('commits changes with the app identity, ignoring existing signing config', 
 })
 
 test('suggests previously used transaction details', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const netflix = await provider.suggestDetails('net')
     assert.equal(netflix.suggestions[0].details, 'Netflix')
     assert.equal(netflix.suggestions[0].category, 'Subscriptions')
@@ -563,7 +528,7 @@ test('suggests previously used transaction details', async () => {
 })
 
 test('suggests categories from history per kind', async () => {
-    const { provider } = setup()
+    const { provider } = createTestProvider()
     const expense = await provider.suggestCategories('grocries', 'expense')
     assert.equal(expense.suggestions[0].category, 'Food Weekly')
     const income = await provider.suggestCategories('Jb', 'income')

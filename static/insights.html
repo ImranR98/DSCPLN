@@ -69,7 +69,7 @@
             <div class="quick-ranges" role="group" aria-label="Quick ranges">
                 <button class="chip" type="button" data-range="this-month">This month</button>
                 <button class="chip" type="button" data-range="last-month">Last month</button>
-                <button class="chip chip--month" id="monthChip" type="button">Pick a month</button>
+                <button class="chip" id="monthChip" type="button">Pick a month</button>
                 <button class="chip" type="button" data-range="last-3">Last 3 full months</button>
                 <button class="chip" type="button" data-range="last-6">Last 6 full months</button>
                 <button class="chip" type="button" data-range="last-12">Last 12 full months</button>
@@ -94,18 +94,18 @@
                 <h2>Monthly totals</h2>
                 <span class="card__header-tools">
                     <span id="historyRange" class="card__context"></span>
-                    <span class="history-legend">
-                        <span class="history-legend__item">
-                            <span class="history-legend__swatch"></span>Out
+                    <span class="chart-legend">
+                        <span class="chart-legend__item">
+                            <span class="chart-legend__swatch"></span>Out
                         </span>
-                        <span class="history-legend__item">
-                            <span class="history-legend__swatch history-legend__swatch--in"></span>In
+                        <span class="chart-legend__item">
+                            <span class="chart-legend__swatch chart-legend__swatch--in"></span>In
                         </span>
                     </span>
                 </span>
             </div>
-            <div id="historyChart" class="history"></div>
-            <div id="historyTooltip" class="history-tooltip" hidden></div>
+            <div id="historyChart" class="chart-host"></div>
+            <div id="historyTooltip" class="chart-tooltip" hidden></div>
         </section>
 
         <div id="insightsContent"></div>
@@ -113,10 +113,10 @@
 
     <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
 
-    <script src="format.js"></script>
-    <script src="insightsMath.js"></script>
-    <script src="transactionList.js"></script>
-    <script src="historyChart.js"></script>
+    <script src="core.js"></script>
+    <script src="insights-math.js"></script>
+    <script src="transaction-list.js"></script>
+    <script src="chart.js"></script>
     <script src="insights.js"></script>
 </body>
 

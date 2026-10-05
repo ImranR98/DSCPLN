@@ -2,7 +2,7 @@
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { suggestCategories, normalize } = require('../categorySuggester')
+const { suggestCategories, normalize } = require('../category-suggester')
 
 const samples = [
     { details: 'Groceries', category: 'Food Weekly', date: new Date('2026-08-01') },

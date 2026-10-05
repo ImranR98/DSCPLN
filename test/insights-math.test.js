@@ -2,7 +2,7 @@
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const math = require('../static/insightsMath')
+const math = require('../static/insights-math')
 
 const tx = (date, kind, amount, extra = {}) => ({
     date,
@@ -87,25 +87,20 @@ test('computes deltas with null percent when there is no previous amount', () =>
     assert.deepEqual(math.delta(10, 0), { amount: 10, pct: null })
 })
 
-test('builds daily and monthly series', () => {
+test('builds a daily series', () => {
     const transactions = [
         tx('2026-09-01', 'expense', 10, { category: 'Rent' }),
         tx('2026-09-03', 'income', 100),
         tx('2026-09-03', 'expense', 2.5, { category: 'Snacks' }),
-        tx('2026-10-02', 'expense', 4, { category: 'Rent' }),
     ]
     const daily = math.dailySeries(transactions, new Date(2026, 8, 1), new Date(2026, 8, 4))
     assert.equal(daily.length, 4)
     assert.deepEqual(daily[0], { date: '2026-09-01', spend: 10, income: 0 })
-    assert.deepEqual(daily[2], { date: '2026-09-03', spend: 2.5, income: 100 })
     assert.deepEqual(daily[1], { date: '2026-09-02', spend: 0, income: 0 })
-    assert.deepEqual(math.monthlySeries(transactions), [
-        { month: '2026-09', spend: 12.5, income: 100 },
-        { month: '2026-10', spend: 4, income: 0 },
-    ])
+    assert.deepEqual(daily[2], { date: '2026-09-03', spend: 2.5, income: 100 })
 })
 
-test('projects month-end spending and averages', () => {
+test('projects month-end spending', () => {
     assert.deepEqual(math.projectMonthEnd({ spend: 300, income: 1000, elapsedDays: 10, daysInMonth: 30 }), {
         spend: 900,
         income: 3000,
@@ -114,24 +109,6 @@ test('projects month-end spending and averages', () => {
         spend: 0,
         income: 0,
     })
-    const transactions = [
-        tx('2026-07-10', 'expense', 100, { category: 'Rent' }),
-        tx('2026-07-20', 'income', 1000),
-        tx('2026-08-10', 'expense', 200, { category: 'Rent' }),
-        tx('2026-08-20', 'income', 1200),
-        tx('2026-09-05', 'expense', 999, { category: 'Rent' }),
-    ]
-    assert.deepEqual(math.trailingAverage(transactions, new Date(2026, 8, 15), 2), {
-        spend: 150,
-        income: 1100,
-    })
-})
-
-test('applies the first-day-bias pace formula', () => {
-    const expected = math.monthExpectedSpend(3000, 1500, 4, 31)
-    assert.equal(Number(expected.toFixed(2)), 1693.55)
-    assert.equal(math.monthExpectedSpend(0, 0, 4, 31), 0)
-    assert.equal(math.monthExpectedSpend(1000, 5000, 15, 30), 1000)
 })
 
 test('builds complete-month presets and comparison windows', () => {

@@ -112,6 +112,12 @@ test('parses transactions with full dates and counts expenses only', async () =>
     assert.equal(currencyOf(data, 'USD').hasActivity, false)
 })
 
+test('reports the first and last transaction dates', async () => {
+    const { provider } = setup()
+    const data = await provider.getData(new Date(2026, 8, 15))
+    assert.deepEqual(data.transactionRange, { first: '2025-01-01', last: '2026-09-15' })
+})
+
 test('returns the viewed month newest first', async () => {
     const { provider } = setup()
     const data = await provider.getData(new Date(2026, 8, 15))

@@ -85,7 +85,7 @@ Row 2 holds a header per column, and each column lists the allowed values for th
 - **Add**: open "This month", click "Add transaction", and fill in Expense/Income, amount, details, date, category, currency, and optional notes. The date defaults to the day you are viewing, and the currency defaults to the main (first) Constants currency.
 - **Details autocomplete**: as you type in Details, previously used descriptions appear in a suggestion menu (ranked by prefix/token match, use count and recency). Picking one also fills the category with the last one used for that description.
 - **Category suggestions**: as you type details, the app scores them against all past transactions of the same kind (fuzzy token/trigram/edit-distance matching, weighted by how often and how recently a category was used). It auto-selects the category when the match is confident, and always shows the top suggestions so you can pick a different one.
-- **Import**: click "Import" and paste one transaction per line, tab-separated, using the Transactions sheet's column order (shown in the dialog). Exactly one of Money In / Expenses must be filled. Every line is validated first: if any line is invalid the whole paste is rejected with per-line errors and nothing is written. A successful import is one git commit.
+- **Import**: click "Import" and paste one transaction per line, tab-separated, using the Transactions sheet's column order (shown in the dialog). Exactly one of Money In / Expenses must be filled. Every line is validated first: if any line is invalid the whole paste is rejected with per-line errors and nothing is written. Lines dated before the current month trigger a confirmation step ("Import anyway"). A successful import is one git commit.
 - **Edit / delete**: use the buttons on each row. Deleting shifts the remaining rows up, like deleting a row in Excel.
 
 The same actions are available over HTTP:
@@ -109,11 +109,11 @@ Transaction ids embed the row number and a hash of the row values. If the workbo
 Everything is shown on one page, per currency:
 
 - The **main currency** (the first one in Constants) gets the full Month card: spend against its budget with progress, pace, remaining/day, previous-month spend, and 12-month average spend.
-- **Earnings** for the main currency: `Money In` for the viewed month, the previous calendar month, and the running average of the 12 complete months before the viewed month (missing months count as $0).
-- **Other currencies** appear as compact tiles below, each with spend vs budget, a progress bar, remaining, and income. Currencies with no spending or income on the viewed date are hidden; the main currency is always shown.
+- **Earnings** for the main currency: `Money In` for the current month, the previous calendar month, and the running average of the 12 complete months before the current month (missing months count as $0).
+- **Other currencies** appear as compact tiles below, each with spend vs budget, a progress bar, remaining, and income. Currencies with no spending or income this month are hidden; the main currency is always shown.
 - **Last 12 months** charts money in and out per month for every currency with activity in that window, as small multiples (one lane per currency, each with its own scale), a 12-month Total column, and a hover tooltip. Each currency keeps a stable accent color across its tile, chips, and chart lane.
-- On wide screens the transactions list moves into a second column on the right; on narrow screens everything stacks in one column.
-- **This month** lists all currencies' transactions with the date shown on each row.
+- On wide screens the transactions list moves into a second column on the right, with the chart below the month overview; on narrow screens everything stacks in one column with the chart below the transactions list.
+- **This month** lists all currencies' transactions newest first, with the date shown on each row. (Historical viewing lives on the insights page.)
 - **Currency conversions** (categories in the `Conversions` group) do not count as spending or earning: they are excluded from the Spent/Earned figures, budgets, pace and notifications. The main card shows a net **Converted** row (in − out per period, hover for the out/in split), currency tiles show a compact converted line, and the chart's Total column lists `conv out`/`conv in` rows.
 - Each currency has its own budget, editable from the pencil button on its card. The first-day bias is available from day 1 and the rest of the budget accrues across the month.
 
@@ -121,13 +121,16 @@ Everything is shown on one page, per currency:
 
 `/insights` (linked from the dashboard header) analyzes an arbitrary date range, per currency:
 
-- **Filters**: start/end date pickers, a month picker that selects a whole month, and quick ranges (this/last month, 3/6/12 months, YTD). The range is kept in the URL.
+- **Filters**: start/end date pickers; quick ranges `This month`, `Last month`, a month chip (opens a month picker), `Last 3/6/12 full months` (complete calendar months only), `Year to date` and `All time` (first to latest transaction); and one **Compare with** selector: `Previous period` (default; snaps to whole months when the range does, otherwise equal-length), `Same period last year`, or `Trailing 3/6/12-month average`. All comparisons on the page — KPIs, categories, movers, chart baselines and the forecast — use this window. The range and comparison are kept in the URL, and a note spells out the exact windows being compared (partial-month ranges are called out; average comparisons are scaled per day).
+- **Transactions panel** (top, collapsed by default): all transactions in the range across currencies, read-only.
+- **Monthly totals chart** (above the currency sections, when the range spans more than one month): the same chart as the dashboard, with an asterisk marking partial months.
 - **Per-currency sections** (primary first, then by volume), each with:
-  - KPI tiles for spent, earned, net, average spend per day and transaction count, each compared with the preceding equal-length period.
+  - KPI tiles for spent, earned, net (coloured by sign, with intensity based on the smaller of spent/earned), average spend per day, average earned per day and transaction count — all vs the selected comparison, with the exact window in the tooltip.
   - Category breakdowns for spending and earning with include/exclude checkboxes that recompute the totals, percentages, charts and forecast (select all/none included).
-  - A cumulative-spend chart with the budget pace line for single-month ranges, or monthly spend/income bars for longer ranges.
-  - Forecasts: projected month-end spend/income vs budget when the range includes today, plus a next-30-days estimate from the trailing 3-month average.
-  - Biggest category increases/decreases vs the previous period.
+  - A cumulative spent-and-earned chart with dashed spent/earned baselines for the selected comparison (single-month ranges), or monthly spend/income bars for longer ranges.
+  - Forecasts: projected month-end spend/income when the range includes today, plus a next-30-days estimate based on the selected comparison window (labelled with the exact dates/months used).
+  - Biggest spending and earning increases/decreases vs the comparison.
+- Budgets are not referenced on this page.
 - Conversion categories are de-selected by default in every section (they remain in the list and can be re-enabled).
 
 ## Migrations

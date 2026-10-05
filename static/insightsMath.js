@@ -41,8 +41,22 @@
         return Math.round((end - start) / DAY_MS) + 1
     }
 
-    // Equal-length range immediately before [start, end].
+    function isWholeMonthsRange(start, end) {
+        return toIsoDate(start) === toIsoDate(startOfMonth(start)) &&
+            toIsoDate(end) === toIsoDate(endOfMonth(end))
+    }
+
+    // Range immediately before [start, end]. When the range covers whole
+    // calendar months, the previous period snaps to the same number of whole
+    // months (e.g. September -> August, not Aug 2 - Aug 31); otherwise it is
+    // the equal-length window immediately before.
     function previousRange(start, end) {
+        if (isWholeMonthsRange(start, end)) {
+            const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+            const previousEnd = new Date(start.getFullYear(), start.getMonth(), 0)
+            const previousStart = new Date(previousEnd.getFullYear(), previousEnd.getMonth() - (months - 1), 1)
+            return { start: previousStart, end: previousEnd }
+        }
         const length = daysInclusive(start, end)
         const previousEnd = addDays(start, -1)
         return { start: addDays(previousEnd, -(length - 1)), end: previousEnd }
@@ -180,6 +194,65 @@
         return { spend: clean(spend * factor), income: clean(income * factor) }
     }
 
+    // The last `count` complete calendar months ending with the month before date.
+    function lastCompleteMonths(count, date) {
+        const end = new Date(date.getFullYear(), date.getMonth(), 0)
+        const start = new Date(end.getFullYear(), end.getMonth() - (count - 1), 1)
+        return { start, end }
+    }
+
+    function shiftYear(date) {
+        const year = date.getFullYear() - 1
+        const month = date.getMonth()
+        const day = Math.min(date.getDate(), new Date(year, month + 1, 0).getDate())
+        return new Date(year, month, day)
+    }
+
+    function spansMultipleMonths(start, end) {
+        return start.getFullYear() !== end.getFullYear() || start.getMonth() !== end.getMonth()
+    }
+
+    // Months touched by [start, end], flagging months only partially covered.
+    function monthPartials(start, end) {
+        const months = []
+        const cursor = startOfMonth(start)
+        const last = startOfMonth(end)
+        while (cursor <= last) {
+            const monthStart = new Date(cursor)
+            const monthEnd = endOfMonth(cursor)
+            months.push({
+                year: cursor.getFullYear(),
+                month: cursor.getMonth() + 1,
+                partial: start > monthStart || end < monthEnd,
+            })
+            cursor.setMonth(cursor.getMonth() + 1)
+        }
+        return months
+    }
+
+    // Window compared against for a mode: 'prev', 'yoy', 'avg3', 'avg6', 'avg12'.
+    function comparisonWindow(mode, range) {
+        if (mode === 'yoy') {
+            return { kind: 'range', mode, start: shiftYear(range.start), end: shiftYear(range.end) }
+        }
+        if (mode === 'avg3' || mode === 'avg6' || mode === 'avg12') {
+            const count = Number(mode.slice(3))
+            return { kind: 'average', mode, count, ...lastCompleteMonths(count, range.start) }
+        }
+        return { kind: 'range', mode: 'prev', ...previousRange(range.start, range.end) }
+    }
+
+    // Range-mode windows are equal-length; average-mode windows scale to the
+    // range length so per-day rates are compared fairly.
+    function comparisonFactor(window, range) {
+        if (window.kind !== 'average') {
+            return 1
+        }
+        const rangeDays = daysInclusive(range.start, range.end)
+        const windowDays = daysInclusive(window.start, window.end)
+        return windowDays > 0 ? rangeDays / windowDays : 0
+    }
+
     // Average per complete calendar month over the `months` months before endDate's month.
     function trailingAverage(transactions, endDate, months) {
         let spend = 0
@@ -244,6 +317,13 @@
         projectMonthEnd,
         trailingAverage,
         categoryMovers,
+        lastCompleteMonths,
+        shiftYear,
+        spansMultipleMonths,
+        monthPartials,
+        comparisonWindow,
+        comparisonFactor,
+        isWholeMonthsRange,
     }
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api

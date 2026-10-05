@@ -45,7 +45,7 @@
     </header>
 
     <main class="insights">
-        <section class="card insights-filters" aria-label="Date range">
+        <section class="card insights-filters" aria-label="Date range and comparison">
             <div class="filters">
                 <label class="field">
                     <span class="field__label">Start</span>
@@ -56,18 +56,56 @@
                     <input id="endDate" type="date" required>
                 </label>
                 <label class="field">
-                    <span class="field__label">Month</span>
-                    <input id="monthPicker" type="month">
+                    <span class="field__label">Compare with</span>
+                    <select id="comparisonSelect">
+                        <option value="prev">Previous period</option>
+                        <option value="yoy">Same period last year</option>
+                        <option value="avg3">Trailing 3-month average</option>
+                        <option value="avg6">Trailing 6-month average</option>
+                        <option value="avg12">Trailing 12-month average</option>
+                    </select>
                 </label>
             </div>
             <div class="quick-ranges" role="group" aria-label="Quick ranges">
                 <button class="chip" type="button" data-range="this-month">This month</button>
                 <button class="chip" type="button" data-range="last-month">Last month</button>
-                <button class="chip" type="button" data-range="last-3">Last 3 months</button>
-                <button class="chip" type="button" data-range="last-6">Last 6 months</button>
-                <button class="chip" type="button" data-range="last-12">Last 12 months</button>
+                <button class="chip chip--month" id="monthChip" type="button">Pick a month</button>
+                <button class="chip" type="button" data-range="last-3">Last 3 full months</button>
+                <button class="chip" type="button" data-range="last-6">Last 6 full months</button>
+                <button class="chip" type="button" data-range="last-12">Last 12 full months</button>
                 <button class="chip" type="button" data-range="ytd">Year to date</button>
+                <button class="chip" type="button" data-range="all-time">All time</button>
             </div>
+            <input id="monthPickerInput" class="visually-hidden" type="month" tabindex="-1" aria-hidden="true">
+            <p id="compareNote" class="insights-note muted"></p>
+        </section>
+
+        <details class="card" id="transactionsCard">
+            <summary>
+                <span>Transactions</span>
+                <span id="transactionsMeta" class="muted"></span>
+            </summary>
+            <ul id="transactionsList" class="expenses__list"></ul>
+            <p id="transactionsEmpty" class="muted" hidden>No transactions in this range.</p>
+        </details>
+
+        <section class="card" id="historyCard" hidden>
+            <div class="card__header">
+                <h2>Monthly totals</h2>
+                <span class="card__header-tools">
+                    <span id="historyRange" class="card__context"></span>
+                    <span class="history-legend">
+                        <span class="history-legend__item">
+                            <span class="history-legend__swatch"></span>Out
+                        </span>
+                        <span class="history-legend__item">
+                            <span class="history-legend__swatch history-legend__swatch--in"></span>In
+                        </span>
+                    </span>
+                </span>
+            </div>
+            <div id="historyChart" class="history"></div>
+            <div id="historyTooltip" class="history-tooltip" hidden></div>
         </section>
 
         <div id="insightsContent"></div>
@@ -77,6 +115,8 @@
 
     <script src="format.js"></script>
     <script src="insightsMath.js"></script>
+    <script src="transactionList.js"></script>
+    <script src="historyChart.js"></script>
     <script src="insights.js"></script>
 </body>
 

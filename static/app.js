@@ -1,6 +1,6 @@
 'use strict'
 
-const { fractionDigitsFor, hasSubCentPrecision, currencyColor, setBreakableText } = DSCPLNFormat
+const { hasSubCentPrecision, currencyColor, setBreakableText } = DSCPLNFormat
 
 const $ = (id) => document.getElementById(id)
 
@@ -9,15 +9,7 @@ const els = {
     themeButton: $('themeButton'),
     contextLabel: $('contextLabel'),
     updatedLabel: $('updatedLabel'),
-    pretendBanner: $('pretendBanner'),
-    pretendBannerDate: $('pretendBannerDate'),
-    bannerTodayButton: $('bannerTodayButton'),
-    pretendButton: $('pretendButton'),
-    pretendDialog: $('pretendDialog'),
-    pretendForm: $('pretendForm'),
-    pretendFormError: $('pretendFormError'),
-    pretendCancelButton: $('pretendCancelButton'),
-    pretendApplyButton: $('pretendApplyButton'),
+
     monthCard: $('monthCard'),
     monthHeading: $('monthHeading'),
     monthName: $('monthName'),
@@ -56,11 +48,10 @@ const els = {
     importForm: $('importForm'),
     importTextarea: $('importTextarea'),
     importHint: $('importHint'),
+    importPastWarning: $('importPastWarning'),
     importFormError: $('importFormError'),
     importCancelButton: $('importCancelButton'),
     importSubmitButton: $('importSubmitButton'),
-    pretendDateInput: $('pretendDateInput'),
-    pretendTodayButton: $('pretendTodayButton'),
     budgetDialog: $('budgetDialog'),
     budgetForm: $('budgetForm'),
     monthlyBudgetInput: $('monthlyBudgetInput'),
@@ -110,14 +101,12 @@ const ICONS = {
 
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
 const dayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-const fullDayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
 const timeFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
 
 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)')
 
 const state = {
     today: startOfDay(new Date()),
-    viewDate: startOfDay(new Date()),
     data: null,
     lastFetchAt: 0,
     theme: readTheme(),
@@ -132,7 +121,6 @@ let detailsSuggestionTimer = null
 let detailsSuggestionSequence = 0
 let detailsSuggestions = []
 let detailsSuggestionIndex = -1
-let historyResizeTimer = null
 let fetchSequence = 0
 
 function startOfDay(date) {
@@ -142,14 +130,6 @@ function startOfDay(date) {
 function toDateInputValue(date) {
     const pad = (n) => String(n).padStart(2, '0')
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-}
-
-function parseDateInputValue(value) {
-    const parts = value.split('-').map(Number)
-    if (parts.length !== 3 || parts.some((p) => !Number.isInteger(p))) return null
-    const date = new Date(parts[0], parts[1] - 1, parts[2])
-    if (date.getFullYear() !== parts[0] || date.getMonth() !== parts[1] - 1 || date.getDate() !== parts[2]) return null
-    return date
 }
 
 function parseIsoDate(value) {
@@ -242,18 +222,12 @@ function toast(message, type = 'success') {
     }, 3200)
 }
 
-function refreshToday() {
-    const newToday = startOfDay(new Date())
-    if (isSameDay(state.viewDate, state.today)) state.viewDate = newToday
-    state.today = newToday
-}
-
 async function fetchData({ silent = false } = {}) {
     const sequence = ++fetchSequence
-    refreshToday()
+    state.today = startOfDay(new Date())
     if (!state.data && !silent) document.body.classList.add('is-loading')
     try {
-        const params = new URLSearchParams({ date: toDateInputValue(state.viewDate) })
+        const params = new URLSearchParams({ date: toDateInputValue(state.today) })
         const response = await fetch(`/data?${params}`, {
             headers: { Accept: 'application/json' },
         })
@@ -291,11 +265,8 @@ function primaryCurrency() {
 }
 
 function renderContext() {
-    const viewingToday = isSameDay(state.viewDate, state.today)
-    els.contextLabel.textContent = `${viewingToday ? 'Today' : 'Viewing'} · ${dayFormat.format(state.viewDate)}`
+    els.contextLabel.textContent = `Today · ${dayFormat.format(state.today)}`
     els.updatedLabel.textContent = state.lastFetchAt ? `Updated ${timeFormat.format(new Date(state.lastFetchAt))}` : ''
-    els.pretendBanner.hidden = viewingToday
-    if (!viewingToday) els.pretendBannerDate.textContent = fullDayFormat.format(state.viewDate)
 }
 
 function setCardState(card, spent, budget) {
@@ -328,7 +299,7 @@ function renderMonth(currency) {
     const budget = currency ? toNumber(currency.monthlyBudget) : 0
     const spent = currency ? toNumber(currency.monthsSpend) : 0
     const code = currency ? currency.code : null
-    const date = state.viewDate
+    const date = state.today
     const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
     const day = date.getDate()
     const daysLeft = Math.max(1, daysInMonth - day + 1)
@@ -483,488 +454,22 @@ function renderOtherCurrencies() {
     }
 }
 
-const SVG_NS = 'http://www.w3.org/2000/svg'
 const monthYearFormat = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' })
-const compactNumberFormat = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 })
-
-function svgElement(tag, attributes = {}) {
-    const element = document.createElementNS(SVG_NS, tag)
-    for (const [name, value] of Object.entries(attributes)) {
-        element.setAttribute(name, value)
-    }
-    return element
-}
-
-function niceMax(value) {
-    if (!Number.isFinite(value) || value <= 0) {
-        return 0
-    }
-    const exponent = Math.floor(Math.log10(value))
-    const base = 10 ** exponent
-    const fraction = value / base
-    const nice = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10
-    return nice * base
-}
-
-function tickMoney(value) {
-    const amount = Number.isFinite(value) ? value : 0
-    const absolute = Math.abs(amount)
-    if (absolute >= 1000) {
-        return `$${compactNumberFormat.format(amount)}`
-    }
-    if (absolute >= 1) {
-        return `$${Math.round(amount).toLocaleString()}`
-    }
-    const decimals = fractionDigitsFor(amount, 3)
-    return `$${amount.toFixed(decimals).replace(/0+$/, '').replace(/\.$/, '')}`
-}
-
-function historyMonthLabel(entry, index) {
-    const date = new Date(entry.year, entry.month - 1, 1)
-    const base = monthYearFormat.formatToParts(date).find((part) => part.type === 'month').value
-    if (index === 0 || entry.month === 1) {
-        return `${base} '${String(entry.year).slice(-2)}`
-    }
-    return base
-}
-
-function buildHistoryTooltip(monthIndex, activeCurrencies) {
-    const entry = state.data.history[monthIndex]
-    const container = document.createElement('div')
-    const title = document.createElement('strong')
-    title.className = 'history-tooltip__title'
-    title.textContent = monthYearFormat.format(new Date(entry.year, entry.month - 1, 1))
-    container.appendChild(title)
-    for (const code of activeCurrencies) {
-        const totals = entry.currencies[code] || { spend: 0, income: 0 }
-        const row = document.createElement('div')
-        row.className = 'history-tooltip__row'
-        const codeEl = document.createElement('span')
-        codeEl.className = 'history-tooltip__code'
-        const dot = document.createElement('span')
-        dot.className = 'history-tooltip__dot'
-        const color = currencyColor(code)
-        if (color) dot.style.background = color
-        const codeText = document.createElement('span')
-        codeText.textContent = code
-        codeEl.append(dot, codeText)
-        const outEl = document.createElement('span')
-        outEl.className = 'history-tooltip__out'
-        outEl.textContent = `${money(toNumber(totals.spend), code)} out`
-        const inEl = document.createElement('span')
-        inEl.className = 'history-tooltip__in'
-        inEl.textContent = `+${money(toNumber(totals.income), code)} in`
-        row.append(codeEl, outEl, inEl)
-        container.appendChild(row)
-        const convertedOut = toNumber(totals.convertedOut)
-        const convertedIn = toNumber(totals.convertedIn)
-        if (convertedOut > 0 || convertedIn > 0) {
-            const converted = document.createElement('div')
-            converted.className = 'history-tooltip__conv'
-            const parts = []
-            if (convertedOut > 0) {
-                parts.push(`−${money(convertedOut, code)}`)
-            }
-            if (convertedIn > 0) {
-                parts.push(`+${money(convertedIn, code)}`)
-            }
-            converted.textContent = `converted ${parts.join(' / ')}`
-            container.appendChild(converted)
-        }
-    }
-    return container
-}
-
-function measureTextWidth(text, className) {
-    const span = document.createElement('span')
-    span.className = className
-    span.textContent = text
-    span.style.position = 'absolute'
-    span.style.visibility = 'hidden'
-    span.style.whiteSpace = 'nowrap'
-    els.historyCard.appendChild(span)
-    const width = span.getBoundingClientRect().width
-    span.remove()
-    return width
-}
 
 function renderHistory() {
     const history = state.data.history || []
     const codes = (state.data.currencies || []).map((currency) => currency.code)
-    const active = codes.filter((code) => history.some((entry) => {
-        const totals = entry.currencies && entry.currencies[code]
-        return totals && (totals.spend > 0 || totals.income > 0 ||
-            totals.convertedOut > 0 || totals.convertedIn > 0)
-    }))
-
-    els.historyTooltip.hidden = true
-    els.historyChart.textContent = ''
-    els.historyCard.hidden = history.length === 0 || active.length === 0
-    if (els.historyCard.hidden) {
+    const rendered = DSCPLNHistory.render(els.historyChart, els.historyTooltip, { months: history, codes })
+    els.historyCard.hidden = !rendered
+    if (!rendered) {
+        els.historyRange.textContent = ''
         return
     }
-
     const first = history[0]
     const last = history[history.length - 1]
-    els.historyRange.textContent = active.length ?
-        `${monthYearFormat.format(new Date(first.year, first.month - 1, 1))} – ${monthYearFormat.format(new Date(last.year, last.month - 1, 1))}` :
-        ''
-
-    // The SVG is built in real pixels (viewBox matches the rendered width), so
-    // text stays legible on small screens. Column widths that hold numbers are
-    // measured from the actual text so long values can't be clipped.
-    const width = Math.max(240, Math.round(els.historyChart.clientWidth || 720))
-    const topPad = 6
-    const laneHeight = 92
-    const laneGap = 18
-    const laneStride = laneHeight + laneGap
-    const axisHeight = 26
-
-    const laneMax = new Map()
-    let maxTickWidth = 0
-    for (const code of active) {
-        const max = niceMax(Math.max(...history.map((entry) => {
-            const totals = entry.currencies[code] || { spend: 0, income: 0 }
-            return Math.max(totals.spend, totals.income)
-        })))
-        for (const factor of [0.5, 1]) {
-            if (max > 0) {
-                maxTickWidth = Math.max(maxTickWidth, measureTextWidth(tickMoney(max * factor), 'history__tick'))
-            }
-        }
-        laneMax.set(code, max)
-    }
-
-    // The Total column is capped (30% of the chart) so long fractional-currency
-    // values can't shrink the plot. Values that don't fit wrap onto their own
-    // line beneath the "out"/"in" label.
-    const totalColumnCap = Math.max(84, Math.round(width * 0.3))
-    const totalTextWidth = totalColumnCap - 12
-    const totalLinesByCode = new Map()
-    let maxTotalLineWidth = 0
-    const breakTotalText = (text, className, maxWidth) => {
-        if (measureTextWidth(text, className) <= maxWidth) return [text]
-        // Prefer breaking after the decimal point so the whole part stays intact.
-        const dotIndex = text.lastIndexOf('.')
-        if (dotIndex > 0) {
-            const whole = text.slice(0, dotIndex + 1)
-            const fraction = text.slice(dotIndex + 1)
-            if (measureTextWidth(whole, className) <= maxWidth && measureTextWidth(fraction, className) <= maxWidth) {
-                return [whole, fraction]
-            }
-        }
-        // Otherwise split into the fewest balanced lines that each fit.
-        const totalWidth = measureTextWidth(text, className)
-        const lineCount = Math.ceil(totalWidth / maxWidth)
-        const targetWidth = totalWidth / lineCount
-        const parts = []
-        let current = ''
-        for (const char of text) {
-            const candidate = current + char
-            if (current && parts.length < lineCount - 1 && measureTextWidth(candidate, className) > targetWidth) {
-                parts.push(current)
-                current = char
-            } else {
-                current = candidate
-            }
-        }
-        if (current) parts.push(current)
-        return parts
-    }
-    for (const code of active) {
-        const totalSpend = Number.parseFloat(history.reduce((sum, entry) =>
-            sum + ((entry.currencies[code] || {}).spend || 0), 0).toPrecision(12))
-        const totalIncome = Number.parseFloat(history.reduce((sum, entry) =>
-            sum + ((entry.currencies[code] || {}).income || 0), 0).toPrecision(12))
-        const totalConvertedOut = Number.parseFloat(history.reduce((sum, entry) =>
-            sum + ((entry.currencies[code] || {}).convertedOut || 0), 0).toPrecision(12))
-        const totalConvertedIn = Number.parseFloat(history.reduce((sum, entry) =>
-            sum + ((entry.currencies[code] || {}).convertedIn || 0), 0).toPrecision(12))
-        const totalEntries = [
-            { label: 'out', value: money(totalSpend, code), isIn: false },
-            { label: 'in', value: `+${money(totalIncome, code)}`, isIn: true },
-        ]
-        if (totalConvertedOut > 0) {
-            totalEntries.push({ label: 'conv out', value: `−${money(totalConvertedOut, code)}`, isConv: true })
-        }
-        if (totalConvertedIn > 0) {
-            totalEntries.push({ label: 'conv in', value: `+${money(totalConvertedIn, code)}`, isConv: true })
-        }
-        const lines = []
-        for (const entry of totalEntries) {
-            const full = `${entry.label} ${entry.value}`
-            if (measureTextWidth(full, 'history__total') <= totalTextWidth) {
-                lines.push({ text: full, isIn: entry.isIn, isConv: entry.isConv })
-            } else {
-                lines.push({ text: entry.label, isIn: entry.isIn, isConv: entry.isConv })
-                for (const part of breakTotalText(entry.value, 'history__total', totalTextWidth)) {
-                    lines.push({ text: part, isIn: entry.isIn, isConv: entry.isConv })
-                }
-            }
-        }
-        for (const line of lines) {
-            maxTotalLineWidth = Math.max(maxTotalLineWidth, measureTextWidth(line.text, 'history__total'))
-        }
-        totalLinesByCode.set(code, lines)
-    }
-
-    const leftPad = Math.max(40, Math.ceil(maxTickWidth) + 10)
-    const rightPad = 6
-    const totalColumnWidth = Math.min(Math.max(84, Math.ceil(maxTotalLineWidth) + 12), totalColumnCap)
-    const plotWidth = Math.max(40, width - leftPad - rightPad - totalColumnWidth)
-    const dividerX = leftPad + plotWidth
-    const columnWidth = plotWidth / history.length
-    const labelStep = columnWidth < 12 ? 6 : columnWidth < 20 ? 4 : columnWidth < 30 ? 3 : columnWidth < 40 ? 2 : 1
-    const groupWidth = columnWidth * 0.7
-    const barGap = 1.5
-    const barWidth = Math.max(1, (groupWidth - barGap) / 2)
-    const height = topPad + active.length * laneStride - laneGap + axisHeight
-
-    const svg = svgElement('svg', {
-        viewBox: `0 0 ${width} ${height}`,
-        class: 'history__svg',
-        role: 'img',
-        'aria-label': `Monthly money in and out over the last ${history.length} months for ${active.join(', ')}`,
-    })
-
-    const band = svgElement('rect', {
-        class: 'history__band',
-        y: topPad,
-        width: columnWidth,
-        height: active.length * laneStride - laneGap,
-    })
-    band.style.display = 'none'
-    svg.appendChild(band)
-
-    active.forEach((code, laneIndex) => {
-        const laneTop = topPad + laneIndex * laneStride
-        const plotTop = laneTop + 24
-        const baseline = laneTop + laneHeight - 8
-        const plotHeight = baseline - plotTop
-        const max = laneMax.get(code)
-
-        const laneColor = currencyColor(code) || 'var(--accent)'
-        const laneDot = svgElement('circle', {
-            cx: 3.5,
-            cy: laneTop + 6,
-            r: 3.5,
-            class: 'history__lane-dot',
-            fill: laneColor,
-        })
-        svg.appendChild(laneDot)
-
-        const laneLabel = svgElement('text', { x: 12, y: laneTop + 10, class: 'history__lane-label' })
-        laneLabel.textContent = code
-        svg.appendChild(laneLabel)
-
-        for (const factor of [0, 0.5, 1]) {
-            const y = baseline - plotHeight * factor
-            svg.appendChild(svgElement('line', {
-                x1: leftPad,
-                x2: dividerX,
-                y1: y,
-                y2: y,
-                class: factor === 0 ? 'history__baseline' : 'history__grid',
-            }))
-            if (factor > 0 && max > 0) {
-                const tick = svgElement('text', { x: leftPad - 6, y: y + 3.5, class: 'history__tick' })
-                tick.textContent = tickMoney(max * factor)
-                svg.appendChild(tick)
-            }
-        }
-
-        history.forEach((entry, monthIndex) => {
-            const totals = entry.currencies[code] || { spend: 0, income: 0 }
-            const groupLeft = leftPad + monthIndex * columnWidth + (columnWidth - groupWidth) / 2
-            const outHeight = max > 0 ? (totals.spend / max) * plotHeight : 0
-            const inHeight = max > 0 ? (totals.income / max) * plotHeight : 0
-            if (outHeight > 0) {
-                const bar = svgElement('rect', {
-                    x: groupLeft,
-                    y: baseline - outHeight,
-                    width: barWidth,
-                    height: outHeight,
-                    rx: Math.min(2.5, barWidth / 2).toFixed(2),
-                    class: 'history__bar',
-                })
-                bar.style.fill = laneColor
-                svg.appendChild(bar)
-            }
-            if (inHeight > 0) {
-                const bar = svgElement('rect', {
-                    x: groupLeft + barWidth + barGap,
-                    y: baseline - inHeight,
-                    width: barWidth,
-                    height: inHeight,
-                    rx: Math.min(2.5, barWidth / 2).toFixed(2),
-                    class: 'history__bar history__bar--in',
-                })
-                bar.style.fill = laneColor
-                bar.style.stroke = laneColor
-                svg.appendChild(bar)
-            }
-            if (laneIndex === active.length - 1 && monthIndex % labelStep === 0) {
-                const label = svgElement('text', {
-                    x: leftPad + monthIndex * columnWidth + columnWidth / 2,
-                    y: height - 8,
-                    class: 'history__label',
-                })
-                label.textContent = historyMonthLabel(entry, monthIndex)
-                svg.appendChild(label)
-            }
-        })
-
-        const totalLines = totalLinesByCode.get(code)
-        const totalLineHeight = 14
-        const totalStartY = laneTop + (laneHeight - totalLines.length * totalLineHeight) / 2 + 11
-        totalLines.forEach((line, lineIndex) => {
-            const totalText = svgElement('text', {
-                x: width - rightPad,
-                y: totalStartY + lineIndex * totalLineHeight,
-                class: line.isConv ? 'history__total history__total--conv' :
-                    line.isIn ? 'history__total history__total--in' : 'history__total',
-            })
-            totalText.textContent = line.text
-            svg.appendChild(totalText)
-        })
-    })
-
-    svg.appendChild(svgElement('line', {
-        x1: dividerX,
-        x2: dividerX,
-        y1: topPad,
-        y2: topPad + active.length * laneStride - laneGap,
-        class: 'history__divider',
-    }))
-    const totalHeader = svgElement('text', {
-        x: dividerX + totalColumnWidth / 2,
-        y: height - 7,
-        class: 'history__label',
-    })
-    totalHeader.textContent = 'Total'
-    svg.appendChild(totalHeader)
-
-    history.forEach((entry, monthIndex) => {
-        const hit = svgElement('rect', {
-            x: leftPad + monthIndex * columnWidth,
-            y: topPad,
-            width: columnWidth,
-            height: active.length * laneStride - laneGap,
-            class: 'history__hit',
-        })
-        const show = (event) => {
-            band.style.display = ''
-            band.setAttribute('x', leftPad + monthIndex * columnWidth)
-            els.historyTooltip.textContent = ''
-            els.historyTooltip.appendChild(buildHistoryTooltip(monthIndex, active))
-            els.historyTooltip.hidden = false
-            const cardRect = els.historyCard.getBoundingClientRect()
-            const tooltipWidth = els.historyTooltip.offsetWidth
-            const tooltipHeight = els.historyTooltip.offsetHeight
-            const relativeX = event.clientX - cardRect.left
-            const relativeY = event.clientY - cardRect.top
-            const left = Math.max(4, Math.min(relativeX + 12, cardRect.width - tooltipWidth - 4))
-            const top = Math.max(4, Math.min(relativeY + 12, cardRect.height - tooltipHeight - 4))
-            els.historyTooltip.style.left = `${left}px`
-            els.historyTooltip.style.top = `${top}px`
-        }
-        hit.addEventListener('mouseenter', show)
-        hit.addEventListener('mousemove', show)
-        hit.addEventListener('mouseleave', () => {
-            band.style.display = 'none'
-            els.historyTooltip.hidden = true
-        })
-        svg.appendChild(hit)
-    })
-
-    els.historyChart.appendChild(svg)
-}
-
-function buildExpenseActions(transaction) {
-    const actions = document.createElement('span')
-    actions.className = 'expense__actions'
-
-    const editButton = document.createElement('button')
-    editButton.type = 'button'
-    editButton.className = 'icon-button'
-    editButton.title = 'Edit'
-    editButton.setAttribute('aria-label', `Edit ${transaction.details || 'transaction'}`)
-    editButton.innerHTML = ICONS.edit
-    editButton.addEventListener('click', () => openEditTransactionDialog(transaction))
-
-    const deleteButton = document.createElement('button')
-    deleteButton.type = 'button'
-    deleteButton.className = 'icon-button icon-button--danger'
-    deleteButton.title = 'Delete'
-    deleteButton.setAttribute('aria-label', `Delete ${transaction.details || 'transaction'}`)
-    deleteButton.innerHTML = ICONS.delete
-    deleteButton.addEventListener('click', () => openDeleteTransactionDialog(transaction))
-
-    actions.append(editButton, deleteButton)
-    return actions
-}
-
-function expenseDateLabel(date) {
-    const yesterday = new Date(state.today.getFullYear(), state.today.getMonth(), state.today.getDate() - 1)
-    if (isSameDay(date, state.today)) return 'Today'
-    if (isSameDay(date, yesterday)) return 'Yesterday'
-    return dayFormat.format(date)
-}
-
-function buildExpenseRow(transaction, writable) {
-    const li = document.createElement('li')
-    li.className = 'expense'
-    if (transaction.kind === 'income') {
-        li.classList.add('expense--income')
-    }
-    applyCurrencyAccent(li, transaction.currency)
-    const date = parseIsoDate(transaction.date)
-    if (date && date > state.viewDate) {
-        li.classList.add('expense--future')
-        li.title = 'Dated after the viewed date'
-    }
-
-    const main = document.createElement('span')
-    main.className = 'expense__main'
-    const descEl = document.createElement('span')
-    descEl.className = 'expense__desc'
-    descEl.textContent = transaction.details || '—'
-    if (transaction.notes) {
-        const notesEl = document.createElement('span')
-        notesEl.className = 'expense__notes'
-        notesEl.textContent = transaction.notes
-        descEl.appendChild(notesEl)
-    }
-    const metaEl = document.createElement('span')
-    metaEl.className = 'expense__meta'
-    if (date) {
-        const dateEl = document.createElement('span')
-        dateEl.className = 'expense__date'
-        dateEl.textContent = expenseDateLabel(date)
-        metaEl.appendChild(dateEl)
-    }
-    const currencyEl = document.createElement('span')
-    currencyEl.className = 'expense__currency'
-    currencyEl.textContent = transaction.currency || ''
-    currencyEl.hidden = !transaction.currency
-    const categoryEl = document.createElement('span')
-    categoryEl.className = 'expense__category'
-    categoryEl.textContent = transaction.category || ''
-    metaEl.append(currencyEl, categoryEl)
-    main.append(descEl, metaEl)
-
-    const amountEl = document.createElement('span')
-    amountEl.className = transaction.kind === 'income' ? 'expense__amount expense__amount--in' : 'expense__amount'
-    const amount = transaction.kind === 'income' ? transaction.moneyIn : transaction.expenses
-    setBreakableText(amountEl, transaction.kind === 'income' ?
-        `+${money(amount || 0, transaction.currency)}` :
-        money(amount || 0, transaction.currency))
-    li.append(main)
-    if (writable) {
-        li.append(buildExpenseActions(transaction))
-    }
-    li.append(amountEl)
-    return li
+    els.historyRange.textContent =
+        monthYearFormat.format(new Date(first.year, first.month - 1, 1)) + ' – ' +
+        monthYearFormat.format(new Date(last.year, last.month - 1, 1))
 }
 
 function renderExpenses() {
@@ -974,14 +479,16 @@ function renderExpenses() {
 
     els.addTransactionButton.hidden = !writable
     els.importButton.hidden = !writable
-    els.expensesList.textContent = ''
-    els.expensesList.hidden = count === 0
-    els.expensesMeta.textContent = count ? `${count} ${count === 1 ? 'transaction' : 'transactions'}` : ''
+    els.expensesMeta.textContent = count ? DSCPLNTransactions.formatCount(count) : ''
     els.expensesEmpty.hidden = count > 0
 
-    for (const transaction of transactions) {
-        els.expensesList.appendChild(buildExpenseRow(transaction, writable))
-    }
+    DSCPLNTransactions.renderList(els.expensesList, transactions, {
+        writable,
+        today: state.today,
+        markFuture: true,
+        onEdit: openEditTransactionDialog,
+        onDelete: openDeleteTransactionDialog,
+    })
 }
 
 async function responseErrorMessage(response, fallback) {
@@ -1179,7 +686,7 @@ function openAddTransactionDialog() {
     renderCurrencyOptions()
     const primary = primaryCurrency()
     els.transactionCurrencySelect.value = primary ? primary.code : ''
-    els.transactionDateInput.value = toDateInputValue(state.viewDate)
+    els.transactionDateInput.value = toDateInputValue(state.today)
     els.transactionCategoryHint.hidden = true
     els.transactionFormError.hidden = true
     hideDetailsSuggestions()
@@ -1199,7 +706,7 @@ function openEditTransactionDialog(transaction) {
     els.transactionAmountInput.value = transaction.kind === 'income' ? transaction.moneyIn : transaction.expenses
     els.transactionDetailsInput.value = transaction.details || ''
     const date = parseIsoDate(transaction.date)
-    els.transactionDateInput.value = date ? toDateInputValue(date) : toDateInputValue(state.viewDate)
+    els.transactionDateInput.value = date ? toDateInputValue(date) : toDateInputValue(state.today)
     els.transactionCategorySelect.value = transaction.category || ''
     els.transactionCurrencySelect.value = transaction.currency || ''
     els.transactionNotesInput.value = transaction.notes || ''
@@ -1253,6 +760,38 @@ async function submitTransaction(event) {
     }
 }
 
+let importPastConfirmed = false
+
+function resetImportConfirmation() {
+    importPastConfirmed = false
+    els.importPastWarning.hidden = true
+    els.importSubmitButton.textContent = 'Import'
+}
+
+// Counts pasted lines whose Date column is before the current month, so the
+// user can be warned before importing historical transactions.
+function pastDatedImportLines(text) {
+    const columns = state.data && state.data.transactionColumns
+    const dateIndex = Math.max(0, (columns || ['Date']).indexOf('Date'))
+    const monthStart = toDateInputValue(new Date(state.today.getFullYear(), state.today.getMonth(), 1))
+    let count = 0
+    let earliest = null
+    for (const line of text.split(/\r?\n/)) {
+        if (line.trim() === '') {
+            continue
+        }
+        const value = (line.split('\t')[dateIndex] || '').trim()
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value >= monthStart) {
+            continue
+        }
+        count += 1
+        if (!earliest || value < earliest) {
+            earliest = value
+        }
+    }
+    return { count, earliest }
+}
+
 function openImportDialog() {
     if (!state.data || state.data.writable === false) return
     const columns = state.data.transactionColumns && state.data.transactionColumns.length ?
@@ -1261,6 +800,7 @@ function openImportDialog() {
     els.importHint.textContent = `One transaction per line, tab-separated, in this column order: ${columns.join(' · ')}. Fill either Money In or Expenses.`
     els.importTextarea.value = ''
     els.importFormError.hidden = true
+    resetImportConfirmation()
     els.importDialog.showModal()
     els.importTextarea.focus()
 }
@@ -1271,6 +811,16 @@ async function submitImport(event) {
     if (!text.trim()) {
         els.importFormError.textContent = 'Paste at least one transaction line.'
         els.importFormError.hidden = false
+        return
+    }
+    const past = pastDatedImportLines(text)
+    if (past.count > 0 && !importPastConfirmed) {
+        importPastConfirmed = true
+        els.importPastWarning.textContent =
+            `${past.count} ${past.count === 1 ? 'line is' : 'lines are'} dated before this month (earliest ${past.earliest}). ` +
+            'Click "Import anyway" to confirm these are deliberate.'
+        els.importPastWarning.hidden = false
+        els.importSubmitButton.textContent = 'Import anyway'
         return
     }
     els.importSubmitButton.disabled = true
@@ -1341,35 +891,6 @@ async function confirmDeleteTransaction() {
 
 function syncControls() {
     els.primaryBudgetButton.disabled = !state.data
-}
-
-function viewToday() {
-    if (els.pretendDialog.open) {
-        els.pretendDialog.close()
-    }
-    state.viewDate = startOfDay(new Date())
-    syncControls()
-    fetchData({ silent: true })
-}
-
-function openPretendDialog() {
-    els.pretendDateInput.value = toDateInputValue(state.viewDate)
-    els.pretendFormError.hidden = true
-    els.pretendDialog.showModal()
-}
-
-function submitPretendForm(event) {
-    event.preventDefault()
-    const parsed = parseDateInputValue(els.pretendDateInput.value)
-    if (!parsed) {
-        els.pretendFormError.textContent = 'Enter a valid date.'
-        els.pretendFormError.hidden = false
-        return
-    }
-    els.pretendDialog.close()
-    state.viewDate = startOfDay(parsed)
-    syncControls()
-    fetchData({ silent: true })
 }
 
 function openBudgetDialog(currencyCode) {
@@ -1457,6 +978,11 @@ els.budgetDialog.addEventListener('click', (event) => {
 els.addTransactionButton.addEventListener('click', openAddTransactionDialog)
 els.importButton.addEventListener('click', openImportDialog)
 els.importForm.addEventListener('submit', submitImport)
+els.importTextarea.addEventListener('input', () => {
+    if (importPastConfirmed) {
+        resetImportConfirmation()
+    }
+})
 els.importCancelButton.addEventListener('click', () => els.importDialog.close())
 els.importDialog.addEventListener('click', (event) => {
     if (event.target === els.importDialog) els.importDialog.close()
@@ -1533,24 +1059,6 @@ els.deleteDialog.addEventListener('click', (event) => {
         state.pendingDelete = null
         els.deleteDialog.close()
     }
-})
-
-els.pretendButton.addEventListener('click', openPretendDialog)
-els.pretendForm.addEventListener('submit', submitPretendForm)
-els.pretendCancelButton.addEventListener('click', () => els.pretendDialog.close())
-els.pretendDialog.addEventListener('click', (event) => {
-    if (event.target === els.pretendDialog) els.pretendDialog.close()
-})
-els.pretendTodayButton.addEventListener('click', viewToday)
-els.bannerTodayButton.addEventListener('click', viewToday)
-
-window.addEventListener('resize', () => {
-    window.clearTimeout(historyResizeTimer)
-    historyResizeTimer = window.setTimeout(() => {
-        if (state.data && !els.historyCard.hidden) {
-            renderHistory()
-        }
-    }, 150)
 })
 
 prefersDark.addEventListener('change', () => {

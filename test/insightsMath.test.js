@@ -23,10 +23,18 @@ test('parses and formats ISO dates', () => {
     assert.equal(math.daysInclusive(new Date(2026, 8, 1), new Date(2026, 8, 30)), 30)
 })
 
-test('computes the preceding equal-length range', () => {
-    const range = math.previousRange(new Date(2026, 8, 1), new Date(2026, 8, 30))
-    assert.equal(math.toIsoDate(range.start), '2026-08-02')
-    assert.equal(math.toIsoDate(range.end), '2026-08-31')
+test('computes the preceding range, snapping whole months', () => {
+    // Whole months snap to whole months even when lengths differ.
+    const month = math.previousRange(new Date(2026, 8, 1), new Date(2026, 8, 30))
+    assert.equal(math.toIsoDate(month.start), '2026-08-01')
+    assert.equal(math.toIsoDate(month.end), '2026-08-31')
+    const quarter = math.previousRange(new Date(2026, 6, 1), new Date(2026, 8, 30))
+    assert.equal(math.toIsoDate(quarter.start), '2026-04-01')
+    assert.equal(math.toIsoDate(quarter.end), '2026-06-30')
+    // Partial ranges stay equal-length.
+    const partial = math.previousRange(new Date(2026, 8, 15), new Date(2026, 9, 4))
+    assert.equal(math.toIsoDate(partial.start), '2026-08-26')
+    assert.equal(math.toIsoDate(partial.end), '2026-09-14')
     const single = math.previousRange(new Date(2026, 9, 4), new Date(2026, 9, 4))
     assert.equal(math.toIsoDate(single.start), '2026-10-03')
     assert.equal(math.toIsoDate(single.end), '2026-10-03')
@@ -124,6 +132,43 @@ test('applies the first-day-bias pace formula', () => {
     assert.equal(Number(expected.toFixed(2)), 1693.55)
     assert.equal(math.monthExpectedSpend(0, 0, 4, 31), 0)
     assert.equal(math.monthExpectedSpend(1000, 5000, 15, 30), 1000)
+})
+
+test('builds complete-month presets and comparison windows', () => {
+    const preset = math.lastCompleteMonths(3, new Date(2026, 9, 15))
+    assert.equal(math.toIsoDate(preset.start), '2026-07-01')
+    assert.equal(math.toIsoDate(preset.end), '2026-09-30')
+
+    const prev = math.comparisonWindow('prev', { start: new Date(2026, 8, 1), end: new Date(2026, 8, 30) })
+    assert.equal(prev.kind, 'range')
+    assert.equal(math.toIsoDate(prev.start), '2026-08-01')
+    assert.equal(math.toIsoDate(prev.end), '2026-08-31')
+
+    const yoy = math.comparisonWindow('yoy', { start: new Date(2026, 8, 15), end: new Date(2026, 9, 4) })
+    assert.equal(math.toIsoDate(yoy.start), '2025-09-15')
+    assert.equal(math.toIsoDate(yoy.end), '2025-10-04')
+    assert.equal(math.toIsoDate(math.shiftYear(new Date(2024, 1, 29))), '2023-02-28')
+
+    const range = { start: new Date(2026, 8, 15), end: new Date(2026, 9, 4) }
+    const avg = math.comparisonWindow('avg3', range)
+    assert.equal(avg.kind, 'average')
+    assert.equal(avg.count, 3)
+    assert.equal(math.toIsoDate(avg.start), '2026-06-01')
+    assert.equal(math.toIsoDate(avg.end), '2026-08-31')
+    assert.equal(Number(math.comparisonFactor(avg, range).toFixed(6)), Number((20 / 92).toFixed(6)))
+    assert.equal(math.comparisonFactor(prev, range), 1)
+})
+
+test('flags partial and multi-month ranges', () => {
+    assert.equal(math.spansMultipleMonths(new Date(2026, 8, 15), new Date(2026, 9, 4)), true)
+    assert.equal(math.spansMultipleMonths(new Date(2026, 8, 1), new Date(2026, 8, 30)), false)
+    assert.deepEqual(math.monthPartials(new Date(2026, 8, 15), new Date(2026, 9, 4)), [
+        { year: 2026, month: 9, partial: true },
+        { year: 2026, month: 10, partial: true },
+    ])
+    assert.deepEqual(math.monthPartials(new Date(2026, 8, 1), new Date(2026, 8, 30)), [
+        { year: 2026, month: 9, partial: false },
+    ])
 })
 
 test('finds the biggest category movers', () => {

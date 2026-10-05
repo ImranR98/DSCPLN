@@ -206,20 +206,6 @@ h1 .accent {
 
 /* ---------- Banner ---------- */
 
-.banner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: var(--space-3);
-    background: color-mix(in srgb, var(--warn) 10%, var(--surface));
-    border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
-    border-radius: var(--radius-sm);
-    padding: var(--space-3) var(--space-4);
-    margin-bottom: var(--space-4);
-    font-size: var(--fs-sm);
-}
-
 /* ---------- Buttons ---------- */
 
 .button {
@@ -913,6 +899,11 @@ details.card[open] > summary::after {
     stroke-width: 1;
 }
 
+.history__note {
+    margin: var(--space-2) 0 0;
+    font-size: var(--fs-2xs);
+}
+
 .history-legend {
     display: inline-flex;
     gap: var(--space-3);
@@ -1216,6 +1207,17 @@ details.card[open] > summary::after {
     white-space: pre-line;
 }
 
+.form-warning {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
+    border-radius: var(--radius-sm);
+    background: var(--warn-soft);
+    color: var(--warn);
+    font-size: var(--fs-sm);
+    white-space: pre-line;
+}
+
 .hint {
     margin: var(--space-1) 0 0;
     font-size: var(--fs-sm);
@@ -1358,6 +1360,21 @@ details.card[open] > summary::after {
         grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
         gap: var(--space-4);
     }
+
+    .layout__main {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .layout__side {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+    }
+
+    #historyCard {
+        grid-column: 1;
+        grid-row: 2;
+    }
 }
 
 @media (max-width: 47.99rem) {
@@ -1497,7 +1514,8 @@ details.card[open] > summary::after {
     color: var(--text-muted);
 }
 
-.field input {
+.field input,
+.field select {
     font: inherit;
     font-size: var(--fs-md);
     padding: 0.5rem 0.7rem;
@@ -1507,11 +1525,29 @@ details.card[open] > summary::after {
     color: var(--text);
 }
 
-.field input:focus {
+.field input:focus,
+.field select:focus {
     outline: none;
     border-color: var(--accent);
     background: var(--surface);
     box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+.insights-note {
+    margin: 0;
+    font-size: var(--fs-sm);
 }
 
 .quick-ranges {
@@ -1775,11 +1811,6 @@ details.card[open] > summary::after {
     height: auto;
 }
 
-.insights-chart__area {
-    fill: var(--currency);
-    opacity: 0.08;
-}
-
 .insights-chart__line {
     fill: none;
     stroke: var(--currency);
@@ -1788,12 +1819,48 @@ details.card[open] > summary::after {
     stroke-linecap: round;
 }
 
-.insights-chart__pace {
+.insights-chart__line--earned {
+    stroke: var(--ok);
+}
+
+.insights-chart__baseline {
     fill: none;
-    stroke: var(--text-muted);
+    stroke: var(--currency);
     stroke-width: 1.5;
     stroke-dasharray: 4 4;
-    opacity: 0.7;
+    opacity: 0.45;
+}
+
+.insights-chart__baseline--earned {
+    stroke: var(--ok);
+}
+
+.chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-top: var(--space-2);
+    font-size: var(--fs-2xs);
+    color: var(--text-muted);
+}
+
+.chart-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-variant-numeric: tabular-nums;
+}
+
+.chart-legend__swatch {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 3px;
+}
+
+.chart-legend__swatch--line {
+    height: 2px;
+    border-radius: 1px;
+    opacity: 0.45;
 }
 
 .forecast {
@@ -1831,12 +1898,26 @@ details.card[open] > summary::after {
 }
 
 .movers {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-3);
     margin-top: var(--space-4);
     padding-top: var(--space-3);
     border-top: 1px solid var(--border);
+}
+
+.movers__block + .movers__block {
+    margin-top: var(--space-4);
+}
+
+.movers__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+}
+
+.movers__heading {
+    margin: 0 0 var(--space-1);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    color: var(--text-muted);
 }
 
 .movers__column {
@@ -1880,7 +1961,7 @@ details.card[open] > summary::after {
 }
 
 @media (min-width: 48rem) {
-    .movers {
+    .movers__grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }

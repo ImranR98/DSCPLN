@@ -16,7 +16,7 @@ const fs = require('fs')
 const path = require('path')
 const ExcelJS = require('exceljs')
 const { loadConfig } = require('../config')
-const { assertWorkbookRepo, commitFile } = require('../workbookGit')
+const { assertWorkbookRepo, commitFile } = require('../workbook-git')
 
 const CONVERSION_GROUP = 'Conversions'
 const BUDGETS_LABEL = 'Budgets'

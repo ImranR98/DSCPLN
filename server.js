@@ -1,24 +1,14 @@
 'use strict'
 
+// HTTP server: static pages and the JSON API. Budget-limit notifications live
+// in notifications.js.
 const express = require('express')
 const path = require('path')
-const axios = require('axios')
 const { loadConfig } = require('./config')
 const { ValidationError } = require('./errors')
+const { startNotifications } = require('./notifications')
 
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
-
-// Shows at least 2 decimals and enough more to keep the value's significant
-// digits (e.g. fractional XMR), without excessive trailing zeros.
-const formatAmount = (value) => {
-    const amount = Number.isFinite(value) ? value : 0
-    const absolute = Math.abs(amount)
-    const decimals = absolute >= 1 ? 2 : Math.min(12, Math.max(2, 8 - 1 - Math.floor(Math.log10(absolute || 1))))
-    const [integerPart, fractionPart = ''] = amount.toFixed(decimals).split('.')
-    const trimmed = fractionPart.replace(/0+$/, '')
-    const fraction = trimmed.length < 2 ? fractionPart.slice(0, 2) : trimmed
-    return `${integerPart}.${fraction}`
-}
 
 const parseDateQuery = (dateStr) => {
     if (!dateStr) {
@@ -136,59 +126,6 @@ const createApp = (config) => {
     return { app, dataProvider }
 }
 
-const startNotifications = (config, dataProvider) => {
-    const { monthlyLimitUrl, ntfyToken, checkIntervalMinutes } = config.notifications
-    const onlyWarnOnce = config.notifications.onlyWarnOnce !== false
-    if (!monthlyLimitUrl) {
-        return
-    }
-    const ntfyAuthHeader = ntfyToken ? `Basic ${Buffer.from(`:${ntfyToken}`).toString('base64')}` : null
-    const intervalMs = (checkIntervalMinutes > 0 ? checkIntervalMinutes : 30) * 60 * 1000
-    const warnedCurrencies = new Set()
-    const previousSpend = new Map()
-    const sendNotification = async (url, message, title) => {
-        try {
-            await axios.post(url, message, {
-                headers: {
-                    Title: title,
-                    Authorization: ntfyAuthHeader
-                },
-                timeout: 10000
-            })
-            return true
-        } catch (e) {
-            console.error(`Failed to send notification: ${e.message}`)
-            return false
-        }
-    }
-    const checkLimits = async () => {
-        try {
-            const overview = await dataProvider.getData()
-            for (const entry of overview.currencies || []) {
-                if (!entry || entry.monthlyBudget <= 0) {
-                    continue
-                }
-                if (entry.monthlyBudget <= entry.monthsSpend) {
-                    if (!(warnedCurrencies.has(entry.code) && onlyWarnOnce) && entry.monthsSpend !== previousSpend.get(entry.code)) {
-                        if (await sendNotification(monthlyLimitUrl,
-                            `${entry.code} $${formatAmount(entry.monthsSpend)} of $${formatAmount(entry.monthlyBudget)}`,
-                            `Monthly Budget Limit Reached (${entry.code})`)) {
-                            warnedCurrencies.add(entry.code)
-                        }
-                    }
-                } else {
-                    warnedCurrencies.delete(entry.code)
-                }
-                previousSpend.set(entry.code, entry.monthsSpend)
-            }
-        } catch (e) {
-            console.error(e)
-        }
-    }
-    checkLimits()
-    setInterval(checkLimits, intervalMs)
-}
-
 const start = (config) => {
     const { app, dataProvider } = createApp(config)
     const server = app.listen(config.port, () => {
@@ -203,4 +140,4 @@ if (require.main === module) {
     start(config)
 }
 
-module.exports = { createApp, start, startNotifications }
+module.exports = { createApp, start }

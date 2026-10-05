@@ -80,7 +80,7 @@
             <p class="figure">
                 <span id="monthSpend" class="figure__spend">—</span>
                 <span class="figure__meta">
-                    <span id="monthOf" class="figure__of">of</span>
+                    <span class="figure__of">of</span>
                     <span id="monthBudget" class="figure__budget">—</span>
                 </span>
             </p>
@@ -147,18 +147,18 @@
                 <h2 id="historyHeading">Last 12 months</h2>
                 <span class="card__header-tools">
                     <span id="historyRange" class="card__context"></span>
-                    <span class="history-legend">
-                        <span class="history-legend__item">
-                            <span class="history-legend__swatch"></span>Out
+                    <span class="chart-legend">
+                        <span class="chart-legend__item">
+                            <span class="chart-legend__swatch"></span>Out
                         </span>
-                        <span class="history-legend__item">
-                            <span class="history-legend__swatch history-legend__swatch--in"></span>In
+                        <span class="chart-legend__item">
+                            <span class="chart-legend__swatch chart-legend__swatch--in"></span>In
                         </span>
                     </span>
                 </span>
             </div>
-            <div id="historyChart" class="history"></div>
-            <div id="historyTooltip" class="history-tooltip" hidden></div>
+            <div id="historyChart" class="chart-host"></div>
+            <div id="historyTooltip" class="chart-tooltip" hidden></div>
         </section>
     </main>
 
@@ -259,9 +259,9 @@
 
     <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
 
-    <script src="format.js"></script>
-    <script src="transactionList.js"></script>
-    <script src="historyChart.js"></script>
+    <script src="core.js"></script>
+    <script src="transaction-list.js"></script>
+    <script src="chart.js"></script>
     <script src="app.js"></script>
 </body>
 

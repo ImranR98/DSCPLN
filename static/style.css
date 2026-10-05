@@ -127,9 +127,9 @@ body {
 .stat-tile__value,
 .currency-card__spend,
 .expense__amount,
-.history__tick,
-.history__total,
-.history-tooltip__row {
+.chart__tick,
+.chart__total,
+.chart-tooltip__row {
     font-variant-numeric: tabular-nums lining-nums;
 }
 
@@ -203,8 +203,6 @@ h1 .accent {
     align-items: center;
     gap: var(--space-2);
 }
-
-/* ---------- Banner ---------- */
 
 /* ---------- Buttons ---------- */
 
@@ -816,95 +814,95 @@ details.card[open] > summary::after {
     }
 }
 
-/* ---------- History chart ---------- */
+/* ---------- Charts ---------- */
 
 #historyCard {
     position: relative;
 }
 
-.history {
+.chart-host {
     position: relative;
 }
 
-.history__svg {
+.chart__svg {
     display: block;
     width: 100%;
     height: auto;
 }
 
-.history__grid {
+.chart__grid {
     stroke: var(--border);
     stroke-width: 1;
     stroke-dasharray: 2 4;
 }
 
-.history__baseline {
+.chart__baseline {
     stroke: var(--border-strong);
     stroke-width: 1;
 }
 
-.history__tick {
+.chart__tick {
     font-size: 11px;
     fill: var(--text-muted);
     text-anchor: end;
 }
 
-.history__lane-label {
+.chart__lane-label {
     font-size: var(--fs-sm);
     font-weight: 700;
     fill: var(--text);
 }
 
-.history__lane-dot {
+.chart__lane-dot {
     opacity: 0.9;
 }
 
-.history__label {
+.chart__label {
     font-size: 11px;
     fill: var(--text-muted);
     text-anchor: middle;
 }
 
-.history__divider {
+.chart__divider {
     stroke: var(--border);
     stroke-width: 1;
 }
 
-.history__total {
+.chart__total {
     font-size: 11px;
     fill: var(--text);
     text-anchor: end;
     font-variant-numeric: tabular-nums;
 }
 
-.history__total--in {
+.chart__total--in {
     fill: var(--ok);
 }
 
-.history__total--conv {
+.chart__total--conv {
     fill: var(--text-muted);
 }
 
-.history__band {
+.chart__band {
     fill: var(--accent);
     opacity: 0.08;
 }
 
-.history__hit {
+.chart__hit {
     fill: transparent;
 }
 
-.history__bar--in {
+.chart__bar--in {
     fill-opacity: 0.35;
     stroke-width: 1;
 }
 
-.history__note {
+.chart__note {
     margin: var(--space-2) 0 0;
     font-size: var(--fs-2xs);
 }
 
-.history-legend {
+.chart-legend {
     display: inline-flex;
     gap: var(--space-3);
     font-size: var(--fs-xs);
@@ -914,24 +912,24 @@ details.card[open] > summary::after {
     letter-spacing: normal;
 }
 
-.history-legend__item {
+.chart-legend__item {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
 }
 
-.history-legend__swatch {
+.chart-legend__swatch {
     width: 0.7rem;
     height: 0.7rem;
     border-radius: 3px;
     background: var(--text-muted);
 }
 
-.history-legend__swatch--in {
+.chart-legend__swatch--in {
     opacity: 0.35;
 }
 
-.history-tooltip {
+.chart-tooltip {
     position: absolute;
     z-index: 3;
     pointer-events: none;
@@ -945,21 +943,21 @@ details.card[open] > summary::after {
     color: var(--text);
 }
 
-.history-tooltip__title {
+.chart-tooltip__title {
     display: block;
     margin-bottom: var(--space-1);
     font-size: var(--fs-sm);
     font-weight: 700;
 }
 
-.history-tooltip__row {
+.chart-tooltip__row {
     display: grid;
     grid-template-columns: auto 1fr auto;
     gap: var(--space-2);
     color: var(--text-muted);
 }
 
-.history-tooltip__code {
+.chart-tooltip__code {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
@@ -967,23 +965,23 @@ details.card[open] > summary::after {
     color: var(--text);
 }
 
-.history-tooltip__dot {
+.chart-tooltip__dot {
     width: 0.5rem;
     height: 0.5rem;
     border-radius: 50%;
     background: var(--currency, var(--accent));
 }
 
-.history-tooltip__out,
-.history-tooltip__in {
+.chart-tooltip__out,
+.chart-tooltip__in {
     text-align: right;
 }
 
-.history-tooltip__in {
+.chart-tooltip__in {
     color: var(--ok);
 }
 
-.history-tooltip__conv {
+.chart-tooltip__conv {
     margin-top: -2px;
     font-size: var(--fs-2xs);
     color: var(--text-muted);
@@ -1042,79 +1040,23 @@ details.card[open] > summary::after {
     color: var(--text-muted);
 }
 
-.dialog input,
-.dialog select {
+:is(.dialog, .field) :is(input, select),
+.dialog__textarea {
     font: inherit;
     font-size: var(--fs-md);
     padding: 0.6rem 0.8rem;
-    border-radius: var(--radius-sm);
     border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text);
     transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
-.dialog input:focus,
-.dialog select:focus {
+:is(.dialog, .field) :is(input, select, textarea):focus {
     outline: none;
     border-color: var(--accent);
     background: var(--surface);
     box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-.autocomplete {
-    position: relative;
-}
-
-.autocomplete__menu {
-    position: absolute;
-    z-index: 6;
-    top: calc(100% + 4px);
-    left: 0;
-    right: 0;
-    margin: 0;
-    padding: var(--space-1);
-    list-style: none;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-md);
-    max-height: 14rem;
-    overflow: auto;
-    overscroll-behavior: contain;
-    touch-action: pan-y;
-    -webkit-overflow-scrolling: touch;
-}
-
-.autocomplete__option {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-xs);
-    cursor: pointer;
-    font-size: var(--fs-sm);
-    user-select: none;
-    -webkit-user-select: none;
-}
-
-.autocomplete__option:hover,
-.autocomplete__option.is-active {
-    background: var(--surface-2);
-}
-
-.autocomplete__option-details {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.autocomplete__option-category {
-    flex: 0 0 auto;
-    color: var(--text-muted);
-    font-size: var(--fs-2xs);
 }
 
 .dialog__textarea {
@@ -1122,33 +1064,10 @@ details.card[open] > summary::after {
     font-size: var(--fs-sm);
     line-height: 1.5;
     min-height: 15rem;
-    padding: var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    color: var(--text);
     resize: vertical;
     tab-size: 8;
     white-space: pre;
     overflow-x: auto;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
-}
-
-.dialog__textarea:focus {
-    outline: none;
-    border-color: var(--accent);
-    background: var(--surface);
-    box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-.dialog__actions {
-    flex: 0 0 auto;
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-    padding: var(--space-3) var(--space-5) var(--space-4);
-    background: var(--surface);
-    border-top: 1px solid var(--border);
 }
 
 .segmented {
@@ -1514,25 +1433,6 @@ details.card[open] > summary::after {
     color: var(--text-muted);
 }
 
-.field input,
-.field select {
-    font: inherit;
-    font-size: var(--fs-md);
-    padding: 0.5rem 0.7rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    color: var(--text);
-}
-
-.field input:focus,
-.field select:focus {
-    outline: none;
-    border-color: var(--accent);
-    background: var(--surface);
-    box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
 .visually-hidden {
     position: absolute;
     width: 1px;
@@ -1735,11 +1635,14 @@ details.card[open] > summary::after {
     accent-color: var(--accent);
 }
 
-.category-row__dot {
-    grid-area: dot;
+.category-dot {
     width: 0.55rem;
     height: 0.55rem;
     border-radius: 50%;
+}
+
+.category-row .category-dot {
+    grid-area: dot;
 }
 
 .category-row__name {
@@ -1805,13 +1708,13 @@ details.card[open] > summary::after {
     min-height: 120px;
 }
 
-.insights-chart {
+.chart-line {
     display: block;
     width: 100%;
     height: auto;
 }
 
-.insights-chart__line {
+.chart-line__line {
     fill: none;
     stroke: var(--currency);
     stroke-width: 2;
@@ -1819,11 +1722,11 @@ details.card[open] > summary::after {
     stroke-linecap: round;
 }
 
-.insights-chart__line--earned {
+.chart-line__line--earned {
     stroke: var(--ok);
 }
 
-.insights-chart__baseline {
+.chart-line__baseline {
     fill: none;
     stroke: var(--currency);
     stroke-width: 1.5;
@@ -1831,11 +1734,11 @@ details.card[open] > summary::after {
     opacity: 0.45;
 }
 
-.insights-chart__baseline--earned {
+.chart-line__baseline--earned {
     stroke: var(--ok);
 }
 
-.chart-legend {
+.series-legend {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-3);
@@ -1844,20 +1747,20 @@ details.card[open] > summary::after {
     color: var(--text-muted);
 }
 
-.chart-legend__item {
+.series-legend__item {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
     font-variant-numeric: tabular-nums;
 }
 
-.chart-legend__swatch {
+.series-legend__swatch {
     width: 0.7rem;
     height: 0.7rem;
     border-radius: 3px;
 }
 
-.chart-legend__swatch--line {
+.series-legend__swatch--line {
     height: 2px;
     border-radius: 1px;
     opacity: 0.45;

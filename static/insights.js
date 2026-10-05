@@ -1,8 +1,11 @@
 'use strict'
 
-const { money: formatMoneyRaw, currencyColor, setBreakableText, hasSubCentPrecision } = DSCPLNFormat
-const IM = DSCPLNInsights
-const TX = DSCPLNTransactions
+// Insights: date-range filters and comparisons, the read-only transactions
+// panel, the range chart and the per-currency sections.
+const { dates, formats, number, moneyFor, currencyColor, setBreakableText, hasSubCentPrecision, requestJson, initTheme, showToast } = DSCPLN
+
+const IM = DSCPLN.math
+const TX = DSCPLN.transactions
 
 const $ = (id) => document.getElementById(id)
 
@@ -27,27 +30,11 @@ const els = {
     toasts: $('toasts'),
 }
 
-const THEME_KEY = 'dscpln-theme'
-const THEME_ORDER = ['auto', 'light', 'dark']
 const COMPARISON_MODES = ['prev', 'yoy', 'avg3', 'avg6', 'avg12']
 
-const ICONS = {
-    auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg>',
-    light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
-    dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
-}
-
 const CATEGORY_PALETTE = ['#2f6fed', '#16a34a', '#d97706', '#8b5cf6', '#0891b2', '#db2777', '#65a30d', '#e11d48', '#0d9488', '#7c3aed', '#ca8a04', '#4f46e5']
-const monthShortFormat = new Intl.DateTimeFormat(undefined, { month: 'short' })
-const dayMonthFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' })
-const monthYearFormat = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' })
-const yearFormat = new Intl.DateTimeFormat(undefined, { year: 'numeric' })
-const compactNumberFormat = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 })
-
-const prefersDark = window.matchMedia('(prefers-color-scheme: dark)')
 
 const state = {
-    theme: readTheme(),
     range: null,
     comparison: 'prev',
     reference: null,
@@ -57,15 +44,10 @@ const state = {
     comparisonData: null,
 }
 
-const pendingCharts = []
 let fetchSequence = 0
 
-function el(tag, className, text) {
-    const node = document.createElement(tag)
-    if (className) node.className = className
-    if (text != null) node.textContent = text
-    return node
-}
+// Local shorthand for core's DOM builder.
+const el = (tag, className, text, ...children) => DSCPLN.el(tag, { class: className, text }, ...children)
 
 function categoryColor(name) {
     let hash = 0
@@ -73,41 +55,10 @@ function categoryColor(name) {
     return CATEGORY_PALETTE[hash % CATEGORY_PALETTE.length]
 }
 
-function money(value, code) {
-    return formatMoneyRaw(value, code, state.fractionalCurrencies.has(code))
-}
-
-function readTheme() {
-    try {
-        const theme = localStorage.getItem(THEME_KEY)
-        return THEME_ORDER.includes(theme) ? theme : 'auto'
-    } catch (e) {
-        return 'auto'
-    }
-}
-
-function saveTheme(theme) {
-    try {
-        localStorage.setItem(THEME_KEY, theme)
-    } catch (e) { }
-}
-
-function applyTheme() {
-    const dark = state.theme === 'dark' || (state.theme === 'auto' && prefersDark.matches)
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-    els.themeButton.innerHTML = ICONS[state.theme]
-    els.themeButton.title = `Theme: ${state.theme}`
-    els.themeButton.setAttribute('aria-label', `Theme: ${state.theme}. Click to change.`)
-}
+const money = moneyFor((code) => state.fractionalCurrencies.has(code))
 
 function toast(message, type = 'error') {
-    const node = el('div', `toast toast--${type}`, message)
-    node.setAttribute('role', 'status')
-    els.toasts.appendChild(node)
-    window.setTimeout(() => {
-        node.classList.add('toast--leaving')
-        window.setTimeout(() => node.remove(), 350)
-    }, 4000)
+    showToast(els.toasts, message, type)
 }
 
 /* ---------- Ranges & presets ---------- */
@@ -164,8 +115,7 @@ function isFullMonth(range) {
 }
 
 function isWholeMonths(range) {
-    return IM.toIsoDate(range.start) === IM.toIsoDate(IM.startOfMonth(range.start)) &&
-        IM.toIsoDate(range.end) === IM.toIsoDate(IM.endOfMonth(range.end))
+    return IM.isWholeMonthsRange(range.start, range.end)
 }
 
 function comparisonShortLabel() {
@@ -179,9 +129,9 @@ function comparisonShortLabel() {
 function comparisonLongLabel() {
     const window = IM.comparisonWindow(state.comparison, state.range)
     if (window.kind === 'average') {
-        return `${window.count}-month average of ${monthShortFormat.format(window.start)}–${monthShortFormat.format(window.end)} ${yearFormat.format(window.end)}`
+        return `${window.count}-month average of ${formats.monthShort.format(window.start)}–${formats.monthShort.format(window.end)} ${formats.year.format(window.end)}`
     }
-    return `${dayMonthFormat.format(window.start)} ${yearFormat.format(window.start)} – ${dayMonthFormat.format(window.end)} ${yearFormat.format(window.end)}`
+    return `${formats.dayMonth.format(window.start)} ${formats.year.format(window.start)} – ${formats.dayMonth.format(window.end)} ${formats.year.format(window.end)}`
 }
 
 function updateCompareNote() {
@@ -190,10 +140,10 @@ function updateCompareNote() {
     }
     const window = IM.comparisonWindow(state.comparison, state.range)
     const rangeDays = IM.daysInclusive(state.range.start, state.range.end)
-    const rangeLabel = `${dayMonthFormat.format(state.range.start)} ${yearFormat.format(state.range.start)} – ${dayMonthFormat.format(state.range.end)} ${yearFormat.format(state.range.end)}`
+    const rangeLabel = `${formats.dayMonth.format(state.range.start)} ${formats.year.format(state.range.start)} – ${formats.dayMonth.format(state.range.end)} ${formats.year.format(state.range.end)}`
     let text
     if (window.kind === 'average') {
-        text = `Comparing ${rangeLabel} (${rangeDays} days) with the ${window.count}-month average (${monthShortFormat.format(window.start)}–${monthShortFormat.format(window.end)} ${yearFormat.format(window.end)}), scaled per day.`
+        text = `Comparing ${rangeLabel} (${rangeDays} days) with the ${window.count}-month average (${formats.monthShort.format(window.start)}–${formats.monthShort.format(window.end)} ${formats.year.format(window.end)}), scaled per day.`
     } else {
         text = `Comparing ${rangeLabel} (${rangeDays} days) with ${comparisonLongLabel()} (${IM.daysInclusive(window.start, window.end)} days).`
     }
@@ -206,11 +156,11 @@ function updateCompareNote() {
 function syncInputs() {
     els.startDate.value = IM.toIsoDate(state.range.start)
     els.endDate.value = IM.toIsoDate(state.range.end)
-    els.monthChip.textContent = isFullMonth(state.range) ? monthYearFormat.format(state.range.start) : 'Pick a month'
+    els.monthChip.textContent = isFullMonth(state.range) ? formats.monthYear.format(state.range.start) : 'Pick a month'
     els.monthPickerInput.value = isFullMonth(state.range)
         ? `${state.range.start.getFullYear()}-${String(state.range.start.getMonth() + 1).padStart(2, '0')}`
         : ''
-    els.rangeLabel.textContent = `${dayMonthFormat.format(state.range.start)} ${yearFormat.format(state.range.start)} – ${dayMonthFormat.format(state.range.end)} ${yearFormat.format(state.range.end)}`
+    els.rangeLabel.textContent = `${formats.dayMonth.format(state.range.start)} ${formats.year.format(state.range.start)} – ${formats.dayMonth.format(state.range.end)} ${formats.year.format(state.range.end)}`
     for (const chip of document.querySelectorAll('.chip[data-range]')) {
         const range = quickRange(chip.dataset.range)
         const active = range &&
@@ -268,19 +218,19 @@ function detectFractional(transactions) {
 }
 
 function transactionsIn(currency, range, excluded) {
-    const start = IM.toIsoDate(range.start)
-    const end = IM.toIsoDate(range.end)
-    return state.transactions.filter((transaction) =>
-        transaction.currency === currency &&
-        transaction.date >= start &&
-        transaction.date <= end &&
-        !(excluded && excluded.has(transaction.category)))
+    return IM.filterTransactions(state.transactions, {
+        start: range.start,
+        end: range.end,
+        currency,
+        excludedCategories: excluded,
+    })
 }
 
 function rangeTransactions() {
-    const start = IM.toIsoDate(state.range.start)
-    const end = IM.toIsoDate(state.range.end)
-    return state.transactions.filter((transaction) => transaction.date >= start && transaction.date <= end)
+    return IM.filterTransactions(state.transactions, {
+        start: state.range.start,
+        end: state.range.end,
+    })
 }
 
 async function fetchData() {
@@ -292,8 +242,18 @@ async function fetchData() {
         // The selected comparison window drives every comparison on the page,
         // including the forecast, so it is the only extra data we fetch.
         const window = IM.comparisonWindow(state.comparison, state.range)
+        // When the range includes today, also fetch the start of the current
+        // month so the month-to-date projection has all of its data.
+        const today = new Date()
+        let fetchStart = window.start
+        if (state.range.start <= today && today <= state.range.end) {
+            const monthStart = IM.startOfMonth(today)
+            if (monthStart < fetchStart) {
+                fetchStart = monthStart
+            }
+        }
         const params = new URLSearchParams({
-            start: IM.toIsoDate(window.start),
+            start: IM.toIsoDate(fetchStart),
             end: IM.toIsoDate(state.range.end),
         })
         const [reference, transactions] = await Promise.all([
@@ -338,9 +298,9 @@ async function fetchData() {
 
 function renderTransactionsPanel(rangeTxs) {
     els.transactionsCard.hidden = false
-    els.transactionsMeta.textContent = rangeTxs.length ? TX.formatCount(rangeTxs.length) : ''
+    els.transactionsMeta.textContent = rangeTxs.length ? String(rangeTxs.length) : ''
     els.transactionsEmpty.hidden = rangeTxs.length > 0
-    TX.renderList(els.transactionsList, rangeTxs, { writable: false, markFuture: false })
+    TX.renderList(els.transactionsList, rangeTxs, { writable: false, markFuture: true })
 }
 
 function renderHistoryPanel(rangeTxs) {
@@ -379,9 +339,9 @@ function renderHistoryPanel(rangeTxs) {
         }
     }
     els.historyCard.hidden = false
-    els.historyRange.textContent = `${monthYearFormat.format(state.range.start)} – ${monthYearFormat.format(state.range.end)}`
+    els.historyRange.textContent = `${formats.monthYear.format(state.range.start)} – ${formats.monthYear.format(state.range.end)}`
     const codes = (state.reference.currencies || []).map((currency) => currency.code)
-    if (!DSCPLNHistory.render(els.historyChart, els.historyTooltip, { months, codes })) {
+    if (!DSCPLN.chart.renderMonthly(els.historyChart, els.historyTooltip, { months, codes, money })) {
         els.historyCard.hidden = true
     }
 }
@@ -396,31 +356,38 @@ function scaleMap(map, factor) {
 
 function comparisonForSection(code, excluded) {
     const data = state.comparisonData
-    const raw = IM.totals(transactionsIn(code, data.window, excluded))
+    const windowTxs = transactionsIn(code, data.window, excluded)
+    const raw = IM.totals(windowTxs)
     const factor = data.factor
+    const windowDays = IM.daysInclusive(data.window.start, data.window.end)
     return {
         kind: data.window.kind,
+        hasData: raw.count > 0,
         spend: raw.spend * factor,
         income: raw.income * factor,
         net: raw.net * factor,
         count: data.window.kind === 'range' ? raw.count : null,
-        spendMap: scaleMap(IM.categoryTotalsMap(transactionsIn(code, data.window, excluded), 'expense'), factor),
-        incomeMap: scaleMap(IM.categoryTotalsMap(transactionsIn(code, data.window, excluded), 'income'), factor),
+        dailySpend: windowDays > 0 ? raw.spend / windowDays : 0,
+        dailyIncome: windowDays > 0 ? raw.income / windowDays : 0,
+        spendMap: scaleMap(IM.categoryTotalsMap(windowTxs, 'expense'), factor),
+        incomeMap: scaleMap(IM.categoryTotalsMap(windowTxs, 'income'), factor),
     }
 }
 
 function renderContent() {
-    pendingCharts.length = 0
     const rangeTxs = rangeTransactions()
     renderTransactionsPanel(rangeTxs)
     renderHistoryPanel(rangeTxs)
+    renderSections(rangeTxs)
+}
+
+// Rebuilds only the per-currency sections (used by category toggles, which
+// shouldn't re-render the transactions panel or the range chart).
+function renderSections(rangeTxs) {
     els.content.textContent = ''
 
     if (rangeTxs.length === 0) {
-        const card = el('section', 'card')
-        card.appendChild(el('p', 'muted', 'No transactions in this range.'))
-        els.content.appendChild(card)
-        window.requestAnimationFrame(drawPendingCharts)
+        els.content.appendChild(el('section', 'card', '', el('p', 'muted', 'No transactions in this range.')))
         return
     }
 
@@ -446,7 +413,6 @@ function renderContent() {
     for (const code of codes) {
         els.content.appendChild(buildSection(code, byCurrency.get(code)))
     }
-    window.requestAnimationFrame(drawPendingCharts)
 }
 
 /* ---------- Currency sections ---------- */
@@ -470,7 +436,7 @@ function buildSection(code, rangeTxs) {
     const badge = el('span', 'currency-badge')
     badge.appendChild(el('span', 'insights-section__code', code))
     header.appendChild(badge)
-    header.appendChild(el('span', 'muted', TX.formatCount(rangeTxs.length)))
+    header.appendChild(el('span', 'muted', TX.formatCount(included.length)))
     section.appendChild(header)
 
     section.appendChild(buildKpis(code, included, comparison))
@@ -502,17 +468,17 @@ function buildKpis(code, included, comparison) {
             code,
             color: netColor(current.net, current.spend, current.income),
         }),
-        kpiTile('Avg / day', days > 0 ? current.spend / days : 0,
-            days > 0 ? comparison.spend / days : 0, { tone: 'spend', code }),
-        kpiTile('Avg earned / day', days > 0 ? current.income / days : 0,
-            days > 0 ? comparison.income / days : 0, { tone: 'income', code }),
+        kpiTile('Avg / day', current.spend / days, comparison.dailySpend, { tone: 'spend', code }),
+        kpiTile('Avg earned / day', current.income / days, comparison.dailyIncome, { tone: 'income', code }),
         kpiTile('Transactions', current.count, comparison.count, { tone: 'neutral' })
     )
     return grid
 }
 
 function daysElapsed() {
-    return Math.max(1, IM.daysInclusive(state.range.start, state.range.end))
+    const today = new Date()
+    const end = state.range.start <= today && today < state.range.end ? today : state.range.end
+    return Math.max(1, IM.daysInclusive(state.range.start, end))
 }
 
 function kpiTile(label, value, comparisonValue, options = {}) {
@@ -567,7 +533,7 @@ function buildCategories(all, comparison, excluded, code) {
             }
         }
         state.excluded.set(code, excluded)
-        renderContent()
+        renderSections(rangeTransactions())
     }
 
     const addList = (title, kind, comparisonMap) => {
@@ -623,10 +589,10 @@ function buildCategoryRow(row, max, total, comparisonAmount, excluded, code) {
             excluded.add(row.category)
         }
         state.excluded.set(code, excluded)
-        renderContent()
+        renderSections(rangeTransactions())
     })
 
-    const dot = el('span', 'category-row__dot')
+    const dot = el('span', 'category-dot')
     dot.style.background = categoryColor(row.category)
 
     const name = el('span', 'category-row__name')
@@ -657,67 +623,50 @@ function buildCategoryRow(row, max, total, comparisonAmount, excluded, code) {
 
 function buildTrendAndForecast(code, included, comparison, excluded) {
     const panel = el('div', 'insights-panel')
-    const sameMonth = state.range.start.getFullYear() === state.range.end.getFullYear() &&
-        state.range.start.getMonth() === state.range.end.getMonth()
-
-    panel.appendChild(el('h3', 'panel__title', sameMonth ? 'Cumulative spent & earned' : 'Monthly totals'))
+    panel.appendChild(el('h3', 'panel__title', 'Cumulative spent & earned'))
     const chartHost = el('div', 'insights-chart-host')
     panel.appendChild(chartHost)
 
-    if (sameMonth) {
-        const monthStart = IM.startOfMonth(state.range.start)
-        const monthEnd = IM.endOfMonth(state.range.start)
-        const daily = IM.dailySeries(included, monthStart, monthEnd)
-        let runningSpend = 0
-        let runningIncome = 0
-        const spendCumulative = daily.map((day) => {
-            runningSpend += day.spend
-            return IM.clean(runningSpend)
-        })
-        const incomeCumulative = daily.map((day) => {
-            runningIncome += day.income
-            return IM.clean(runningIncome)
-        })
-        const baseline = cumulativeBaseline(code, excluded)
-        pendingCharts.push({
-            host: chartHost,
-            draw: (width) => drawCumulativeChart(chartHost, width, {
-                daily, spendCumulative, incomeCumulative,
-                baselineSpend: baseline.spend, baselineIncome: baseline.income,
-                currency: code,
-            }),
-        })
-        const short = comparisonShortLabel()
-        const laneColor = currencyColor(code) || 'var(--accent)'
-        const legend = el('div', 'chart-legend')
-        const items = [
-            { label: 'Spent', color: laneColor },
-            { label: 'Earned', color: 'var(--ok)' },
-            { label: `Spent vs ${short}`, color: laneColor, baseline: true },
-            { label: `Earned vs ${short}`, color: 'var(--ok)', baseline: true },
-        ]
-        for (const item of items) {
-            const entry = el('span', `chart-legend__item${item.baseline ? ' chart-legend__item--baseline' : ''}`)
-            const swatch = el('span', `chart-legend__swatch${item.baseline ? ' chart-legend__swatch--line' : ''}`)
-            swatch.style.background = item.color
-            entry.append(swatch, el('span', '', item.label))
-            legend.appendChild(entry)
-        }
-        panel.appendChild(legend)
-    } else {
-        const byMonth = new Map(IM.monthlySeries(included).map((entry) => [entry.month, entry]))
-        const months = IM.monthPartials(state.range.start, state.range.end).map((entry) => {
-            const key = `${entry.year}-${String(entry.month).padStart(2, '0')}`
-            return byMonth.get(key) || { month: key, spend: 0, income: 0 }
-        })
-        pendingCharts.push({
-            host: chartHost,
-            draw: (width) => drawMonthlyChart(chartHost, width, months, code),
-        })
-    }
+    const daily = IM.dailySeries(included, state.range.start, state.range.end)
+    let runningSpend = 0
+    let runningIncome = 0
+    const spendCumulative = daily.map((day) => {
+        runningSpend += day.spend
+        return IM.clean(runningSpend)
+    })
+    const incomeCumulative = daily.map((day) => {
+        runningIncome += day.income
+        return IM.clean(runningIncome)
+    })
+    const baseline = cumulativeBaseline(code, excluded)
+    const middle = daily[Math.floor((daily.length - 1) / 2)]
+    DSCPLN.chart.renderCumulative(chartHost, {
+        daily, spendCumulative, incomeCumulative,
+        baselineSpend: baseline.spend, baselineIncome: baseline.income,
+        currency: code,
+        axisLabels: [
+            formats.dayMonth.format(state.range.start),
+            middle ? formats.dayMonth.format(dates.parseIso(middle.date)) : '',
+            formats.dayMonth.format(state.range.end),
+        ],
+    })
+
+    const short = comparisonShortLabel()
+    const laneColor = currencyColor(code) || 'var(--accent)'
+    panel.appendChild(el('div', 'series-legend', '',
+        legendItem('Spent', laneColor),
+        legendItem('Earned', 'var(--ok)'),
+        legendItem(`Spent vs ${short}`, laneColor, true),
+        legendItem(`Earned vs ${short}`, 'var(--ok)', true)))
 
     panel.appendChild(buildForecast(code, excluded))
     return panel
+}
+
+function legendItem(label, color, baseline = false) {
+    const swatch = el('span', `series-legend__swatch${baseline ? ' series-legend__swatch--line' : ''}`)
+    swatch.style.background = color
+    return el('span', `series-legend__item${baseline ? ' series-legend__item--baseline' : ''}`, '', swatch, label)
 }
 
 // Resamples a cumulative series to `targetLength` points so comparisons with
@@ -785,8 +734,8 @@ function buildForecast(code, excluded) {
         const projected = IM.projectMonthEnd({
             spend: monthTotals.spend, income: monthTotals.income, elapsedDays: elapsed, daysInMonth,
         })
-        wrap.appendChild(forecastRow('Projected month-end spend', money(projected.spend, code)))
-        wrap.appendChild(forecastRow('Projected month-end income', money(projected.income, code)))
+        wrap.appendChild(forecastRow('Projected month-end spend (month to date)', money(projected.spend, code)))
+        wrap.appendChild(forecastRow('Projected month-end income (month to date)', money(projected.income, code)))
     }
 
     const data = state.comparisonData
@@ -796,8 +745,8 @@ function buildForecast(code, excluded) {
     if (windowDays > 0 && (windowTotals.spend > 0 || windowTotals.income > 0)) {
         const factor = 30 / windowDays
         const label = window.kind === 'average' ?
-            `Next 30 days (avg of ${monthShortFormat.format(window.start)}–${monthShortFormat.format(window.end)} ${yearFormat.format(window.end)})` :
-            `Next 30 days (based on ${dayMonthFormat.format(window.start)}–${dayMonthFormat.format(window.end)} ${yearFormat.format(window.end)})`
+            `Next 30 days (avg of ${formats.monthShort.format(window.start)}–${formats.monthShort.format(window.end)} ${formats.year.format(window.end)})` :
+            `Next 30 days (based on ${formats.dayMonth.format(window.start)}–${formats.dayMonth.format(window.end)} ${formats.year.format(window.end)})`
         wrap.appendChild(forecastRow(label,
             `${money(windowTotals.spend * factor, code)} out · ${money(windowTotals.income * factor, code)} in`))
     }
@@ -818,6 +767,10 @@ function forecastRow(label, value) {
 
 function buildMovers(code, included, comparison) {
     const wrap = el('div', 'movers')
+    if (!comparison.hasData) {
+        wrap.appendChild(el('p', 'muted', `No comparison data for ${comparisonLongLabel()}.`))
+        return wrap
+    }
     const addBlock = (title, currentMap, comparisonMap) => {
         const movers = IM.categoryMovers(currentMap, comparisonMap, 3)
         if (movers.increases.length === 0 && movers.decreases.length === 0) {
@@ -836,7 +789,7 @@ function buildMovers(code, included, comparison) {
             const list = el('ul', 'movers__list')
             for (const entry of entries) {
                 const item = el('li', 'movers__item')
-                const dot = el('span', 'category-row__dot')
+                const dot = el('span', 'category-dot')
                 dot.style.background = categoryColor(entry.category)
                 item.appendChild(dot)
                 item.appendChild(el('span', 'movers__name', entry.category))
@@ -865,190 +818,7 @@ function buildMovers(code, included, comparison) {
     return wrap
 }
 
-/* ---------- Charts ---------- */
-
-const SVG_NS = 'http://www.w3.org/2000/svg'
-
-function svgEl(tag, attributes = {}) {
-    const node = document.createElementNS(SVG_NS, tag)
-    for (const [name, value] of Object.entries(attributes)) {
-        node.setAttribute(name, value)
-    }
-    return node
-}
-
-function niceMax(value) {
-    if (!Number.isFinite(value) || value <= 0) {
-        return 0
-    }
-    const exponent = Math.floor(Math.log10(value))
-    const base = 10 ** exponent
-    const fraction = value / base
-    const nice = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10
-    return nice * base
-}
-
-function compactMoney(value) {
-    const absolute = Math.abs(value)
-    if (absolute >= 1000) {
-        return `$${compactNumberFormat.format(value)}`
-    }
-    if (absolute >= 1) {
-        return `$${Math.round(value).toLocaleString()}`
-    }
-    return `$${value.toFixed(2)}`
-}
-
-function drawPendingCharts() {
-    for (const chart of pendingCharts) {
-        const width = Math.max(240, Math.round(chart.host.clientWidth || 480))
-        chart.draw(width)
-    }
-}
-
-function drawCumulativeChart(host, width, data) {
-    host.textContent = ''
-    const height = 210
-    const pad = { top: 12, right: 10, bottom: 26, left: 48 }
-    const plotWidth = width - pad.left - pad.right
-    const plotHeight = height - pad.top - pad.bottom
-    const baselineSpend = data.baselineSpend || []
-    const baselineIncome = data.baselineIncome || []
-    const max = niceMax(Math.max(
-        ...data.spendCumulative,
-        ...data.incomeCumulative,
-        ...baselineSpend,
-        ...baselineIncome,
-        0
-    )) || 1
-    const svg = svgEl('svg', {
-        viewBox: `0 0 ${width} ${height}`,
-        class: 'insights-chart',
-        role: 'img',
-        'aria-label': `Cumulative spend and earned for ${data.currency}`,
-    })
-    const x = (index) => pad.left + (index / (data.daily.length - 1 || 1)) * plotWidth
-    const y = (value) => pad.top + plotHeight - (value / max) * plotHeight
-
-    for (const factor of [0, 0.5, 1]) {
-        const lineY = y(max * factor)
-        svg.appendChild(svgEl('line', {
-            x1: pad.left, x2: pad.left + plotWidth, y1: lineY, y2: lineY,
-            class: factor === 0 ? 'history__baseline' : 'history__grid',
-        }))
-        const tick = svgEl('text', { x: pad.left - 6, y: lineY + 3.5, class: 'history__tick' })
-        tick.textContent = compactMoney(max * factor)
-        svg.appendChild(tick)
-    }
-
-    if (baselineSpend.length > 0) {
-        const points = baselineSpend.map((value, index) => `${x(index)},${y(value)}`).join(' ')
-        svg.appendChild(svgEl('polyline', { points, class: 'insights-chart__baseline' }))
-    }
-    if (baselineIncome.length > 0) {
-        const points = baselineIncome.map((value, index) => `${x(index)},${y(value)}`).join(' ')
-        svg.appendChild(svgEl('polyline', { points, class: 'insights-chart__baseline insights-chart__baseline--earned' }))
-    }
-
-    const spendPoints = data.spendCumulative.map((value, index) => `${x(index)},${y(value)}`)
-    if (spendPoints.length > 0) {
-        svg.appendChild(svgEl('polyline', { points: spendPoints.join(' '), class: 'insights-chart__line' }))
-    }
-    const incomePoints = data.incomeCumulative.map((value, index) => `${x(index)},${y(value)}`)
-    if (incomePoints.length > 0) {
-        svg.appendChild(svgEl('polyline', { points: incomePoints.join(' '), class: 'insights-chart__line insights-chart__line--earned' }))
-    }
-
-    const labelIndexes = [0, Math.floor((data.daily.length - 1) / 2), data.daily.length - 1]
-    for (const index of labelIndexes) {
-        const label = svgEl('text', {
-            x: x(index), y: height - 8, class: 'history__label',
-            'text-anchor': index === 0 ? 'start' : index === data.daily.length - 1 ? 'end' : 'middle',
-        })
-        label.textContent = String(index + 1)
-        svg.appendChild(label)
-    }
-    host.appendChild(svg)
-}
-
-function drawMonthlyChart(host, width, months, currency) {
-    host.textContent = ''
-    const height = 210
-    const pad = { top: 12, right: 10, bottom: 30, left: 48 }
-    const plotWidth = width - pad.left - pad.right
-    const plotHeight = height - pad.top - pad.bottom
-    const max = niceMax(Math.max(0, ...months.map((month) => Math.max(month.spend, month.income)))) || 1
-    const svg = svgEl('svg', {
-        viewBox: `0 0 ${width} ${height}`,
-        class: 'insights-chart',
-        role: 'img',
-        'aria-label': `Monthly spend and income for ${currency}`,
-    })
-    const slot = plotWidth / months.length
-    const barWidth = Math.max(2, Math.min(14, (slot * 0.3)))
-    const y = (value) => pad.top + plotHeight - (value / max) * plotHeight
-    const baseY = y(0)
-
-    for (const factor of [0, 0.5, 1]) {
-        const lineY = y(max * factor)
-        svg.appendChild(svgEl('line', {
-            x1: pad.left, x2: pad.left + plotWidth, y1: lineY, y2: lineY,
-            class: factor === 0 ? 'history__baseline' : 'history__grid',
-        }))
-        const tick = svgEl('text', { x: pad.left - 6, y: lineY + 3.5, class: 'history__tick' })
-        tick.textContent = compactMoney(max * factor)
-        svg.appendChild(tick)
-    }
-
-    const color = currencyColor(currency) || 'var(--accent)'
-    const labelStep = Math.max(1, Math.ceil(months.length / Math.max(2, Math.floor(plotWidth / 44))))
-    const labeled = []
-    for (let index = months.length - 1; index >= 0; index -= labelStep) {
-        labeled.unshift(index)
-    }
-    months.forEach((month, index) => {
-        const center = pad.left + slot * index + slot / 2
-        const spendHeight = (month.spend / max) * plotHeight
-        const incomeHeight = (month.income / max) * plotHeight
-        if (spendHeight > 0) {
-            const bar = svgEl('rect', {
-                x: center - barWidth - 1, y: baseY - spendHeight, width: barWidth, height: spendHeight,
-                rx: Math.min(2, barWidth / 2).toFixed(2), class: 'history__bar',
-            })
-            bar.style.fill = color
-            svg.appendChild(bar)
-        }
-        if (incomeHeight > 0) {
-            const bar = svgEl('rect', {
-                x: center + 1, y: baseY - incomeHeight, width: barWidth, height: incomeHeight,
-                rx: Math.min(2, barWidth / 2).toFixed(2), class: 'history__bar history__bar--in',
-            })
-            bar.style.fill = color
-            bar.style.stroke = color
-            svg.appendChild(bar)
-        }
-        if (labeled.includes(index)) {
-            const [year, monthNumber] = month.month.split('-').map(Number)
-            const date = new Date(year, monthNumber - 1, 1)
-            const label = svgEl('text', {
-                x: center, y: height - 8, class: 'history__label',
-                'text-anchor': index === months.length - 1 ? 'end' : index === 0 ? 'start' : 'middle',
-            })
-            const showYear = monthNumber === 1 || index === labeled[0]
-            label.textContent = `${monthShortFormat.format(date)}${showYear ? ` '${String(year).slice(-2)}` : ''}`
-            svg.appendChild(label)
-        }
-    })
-    host.appendChild(svg)
-}
-
 /* ---------- Wiring ---------- */
-
-els.themeButton.addEventListener('click', () => {
-    state.theme = THEME_ORDER[(THEME_ORDER.indexOf(state.theme) + 1) % THEME_ORDER.length]
-    saveTheme(state.theme)
-    applyTheme()
-})
 
 els.startDate.addEventListener('change', () => {
     const start = IM.parseIsoDate(els.startDate.value)
@@ -1109,13 +879,7 @@ for (const chip of document.querySelectorAll('.chip[data-range]')) {
     })
 }
 
-prefersDark.addEventListener('change', () => {
-    if (state.theme === 'auto') {
-        applyTheme()
-    }
-})
-
-applyTheme()
+initTheme(els.themeButton)
 const initial = stateFromUrl()
 state.comparison = initial.comparison
 state.range = initial.range || lastMonthRange()

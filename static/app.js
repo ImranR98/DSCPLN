@@ -1,6 +1,8 @@
 'use strict'
 
-const { hasSubCentPrecision, currencyColor, setBreakableText } = DSCPLNFormat
+// Dashboard: the current-month overview, currency tiles, last-12-months chart,
+// the transactions list and the add/edit/import dialogs.
+const { dates, formats, number, moneyFor, hasSubCentPrecision, currencyColor, setBreakableText, el, requestJson, initTheme, showToast } = DSCPLN
 
 const $ = (id) => document.getElementById(id)
 
@@ -14,7 +16,6 @@ const els = {
     monthHeading: $('monthHeading'),
     monthName: $('monthName'),
     monthSpend: $('monthSpend'),
-    monthOf: $('monthOf'),
     monthBudget: $('monthBudget'),
     monthProgress: $('monthProgress'),
     monthProgressFill: $('monthProgressFill'),
@@ -83,33 +84,18 @@ const els = {
     toasts: $('toasts'),
 }
 
-const THEME_KEY = 'dscpln-theme'
-const THEME_ORDER = ['auto', 'light', 'dark']
 const REFRESH_STALE_MS = 60 * 1000
 const INCOME_GROUP = 'Money In'
 const CONVERSION_GROUP = 'Conversions'
 
 const ICONS = {
-    auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg>',
-    light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
-    dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
     edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
-    delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>',
-    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
-    alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>',
 }
 
-const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
-const dayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-const timeFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
-
-const prefersDark = window.matchMedia('(prefers-color-scheme: dark)')
-
 const state = {
-    today: startOfDay(new Date()),
+    today: dates.startOfDay(new Date()),
     data: null,
     lastFetchAt: 0,
-    theme: readTheme(),
     editingBudgetCurrency: null,
     editingTransaction: null,
     pendingDelete: null,
@@ -122,29 +108,6 @@ let detailsSuggestionSequence = 0
 let detailsSuggestions = []
 let detailsSuggestionIndex = -1
 let fetchSequence = 0
-
-function startOfDay(date) {
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate())
-}
-
-function toDateInputValue(date) {
-    const pad = (n) => String(n).padStart(2, '0')
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-}
-
-function parseIsoDate(value) {
-    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value || '')
-    return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : null
-}
-
-function isSameDay(a, b) {
-    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-}
-
-function toNumber(value) {
-    const n = Number.parseFloat(value)
-    return Number.isFinite(n) ? n : 0
-}
 
 // Currencies whose data needs more than cents (e.g. XMR) keep significant
 // digits even for values of 1 or more; everything else uses plain 2 decimals.
@@ -168,9 +131,7 @@ function isFractionalCurrency(code) {
     return code ? fractionalCurrencies.has(code) : false
 }
 
-function money(value, code) {
-    return DSCPLNFormat.money(value, code, Boolean(code) && isFractionalCurrency(code))
-}
+const money = moneyFor((code) => Boolean(code) && isFractionalCurrency(code))
 
 function applyCurrencyAccent(element, code) {
     const color = currencyColor(code)
@@ -182,57 +143,17 @@ function getSelectedKind() {
     return selected ? selected.value : 'expense'
 }
 
-function readTheme() {
-    try {
-        const theme = localStorage.getItem(THEME_KEY)
-        return THEME_ORDER.includes(theme) ? theme : 'auto'
-    } catch (e) {
-        return 'auto'
-    }
-}
-
-function saveTheme(theme) {
-    try {
-        localStorage.setItem(THEME_KEY, theme)
-    } catch (e) { }
-}
-
-function applyTheme() {
-    const dark = state.theme === 'dark' || (state.theme === 'auto' && prefersDark.matches)
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-    els.themeButton.innerHTML = ICONS[state.theme]
-    els.themeButton.title = `Theme: ${state.theme}`
-    els.themeButton.setAttribute('aria-label', `Theme: ${state.theme}. Click to change.`)
-}
-
 function toast(message, type = 'success') {
-    const el = document.createElement('div')
-    el.className = `toast toast--${type}`
-    el.setAttribute('role', 'status')
-    const icon = document.createElement('span')
-    icon.className = 'toast__icon'
-    icon.innerHTML = type === 'error' ? ICONS.alert : ICONS.check
-    const text = document.createElement('span')
-    text.textContent = message
-    el.append(icon, text)
-    els.toasts.appendChild(el)
-    window.setTimeout(() => {
-        el.classList.add('toast--leaving')
-        window.setTimeout(() => el.remove(), 350)
-    }, 3200)
+    showToast(els.toasts, message, type)
 }
 
 async function fetchData({ silent = false } = {}) {
     const sequence = ++fetchSequence
-    state.today = startOfDay(new Date())
+    state.today = dates.startOfDay(new Date())
     if (!state.data && !silent) document.body.classList.add('is-loading')
     try {
-        const params = new URLSearchParams({ date: toDateInputValue(state.today) })
-        const response = await fetch(`/data?${params}`, {
-            headers: { Accept: 'application/json' },
-        })
-        if (!response.ok) throw new Error(`Request failed (${response.status})`)
-        const data = await response.json()
+        const params = new URLSearchParams({ date: dates.iso(state.today) })
+        const data = await requestJson(`/data?${params}`)
         if (sequence !== fetchSequence) return
         state.data = data
         state.lastFetchAt = Date.now()
@@ -265,8 +186,8 @@ function primaryCurrency() {
 }
 
 function renderContext() {
-    els.contextLabel.textContent = `Today · ${dayFormat.format(state.today)}`
-    els.updatedLabel.textContent = state.lastFetchAt ? `Updated ${timeFormat.format(new Date(state.lastFetchAt))}` : ''
+    els.contextLabel.textContent = `Today · ${formats.weekday.format(state.today)}`
+    els.updatedLabel.textContent = state.lastFetchAt ? `Updated ${formats.time.format(new Date(state.lastFetchAt))}` : ''
 }
 
 function setCardState(card, spent, budget) {
@@ -296,8 +217,8 @@ function setPace(el, budget, spent, fraction, code) {
 }
 
 function renderMonth(currency) {
-    const budget = currency ? toNumber(currency.monthlyBudget) : 0
-    const spent = currency ? toNumber(currency.monthsSpend) : 0
+    const budget = currency ? number(currency.monthlyBudget) : 0
+    const spent = currency ? number(currency.monthsSpend) : 0
     const code = currency ? currency.code : null
     const date = state.today
     const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
@@ -307,7 +228,7 @@ function renderMonth(currency) {
 
     els.monthHeading.textContent = currency ? currency.code : 'Main'
     applyCurrencyAccent(els.monthCard, code)
-    els.monthName.textContent = monthFormat.format(date)
+    els.monthName.textContent = formats.monthName.format(date)
     setBreakableText(els.monthSpend, money(spent, code))
     setBreakableText(els.monthBudget, budget > 0 ? money(budget, code) : 'no budget')
     if (budget <= 0) {
@@ -325,15 +246,15 @@ function renderMonth(currency) {
     }
     els.monthDaysLeft.textContent = String(daysLeft)
     setBreakableText(els.monthSpentThis, money(spent, code))
-    setBreakableText(els.monthSpentPrev, money(currency ? toNumber(currency.previousMonthsSpend) : 0, code))
-    setBreakableText(els.monthSpentAvg, money(currency ? toNumber(currency.trailingSpendAverage) : 0, code))
-    setBreakableText(els.monthEarnThis, `+${money(currency ? toNumber(currency.monthsIncome) : 0, code)}`)
-    setBreakableText(els.monthEarnPrev, `+${money(currency ? toNumber(currency.previousMonthsIncome) : 0, code)}`)
-    setBreakableText(els.monthEarnAvg, `+${money(currency ? toNumber(currency.trailingIncomeAverage) : 0, code)}`)
+    setBreakableText(els.monthSpentPrev, money(currency ? number(currency.previousMonthsSpend) : 0, code))
+    setBreakableText(els.monthSpentAvg, money(currency ? number(currency.trailingSpendAverage) : 0, code))
+    setBreakableText(els.monthEarnThis, `+${money(currency ? number(currency.monthsIncome) : 0, code)}`)
+    setBreakableText(els.monthEarnPrev, `+${money(currency ? number(currency.previousMonthsIncome) : 0, code)}`)
+    setBreakableText(els.monthEarnAvg, `+${money(currency ? number(currency.trailingIncomeAverage) : 0, code)}`)
 
-    const convertedThis = { out: toNumber(currency && currency.monthsConvertedOut), in: toNumber(currency && currency.monthsConvertedIn) }
-    const convertedPrev = { out: toNumber(currency && currency.previousMonthsConvertedOut), in: toNumber(currency && currency.previousMonthsConvertedIn) }
-    const convertedAvg = { out: toNumber(currency && currency.trailingConvertedOutAverage), in: toNumber(currency && currency.trailingConvertedInAverage) }
+    const convertedThis = { out: number(currency && currency.monthsConvertedOut), in: number(currency && currency.monthsConvertedIn) }
+    const convertedPrev = { out: number(currency && currency.previousMonthsConvertedOut), in: number(currency && currency.previousMonthsConvertedIn) }
+    const convertedAvg = { out: number(currency && currency.trailingConvertedOutAverage), in: number(currency && currency.trailingConvertedInAverage) }
     const setConvertedCell = (element, totals) => {
         const net = Number.parseFloat((totals.in - totals.out).toPrecision(12))
         setBreakableText(element, `${net > 0 ? '+' : net < 0 ? '−' : ''}${money(Math.abs(net), code)}`)
@@ -348,7 +269,7 @@ function renderMonth(currency) {
         cell.hidden = !hasConversions
     }
 
-    const expected = currency && currency.monthsExpectedSpend != null ? toNumber(currency.monthsExpectedSpend) : budget * (day / daysInMonth)
+    const expected = currency && currency.monthsExpectedSpend != null ? number(currency.monthsExpectedSpend) : budget * (day / daysInMonth)
     setPace(els.monthPace, budget, spent, budget > 0 ? expected / budget : 0, code)
     setProgress(els.monthProgress, els.monthProgressFill, spent, budget)
     setCardState(els.monthCard, spent, budget)
@@ -358,91 +279,65 @@ function renderMonth(currency) {
 }
 
 function buildCurrencyCard(currency) {
-    const card = document.createElement('section')
-    card.className = 'currency-card'
-    card.setAttribute('aria-label', `${currency.code} budget`)
-    applyCurrencyAccent(card, currency.code)
-
     const code = currency.code
-    const budget = toNumber(currency.monthlyBudget)
-    const spent = toNumber(currency.monthsSpend)
+    const budget = number(currency.monthlyBudget)
+    const spent = number(currency.monthsSpend)
     const remaining = budget - spent
-
-    const header = document.createElement('div')
-    header.className = 'currency-card__header'
-    const title = document.createElement('span')
-    title.className = 'currency-badge'
-    const codeEl = document.createElement('span')
-    codeEl.textContent = code
-    title.append(codeEl)
-    const editButton = document.createElement('button')
-    editButton.type = 'button'
-    editButton.className = 'icon-button icon-button--small'
-    editButton.title = `Edit ${code} budget`
-    editButton.setAttribute('aria-label', `Edit ${code} budget`)
-    editButton.innerHTML = ICONS.edit
-    editButton.addEventListener('click', () => openBudgetDialog(code))
-    header.append(title, editButton)
-
-    const figure = document.createElement('p')
-    figure.className = 'currency-card__figure'
-    const spendEl = document.createElement('span')
-    spendEl.className = 'currency-card__spend'
-    setBreakableText(spendEl, money(spent, code))
-    const budgetEl = document.createElement('span')
-    budgetEl.className = 'currency-card__budget'
-    setBreakableText(budgetEl, budget > 0 ? `of ${money(budget, code)}` : 'no budget')
-    figure.append(spendEl, budgetEl)
-
-    const progress = document.createElement('div')
-    progress.className = 'progress progress--sm'
-    progress.setAttribute('role', 'progressbar')
-    progress.setAttribute('aria-valuemin', '0')
-    progress.setAttribute('aria-valuemax', '100')
-    const fill = document.createElement('div')
-    fill.className = 'progress__fill'
     const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0
-    fill.style.width = `${pct.toFixed(1)}%`
-    progress.setAttribute('aria-valuenow', String(Math.round(pct)))
-    progress.setAttribute('aria-valuetext', budget > 0 ? `${Math.round(pct)}% of budget used` : 'No budget set')
-    progress.appendChild(fill)
+
+    const card = el('section', {
+        class: 'currency-card',
+        'aria-label': `${code} budget`,
+        style: { '--currency': currencyColor(code) },
+    },
+        el('div', { class: 'currency-card__header' },
+            el('span', { class: 'currency-badge' }, code),
+            el('button', {
+                type: 'button',
+                class: 'icon-button icon-button--small',
+                title: `Edit ${code} budget`,
+                'aria-label': `Edit ${code} budget`,
+                innerHTML: ICONS.edit,
+                onclick: () => openBudgetDialog(code),
+            })),
+        el('p', { class: 'currency-card__figure' },
+            breakable('currency-card__spend', money(spent, code)),
+            breakable('currency-card__budget', budget > 0 ? `of ${money(budget, code)}` : 'no budget')),
+        el('div', {
+            class: 'progress progress--sm',
+            role: 'progressbar',
+            'aria-valuemin': '0',
+            'aria-valuemax': '100',
+            'aria-valuenow': String(Math.round(pct)),
+            'aria-valuetext': budget > 0 ? `${Math.round(pct)}% of budget used` : 'No budget set',
+        }, el('div', { class: 'progress__fill', style: { width: `${pct.toFixed(1)}%` } })),
+        el('div', { class: 'currency-card__meta' },
+            budget > 0 && el('span', {
+                class: remaining >= 0 ? '' : 'currency-card__over',
+                text: remaining >= 0 ? `${money(remaining, code)} left` : `${money(-remaining, code)} over`,
+            }),
+            el('span', { class: 'currency-card__earned', text: `+${money(number(currency.monthsIncome), code)} in` })),
+        convertedLine(currency, code))
     setCardState(card, spent, budget)
-
-    const meta = document.createElement('div')
-    meta.className = 'currency-card__meta'
-    const earned = document.createElement('span')
-    earned.className = 'currency-card__earned'
-    earned.textContent = `+${money(toNumber(currency.monthsIncome), code)} in`
-    const convertedOut = toNumber(currency.monthsConvertedOut)
-    const convertedIn = toNumber(currency.monthsConvertedIn)
-    const convertedParts = []
-    if (convertedOut > 0) {
-        convertedParts.push(`−${money(convertedOut, code)}`)
-    }
-    if (convertedIn > 0) {
-        convertedParts.push(`+${money(convertedIn, code)}`)
-    }
-    if (budget > 0) {
-        const left = document.createElement('span')
-        if (remaining >= 0) {
-            left.textContent = `${money(remaining, code)} left`
-        } else {
-            left.textContent = `${money(-remaining, code)} over`
-            left.className = 'currency-card__over'
-        }
-        meta.append(left, earned)
-    } else {
-        meta.append(earned)
-    }
-
-    card.append(header, figure, progress, meta)
-    if (convertedParts.length) {
-        const converted = document.createElement('div')
-        converted.className = 'currency-card__converted'
-        converted.textContent = `${convertedParts.join(' / ')} converted`
-        card.append(converted)
-    }
     return card
+}
+
+// A span whose money value may wrap at sensible points.
+function breakable(className, text) {
+    const span = el('span', { class: className })
+    setBreakableText(span, text)
+    return span
+}
+
+function convertedLine(currency, code) {
+    const parts = []
+    if (number(currency.monthsConvertedOut) > 0) {
+        parts.push(`−${money(number(currency.monthsConvertedOut), code)}`)
+    }
+    if (number(currency.monthsConvertedIn) > 0) {
+        parts.push(`+${money(number(currency.monthsConvertedIn), code)}`)
+    }
+    return parts.length ? el('div', { class: 'currency-card__converted', text: `${parts.join(' / ')} converted` }) : null
 }
 
 function renderOtherCurrencies() {
@@ -459,7 +354,7 @@ const monthYearFormat = new Intl.DateTimeFormat(undefined, { month: 'short', yea
 function renderHistory() {
     const history = state.data.history || []
     const codes = (state.data.currencies || []).map((currency) => currency.code)
-    const rendered = DSCPLNHistory.render(els.historyChart, els.historyTooltip, { months: history, codes })
+    const rendered = DSCPLN.chart.renderMonthly(els.historyChart, els.historyTooltip, { months: history, codes, money })
     els.historyCard.hidden = !rendered
     if (!rendered) {
         els.historyRange.textContent = ''
@@ -479,25 +374,17 @@ function renderExpenses() {
 
     els.addTransactionButton.hidden = !writable
     els.importButton.hidden = !writable
-    els.expensesMeta.textContent = count ? DSCPLNTransactions.formatCount(count) : ''
+    els.expensesMeta.textContent = count ? DSCPLN.transactions.formatCount(count) : ''
     els.expensesEmpty.hidden = count > 0
 
-    DSCPLNTransactions.renderList(els.expensesList, transactions, {
+    DSCPLN.transactions.renderList(els.expensesList, transactions, {
         writable,
+        money,
         today: state.today,
         markFuture: true,
         onEdit: openEditTransactionDialog,
         onDelete: openDeleteTransactionDialog,
     })
-}
-
-async function responseErrorMessage(response, fallback) {
-    try {
-        const text = (await response.text()).trim()
-        return text || fallback
-    } catch (e) {
-        return fallback
-    }
 }
 
 function renderCategoryOptions(kind) {
@@ -562,11 +449,10 @@ async function fetchDetailsSuggestions() {
     const sequence = ++detailsSuggestionSequence
     try {
         const params = new URLSearchParams({ q: els.transactionDetailsInput.value, kind: getSelectedKind() })
-        const response = await fetch(`/details-suggestions?${params}`, { headers: { Accept: 'application/json' } })
-        if (!response.ok || sequence !== detailsSuggestionSequence || !els.transactionDialog.open) {
+        const data = await requestJson(`/details-suggestions?${params}`)
+        if (sequence !== detailsSuggestionSequence || !els.transactionDialog.open) {
             return
         }
-        const data = await response.json()
         renderDetailsSuggestions(data.suggestions || [])
     } catch (e) {
         // Autocomplete is best-effort; ignore failures.
@@ -582,24 +468,18 @@ function renderDetailsSuggestions(suggestions) {
         return
     }
     suggestions.forEach((suggestion, index) => {
-        const item = document.createElement('li')
-        item.className = 'autocomplete__option'
-        item.id = `detailsSuggestion-${index}`
-        item.setAttribute('role', 'option')
-        item.setAttribute('aria-selected', 'false')
-        const detailsEl = document.createElement('span')
-        detailsEl.className = 'autocomplete__option-details'
-        detailsEl.textContent = suggestion.details
-        const categoryEl = document.createElement('span')
-        categoryEl.className = 'autocomplete__option-category'
-        categoryEl.textContent = suggestion.category || ''
-        item.append(detailsEl, categoryEl)
-        // Keep focus in the input while tapping/clicking (prevents the blur
-        // that would close the menu); selection happens on click, so a touch
-        // that turns into a scroll gesture doesn't select a suggestion.
-        item.addEventListener('mousedown', (event) => event.preventDefault())
-        item.addEventListener('click', () => selectDetailsSuggestion(index))
-        els.detailsSuggestions.appendChild(item)
+        // mousedown is prevented to keep focus in the input; selection happens
+        // on click, so a touch scroll gesture doesn't select a suggestion.
+        els.detailsSuggestions.appendChild(el('li', {
+            class: 'autocomplete__option',
+            id: `detailsSuggestion-${index}`,
+            role: 'option',
+            'aria-selected': 'false',
+            onmousedown: (event) => event.preventDefault(),
+            onclick: () => selectDetailsSuggestion(index),
+        },
+            el('span', { class: 'autocomplete__option-details', text: suggestion.details }),
+            el('span', { class: 'autocomplete__option-category', text: suggestion.category || '' })))
     })
     els.detailsSuggestions.hidden = false
     els.transactionDetailsInput.setAttribute('aria-expanded', 'true')
@@ -653,11 +533,7 @@ async function fetchCategorySuggestions() {
         return
     }
     try {
-        const response = await fetch(`/category-suggestions?q=${encodeURIComponent(details)}&kind=${getSelectedKind()}`)
-        if (!response.ok) {
-            return
-        }
-        const result = await response.json()
+        const result = await requestJson(`/category-suggestions?q=${encodeURIComponent(details)}&kind=${getSelectedKind()}`)
         const suggestions = result.suggestions || []
         if (!suggestions.length) {
             els.transactionCategoryHint.hidden = true
@@ -686,7 +562,7 @@ function openAddTransactionDialog() {
     renderCurrencyOptions()
     const primary = primaryCurrency()
     els.transactionCurrencySelect.value = primary ? primary.code : ''
-    els.transactionDateInput.value = toDateInputValue(state.today)
+    els.transactionDateInput.value = dates.iso(state.today)
     els.transactionCategoryHint.hidden = true
     els.transactionFormError.hidden = true
     hideDetailsSuggestions()
@@ -705,8 +581,8 @@ function openEditTransactionDialog(transaction) {
     renderCurrencyOptions()
     els.transactionAmountInput.value = transaction.kind === 'income' ? transaction.moneyIn : transaction.expenses
     els.transactionDetailsInput.value = transaction.details || ''
-    const date = parseIsoDate(transaction.date)
-    els.transactionDateInput.value = date ? toDateInputValue(date) : toDateInputValue(state.today)
+    const date = dates.parseIso(transaction.date)
+    els.transactionDateInput.value = date ? dates.iso(date) : dates.iso(state.today)
     els.transactionCategorySelect.value = transaction.category || ''
     els.transactionCurrencySelect.value = transaction.currency || ''
     els.transactionNotesInput.value = transaction.notes || ''
@@ -731,33 +607,34 @@ async function submitTransaction(event) {
     }
     els.transactionSaveButton.disabled = true
     try {
-        const response = await fetch(editing ? `/transactions/${encodeURIComponent(editing.id)}` : '/transactions', {
+        await requestJson(editing ? `/transactions/${encodeURIComponent(editing.id)}` : '/transactions', {
             method: editing ? 'PUT' : 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         })
-        if (!response.ok) {
-            const message = await responseErrorMessage(response, `Save failed (${response.status})`)
-            if (response.status === 409) {
-                els.transactionDialog.close()
-                toast(message, 'error')
-                await fetchData({ silent: true })
-                return
-            }
-            els.transactionFormError.textContent = message
-            els.transactionFormError.hidden = false
-            return
-        }
         els.transactionDialog.close()
         toast(editing ? 'Transaction updated' : 'Transaction added')
         await fetchData({ silent: true })
     } catch (e) {
-        console.error(e)
-        els.transactionFormError.textContent = 'Could not save the transaction. Check the server logs.'
-        els.transactionFormError.hidden = false
+        if (e.status === 409) {
+            els.transactionDialog.close()
+            toast(e.message, 'error')
+            await fetchData({ silent: true })
+        } else {
+            showFormError(e, els.transactionFormError, 'Could not save the transaction. Check the server logs.')
+        }
     } finally {
         els.transactionSaveButton.disabled = false
     }
+}
+
+// HTTP errors carry the server's message; anything else is unexpected.
+function showFormError(error, element, fallback) {
+    const message = error.status ? error.message : fallback
+    if (!error.status) {
+        console.error(error)
+    }
+    element.textContent = message
+    element.hidden = false
 }
 
 let importPastConfirmed = false
@@ -773,7 +650,7 @@ function resetImportConfirmation() {
 function pastDatedImportLines(text) {
     const columns = state.data && state.data.transactionColumns
     const dateIndex = Math.max(0, (columns || ['Date']).indexOf('Date'))
-    const monthStart = toDateInputValue(new Date(state.today.getFullYear(), state.today.getMonth(), 1))
+    const monthStart = dates.iso(new Date(state.today.getFullYear(), state.today.getMonth(), 1))
     let count = 0
     let earliest = null
     for (const line of text.split(/\r?\n/)) {
@@ -825,25 +702,15 @@ async function submitImport(event) {
     }
     els.importSubmitButton.disabled = true
     try {
-        const response = await fetch('/transactions/import', {
+        const result = await requestJson('/transactions/import', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text }),
         })
-        if (!response.ok) {
-            const message = await responseErrorMessage(response, `Import failed (${response.status})`)
-            els.importFormError.textContent = message
-            els.importFormError.hidden = false
-            return
-        }
-        const result = await response.json()
         els.importDialog.close()
         toast(`Imported ${result.imported} ${result.imported === 1 ? 'transaction' : 'transactions'}`)
         await fetchData({ silent: true })
     } catch (e) {
-        console.error(e)
-        els.importFormError.textContent = 'Could not import transactions. Check the server logs.'
-        els.importFormError.hidden = false
+        showFormError(e, els.importFormError, 'Could not import transactions. Check the server logs.')
     } finally {
         els.importSubmitButton.disabled = false
     }
@@ -862,28 +729,20 @@ async function confirmDeleteTransaction() {
     if (!transaction) return
     els.deleteConfirmButton.disabled = true
     try {
-        const response = await fetch(`/transactions/${encodeURIComponent(transaction.id)}`, { method: 'DELETE' })
-        if (!response.ok) {
-            const message = await responseErrorMessage(response, `Delete failed (${response.status})`)
-            if (response.status === 409) {
-                els.deleteDialog.close()
-                state.pendingDelete = null
-                toast(message, 'error')
-                await fetchData({ silent: true })
-                return
-            }
-            els.deleteDialogError.textContent = message
-            els.deleteDialogError.hidden = false
-            return
-        }
+        await requestJson(`/transactions/${encodeURIComponent(transaction.id)}`, { method: 'DELETE' })
         els.deleteDialog.close()
         state.pendingDelete = null
         toast('Transaction deleted')
         await fetchData({ silent: true })
     } catch (e) {
-        console.error(e)
-        els.deleteDialogError.textContent = 'Could not delete the transaction. Check the server logs.'
-        els.deleteDialogError.hidden = false
+        if (e.status === 409) {
+            els.deleteDialog.close()
+            state.pendingDelete = null
+            toast(e.message, 'error')
+            await fetchData({ silent: true })
+        } else {
+            showFormError(e, els.deleteDialogError, 'Could not delete the transaction. Check the server logs.')
+        }
     } finally {
         els.deleteConfirmButton.disabled = false
     }
@@ -897,8 +756,8 @@ function openBudgetDialog(currencyCode) {
     if (!state.data) return
     const currency = (state.data.currencies || []).find((entry) => entry.code === currencyCode)
     state.editingBudgetCurrency = currencyCode
-    els.monthlyBudgetInput.value = currency ? toNumber(currency.monthlyBudget) : 0
-    els.firstDayBiasInput.value = currency ? toNumber(currency.firstDayBias) : 0
+    els.monthlyBudgetInput.value = currency ? number(currency.monthlyBudget) : 0
+    els.firstDayBiasInput.value = currency ? number(currency.firstDayBias) : 0
     els.budgetCurrencyNote.textContent = `Editing the ${currencyCode} budget.`
     updateBudgetFormValidity()
     els.budgetDialog.showModal()
@@ -933,12 +792,10 @@ async function submitBudget(event) {
     const { monthlyBudget, firstDayBias } = getBudgetFormValues()
     els.budgetSaveButton.disabled = true
     try {
-        const response = await fetch('/budget', {
+        await requestJson('/budget', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ monthlyBudget, firstDayBias, currency: state.editingBudgetCurrency }),
         })
-        if (!response.ok) throw new Error(`Save failed (${response.status})`)
         els.budgetDialog.close()
         toast('Budget updated')
         await fetchData({ silent: true })
@@ -954,12 +811,6 @@ els.refreshButton.addEventListener('click', () => {
     els.refreshButton.classList.add('is-spinning')
     window.setTimeout(() => els.refreshButton.classList.remove('is-spinning'), 600)
     fetchData({ silent: true })
-})
-
-els.themeButton.addEventListener('click', () => {
-    state.theme = THEME_ORDER[(THEME_ORDER.indexOf(state.theme) + 1) % THEME_ORDER.length]
-    saveTheme(state.theme)
-    applyTheme()
 })
 
 els.primaryBudgetButton.addEventListener('click', () => {
@@ -1061,16 +912,12 @@ els.deleteDialog.addEventListener('click', (event) => {
     }
 })
 
-prefersDark.addEventListener('change', () => {
-    if (state.theme === 'auto') applyTheme()
-})
-
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && Date.now() - state.lastFetchAt > REFRESH_STALE_MS) {
         fetchData({ silent: true })
     }
 })
 
-applyTheme()
+initTheme(els.themeButton)
 syncControls()
 fetchData()

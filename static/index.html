@@ -11,16 +11,7 @@
     <title>D$CPLN</title>
     <link rel="icon"
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232f6fed'/%3E%3Ctext x='32' y='45' font-size='38' text-anchor='middle' fill='white' font-family='sans-serif'%3E%24%3C/text%3E%3C/svg%3E">
-    <script>
-        (function () {
-            try {
-                var theme = localStorage.getItem('dscpln-theme') || 'auto'
-                if (theme !== 'light' && theme !== 'dark' && theme !== 'auto') theme = 'auto'
-                var dark = theme === 'dark' || (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-                document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-            } catch (e) { }
-        })()
-    </script>
+    <script src="theme-boot.js"></script>
     <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -168,7 +159,7 @@
                 <h2 id="budgetDialogTitle">Edit budget</h2>
                 <p id="budgetCurrencyNote" class="hint"></p>
                 <label for="monthlyBudgetInput">Monthly budget</label>
-                <input id="monthlyBudgetInput" name="monthlyBudget" type="number" step="0.01" min="0.01"
+                <input id="monthlyBudgetInput" name="monthlyBudget" type="number" step="0.01" min="0"
                     inputmode="decimal" autocomplete="off" required>
                 <label for="firstDayBiasInput">First day bias</label>
                 <input id="firstDayBiasInput" name="firstDayBias" type="number" step="0.01" min="0"

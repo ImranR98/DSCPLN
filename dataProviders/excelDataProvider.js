@@ -49,6 +49,11 @@ const getMonthExpectedSpend = (monthlyBudget, firstDayBias, day, daysInMonth) =>
 // tiny amounts (e.g. fractional XMR) keep their precision.
 const cleanAmount = (value) => Number.parseFloat(Number(value).toPrecision(12))
 
+const hasSubCentPrecision = (value) => {
+    const amount = Number(value)
+    return Number.isFinite(amount) && Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6
+}
+
 const normalizeHeader = (value) => String(value == null ? '' : value).trim()
 
 const cellString = (value) => {
@@ -356,7 +361,7 @@ module.exports = (config = {}, configDir = process.cwd()) => {
             kind: expenses == null && moneyIn != null ? 'income' : 'expense',
         }
         if (!date) {
-            return { ...transaction, invalidDate: true }
+            return null
         }
         transaction.id = `${rowNumber}-${transactionHash(transaction)}`
         return transaction
@@ -364,22 +369,49 @@ module.exports = (config = {}, configDir = process.cwd()) => {
 
     const readTransactions = (sheet, map, date1904) => {
         const transactions = []
-        const warnings = []
         sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
             if (rowNumber === 1) {
                 return
             }
             const transaction = parseTransactionRow(row, map, rowNumber, date1904)
-            if (!transaction) {
-                return
+            if (transaction) {
+                transactions.push(transaction)
             }
-            if (transaction.invalidDate) {
-                warnings.push(`Row ${rowNumber}: missing or invalid date, skipped`)
-                return
-            }
-            transactions.push(transaction)
         })
-        return { transactions, warnings }
+        return transactions
+    }
+
+    // The Budgets table sits below the category lists: a label row, a header
+    // row, then one currency per row until the first blank currency cell.
+    const budgetColumns = (sheet, budgetsLabelRow) => {
+        const columns = {}
+        sheet.getRow(budgetsLabelRow + 1).eachCell({ includeEmpty: false }, (cell, column) => {
+            const header = normalizeHeader(cellString(cell.value))
+            if (header) {
+                columns[header] = column
+            }
+        })
+        const currencyColumn = columns[BUDGET_CURRENCY_HEADER] || 1
+        return {
+            currencyColumn,
+            budgetColumn: columns[BUDGET_MONTHLY_LABEL] || currencyColumn + 1,
+            biasColumn: columns[BUDGET_BIAS_LABEL] || currencyColumn + 2,
+        }
+    }
+
+    const eachBudgetRow = (sheet, budgetsLabelRow, columns, callback) => {
+        let scanning = true
+        sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            if (!scanning || rowNumber <= budgetsLabelRow + 1) {
+                return
+            }
+            const currency = cellString(row.getCell(columns.currencyColumn).value).trim()
+            if (!currency) {
+                scanning = false
+                return
+            }
+            callback(currency, row, rowNumber)
+        })
     }
 
     const readConstants = (workbook) => {
@@ -387,7 +419,6 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         const categoryGroups = []
         const currencies = []
         const budgets = {}
-        let legacyBudget = null
         let budgetsLabelRow = -1
 
         const columns = []
@@ -417,18 +448,8 @@ module.exports = (config = {}, configDir = process.cwd()) => {
                     entry.values.push(value)
                 }
             }
-            const label = normalizeHeader(cellString(row.getCell(1).value))
-            if (label === BUDGETS_LABEL && budgetsLabelRow < 0) {
+            if (normalizeHeader(cellString(row.getCell(1).value)) === BUDGETS_LABEL && budgetsLabelRow < 0) {
                 budgetsLabelRow = rowNumber
-            }
-            if (label === BUDGET_MONTHLY_LABEL || label === BUDGET_BIAS_LABEL) {
-                legacyBudget = legacyBudget || { monthlyBudget: 0, firstDayBias: 0 }
-                const value = cellNumber(row.getCell(2).value) || 0
-                if (label === BUDGET_MONTHLY_LABEL) {
-                    legacyBudget.monthlyBudget = value
-                } else {
-                    legacyBudget.firstDayBias = value
-                }
             }
             previousRow = rowNumber
         })
@@ -441,44 +462,19 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         }
 
         if (budgetsLabelRow > 0) {
-            const columnsByHeader = {}
-            sheet.getRow(budgetsLabelRow + 1).eachCell({ includeEmpty: false }, (cell, column) => {
-                const header = normalizeHeader(cellString(cell.value))
-                if (header) {
-                    columnsByHeader[header] = column
-                }
-            })
-            const currencyColumn = columnsByHeader[BUDGET_CURRENCY_HEADER] || 1
-            const budgetColumn = columnsByHeader[BUDGET_MONTHLY_LABEL] || currencyColumn + 1
-            const biasColumn = columnsByHeader[BUDGET_BIAS_LABEL] || currencyColumn + 2
-            let scanning = true
-            sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-                if (!scanning || rowNumber <= budgetsLabelRow + 1) {
-                    return
-                }
-                const currency = cellString(row.getCell(currencyColumn).value).trim()
-                if (!currency) {
-                    scanning = false
-                    return
-                }
+            const columns = budgetColumns(sheet, budgetsLabelRow)
+            eachBudgetRow(sheet, budgetsLabelRow, columns, (currency, row) => {
                 budgets[currency] = {
-                    monthlyBudget: cellNumber(row.getCell(budgetColumn).value) || 0,
-                    firstDayBias: cellNumber(row.getCell(biasColumn).value) || 0,
+                    monthlyBudget: cellNumber(row.getCell(columns.budgetColumn).value) || 0,
+                    firstDayBias: cellNumber(row.getCell(columns.biasColumn).value) || 0,
                 }
             })
         }
-        return { categoryGroups, currencies, budgets, legacyBudget }
+        return { categoryGroups, currencies, budgets }
     }
 
-    const getBudgetForCurrency = (constants, currency) => {
-        if (currency && constants.budgets[currency]) {
-            return constants.budgets[currency]
-        }
-        if (currency && currency === constants.currencies[0] && constants.legacyBudget) {
-            return constants.legacyBudget
-        }
-        return { monthlyBudget: 0, firstDayBias: 0 }
-    }
+    const getBudgetForCurrency = (constants, currency) =>
+        (currency && constants.budgets[currency]) || { monthlyBudget: 0, firstDayBias: 0 }
 
     const emptyTotals = () => ({ spend: 0, income: 0, convertedOut: 0, convertedIn: 0 })
 
@@ -513,13 +509,10 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         return monthly
     }
 
-    const buildTransactionRange = (transactions) => {
-        const dated = transactions.filter((transaction) => !transaction.invalidDate && transaction.dateIso)
-        return {
-            first: dated.reduce((min, transaction) => (min == null || transaction.dateIso < min ? transaction.dateIso : min), null),
-            last: dated.reduce((max, transaction) => (max == null || transaction.dateIso > max ? transaction.dateIso : max), null),
-        }
-    }
+    const buildTransactionRange = (transactions) => ({
+        first: transactions.reduce((min, transaction) => (min == null || transaction.dateIso < min ? transaction.dateIso : min), null),
+        last: transactions.reduce((max, transaction) => (max == null || transaction.dateIso > max ? transaction.dateIso : max), null),
+    })
 
     const buildSamples = (transactions, constants, kind) => {
         const allowed = new Set(categoriesForKind(constants, kind))
@@ -537,14 +530,13 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         const constants = readConstants(workbook)
         const sheet = getSheet(workbook, transactionsSheetName, 'transactions')
         const headerMap = readHeaderMap(sheet)
-        const { transactions, warnings } = readTransactions(sheet, headerMap, date1904)
+        const transactions = readTransactions(sheet, headerMap, date1904)
         const conversionCategories = conversionCategoriesFor(constants)
         return {
             date1904,
             headerMap,
             constants,
             transactions,
-            warnings,
             monthly: buildMonthlyTotals(transactions, conversionCategories),
             conversionCategories,
             transactionRange: buildTransactionRange(transactions),
@@ -614,7 +606,7 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         const allowedCategories = categoriesForKind(constants, input.kind)
         const category = typeof input.category === 'string' ? input.category.trim() : ''
         if (!category || !allowedCategories.includes(category)) {
-            throw new ValidationError(`Category must be one of the ${input.kind === 'income' ? INCOME_GROUP : 'expense'} categories in the "${constantsSheetName}" sheet`)
+            throw new ValidationError(`Category must be one of the ${input.kind} categories in the "${constantsSheetName}" sheet`)
         }
         const currency = typeof input.currency === 'string' ? input.currency.trim() : ''
         if (!currency) {
@@ -713,7 +705,7 @@ module.exports = (config = {}, configDir = process.cwd()) => {
             throw new ConflictError('This transaction changed on disk. Refresh and try again.')
         }
         const existing = parseTransactionRow(row, map, rowNumber, date1904)
-        if (!existing || existing.invalidDate || existing.id !== id) {
+        if (!existing || existing.id !== id) {
             throw new ConflictError('This transaction changed on disk. Refresh and try again.')
         }
         return row
@@ -786,18 +778,24 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         })
     }
 
-    // The last 12 months of per-currency totals, oldest first.
-    const buildHistory = (constants, monthly, date) => {
+    // The last 12 months of per-currency totals, oldest first. The viewed month
+    // is capped at the viewed day (matching the month figures) and flagged as
+    // partial when it is not over yet.
+    const buildHistory = (constants, monthly, currentByCurrency, date, daysInMonth) => {
         const year = date.getFullYear()
         const month = date.getMonth() + 1
+        const day = date.getDate()
         const history = []
         for (let offset = 11; offset >= 0; offset--) {
             const target = new Date(year, month - 1 - offset, 1)
             const targetYear = target.getFullYear()
             const targetMonth = target.getMonth() + 1
+            const isCurrentMonth = offset === 0
             const currencyTotals = {}
             for (const code of constants.currencies) {
-                const entry = monthly.get(`${code}|${targetYear}|${targetMonth}`) || emptyTotals()
+                const entry = isCurrentMonth ?
+                    (currentByCurrency.get(code) || emptyTotals()) :
+                    (monthly.get(`${code}|${targetYear}|${targetMonth}`) || emptyTotals())
                 currencyTotals[code] = {
                     spend: cleanAmount(entry.spend),
                     income: cleanAmount(entry.income),
@@ -805,14 +803,19 @@ module.exports = (config = {}, configDir = process.cwd()) => {
                     convertedIn: cleanAmount(entry.convertedIn),
                 }
             }
-            history.push({ year: targetYear, month: targetMonth, currencies: currencyTotals })
+            history.push({
+                year: targetYear,
+                month: targetMonth,
+                partial: isCurrentMonth && day < daysInMonth,
+                currencies: currencyTotals,
+            })
         }
         return history
     }
 
     const getData = async (date = new Date()) => {
         const parsed = await getParsed()
-        const { constants, transactions, monthly, warnings, headerMap, conversionCategories, transactionRange } = parsed
+        const { constants, transactions, monthly, headerMap, conversionCategories, transactionRange } = parsed
         const year = date.getFullYear()
         const month = date.getMonth() + 1
         const day = date.getDate()
@@ -822,9 +825,16 @@ module.exports = (config = {}, configDir = process.cwd()) => {
             .filter((transaction) => transaction.date.year === year && transaction.date.month === month)
             .sort((a, b) => (a.dateIso === b.dateIso ? b.row - a.row : a.dateIso < b.dateIso ? 1 : -1))
 
+        const fractional = new Set()
+        for (const transaction of transactions) {
+            if (hasSubCentPrecision(transaction.moneyIn) || hasSubCentPrecision(transaction.expenses)) {
+                fractional.add(transaction.currency)
+            }
+        }
         const currentByCurrency = buildCurrentTotals(monthTransactions, day, conversionCategories)
         const currencies = buildCurrencyStats(constants, monthly, currentByCurrency, date, daysInMonth)
-        const history = buildHistory(constants, monthly, date)
+            .map((entry) => ({ ...entry, fractional: fractional.has(entry.code) }))
+        const history = buildHistory(constants, monthly, currentByCurrency, date, daysInMonth)
         return {
             currencies,
             categories: constants.categoryGroups,
@@ -834,7 +844,6 @@ module.exports = (config = {}, configDir = process.cwd()) => {
                 .sort((a, b) => a[1] - b[1])
                 .map(([header]) => header),
             history,
-            warnings,
             writable: true,
             transactions: monthTransactions.map(serializeTransaction),
         }
@@ -855,8 +864,7 @@ module.exports = (config = {}, configDir = process.cwd()) => {
             start: startIso,
             end: endIso,
             transactions: parsed.transactions
-                .filter((transaction) => !transaction.invalidDate &&
-                    transaction.dateIso >= startIso && transaction.dateIso <= endIso)
+                .filter((transaction) => transaction.dateIso >= startIso && transaction.dateIso <= endIso)
                 .sort((a, b) => (a.dateIso === b.dateIso ? a.row - b.row : a.dateIso < b.dateIso ? -1 : 1))
                 .map(serializeTransaction),
         }
@@ -865,7 +873,7 @@ module.exports = (config = {}, configDir = process.cwd()) => {
     const updateMonthlyBudget = async (monthlyBudget, firstDayBias, currency) => {
         const budget = Number.parseFloat(monthlyBudget)
         const bias = Number.parseFloat(firstDayBias)
-        if (!Number.isFinite(budget) || budget <= 0 || !Number.isFinite(bias) || bias < 0 || bias > budget) {
+        if (!Number.isFinite(budget) || budget < 0 || !Number.isFinite(bias) || bias < 0 || bias > budget) {
             throw new ValidationError('Invalid budget values')
         }
         const currencyCode = typeof currency === 'string' ? currency.trim() : ''
@@ -888,42 +896,23 @@ module.exports = (config = {}, configDir = process.cwd()) => {
             }
         })
 
-        let currencyColumn = 1
-        let budgetColumn = 2
-        let biasColumn = 3
+        let columns
         let targetRow
         if (budgetsLabelRow < 0) {
             budgetsLabelRow = lastUsedRow + 2
+            columns = { currencyColumn: 1, budgetColumn: 2, biasColumn: 3 }
             sheet.getRow(budgetsLabelRow).getCell(1).value = BUDGETS_LABEL
             const headerRow = sheet.getRow(budgetsLabelRow + 1)
-            headerRow.getCell(1).value = BUDGET_CURRENCY_HEADER
-            headerRow.getCell(2).value = BUDGET_MONTHLY_LABEL
-            headerRow.getCell(3).value = BUDGET_BIAS_LABEL
+            headerRow.getCell(columns.currencyColumn).value = BUDGET_CURRENCY_HEADER
+            headerRow.getCell(columns.budgetColumn).value = BUDGET_MONTHLY_LABEL
+            headerRow.getCell(columns.biasColumn).value = BUDGET_BIAS_LABEL
             headerRow.font = { bold: true }
             targetRow = budgetsLabelRow + 2
         } else {
-            const columns = {}
-            sheet.getRow(budgetsLabelRow + 1).eachCell({ includeEmpty: false }, (cell, column) => {
-                const header = normalizeHeader(cellString(cell.value))
-                if (header) {
-                    columns[header] = column
-                }
-            })
-            currencyColumn = columns[BUDGET_CURRENCY_HEADER] || 1
-            budgetColumn = columns[BUDGET_MONTHLY_LABEL] || currencyColumn + 1
-            biasColumn = columns[BUDGET_BIAS_LABEL] || currencyColumn + 2
+            columns = budgetColumns(sheet, budgetsLabelRow)
             targetRow = -1
             let lastBudgetRow = budgetsLabelRow + 1
-            let scanning = true
-            sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-                if (!scanning || rowNumber <= budgetsLabelRow + 1) {
-                    return
-                }
-                const value = cellString(row.getCell(currencyColumn).value).trim()
-                if (!value) {
-                    scanning = false
-                    return
-                }
+            eachBudgetRow(sheet, budgetsLabelRow, columns, (value, row, rowNumber) => {
                 lastBudgetRow = rowNumber
                 if (value === currencyCode && targetRow < 0) {
                     targetRow = rowNumber
@@ -934,11 +923,11 @@ module.exports = (config = {}, configDir = process.cwd()) => {
             }
         }
         const row = sheet.getRow(targetRow)
-        row.getCell(currencyColumn).value = currencyCode
-        row.getCell(budgetColumn).value = budget
-        row.getCell(budgetColumn).numFmt = '#,##0.00'
-        row.getCell(biasColumn).value = bias
-        row.getCell(biasColumn).numFmt = '#,##0.00'
+        row.getCell(columns.currencyColumn).value = currencyCode
+        row.getCell(columns.budgetColumn).value = budget
+        row.getCell(columns.budgetColumn).numFmt = '#,##0.00'
+        row.getCell(columns.biasColumn).value = bias
+        row.getCell(columns.biasColumn).numFmt = '#,##0.00'
         await saveWorkbook(workbook, `D$CPLN: update ${currencyCode} budget`)
     }
 
@@ -1053,7 +1042,7 @@ module.exports = (config = {}, configDir = process.cwd()) => {
 
         const used = new Map()
         for (const transaction of parsed.transactions) {
-            if (!transaction.details || transaction.invalidDate) {
+            if (!transaction.details) {
                 continue
             }
             if (kind && transaction.kind !== kind) {

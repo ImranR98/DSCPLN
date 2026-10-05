@@ -37,11 +37,13 @@ const createCustomWorkbook = async (file, rows, options = {}) => {
     constants.getCell('B3').value = 'Job'
     constants.getCell('C2').value = 'Currencies'
     constants.getCell('C3').value = 'CAD'
-    constants.getCell('A5').value = 'Budget'
-    constants.getCell('A6').value = 'Monthly Budget'
-    constants.getCell('B6').value = 1000
-    constants.getCell('A7').value = 'First Day Bias'
-    constants.getCell('B7').value = 500
+    constants.getCell('A5').value = 'Budgets'
+    constants.getCell('A6').value = 'Currency'
+    constants.getCell('B6').value = 'Monthly Budget'
+    constants.getCell('C6').value = 'First Day Bias'
+    constants.getCell('A7').value = 'CAD'
+    constants.getCell('B7').value = 1000
+    constants.getCell('C7').value = 500
     await workbook.xlsx.writeFile(file)
 }
 
@@ -123,7 +125,6 @@ test('computes previous month and trailing 12 month averages', async () => {
     assert.equal(data2026.monthsSpend, 400)
     assert.equal(data2026.previousMonthsSpend, 300)
     assert.equal(data2026.trailingSpendAverage, 50)
-    // Legacy single-budget section is used for the first currency.
     assert.equal(data2026.monthlyBudget, 1000)
     assert.equal(data2026.firstDayBias, 500)
     assert.equal(Math.round(data2026.monthsExpectedSpend * 100) / 100, 741.94)
@@ -166,6 +167,26 @@ test('history zero-fills months without data', async () => {
     assert.deepEqual(february.currencies.CAD, { spend: 0, income: 0, convertedOut: 0, convertedIn: 0 })
 })
 
+test('caps the viewed month in history and flags it partial', async () => {
+    const { dir, workbookFile: file } = createWorkbookRepo()
+    await createCustomWorkbook(file, [
+        { year: 2026, month: 3, day: 5, details: 'Paid', expenses: 10, category: 'Rent' },
+        { year: 2026, month: 3, day: 25, details: 'Future', expenses: 90, category: 'Rent' },
+    ])
+    const provider = createProvider({ workbookFile: file }, dir)
+    const data = await provider.getData(new Date(2026, 2, 15))
+    const march = data.history[data.history.length - 1]
+    assert.equal(march.partial, true)
+    assert.equal(march.currencies.CAD.spend, 10)
+    // Future-dated rows still show in the month's transaction list.
+    assert.equal(data.transactions.length, 2)
+    assert.equal(currencyOf(data, 'CAD').monthsSpend, 10)
+
+    const complete = await provider.getData(new Date(2026, 2, 31))
+    assert.equal(complete.history[complete.history.length - 1].partial, false)
+    assert.equal(complete.history[complete.history.length - 1].currencies.CAD.spend, 100)
+})
+
 test('preserves high-precision amounts like fractional XMR', async () => {
     const { provider, workbookFile } = createTestProvider()
     const created = await provider.addTransaction({
@@ -182,6 +203,9 @@ test('preserves high-precision amounts like fractional XMR', async () => {
     const xmr = currencyOf(data, 'XMR')
     assert.equal(xmr.monthsSpend, 0.000001)
     assert.equal(xmr.hasActivity, true)
+    // The fractional flag drives sub-cent formatting on both pages.
+    assert.equal(xmr.fractional, true)
+    assert.equal(currencyOf(data, 'CAD').fractional, false)
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.readFile(workbookFile)
     const sheet = workbook.getWorksheet('Transactions')
@@ -349,8 +373,8 @@ test('validates import lines', async () => {
     const cases = [
         ['2026-09-08\tBoth\t1\t2\tCAD\tDividend', /Line 1: Fill only one of Money In or Expenses/],
         ['2026-09-08\tNo amount\t\t\tCAD\tDividend', /Line 1: Fill one of Money In or Expenses/],
-        ['2026-09-08\tBad category\t1\t\tCAD\tNope', /Line 1: Category must be one of the Money In categories/],
-        ['2026-09-08\tIncome with expense category\t1\t\tCAD\tSnacks', /Line 1: Category must be one of the Money In categories/],
+        ['2026-09-08\tBad category\t1\t\tCAD\tNope', /Line 1: Category must be one of the income categories/],
+        ['2026-09-08\tIncome with expense category\t1\t\tCAD\tSnacks', /Line 1: Category must be one of the income categories/],
         ['2026-09-08\tUnknown currency\t1\t\tEUR\tDividend', /Line 1: Currency must be one of/],
         ['2026-02-30\tBad date\t1\t\tCAD\tDividend', /Line 1: Date is not a valid calendar date/],
         ['08/09/2026\tBad format\t1\t\tCAD\tDividend', /Line 1: Date must be a YYYY-MM-DD string/],
@@ -453,6 +477,10 @@ test('writes per-currency budgets into the Constants sheet', async () => {
     assert.equal(currencyOf(data, 'CAD').firstDayBias, 900)
     assert.equal(currencyOf(data, 'USD').monthlyBudget, 700)
     assert.equal(currencyOf(data, 'USD').firstDayBias, 50)
+    // A 0 budget clears it (no budget tracking).
+    await provider.updateMonthlyBudget(0, 0, 'CAD')
+    assert.equal(currencyOf(await provider.getData(new Date(2026, 8, 15)), 'CAD').monthlyBudget, 0)
+    await assert.rejects(provider.updateMonthlyBudget(-1, 0, 'CAD'), ValidationError)
     await assert.rejects(provider.updateMonthlyBudget(100, 0, 'EUR'), ValidationError)
     await assert.rejects(provider.updateMonthlyBudget(100, 0), ValidationError)
 })

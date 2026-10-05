@@ -49,17 +49,22 @@ const startNotifications = (config, dataProvider) => {
                 const overBudget = entry.monthsSpend >= entry.monthlyBudget
                 const alreadyWarned = warnedCurrencies.has(entry.code) && onlyWarnOnce
                 const unchanged = entry.monthsSpend === previousSpend.get(entry.code)
+                let settled = true
                 if (overBudget && !alreadyWarned && !unchanged) {
-                    const sent = await send(
+                    settled = await send(
                         `${entry.code} $${plainAmount(entry.monthsSpend)} of $${plainAmount(entry.monthlyBudget)}`,
                         `Monthly Budget Limit Reached (${entry.code})`)
-                    if (sent) {
+                    if (settled) {
                         warnedCurrencies.add(entry.code)
                     }
                 } else if (!overBudget) {
                     warnedCurrencies.delete(entry.code)
                 }
-                previousSpend.set(entry.code, entry.monthsSpend)
+                // Only remember a spend level once its notification settled, so
+                // a failed send is retried on the next check.
+                if (settled) {
+                    previousSpend.set(entry.code, entry.monthsSpend)
+                }
             }
         } catch (e) {
             console.error(e)

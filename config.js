@@ -84,4 +84,4 @@ const loadConfig = (configPath) => {
     return config
 }
 
-module.exports = { loadConfig, DEFAULTS }
+module.exports = { loadConfig }

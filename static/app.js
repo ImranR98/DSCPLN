@@ -2,7 +2,7 @@
 
 // Dashboard: the current-month overview, currency tiles, last-12-months chart,
 // the transactions list and the add/edit/import dialogs.
-const { dates, formats, number, moneyFor, hasSubCentPrecision, currencyColor, setBreakableText, el, requestJson, initTheme, showToast } = DSCPLN
+const { dates, formats, number, clean, moneyFor, currencyColor, icons, setBreakableText, el, requestJson, initTheme, showToast } = DSCPLN
 
 const $ = (id) => document.getElementById(id)
 
@@ -88,14 +88,11 @@ const REFRESH_STALE_MS = 60 * 1000
 const INCOME_GROUP = 'Money In'
 const CONVERSION_GROUP = 'Conversions'
 
-const ICONS = {
-    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
-}
-
 const state = {
     today: dates.startOfDay(new Date()),
     data: null,
     lastFetchAt: 0,
+    fractionalCurrencies: new Set(),
     editingBudgetCurrency: null,
     editingTransaction: null,
     pendingDelete: null,
@@ -103,6 +100,7 @@ const state = {
 }
 
 let suggestionTimer = null
+let categorySuggestionSequence = 0
 let detailsSuggestionTimer = null
 let detailsSuggestionSequence = 0
 let detailsSuggestions = []
@@ -111,27 +109,7 @@ let fetchSequence = 0
 
 // Currencies whose data needs more than cents (e.g. XMR) keep significant
 // digits even for values of 1 or more; everything else uses plain 2 decimals.
-let fractionalCurrencies = new Set()
-let fractionalCurrenciesSource = null
-
-function isFractionalCurrency(code) {
-    const history = (state.data && state.data.history) || []
-    if (fractionalCurrenciesSource !== history) {
-        fractionalCurrencies = new Set()
-        for (const entry of history) {
-            for (const [currencyCode, totals] of Object.entries(entry.currencies || {})) {
-                if (hasSubCentPrecision(totals.spend) || hasSubCentPrecision(totals.income) ||
-                    hasSubCentPrecision(totals.convertedOut) || hasSubCentPrecision(totals.convertedIn)) {
-                    fractionalCurrencies.add(currencyCode)
-                }
-            }
-        }
-        fractionalCurrenciesSource = history
-    }
-    return code ? fractionalCurrencies.has(code) : false
-}
-
-const money = moneyFor((code) => Boolean(code) && isFractionalCurrency(code))
+const money = moneyFor((code) => Boolean(code) && state.fractionalCurrencies.has(code))
 
 function applyCurrencyAccent(element, code) {
     const color = currencyColor(code)
@@ -157,6 +135,8 @@ async function fetchData({ silent = false } = {}) {
         if (sequence !== fetchSequence) return
         state.data = data
         state.lastFetchAt = Date.now()
+        state.fractionalCurrencies = new Set(
+            (data.currencies || []).filter((entry) => entry.fractional).map((entry) => entry.code))
         render()
     } catch (e) {
         if (sequence === fetchSequence) {
@@ -205,26 +185,28 @@ function setProgress(bar, fill, spent, budget) {
     bar.setAttribute('aria-valuetext', budget > 0 ? `${Math.round(pct)}% of budget used` : 'No budget set')
 }
 
-function setPace(el, budget, spent, fraction, code) {
+function setPace(element, budget, spent, fraction, code) {
     if (budget <= 0) {
-        el.textContent = ''
-        el.className = 'pace'
+        element.textContent = ''
+        element.className = 'pace'
         return
     }
     const delta = budget * fraction - spent
-    el.textContent = `${money(Math.abs(delta), code)} ${delta >= 0 ? 'less' : 'more'} than expected`
-    el.className = `pace ${delta >= 0 ? 'pace--ok' : 'pace--over'}`
+    element.textContent = `${money(Math.abs(delta), code)} ${delta >= 0 ? 'less' : 'more'} than expected`
+    element.className = `pace ${delta >= 0 ? 'pace--ok' : 'pace--over'}`
 }
 
 function renderMonth(currency) {
-    const budget = currency ? number(currency.monthlyBudget) : 0
-    const spent = currency ? number(currency.monthsSpend) : 0
+    const value = (key) => number(currency && currency[key])
+    const budget = value('monthlyBudget')
+    const spent = value('monthsSpend')
     const code = currency ? currency.code : null
     const date = state.today
     const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
     const day = date.getDate()
     const daysLeft = Math.max(1, daysInMonth - day + 1)
     const remaining = budget - spent
+    const expected = value('monthsExpectedSpend') || budget * (day / daysInMonth)
 
     els.monthHeading.textContent = currency ? currency.code : 'Main'
     applyCurrencyAccent(els.monthCard, code)
@@ -246,17 +228,17 @@ function renderMonth(currency) {
     }
     els.monthDaysLeft.textContent = String(daysLeft)
     setBreakableText(els.monthSpentThis, money(spent, code))
-    setBreakableText(els.monthSpentPrev, money(currency ? number(currency.previousMonthsSpend) : 0, code))
-    setBreakableText(els.monthSpentAvg, money(currency ? number(currency.trailingSpendAverage) : 0, code))
-    setBreakableText(els.monthEarnThis, `+${money(currency ? number(currency.monthsIncome) : 0, code)}`)
-    setBreakableText(els.monthEarnPrev, `+${money(currency ? number(currency.previousMonthsIncome) : 0, code)}`)
-    setBreakableText(els.monthEarnAvg, `+${money(currency ? number(currency.trailingIncomeAverage) : 0, code)}`)
+    setBreakableText(els.monthSpentPrev, money(value('previousMonthsSpend'), code))
+    setBreakableText(els.monthSpentAvg, money(value('trailingSpendAverage'), code))
+    setBreakableText(els.monthEarnThis, `+${money(value('monthsIncome'), code)}`)
+    setBreakableText(els.monthEarnPrev, `+${money(value('previousMonthsIncome'), code)}`)
+    setBreakableText(els.monthEarnAvg, `+${money(value('trailingIncomeAverage'), code)}`)
 
-    const convertedThis = { out: number(currency && currency.monthsConvertedOut), in: number(currency && currency.monthsConvertedIn) }
-    const convertedPrev = { out: number(currency && currency.previousMonthsConvertedOut), in: number(currency && currency.previousMonthsConvertedIn) }
-    const convertedAvg = { out: number(currency && currency.trailingConvertedOutAverage), in: number(currency && currency.trailingConvertedInAverage) }
+    const convertedThis = { out: value('monthsConvertedOut'), in: value('monthsConvertedIn') }
+    const convertedPrev = { out: value('previousMonthsConvertedOut'), in: value('previousMonthsConvertedIn') }
+    const convertedAvg = { out: value('trailingConvertedOutAverage'), in: value('trailingConvertedInAverage') }
     const setConvertedCell = (element, totals) => {
-        const net = Number.parseFloat((totals.in - totals.out).toPrecision(12))
+        const net = clean(totals.in - totals.out)
         setBreakableText(element, `${net > 0 ? '+' : net < 0 ? '−' : ''}${money(Math.abs(net), code)}`)
         element.title = `out ${money(totals.out, code)} · in ${money(totals.in, code)}`
     }
@@ -269,7 +251,6 @@ function renderMonth(currency) {
         cell.hidden = !hasConversions
     }
 
-    const expected = currency && currency.monthsExpectedSpend != null ? number(currency.monthsExpectedSpend) : budget * (day / daysInMonth)
     setPace(els.monthPace, budget, spent, budget > 0 ? expected / budget : 0, code)
     setProgress(els.monthProgress, els.monthProgressFill, spent, budget)
     setCardState(els.monthCard, spent, budget)
@@ -297,7 +278,7 @@ function buildCurrencyCard(currency) {
                 class: 'icon-button icon-button--small',
                 title: `Edit ${code} budget`,
                 'aria-label': `Edit ${code} budget`,
-                innerHTML: ICONS.edit,
+                innerHTML: icons.edit,
                 onclick: () => openBudgetDialog(code),
             })),
         el('p', { class: 'currency-card__figure' },
@@ -349,8 +330,6 @@ function renderOtherCurrencies() {
     }
 }
 
-const monthYearFormat = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' })
-
 function renderHistory() {
     const history = state.data.history || []
     const codes = (state.data.currencies || []).map((currency) => currency.code)
@@ -363,8 +342,8 @@ function renderHistory() {
     const first = history[0]
     const last = history[history.length - 1]
     els.historyRange.textContent =
-        monthYearFormat.format(new Date(first.year, first.month - 1, 1)) + ' – ' +
-        monthYearFormat.format(new Date(last.year, last.month - 1, 1))
+        formats.monthYear.format(new Date(first.year, first.month - 1, 1)) + ' – ' +
+        formats.monthYear.format(new Date(last.year, last.month - 1, 1))
 }
 
 function renderExpenses() {
@@ -527,6 +506,7 @@ function scheduleCategorySuggestion() {
 }
 
 async function fetchCategorySuggestions() {
+    const sequence = ++categorySuggestionSequence
     const details = els.transactionDetailsInput.value.trim()
     if (details.length < 3) {
         els.transactionCategoryHint.hidden = true
@@ -534,6 +514,9 @@ async function fetchCategorySuggestions() {
     }
     try {
         const result = await requestJson(`/category-suggestions?q=${encodeURIComponent(details)}&kind=${getSelectedKind()}`)
+        if (sequence !== categorySuggestionSequence) {
+            return
+        }
         const suggestions = result.suggestions || []
         if (!suggestions.length) {
             els.transactionCategoryHint.hidden = true
@@ -669,12 +652,16 @@ function pastDatedImportLines(text) {
     return { count, earliest }
 }
 
+const IMPORTABLE_COLUMNS = ['Date', 'Details', 'Money In', 'Expenses', 'Currency', 'Type', 'Notes']
+
 function openImportDialog() {
     if (!state.data || state.data.writable === false) return
     const columns = state.data.transactionColumns && state.data.transactionColumns.length ?
         state.data.transactionColumns :
-        ['Date', 'Details', 'Money In', 'Expenses', 'Currency', 'Type', 'Notes']
-    els.importHint.textContent = `One transaction per line, tab-separated, in this column order: ${columns.join(' · ')}. Fill either Money In or Expenses.`
+        IMPORTABLE_COLUMNS
+    const extra = columns.filter((column) => !IMPORTABLE_COLUMNS.includes(column))
+    els.importHint.textContent = `One transaction per line, tab-separated, in this column order: ${columns.join(' · ')}. Fill either Money In or Expenses.` +
+        (extra.length ? ` Leave ${extra.join(', ')} empty.` : '')
     els.importTextarea.value = ''
     els.importFormError.hidden = true
     resetImportConfirmation()
@@ -773,8 +760,8 @@ function getBudgetFormValues() {
 function updateBudgetFormValidity() {
     const { monthlyBudget, firstDayBias } = getBudgetFormValues()
     let error = ''
-    if (!Number.isFinite(monthlyBudget) || monthlyBudget <= 0) {
-        error = 'Monthly budget must be greater than 0.'
+    if (!Number.isFinite(monthlyBudget) || monthlyBudget < 0) {
+        error = 'Monthly budget must be 0 or greater.'
     } else if (!Number.isFinite(firstDayBias) || firstDayBias < 0) {
         error = 'First day bias must be 0 or greater.'
     } else if (firstDayBias > monthlyBudget) {

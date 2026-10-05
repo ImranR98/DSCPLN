@@ -3,7 +3,7 @@
 // SVG charts: the shared monthly money in/out chart (dashboard and insights)
 // and the cumulative spent/earned line chart used by the insights sections.
 ;(function (global) {
-    const { formats, number, currencyColor, fractionDigits, moneyFor } = DSCPLN
+    const { formats, number, clean, currencyColor, fractionDigits, moneyFor } = DSCPLN
 
     const SVG_NS = 'http://www.w3.org/2000/svg'
     const monthYearFormat = formats.monthYear
@@ -42,8 +42,7 @@
     }
 
     const historyMonthLabel = (entry, index) => {
-        const date = new Date(entry.year, entry.month - 1, 1)
-        const base = monthYearFormat.formatToParts(date).find((part) => part.type === 'month').value
+        const base = formats.monthShort.format(new Date(entry.year, entry.month - 1, 1))
         const label = index === 0 || entry.month === 1 ? `${base} '${String(entry.year).slice(-2)}` : base
         return entry.partial ? `${label}*` : label
     }
@@ -111,15 +110,8 @@
     }
 
     const activeCodesFor = (months, codes) => {
-        if (codes) {
-            return codes.filter((code) => months.some((entry) => {
-                const totals = entry.currencies && entry.currencies[code]
-                return totals && (totals.spend > 0 || totals.income > 0 ||
-                    totals.convertedOut > 0 || totals.convertedIn > 0)
-            }))
-        }
-        const all = [...new Set(months.flatMap((entry) => Object.keys(entry.currencies || {})))]
-        return all.filter((code) => months.some((entry) => {
+        const candidates = codes || [...new Set(months.flatMap((entry) => Object.keys(entry.currencies || {})))]
+        return candidates.filter((code) => months.some((entry) => {
             const totals = entry.currencies && entry.currencies[code]
             return totals && (totals.spend > 0 || totals.income > 0 ||
                 totals.convertedOut > 0 || totals.convertedIn > 0)
@@ -187,14 +179,14 @@
             return parts
         }
         for (const code of active) {
-            const totalSpend = Number.parseFloat(history.reduce((sum, entry) =>
-                sum + ((entry.currencies[code] || {}).spend || 0), 0).toPrecision(12))
-            const totalIncome = Number.parseFloat(history.reduce((sum, entry) =>
-                sum + ((entry.currencies[code] || {}).income || 0), 0).toPrecision(12))
-            const totalConvertedOut = Number.parseFloat(history.reduce((sum, entry) =>
-                sum + ((entry.currencies[code] || {}).convertedOut || 0), 0).toPrecision(12))
-            const totalConvertedIn = Number.parseFloat(history.reduce((sum, entry) =>
-                sum + ((entry.currencies[code] || {}).convertedIn || 0), 0).toPrecision(12))
+            const totalSpend = clean(history.reduce((sum, entry) =>
+                sum + ((entry.currencies[code] || {}).spend || 0), 0))
+            const totalIncome = clean(history.reduce((sum, entry) =>
+                sum + ((entry.currencies[code] || {}).income || 0), 0))
+            const totalConvertedOut = clean(history.reduce((sum, entry) =>
+                sum + ((entry.currencies[code] || {}).convertedOut || 0), 0))
+            const totalConvertedIn = clean(history.reduce((sum, entry) =>
+                sum + ((entry.currencies[code] || {}).convertedIn || 0), 0))
             const totalEntries = [
                 { label: 'out', value: money(totalSpend, code), isIn: false },
                 { label: 'in', value: `+${money(totalIncome, code)}`, isIn: true },
@@ -396,7 +388,7 @@
         if (history.some((entry) => entry.partial)) {
             const note = document.createElement('p')
             note.className = 'chart__note muted'
-            note.textContent = '* partial month (the selected range covers only part of it)'
+            note.textContent = '* partial month'
             container.appendChild(note)
         }
     }

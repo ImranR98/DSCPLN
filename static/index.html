@@ -46,14 +46,6 @@
                         <path d="M20 4v7h-7" />
                     </svg>
                 </button>
-                <button id="pretendButton" class="icon-button" type="button" title="Pretend date"
-                    aria-label="Pretend date">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="5" width="18" height="16" rx="2" />
-                        <path d="M8 3v4M16 3v4M3 10h18" />
-                    </svg>
-                </button>
                 <button id="themeButton" class="icon-button" type="button" title="Theme: auto"
                     aria-label="Theme: auto. Click to change."></button>
             </div>
@@ -65,11 +57,6 @@
             </span>
         </div>
     </header>
-
-    <div id="pretendBanner" class="banner" hidden>
-        <span>Viewing as of <strong id="pretendBannerDate"></strong> — this is a simulation.</span>
-        <button id="bannerTodayButton" class="button button--small" type="button">Back to today</button>
-    </div>
 
     <main class="layout">
         <div class="layout__main">
@@ -138,6 +125,22 @@
         </section>
 
         <div id="otherCurrencies" class="currency-grid"></div>
+        </div>
+
+        <div class="layout__side">
+        <details class="card" id="expensesCard" open>
+            <summary>
+                <span>This month</span>
+                <span id="expensesMeta" class="muted"></span>
+            </summary>
+            <div class="expenses__actions">
+                <button id="importButton" class="button button--small" type="button" hidden>Import</button>
+                <button id="addTransactionButton" class="button button--primary button--small" type="button" hidden>Add transaction</button>
+            </div>
+            <ul id="expensesList" class="expenses__list"></ul>
+            <p id="expensesEmpty" class="muted" hidden>No transactions recorded this month.</p>
+        </details>
+        </div>
 
         <section class="card" id="historyCard" aria-labelledby="historyHeading" hidden>
             <div class="card__header">
@@ -157,22 +160,6 @@
             <div id="historyChart" class="history"></div>
             <div id="historyTooltip" class="history-tooltip" hidden></div>
         </section>
-        </div>
-
-        <div class="layout__side">
-        <details class="card" id="expensesCard" open>
-            <summary>
-                <span>This month</span>
-                <span id="expensesMeta" class="muted"></span>
-            </summary>
-            <div class="expenses__actions">
-                <button id="importButton" class="button button--small" type="button" hidden>Import</button>
-                <button id="addTransactionButton" class="button button--primary button--small" type="button" hidden>Add transaction</button>
-            </div>
-            <ul id="expensesList" class="expenses__list"></ul>
-            <p id="expensesEmpty" class="muted" hidden>No transactions recorded this month.</p>
-        </details>
-        </div>
     </main>
 
     <dialog id="budgetDialog" class="dialog" aria-labelledby="budgetDialogTitle">
@@ -246,6 +233,7 @@
                 <p id="importHint" class="hint"></p>
                 <textarea id="importTextarea" class="dialog__textarea" rows="14" spellcheck="false" autocapitalize="off"
                     autocomplete="off" placeholder="2026-09-08	CASH Dividend	29.77		CAD	Dividend"></textarea>
+                <p id="importPastWarning" class="form-warning" hidden></p>
                 <p id="importFormError" class="form-error" hidden></p>
             </div>
             <div class="dialog__actions">
@@ -269,25 +257,11 @@
         </div>
     </dialog>
 
-    <dialog id="pretendDialog" class="dialog" aria-labelledby="pretendDialogTitle">
-        <form id="pretendForm">
-            <div class="dialog__body">
-                <h2 id="pretendDialogTitle">Pretend it's</h2>
-                <label for="pretendDateInput">Date</label>
-                <input id="pretendDateInput" name="date" type="date" required>
-                <p id="pretendFormError" class="form-error" hidden></p>
-            </div>
-            <div class="dialog__actions">
-                <button id="pretendCancelButton" class="button" type="button">Cancel</button>
-                <button id="pretendTodayButton" class="button" type="button">Today</button>
-                <button id="pretendApplyButton" class="button button--primary" type="submit">View</button>
-            </div>
-        </form>
-    </dialog>
-
     <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
 
     <script src="format.js"></script>
+    <script src="transactionList.js"></script>
+    <script src="historyChart.js"></script>
     <script src="app.js"></script>
 </body>
 

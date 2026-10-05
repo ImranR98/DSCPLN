@@ -805,10 +805,17 @@ module.exports = (config = {}, configDir = process.cwd()) => {
             history.push({ year: targetYear, month: targetMonth, currencies: currencyTotals })
         }
 
+        const dated = transactions.filter((transaction) => !transaction.invalidDate && transaction.dateIso)
+        const transactionRange = {
+            first: dated.reduce((min, transaction) => (min == null || transaction.dateIso < min ? transaction.dateIso : min), null),
+            last: dated.reduce((max, transaction) => (max == null || transaction.dateIso > max ? transaction.dateIso : max), null),
+        }
+
         return {
             currencies,
             categories: constants.categoryGroups,
             conversionCategories: [...conversionCategories],
+            transactionRange,
             transactionColumns: Object.entries(headerMap)
                 .sort((a, b) => a[1] - b[1])
                 .map(([header]) => header),

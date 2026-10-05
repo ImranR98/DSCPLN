@@ -81,4 +81,4 @@ const commitFile = (file, message) => {
     }
 }
 
-module.exports = { APP_IDENTITY, findRepoRoot, assertWorkbookRepo, commitFile }
+module.exports = { assertWorkbookRepo, commitFile }

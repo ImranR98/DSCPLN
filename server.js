@@ -41,7 +41,7 @@ const createApp = (config) => {
 
     const app = express()
     app.use(express.static(path.join(__dirname, 'static')))
-    app.use(express.json())
+    app.use(express.json({ limit: '256kb' }))
 
     app.get('/insights', (req, res) => {
         res.sendFile(path.join(__dirname, 'static', 'insights.html'))
@@ -52,21 +52,13 @@ const createApp = (config) => {
     }))
 
     app.post('/budget', asyncRoute(async (req, res) => {
-        const monthlyBudget = Number.parseFloat(req.body?.monthlyBudget)
-        const firstDayBias = Number.parseFloat(req.body?.firstDayBias ?? 0)
-        const currency = req.body?.currency
-        if (!Number.isFinite(monthlyBudget) || monthlyBudget <= 0 ||
-            !Number.isFinite(firstDayBias) || firstDayBias < 0 || firstDayBias > monthlyBudget) {
-            res.status(400).send('Invalid budget values')
-            return
-        }
-        await dataProvider.updateMonthlyBudget(monthlyBudget, firstDayBias, currency)
+        await dataProvider.updateMonthlyBudget(req.body?.monthlyBudget, req.body?.firstDayBias ?? 0, req.body?.currency)
         res.send()
     }))
 
-    const requireProviderMethod = (method) => (req, res, next) => {
+    const requireProviderMethod = (method, feature = 'transactions') => (req, res, next) => {
         if (typeof dataProvider[method] !== 'function') {
-            res.status(501).send('This data provider does not support transactions')
+            res.status(501).send(`This data provider does not support ${feature}`)
             return
         }
         next()
@@ -98,15 +90,11 @@ const createApp = (config) => {
         res.status(204).send()
     }))
 
-    app.get('/details-suggestions', requireProviderMethod('suggestDetails'), asyncRoute(async (req, res) => {
+    app.get('/details-suggestions', requireProviderMethod('suggestDetails', 'details suggestions'), asyncRoute(async (req, res) => {
         res.send(await dataProvider.suggestDetails(req.query['q'], req.query['kind']))
     }))
 
-    app.get('/category-suggestions', asyncRoute(async (req, res) => {
-        if (typeof dataProvider.suggestCategories !== 'function') {
-            res.status(501).send('This data provider does not support category suggestions')
-            return
-        }
+    app.get('/category-suggestions', requireProviderMethod('suggestCategories', 'category suggestions'), asyncRoute(async (req, res) => {
         res.send(await dataProvider.suggestCategories(req.query['q'], req.query['kind']))
     }))
 

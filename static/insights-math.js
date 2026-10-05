@@ -5,6 +5,7 @@
 // date helpers).
 ;(function (global) {
     const core = global.DSCPLN || require('./core')
+    const { clean } = core
     const {
         parseIso: parseIsoDate,
         iso: toIsoDate,
@@ -33,10 +34,6 @@
         const length = daysInclusive(start, end)
         const previousEnd = addDays(start, -1)
         return { start: addDays(previousEnd, -(length - 1)), end: previousEnd }
-    }
-
-    function clean(value) {
-        return Number.parseFloat(Number(value).toPrecision(12))
     }
 
     function amountOf(transaction) {
@@ -132,7 +129,7 @@
         return days
     }
 
-    // Same formula as the dashboard: first-day bias plus accrual to the day.
+    // Projects the month total by scaling the amount so far to the full month.
     function projectMonthEnd({ spend, income, elapsedDays, daysInMonth }) {
         const factor = elapsedDays > 0 ? daysInMonth / elapsedDays : 0
         return { spend: clean(spend * factor), income: clean(income * factor) }

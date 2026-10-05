@@ -2,7 +2,7 @@
 
 // Insights: date-range filters and comparisons, the read-only transactions
 // panel, the range chart and the per-currency sections.
-const { dates, formats, number, moneyFor, currencyColor, setBreakableText, hasSubCentPrecision, requestJson, initTheme, showToast } = DSCPLN
+const { dates, formats, moneyFor, currencyColor, setBreakableText, requestJson, initTheme, showToast } = DSCPLN
 
 const IM = DSCPLN.math
 const TX = DSCPLN.transactions
@@ -49,11 +49,7 @@ let fetchSequence = 0
 // Local shorthand for core's DOM builder.
 const el = (tag, className, text, ...children) => DSCPLN.el(tag, { class: className, text }, ...children)
 
-function categoryColor(name) {
-    let hash = 0
-    for (const char of String(name || '')) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
-    return CATEGORY_PALETTE[hash % CATEGORY_PALETTE.length]
-}
+const categoryColor = (name) => DSCPLN.colorFrom(CATEGORY_PALETTE, String(name || ''))
 
 const money = moneyFor((code) => state.fractionalCurrencies.has(code))
 
@@ -96,20 +92,23 @@ function allTimeRange() {
     return { start: IM.parseIsoDate(range.first), end: IM.parseIsoDate(range.last) }
 }
 
+const QUICK_RANGES = {
+    'this-month': currentMonthRange,
+    'last-month': lastMonthRange,
+    'last-3': () => lastFullMonthsRange(3),
+    'last-6': () => lastFullMonthsRange(6),
+    'last-12': () => lastFullMonthsRange(12),
+    ytd: ytdRange,
+    'all-time': allTimeRange,
+}
+
 function quickRange(name) {
-    if (name === 'this-month') return currentMonthRange()
-    if (name === 'last-month') return lastMonthRange()
-    if (name === 'last-3') return lastFullMonthsRange(3)
-    if (name === 'last-6') return lastFullMonthsRange(6)
-    if (name === 'last-12') return lastFullMonthsRange(12)
-    if (name === 'ytd') return ytdRange()
-    if (name === 'all-time') return allTimeRange()
-    return null
+    const build = QUICK_RANGES[name]
+    return build ? build() : null
 }
 
 function isFullMonth(range) {
-    return IM.toIsoDate(range.start) === IM.toIsoDate(IM.startOfMonth(range.start)) &&
-        IM.toIsoDate(range.end) === IM.toIsoDate(IM.endOfMonth(range.end)) &&
+    return isWholeMonths(range) &&
         range.start.getMonth() === range.end.getMonth() &&
         range.start.getFullYear() === range.end.getFullYear()
 }
@@ -117,6 +116,9 @@ function isFullMonth(range) {
 function isWholeMonths(range) {
     return IM.isWholeMonthsRange(range.start, range.end)
 }
+
+const formatDateRange = (start, end) =>
+    `${formats.dayMonth.format(start)} ${formats.year.format(start)} – ${formats.dayMonth.format(end)} ${formats.year.format(end)}`
 
 function comparisonShortLabel() {
     const window = IM.comparisonWindow(state.comparison, state.range)
@@ -131,7 +133,7 @@ function comparisonLongLabel() {
     if (window.kind === 'average') {
         return `${window.count}-month average of ${formats.monthShort.format(window.start)}–${formats.monthShort.format(window.end)} ${formats.year.format(window.end)}`
     }
-    return `${formats.dayMonth.format(window.start)} ${formats.year.format(window.start)} – ${formats.dayMonth.format(window.end)} ${formats.year.format(window.end)}`
+    return formatDateRange(window.start, window.end)
 }
 
 function updateCompareNote() {
@@ -140,7 +142,7 @@ function updateCompareNote() {
     }
     const window = IM.comparisonWindow(state.comparison, state.range)
     const rangeDays = IM.daysInclusive(state.range.start, state.range.end)
-    const rangeLabel = `${formats.dayMonth.format(state.range.start)} ${formats.year.format(state.range.start)} – ${formats.dayMonth.format(state.range.end)} ${formats.year.format(state.range.end)}`
+    const rangeLabel = formatDateRange(state.range.start, state.range.end)
     let text
     if (window.kind === 'average') {
         text = `Comparing ${rangeLabel} (${rangeDays} days) with the ${window.count}-month average (${formats.monthShort.format(window.start)}–${formats.monthShort.format(window.end)} ${formats.year.format(window.end)}), scaled per day.`
@@ -160,7 +162,7 @@ function syncInputs() {
     els.monthPickerInput.value = isFullMonth(state.range)
         ? `${state.range.start.getFullYear()}-${String(state.range.start.getMonth() + 1).padStart(2, '0')}`
         : ''
-    els.rangeLabel.textContent = `${formats.dayMonth.format(state.range.start)} ${formats.year.format(state.range.start)} – ${formats.dayMonth.format(state.range.end)} ${formats.year.format(state.range.end)}`
+    els.rangeLabel.textContent = formatDateRange(state.range.start, state.range.end)
     for (const chip of document.querySelectorAll('.chip[data-range]')) {
         const range = quickRange(chip.dataset.range)
         const active = range &&
@@ -206,17 +208,6 @@ function stateFromUrl() {
 
 /* ---------- Data ---------- */
 
-function detectFractional(transactions) {
-    const codes = new Set()
-    for (const transaction of transactions) {
-        const amount = transaction.kind === 'income' ? transaction.moneyIn : transaction.expenses
-        if (hasSubCentPrecision(amount)) {
-            codes.add(transaction.currency)
-        }
-    }
-    return codes
-}
-
 function transactionsIn(currency, range, excluded) {
     return IM.filterTransactions(state.transactions, {
         start: range.start,
@@ -257,21 +248,16 @@ async function fetchData() {
             end: IM.toIsoDate(state.range.end),
         })
         const [reference, transactions] = await Promise.all([
-            state.reference ? Promise.resolve(state.reference) : fetch('/data').then((response) => {
-                if (!response.ok) throw new Error(`Request failed (${response.status})`)
-                return response.json()
-            }),
-            fetch(`/transactions?${params}`).then((response) => {
-                if (!response.ok) throw new Error(`Request failed (${response.status})`)
-                return response.json()
-            }),
+            state.reference ? Promise.resolve(state.reference) : requestJson('/data'),
+            requestJson(`/transactions?${params}`),
         ])
         if (sequence !== fetchSequence) {
             return
         }
         state.reference = reference
         state.transactions = transactions.transactions || []
-        state.fractionalCurrencies = detectFractional(state.transactions)
+        state.fractionalCurrencies = new Set(
+            (reference.currencies || []).filter((entry) => entry.fractional).map((entry) => entry.code))
         state.comparisonData = {
             window,
             factor: IM.comparisonFactor(window, state.range),
@@ -298,7 +284,7 @@ async function fetchData() {
 
 function renderTransactionsPanel(rangeTxs) {
     els.transactionsCard.hidden = false
-    els.transactionsMeta.textContent = rangeTxs.length ? String(rangeTxs.length) : ''
+    els.transactionsMeta.textContent = rangeTxs.length ? TX.formatCount(rangeTxs.length) : ''
     els.transactionsEmpty.hidden = rangeTxs.length > 0
     TX.renderList(els.transactionsList, rangeTxs, { writable: false, markFuture: true })
 }
@@ -847,9 +833,9 @@ els.comparisonSelect.addEventListener('change', () => {
 
 els.monthChip.addEventListener('click', () => {
     const input = els.monthPickerInput
-    if (isFullMonth(state.range)) {
-        input.value = `${state.range.start.getFullYear()}-${String(state.range.start.getMonth() + 1).padStart(2, '0')}`
-    }
+    input.value = isFullMonth(state.range)
+        ? `${state.range.start.getFullYear()}-${String(state.range.start.getMonth() + 1).padStart(2, '0')}`
+        : ''
     if (typeof input.showPicker === 'function') {
         try {
             input.showPicker()

@@ -64,6 +64,9 @@
         return Number.isFinite(parsed) ? parsed : 0
     }
 
+    // Trims floating point noise without forcing a fixed number of decimals.
+    const clean = (value) => Number.parseFloat(Number(value).toPrecision(12))
+
     const moneyFormatters = new Map()
 
     // Enough decimals to keep `significantDigits` significant, at least 2 and
@@ -74,11 +77,6 @@
             return 2
         }
         return Math.min(12, Math.max(2, significantDigits - 1 - Math.floor(Math.log10(absolute))))
-    }
-
-    const hasSubCentPrecision = (value) => {
-        const amount = Number(value)
-        return Number.isFinite(amount) && Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6
     }
 
     // Returns a `money(value, code)` formatter whose precision follows whether
@@ -107,20 +105,16 @@
     }
     const FALLBACK_COLORS = ['#7c3aed', '#0891b2', '#db2777', '#65a30d', '#9333ea', '#0d9488', '#f59e0b', '#4f46e5']
 
-    // Stable accent per currency (known codes get hand-picked colors).
-    const currencyColor = (code) => {
-        if (!code) {
-            return null
-        }
-        if (CURRENCY_COLORS[code]) {
-            return CURRENCY_COLORS[code]
-        }
+    const colorFrom = (palette, key) => {
         let hash = 0
-        for (const char of code) {
+        for (const char of String(key)) {
             hash = (hash * 31 + char.charCodeAt(0)) >>> 0
         }
-        return FALLBACK_COLORS[hash % FALLBACK_COLORS.length]
+        return palette[hash % palette.length]
     }
+
+    // Stable accent per currency (known codes get hand-picked colors).
+    const currencyColor = (code) => (code ? CURRENCY_COLORS[code] || colorFrom(FALLBACK_COLORS, code) : null)
 
     // Inserts <wbr> after thousands separators, the decimal point and every
     // third fraction digit, so long money values wrap at sensible points.
@@ -208,7 +202,8 @@
             error.status = response.status
             throw error
         }
-        return response.status === 204 ? null : response.json()
+        const text = await response.text().catch(() => '')
+        return text ? JSON.parse(text) : null
     }
 
     /* ---------- Theme and toasts ---------- */
@@ -223,6 +218,10 @@
     const TOAST_ICONS = {
         success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
         error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>',
+    }
+    const ICONS = {
+        edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+        delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>',
     }
 
     // Cycles the theme button auto -> light -> dark and applies the stored
@@ -257,23 +256,23 @@
     }
 
     const showToast = (container, message, type = 'success') => {
-        const el = document.createElement('div')
-        el.className = `toast toast--${type}`
-        el.setAttribute('role', 'status')
+        const toastEl = document.createElement('div')
+        toastEl.className = `toast toast--${type}`
+        toastEl.setAttribute('role', 'status')
         const icon = document.createElement('span')
         icon.className = 'toast__icon'
         icon.innerHTML = TOAST_ICONS[type] || TOAST_ICONS.success
         const text = document.createElement('span')
         text.textContent = message
-        el.append(icon, text)
-        container.appendChild(el)
+        toastEl.append(icon, text)
+        container.appendChild(toastEl)
         window.setTimeout(() => {
-            el.classList.add('toast--leaving')
-            window.setTimeout(() => el.remove(), 350)
+            toastEl.classList.add('toast--leaving')
+            window.setTimeout(() => toastEl.remove(), 350)
         }, 3500)
     }
 
-    const api = { dates, formats, number, moneyFor, fractionDigits, hasSubCentPrecision, currencyColor, setBreakableText, el, requestJson, initTheme, showToast }
+    const api = { dates, formats, number, clean, moneyFor, fractionDigits, colorFrom, currencyColor, icons: ICONS, setBreakableText, el, requestJson, initTheme, showToast }
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api
     }

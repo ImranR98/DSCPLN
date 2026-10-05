@@ -19,7 +19,7 @@ It reads your expenses from an Excel workbook (the source of truth) and writes c
    npm start
    ```
 
-The app reads `config.json` from its directory by default; set `DSCPLN_CONFIG` to use a different path (useful in Docker). The example config points at the included `mock-data.xlsx`, so you can try it immediately; `npm run mock` regenerates that file.
+The app reads `config.json` from its directory by default; set `DSCPLN_CONFIG` to use a different path. The example config points at the included `mock-data.xlsx`, so you can try it immediately; `npm run mock` regenerates that file.
 
 ## Configuration
 
@@ -78,7 +78,7 @@ Row 2 holds a header per column, and each column lists the allowed values for th
   CAD        3000             1500
   USD        500              100
   ```
-  The first-day bias is an extra amount available on the 1st of the month. A currency with no row (or a 0 budget) simply has no budget tracking. The app creates the table on the first save if it is missing. If you still have the older single `Budget` section (`Monthly Budget` / `First Day Bias` in column A/B), it is read as the first currency's budget until you save a new one.
+  The first-day bias is an extra amount available on the 1st of the month. A currency with no row (or a 0 budget) simply has no budget tracking; saving a budget of 0 clears it. The app creates the table on the first save if it is missing.
 
 ## API
 
@@ -89,12 +89,12 @@ Row 2 holds a header per column, and each column lists the allowed values for th
 | `GET` | `/details-suggestions?q=details&kind=expense` | - |
 | `GET` | `/transactions?start=YYYY-MM-DD&end=YYYY-MM-DD` | - |
 | `POST` | `/transactions` | `{ "kind", "amount", "details", "date", "category", "currency", "notes" }` |
-| `POST` | `/transactions/import` | `{ "text" }` — tab-separated rows in the sheet's column order |
+| `POST` | `/transactions/import` | `{ "text" }` — tab-separated rows in the sheet's column order (non-transaction columns must be empty) |
 | `PUT` | `/transactions/:id` | `{ "kind", "amount", "details", "date", "category", "currency", "notes" }` |
 | `DELETE` | `/transactions/:id` | - |
 | `POST` | `/budget` | `{ "monthlyBudget", "firstDayBias", "currency" }` |
 
-`/data` also returns `conversionCategories` (the categories in the `Conversions` group) and `transactionRange` (the first and last dated transactions, used by the insights "All time" preset).
+`/data` also returns `conversionCategories` (the categories in the `Conversions` group), `transactionRange` (the first and last dated transactions, used by the insights "All time" preset), and a `fractional` flag per currency (whether any amount needs sub-cent precision).
 
 Transaction ids embed the row number and a hash of the row values. If the workbook changes underneath the app, stale ids are rejected with `409 Conflict` and the UI refreshes.
 
@@ -105,7 +105,7 @@ The dashboard covers the current month, per currency:
 - The **main currency** (the first one in Constants) gets the full Month card: spend against its budget with progress, pace, remaining/day, previous-month spend, and 12-month average spend.
 - **Earnings** for the main currency: `Money In` for the current month, the previous calendar month, and the running average of the 12 complete months before the current month (missing months count as $0).
 - **Other currencies** appear as compact tiles below, each with spend vs budget, a progress bar, remaining, and income. Currencies with no spending or income this month are hidden; the main currency is always shown.
-- **Last 12 months** charts money in and out per month for every currency with activity in that window, as small multiples (one lane per currency, each with its own scale), a 12-month Total column, and a hover tooltip. Each currency keeps a stable accent color across its tile, chips, and chart lane.
+- **Last 12 months** charts money in and out per month for every currency with activity in that window, as small multiples (one lane per currency, each with its own scale), a 12-month Total column, and a hover tooltip. The current month is capped at today and marked with an asterisk. Each currency keeps a stable accent color across its tile, chips, and chart lane.
 - **This month** lists all currencies' transactions newest first, with the date on each row; future-dated rows are dimmed.
 - **Currency conversions** (categories in the `Conversions` group) do not count as spending or earning: they are excluded from the Spent/Earned figures, budgets, pace and notifications. The main card shows a net **Converted** row (in − out per period, hover for the out/in split), currency tiles show a compact converted line, and the chart's Total column lists `conv out`/`conv in` rows.
 - Each currency has its own budget, editable from the pencil button on its card.
@@ -117,7 +117,7 @@ On wide screens the transactions list sits in a second column on the right, with
 - **Add**: open "This month", click "Add transaction", and fill in Expense/Income, amount, details, date, category, currency, and optional notes. The date defaults to today, and the currency defaults to the main (first) Constants currency.
 - **Details autocomplete**: as you type in Details, previously used descriptions appear in a suggestion menu (ranked by prefix/token match, use count and recency). Picking one also fills the category with the last one used for that description.
 - **Category suggestions**: as you type details, the app scores them against all past transactions of the same kind (fuzzy token/trigram/edit-distance matching, weighted by how often and how recently a category was used). It auto-selects the category when the match is confident, and always shows the top suggestions so you can pick a different one.
-- **Import**: click "Import" and paste one transaction per line, tab-separated, using the Transactions sheet's column order (shown in the dialog). Exactly one of Money In / Expenses must be filled. Every line is validated first: if any line is invalid the whole paste is rejected with per-line errors and nothing is written. Lines dated before the current month trigger a confirmation step ("Import anyway"). A successful import is one git commit.
+- **Import**: click "Import" and paste one transaction per line, tab-separated, using the Transactions sheet's column order (shown in the dialog). Exactly one of Money In / Expenses must be filled; any other sheet columns must be left empty. Every line is validated first: if any line is invalid the whole paste is rejected with per-line errors and nothing is written. Lines dated before the current month trigger a confirmation step ("Import anyway"). A successful import is one git commit.
 - **Edit / delete**: use the buttons on each row. Deleting shifts the remaining rows up, like deleting a row in Excel.
 
 ## Insights
@@ -135,17 +135,6 @@ On wide screens the transactions list sits in a second column on the right, with
   - Biggest spending and earning increases/decreases vs the comparison.
 - Budgets are not referenced on this page.
 - Conversion categories are de-selected by default in every section (they remain in the list and can be re-enabled).
-
-## Migrations
-
-Older workbooks can be migrated with:
-
-```sh
-node scripts/migrate-workbook.js --dry-run   # report what would change
-node scripts/migrate-workbook.js             # apply, save, and commit
-```
-
-It converts the legacy single `Budget` section into the per-currency `Budgets` table and moves conversion categories (default `Conversion`, override with `--categories "A,B"`) into a new `Conversions` group column. It is idempotent and leaves a `.bak` file next to the workbook.
 
 ## Operations
 
@@ -185,4 +174,4 @@ No build step and no framework: the browser loads plain scripts, and the server 
 | `server.js` | Routes and error handling; `notifications.js` sends budget-limit pushes. |
 | `dataProviders/excelDataProvider.js` | Workbook reading/writing; `category-suggester.js` and `workbook-git.js` are its helpers. |
 
-Scripts must load in this order: `core.js` → (`insights-math.js` on insights) → `transaction-list.js` → `chart.js` → page script. Conventions: `render*` updates existing DOM, `build*` creates and returns a node, `read*` parses workbook data, `create*` is a factory. Tests use `test/helpers.js` for temporary git-backed workbooks and a test server.
+`theme-boot.js` runs first (synchronously in `<head>`, to set the theme before first paint), then scripts must load in this order: `core.js` → (`insights-math.js` on insights) → `transaction-list.js` → `chart.js` → page script. Conventions: `render*` draws into an existing container, `build*` creates and returns a node, `read*` parses workbook data, `create*` is a factory. Tests use `test/helpers.js` for temporary git-backed workbooks and a test server.

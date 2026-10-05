@@ -3,12 +3,7 @@
 // Shared transaction list for the dashboard (editable) and insights (read-only).
 // Rows are always rendered newest first.
 ;(function (global) {
-    const { dates, formats, el, currencyColor, setBreakableText } = DSCPLN
-
-    const ICONS = {
-        edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
-        delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>',
-    }
+    const { dates, formats, el, currencyColor, icons, setBreakableText } = DSCPLN
 
     const dateLabel = (date, today) => {
         if (dates.sameDay(date, today)) {
@@ -26,7 +21,7 @@
             class: 'icon-button',
             title: 'Edit',
             'aria-label': `Edit ${transaction.details || 'transaction'}`,
-            innerHTML: ICONS.edit,
+            innerHTML: icons.edit,
             onclick: () => onEdit && onEdit(transaction),
         }),
         el('button', {
@@ -34,7 +29,7 @@
             class: 'icon-button icon-button--danger',
             title: 'Delete',
             'aria-label': `Delete ${transaction.details || 'transaction'}`,
-            innerHTML: ICONS.delete,
+            innerHTML: icons.delete,
             onclick: () => onDelete && onDelete(transaction),
         }))
 

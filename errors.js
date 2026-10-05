@@ -14,16 +14,10 @@ class ValidationError extends AppError {
     }
 }
 
-class NotFoundError extends AppError {
-    constructor(message) {
-        super(message, 404)
-    }
-}
-
 class ConflictError extends AppError {
     constructor(message) {
         super(message, 409)
     }
 }
 
-module.exports = { AppError, ValidationError, NotFoundError, ConflictError }
+module.exports = { ValidationError, ConflictError }

@@ -10,10 +10,58 @@ const els = {
     regenerateButton: document.getElementById('regenerateTokenButton'),
     example: document.getElementById('apiExample'),
     editExample: document.getElementById('editExample'),
+    reference: document.getElementById('apiReference'),
+    copyReferenceButton: document.getElementById('copyReferenceButton'),
     toasts: document.getElementById('toasts'),
 }
 
 const toast = (message, type = 'success') => showToast(els.toasts, message, type)
+
+/* ---------- API reference export ---------- */
+
+const cleanText = (value) => value.replace(/\s+/g, ' ').trim()
+
+// Renders inline markup (code pills) as backticks.
+const inlineMarkdown = (node) => [...node.childNodes].map((child) => {
+    if (child.nodeType === Node.TEXT_NODE) {
+        return child.textContent
+    }
+    if (child.tagName === 'CODE') {
+        return `\`${child.textContent}\``
+    }
+    return inlineMarkdown(child)
+}).join('')
+
+const tableMarkdown = (table) => {
+    const rows = [...table.rows].map((row) => [...row.cells].map((cell) => cleanText(inlineMarkdown(cell))))
+    return [
+        `| ${rows[0].join(' | ')} |`,
+        `| ${rows[0].map(() => '---').join(' | ')} |`,
+        ...rows.slice(1).map((row) => `| ${row.join(' | ')} |`),
+    ].join('\n')
+}
+
+// Serializes the visible reference card, swapping the live token for a
+// placeholder so the copied Markdown is safe to share.
+const referenceMarkdown = () => {
+    const blocks = [...els.reference.children]
+        .filter((node) => node.matches('h3, p, pre, table'))
+        .map((node) => {
+            if (node.tagName === 'H3') {
+                return `## ${cleanText(node.textContent)}`
+            }
+            if (node.tagName === 'PRE') {
+                return `\`\`\`sh\n${node.textContent.trim()}\n\`\`\``
+            }
+            if (node.tagName === 'TABLE') {
+                return tableMarkdown(node)
+            }
+            return cleanText(inlineMarkdown(node))
+        })
+    const markdown = `# D$CPLN API reference\n\n${blocks.join('\n\n')}\n`
+    const token = els.tokenInput.value
+    return token ? markdown.replaceAll(token, '$API_TOKEN') : markdown
+}
 
 const exampleText = (token) => `curl -X POST ${location.origin}/api/transactions \\
   -H "Authorization: Bearer ${token}" \\
@@ -50,6 +98,16 @@ els.copyButton.addEventListener('click', async () => {
     } catch (e) {
         els.tokenInput.select()
         toast('Press Ctrl/Cmd+C to copy the selected token', 'error')
+    }
+})
+
+els.copyReferenceButton.addEventListener('click', async () => {
+    try {
+        await navigator.clipboard.writeText(referenceMarkdown())
+        toast('API reference copied as Markdown')
+    } catch (e) {
+        console.error(e)
+        toast('Could not copy the API reference', 'error')
     }
 })
 

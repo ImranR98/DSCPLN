@@ -48,13 +48,17 @@
             </div>
         </section>
 
-        <section class="card">
+        <section class="card" id="apiReference">
             <div class="card__header">
                 <h2>API reference</h2>
+                <span class="card__header-tools">
+                    <button id="copyReferenceButton" class="button button--small" type="button">Copy as Markdown</button>
+                </span>
             </div>
             <p class="hint">
-                The external API lives under <code>/api/</code> (reachable without SSO, protected by the token
-                above) and only supports these two calls. Request and response bodies are JSON.
+                The external API lives under <code>/api/</code> (reachable without SSO). Every request needs
+                <code>Authorization: Bearer &lt;token&gt;</code> and uses JSON bodies; it only supports these two
+                calls.
             </p>
 
             <h3 class="api-heading">Add a transaction</h3>

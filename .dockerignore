@@ -3,6 +3,8 @@ build.sh
 .git/
 node_modules/
 config.json
+DEPLOY.md
+api-state.json
 test/
 scripts/
 *.xlsx.bak

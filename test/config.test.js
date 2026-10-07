@@ -27,6 +27,7 @@ test('applies defaults for missing fields', () => {
     assert.equal(config.notifications.onlyWarnOnce, false)
     assert.equal(config.notifications.monthlyLimitUrl, null)
     assert.equal('weeklyLimitUrl' in config.notifications, false)
+    assert.equal(config.api.stateFile, './api-state.json')
     assert.equal(config.configDir, dir)
 })
 
@@ -74,4 +75,6 @@ test('throws on invalid values', () => {
         ...minimalConfig,
         notifications: { onlyWarnOnce: 'yes' },
     }).file), /onlyWarnOnce/)
+    assert.throws(() => loadConfig(writeConfig({ ...minimalConfig, api: 5 }).file), /"api"/)
+    assert.throws(() => loadConfig(writeConfig({ ...minimalConfig, api: { stateFile: '' } }).file), /api\.stateFile/)
 })

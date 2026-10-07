@@ -34,6 +34,7 @@ The app reads `config.json` from its directory by default; set `DSCPLN_CONFIG` t
 | `notifications.ntfyToken` | An authorization token to use when sending out notifications, or `null`. |
 | `notifications.checkIntervalMinutes` | How often, in minutes, to check for changes so that notifications can be sent out if needed (defaults to `30`). |
 | `notifications.onlyWarnOnce` | When `true`, a given currency's monthly notification is only sent the first time it goes over budget, not for subsequent increases. |
+| `api.stateFile` | The file holding the external API token and its edit-token signing secret (defaults to `./api-state.json`; created on first run, mode `0600`). Relative paths resolve against the config file's directory. |
 
 ### `excelDataProvider` options
 
@@ -82,6 +83,8 @@ Row 2 holds a header per column, and each column lists the allowed values for th
 
 ## API
 
+These routes are used by the web UI (and only support what it needs).
+
 | Method | Path | Body |
 | --- | --- | --- |
 | `GET` | `/data?date=YYYY-MM-DD` | - |
@@ -97,6 +100,29 @@ Row 2 holds a header per column, and each column lists the allowed values for th
 `/data` also returns `conversionCategories` (the categories in the `Conversions` group), `transactionRange` (the first and last dated transactions, used by the insights "All time" preset), and a `fractional` flag per currency (whether any amount needs sub-cent precision).
 
 Transaction ids embed the row number and a hash of the row values. If the workbook changes underneath the app, stale ids are rejected with `409 Conflict` and the UI refreshes.
+
+### External API
+
+`/api/*` is a small add-only JSON API meant for scripts and other automations. It is designed to
+be reachable without SSO (the deployment routes it around Authelia), so it is protected by a bearer
+token instead. Open the settings page (`/settings`, linked from the header) to copy or regenerate
+the single token; send it as `Authorization: Bearer <token>`.
+
+| Method | Path | Body |
+| --- | --- | --- |
+| `POST` | `/api/transactions` | `{ "amount", "details", "currency", "date"?, "notes"?, "category"? }` |
+| `PATCH` | `/api/transactions/:editToken` | `{ "category" }` |
+
+- `amount` is signed: negative is an expense (`Expenses`), positive is income (`Money In`); `0` is rejected. `date` defaults to today. `details` and `currency` are required.
+- With `category`, the transaction is added as-is and the response is `201 { "transaction": ... }`.
+- Without `category`, the app picks one from your history using the same suggestion logic as the UI. When it is confident the response adds `"assignedCategory"` and a short-lived `"editToken"`; when it is not, you get `422` with the candidate `"suggestions"` so the client can retry with a category.
+- `PATCH /api/transactions/<editToken>` corrects only that transaction's category. A successful correction changes the transaction's id, so the token is single-use (retrying returns `409`); a validation error leaves it usable.
+
+```sh
+curl -X POST https://dscpln.example.com/api/transactions \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"amount":-12.34,"details":"Groceries","currency":"CAD"}'
+```
 
 ## Dashboard
 
@@ -170,8 +196,9 @@ No build step and no framework: the browser loads plain scripts, and the server 
 | `static/insights-math.js` | Pure aggregation and comparison math (`DSCPLN.math`); also required by the Node tests. |
 | `static/transaction-list.js` | Transaction rows shared by both pages (editable on the dashboard, read-only on insights). |
 | `static/chart.js` | SVG charts: the multi-currency monthly chart and the cumulative spent/earned line chart. |
-| `static/app.js`, `static/insights.js` | Page controllers (rendering, dialogs, filters). |
+| `static/app.js`, `static/insights.js`, `static/settings.js` | Page controllers (rendering, dialogs, filters, API token). |
 | `server.js` | Routes and error handling; `notifications.js` sends budget-limit pushes. |
+| `api-auth.js` | The external API's bearer token and edit-token signing, persisted in `api.stateFile`. |
 | `dataProviders/excelDataProvider.js` | Workbook reading/writing; `category-suggester.js` and `workbook-git.js` are its helpers. |
 
 `theme-boot.js` runs first (synchronously in `<head>`, to set the theme before first paint), then scripts must load in this order: `core.js` → (`insights-math.js` on insights) → `transaction-list.js` → `chart.js` → page script. Conventions: `render*` draws into an existing container, `build*` creates and returns a node, `read*` parses workbook data, `create*` is a factory. Tests use `test/helpers.js` for temporary git-backed workbooks and a test server.

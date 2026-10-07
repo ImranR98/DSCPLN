@@ -9,6 +9,7 @@ const els = {
     copyButton: document.getElementById('copyTokenButton'),
     regenerateButton: document.getElementById('regenerateTokenButton'),
     example: document.getElementById('apiExample'),
+    editExample: document.getElementById('editExample'),
     toasts: document.getElementById('toasts'),
 }
 
@@ -19,9 +20,15 @@ const exampleText = (token) => `curl -X POST ${location.origin}/api/transactions
   -H "Content-Type: application/json" \\
   -d '{"amount":-12.34,"details":"Groceries","currency":"CAD"}'`
 
+const editExampleText = () => `curl -X PATCH ${location.origin}/api/transactions/$EDIT_TOKEN \\
+  -H "Authorization: Bearer $API_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"category":"Food Weekly"}'`
+
 function show(token) {
     els.tokenInput.value = token
     els.example.textContent = exampleText(token)
+    els.editExample.textContent = editExampleText()
 }
 
 async function load() {

@@ -1207,6 +1207,39 @@ details.card[open] > summary::after {
     letter-spacing: normal;
 }
 
+/* ---------- Settings ---------- */
+
+.token-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+}
+
+.token-row input {
+    flex: 1 1 16rem;
+    min-width: 0;
+    font: inherit;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: var(--fs-sm);
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.code-block {
+    margin: var(--space-3) 0 0;
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    font-size: var(--fs-xs);
+    line-height: 1.5;
+    overflow-x: auto;
+}
+
 /* ---------- Toasts ---------- */
 
 .toasts {

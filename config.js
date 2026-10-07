@@ -15,6 +15,9 @@ const DEFAULTS = {
         checkIntervalMinutes: 30,
         onlyWarnOnce: false,
     },
+    api: {
+        stateFile: './api-state.json',
+    },
 }
 
 const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -59,6 +62,13 @@ const validateConfig = (config) => {
     config.notifications.checkIntervalMinutes = checkIntervalMinutes
     if (typeof config.notifications.onlyWarnOnce !== 'boolean') {
         throw new Error('Config error: "notifications.onlyWarnOnce" must be true or false')
+    }
+
+    if (!isPlainObject(config.api)) {
+        throw new Error('Config error: "api" must be an object')
+    }
+    if (typeof config.api.stateFile !== 'string' || config.api.stateFile.trim() === '') {
+        throw new Error('Config error: "api.stateFile" must be a non-empty string')
     }
 
     return config

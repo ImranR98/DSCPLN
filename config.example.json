@@ -13,5 +13,8 @@
     "ntfyToken": null,
     "checkIntervalMinutes": 30,
     "onlyWarnOnce": false
+  },
+  "api": {
+    "stateFile": "./api-state.json"
   }
 }

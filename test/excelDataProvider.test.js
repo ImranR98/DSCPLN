@@ -304,6 +304,29 @@ test('adds, edits and deletes transactions, preserving styles', async () => {
     assert.equal(fs.existsSync(`${workbookFile}.bak`), true)
 })
 
+test('reassigns a category without touching the other fields', async () => {
+    const { provider } = createTestProvider()
+    const created = await provider.addTransaction({
+        kind: 'expense',
+        amount: 9.5,
+        details: 'Category correction',
+        date: '2026-09-15',
+        category: 'Snacks',
+        currency: 'CAD',
+        notes: 'keep me',
+    })
+    const updated = await provider.reassignCategory(created.id, ' Rent ')
+    assert.equal(updated.category, 'Rent')
+    assert.equal(updated.details, 'Category correction')
+    assert.equal(updated.expenses, 9.5)
+    assert.equal(updated.notes, 'keep me')
+    assert.notEqual(updated.id, created.id)
+
+    await assert.rejects(provider.reassignCategory(updated.id, 'Nope'), ValidationError)
+    await assert.rejects(provider.reassignCategory(updated.id, 'Job'), ValidationError)
+    await assert.rejects(provider.reassignCategory(created.id, 'Snacks'), ConflictError)
+})
+
 test('validates transaction input', async () => {
     const { provider } = createTestProvider()
     const base = { kind: 'expense', amount: 5, details: 'x', date: '2026-09-15', category: 'Snacks', currency: 'CAD', notes: '' }

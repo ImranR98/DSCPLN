@@ -1017,6 +1017,27 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         await saveWorkbook(workbook, 'D$CPLN: delete transaction')
     }
 
+    // Rewrites only the Type cell, for the narrow post-create category
+    // correction the external API exposes.
+    const reassignCategory = async (id, newCategory) => {
+        const rowNumber = parseRowInput(id)
+        const workbook = await loadWorkbook()
+        const date1904 = Boolean(workbook.properties.date1904)
+        const constants = readConstants(workbook)
+        const sheet = getSheet(workbook, transactionsSheetName, 'transactions')
+        const map = readHeaderMap(sheet)
+        const row = findTransactionRow(sheet, map, rowNumber, date1904, id)
+        const existing = parseTransactionRow(row, map, rowNumber, date1904)
+        const category = typeof newCategory === 'string' ? newCategory.trim() : ''
+        if (!category || !categoriesForKind(constants, existing.kind).includes(category)) {
+            throw new ValidationError(`Category must be one of the ${existing.kind} categories in the "${constantsSheetName}" sheet`)
+        }
+        row.getCell(map['Type']).value = category
+        await saveWorkbook(workbook, 'D$CPLN: correct transaction category')
+        const stored = parseTransactionRow(sheet.getRow(rowNumber), map, rowNumber, date1904)
+        return serializeTransaction(stored)
+    }
+
     const suggestCategories = async (description, kind) => {
         const query = typeof description === 'string' ? description.trim() : ''
         if (!query) {
@@ -1103,6 +1124,7 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         importTransactions,
         updateTransaction,
         deleteTransaction,
+        reassignCategory,
         suggestCategories,
         suggestDetails,
     }

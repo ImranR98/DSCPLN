@@ -121,6 +121,14 @@ body {
     color: var(--text-muted);
 }
 
+code {
+    padding: 0.1rem 0.35rem;
+    border-radius: var(--radius-xs);
+    background: var(--surface-2);
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 0.9em;
+}
+
 .figure__spend,
 .mini-grid,
 .stat-tile__value,
@@ -1238,6 +1246,41 @@ details.card[open] > summary::after {
     font-size: var(--fs-xs);
     line-height: 1.5;
     overflow-x: auto;
+}
+
+.api-heading {
+    margin: var(--space-4) 0 var(--space-1);
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+}
+
+.api-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-sm);
+}
+
+.api-table th,
+.api-table td {
+    padding: var(--space-2) var(--space-3) var(--space-2) 0;
+    border-top: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+}
+
+.api-table th {
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+}
+
+.api-table td:first-child {
+    white-space: nowrap;
 }
 
 /* ---------- Toasts ---------- */

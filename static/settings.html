@@ -38,15 +38,113 @@
                 <h2>API token</h2>
             </div>
             <p class="hint">
-                Send this token as <code>Authorization: Bearer &lt;token&gt;</code> when calling
-                <code>/api/transactions</code>. Regenerating invalidates the old token immediately.
+                Send this token as <code>Authorization: Bearer &lt;token&gt;</code> on every request. Regenerating
+                invalidates the old token immediately.
             </p>
             <div class="token-row">
                 <input id="apiTokenInput" type="text" readonly spellcheck="false" aria-label="API token">
                 <button id="copyTokenButton" class="button" type="button">Copy</button>
                 <button id="regenerateTokenButton" class="button button--danger" type="button">Regenerate</button>
             </div>
+        </section>
+
+        <section class="card">
+            <div class="card__header">
+                <h2>API reference</h2>
+            </div>
+            <p class="hint">
+                The external API lives under <code>/api/</code> (reachable without SSO, protected by the token
+                above) and only supports these two calls. Request and response bodies are JSON.
+            </p>
+
+            <h3 class="api-heading">Add a transaction</h3>
+            <p><code>POST /api/transactions</code></p>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Required</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>amount</code></td>
+                        <td>yes</td>
+                        <td>Signed: negative is an expense, positive is income; <code>0</code> is rejected.</td>
+                    </tr>
+                    <tr>
+                        <td><code>details</code></td>
+                        <td>yes</td>
+                        <td>The description; also used for category suggestions.</td>
+                    </tr>
+                    <tr>
+                        <td><code>currency</code></td>
+                        <td>yes</td>
+                        <td>One of the currencies listed in the Constants sheet.</td>
+                    </tr>
+                    <tr>
+                        <td><code>date</code></td>
+                        <td>no</td>
+                        <td><code>YYYY-MM-DD</code>; defaults to today.</td>
+                    </tr>
+                    <tr>
+                        <td><code>notes</code></td>
+                        <td>no</td>
+                        <td>Optional single line.</td>
+                    </tr>
+                    <tr>
+                        <td><code>category</code></td>
+                        <td>no</td>
+                        <td>When omitted, the app assigns one from history (see below).</td>
+                    </tr>
+                </tbody>
+            </table>
             <pre id="apiExample" class="code-block"></pre>
+            <p class="hint">
+                With a category, the response is <code>201 {"transaction":{...}}</code>. Without one, a confident
+                match adds <code>"assignedCategory"</code> and a short-lived <code>"editToken"</code>; otherwise
+                the request fails with <code>422</code> and the candidate <code>"suggestions"</code>, so the client
+                can retry with an explicit category.
+            </p>
+
+            <h3 class="api-heading">Correct an assigned category</h3>
+            <p><code>PATCH /api/transactions/&lt;editToken&gt;</code> with <code>{"category":"..."}</code>.</p>
+            <pre id="editExample" class="code-block"></pre>
+            <p class="hint">
+                The edit token only works for the transaction it was issued for and only changes the category.
+                A successful correction changes the transaction's id, so the token is consumed (retrying returns
+                <code>409</code>); an invalid category is rejected and the token stays usable.
+            </p>
+
+            <h3 class="api-heading">Errors</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Meaning</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>401</td>
+                        <td>Missing or invalid API token, or an invalid/expired edit token.</td>
+                    </tr>
+                    <tr>
+                        <td>400</td>
+                        <td>Invalid input, including a zero amount or a category that doesn't fit the transaction's kind.</td>
+                    </tr>
+                    <tr>
+                        <td>422</td>
+                        <td>No category was supplied and none could be assigned confidently; the body lists the
+                            <code>suggestions</code>.</td>
+                    </tr>
+                    <tr>
+                        <td>409</td>
+                        <td>The edit token was already used, or the transaction changed on disk.</td>
+                    </tr>
+                </tbody>
+            </table>
         </section>
     </main>
 

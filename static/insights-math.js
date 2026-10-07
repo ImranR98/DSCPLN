@@ -138,6 +138,42 @@
         return days
     }
 
+    // Stretches a series to `targetLength` points (used to align cumulative
+    // curves with the range being charted).
+    function resampleSeries(values, targetLength) {
+        if (values.length === 0) {
+            return []
+        }
+        return Array.from({ length: targetLength }, (_, index) => {
+            const position = Math.round(((index + 1) / targetLength) * values.length) - 1
+            return values[Math.max(0, Math.min(values.length - 1, position))]
+        })
+    }
+
+    // The average of the months' cumulative curves, resampled to targetDays,
+    // so the trailing-average baseline keeps the shape of a typical month.
+    function averageCumulative(transactions, months, targetDays) {
+        const series = months.map((entry) => {
+            const start = new Date(entry.year, entry.month - 1, 1)
+            const daily = dailySeries(transactions, start, endOfMonth(start))
+            let spend = 0
+            let income = 0
+            return {
+                spend: resampleSeries(daily.map((day) => {
+                    spend += day.spend
+                    return clean(spend)
+                }), targetDays),
+                income: resampleSeries(daily.map((day) => {
+                    income += day.income
+                    return clean(income)
+                }), targetDays),
+            }
+        })
+        const average = (key) => Array.from({ length: targetDays }, (_, index) =>
+            clean(series.reduce((sum, entry) => sum + entry[key][index], 0) / series.length))
+        return { spend: average('spend'), income: average('income') }
+    }
+
     // Projects the month total by scaling the amount so far to the full month.
     function projectMonthEnd({ spend, income, elapsedDays, daysInMonth }) {
         const factor = elapsedDays > 0 ? daysInMonth / elapsedDays : 0
@@ -257,6 +293,8 @@
         categoryTotalsMap,
         delta,
         dailySeries,
+        resampleSeries,
+        averageCumulative,
         projectMonthEnd,
         categoryMovers,
         lastCompleteMonths,

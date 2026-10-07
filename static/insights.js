@@ -680,18 +680,6 @@ function legendItem(label, color, baseline = false) {
     return el('span', `series-legend__item${baseline ? ' series-legend__item--baseline' : ''}`, '', swatch, label)
 }
 
-// Resamples a cumulative series to `targetLength` points so comparisons with
-// a different number of days (e.g. September vs August) still align.
-function resampleSeries(values, targetLength) {
-    if (values.length === 0) {
-        return []
-    }
-    return Array.from({ length: targetLength }, (_, index) => {
-        const position = Math.round(((index + 1) / targetLength) * values.length) - 1
-        return values[Math.max(0, Math.min(values.length - 1, position))]
-    })
-}
-
 function cumulativeBaseline(code, excluded) {
     const data = state.comparisonData
     const empty = { spend: [], income: [] }
@@ -701,13 +689,15 @@ function cumulativeBaseline(code, excluded) {
     const window = data.chartWindow || data.window
     const days = IM.daysInclusive(state.range.start, state.range.end)
     if (window.kind === 'average') {
-        const totals = IM.totals(transactionsIn(code, window, excluded))
-        const windowDays = IM.daysInclusive(window.start, window.end)
-        const spendPerDay = windowDays > 0 ? totals.spend / windowDays : 0
-        const incomePerDay = windowDays > 0 ? totals.income / windowDays : 0
+        // Average the trailing months' cumulative curves, then scale so the
+        // line still ends at the comparison total (windowTotal * rangeDays /
+        // windowDays) instead of the raw average month.
+        const months = IM.monthPartials(window.start, window.end)
+        const averages = IM.averageCumulative(transactionsIn(code, window, excluded), months, days)
+        const scale = IM.comparisonFactor(window, state.range) * months.length
         return {
-            spend: Array.from({ length: days }, (_, index) => IM.clean(spendPerDay * (index + 1))),
-            income: Array.from({ length: days }, (_, index) => IM.clean(incomePerDay * (index + 1))),
+            spend: averages.spend.map((value) => IM.clean(value * scale)),
+            income: averages.income.map((value) => IM.clean(value * scale)),
         }
     }
     const daily = IM.dailySeries(transactionsIn(code, window, excluded), window.start, window.end)
@@ -722,8 +712,8 @@ function cumulativeBaseline(code, excluded) {
         return IM.clean(runningIncome)
     })
     return {
-        spend: resampleSeries(spend, days),
-        income: resampleSeries(income, days),
+        spend: IM.resampleSeries(spend, days),
+        income: IM.resampleSeries(income, days),
     }
 }
 

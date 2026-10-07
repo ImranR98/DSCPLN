@@ -136,6 +136,42 @@ test('builds a daily series', () => {
     assert.deepEqual(daily[2], { date: '2026-09-03', spend: 2.5, income: 100 })
 })
 
+test('averages the trailing months into a shaped cumulative baseline', () => {
+    const transactions = [
+        tx('2026-07-10', 'expense', 100, { category: 'Rent' }),
+        tx('2026-08-05', 'expense', 50, { category: 'Rent' }),
+        tx('2026-09-20', 'expense', 30, { category: 'Rent' }),
+    ]
+    const months = math.monthPartials(new Date(2026, 6, 1), new Date(2026, 8, 30))
+    assert.equal(months.length, 3)
+    const average = math.averageCumulative(transactions, months, 30)
+    assert.equal(average.spend.length, 30)
+    // Ends at the mean of the months' totals, starting at zero.
+    assert.equal(average.spend[0], 0)
+    assert.equal(average.spend[29], 60)
+    // The increments differ (the spends land on different days), so the curve
+    // is not a straight line.
+    const increments = average.spend.slice(1).map((value, index) => Number((value - average.spend[index]).toFixed(6)))
+    assert.ok(new Set(increments).size > 1)
+})
+
+test('averages a zero-data month into the baseline', () => {
+    const transactions = [
+        tx('2026-07-01', 'expense', 100, { category: 'Rent' }),
+        tx('2026-09-30', 'expense', 60, { category: 'Rent' }),
+    ]
+    const months = math.monthPartials(new Date(2026, 6, 1), new Date(2026, 8, 30))
+    const average = math.averageCumulative(transactions, months, 30)
+    assert.equal(Number(average.spend[29].toFixed(6)), Number((160 / 3).toFixed(6)))
+})
+
+test('resamples a series to a target length', () => {
+    assert.deepEqual(math.resampleSeries([0, 10, 20, 30], 4), [0, 10, 20, 30])
+    assert.deepEqual(math.resampleSeries([0, 10, 20, 30], 2), [10, 30])
+    assert.deepEqual(math.resampleSeries([5], 3), [5, 5, 5])
+    assert.deepEqual(math.resampleSeries([], 3), [])
+})
+
 test('projects month-end spending', () => {
     assert.deepEqual(math.projectMonthEnd({ spend: 300, income: 1000, elapsedDays: 10, daysInMonth: 30 }), {
         spend: 900,

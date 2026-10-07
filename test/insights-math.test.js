@@ -54,6 +54,21 @@ test('computes the preceding range, calendar-aligned', () => {
     assert.deepEqual(iso(range([2026, 9, 15], [2026, 10, 4])), ['2026-07-16', '2026-08-04'])
 })
 
+test('caps ranges that extend past today for statistics', () => {
+    const today = new Date(2026, 9, 5)
+    const capped = math.elapsedRange(new Date(2026, 9, 1), new Date(2026, 9, 31), today)
+    assert.equal(math.toIsoDate(capped.start), '2026-10-01')
+    assert.equal(math.toIsoDate(capped.end), '2026-10-05')
+    // Ranges ending today or earlier are untouched.
+    const past = math.elapsedRange(new Date(2026, 8, 1), new Date(2026, 8, 30), today)
+    assert.deepEqual([math.toIsoDate(past.start), math.toIsoDate(past.end)], ['2026-09-01', '2026-09-30'])
+    const endingToday = math.elapsedRange(new Date(2026, 9, 1), new Date(2026, 9, 5), today)
+    assert.equal(math.toIsoDate(endingToday.end), '2026-10-05')
+    // Wholly future ranges are untouched.
+    const future = math.elapsedRange(new Date(2026, 10, 1), new Date(2026, 10, 30), today)
+    assert.deepEqual([math.toIsoDate(future.start), math.toIsoDate(future.end)], ['2026-11-01', '2026-11-30'])
+})
+
 test('shiftMonths preserves the day and month-end anchoring', () => {
     assert.equal(math.toIsoDate(math.shiftMonths(new Date(2026, 8, 30), -1)), '2026-08-31')
     assert.equal(math.toIsoDate(math.shiftMonths(new Date(2026, 0, 31), 1)), '2026-02-28')

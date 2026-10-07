@@ -59,13 +59,14 @@ function toast(message, type = 'error') {
 
 /* ---------- Ranges & presets ---------- */
 
+// Statistics never count dates after today; the selected range still drives
+// the date inputs, URL and chart axis.
+function elapsedRange() {
+    return IM.elapsedRange(state.range.start, state.range.end, dates.startOfDay(new Date()))
+}
+
 function currentMonthRange(date = new Date()) {
-    const start = IM.startOfMonth(date)
-    const monthEnd = IM.endOfMonth(date)
-    const today = new Date()
-    const isThisMonth = start.getFullYear() === today.getFullYear() && start.getMonth() === today.getMonth()
-    const end = isThisMonth && today < monthEnd ? today : monthEnd
-    return { start, end }
+    return { start: IM.startOfMonth(date), end: IM.endOfMonth(date) }
 }
 
 function lastMonthRange() {
@@ -121,18 +122,19 @@ const formatDateRange = (start, end) =>
     `${formats.dayMonth.format(start)} ${formats.year.format(start)} – ${formats.dayMonth.format(end)} ${formats.year.format(end)}`
 
 function comparisonShortLabel() {
-    const window = IM.comparisonWindow(state.comparison, state.range)
+    const range = elapsedRange()
+    const window = IM.comparisonWindow(state.comparison, range)
     if (window.kind === 'average') {
         return `${window.count}-mo avg`
     }
-    if (window.start.getFullYear() !== state.range.start.getFullYear()) {
+    if (window.start.getFullYear() !== range.start.getFullYear()) {
         return 'last year'
     }
-    return IM.spansMultipleMonths(state.range.start, state.range.end) ? 'previous period' : 'previous month'
+    return IM.spansMultipleMonths(range.start, range.end) ? 'previous period' : 'previous month'
 }
 
 function comparisonLongLabel() {
-    const window = IM.comparisonWindow(state.comparison, state.range)
+    const window = IM.comparisonWindow(state.comparison, elapsedRange())
     if (window.kind === 'average') {
         return `${window.count}-month average of ${formats.monthShort.format(window.start)}–${formats.monthShort.format(window.end)} ${formats.year.format(window.end)}`
     }
@@ -143,20 +145,30 @@ function updateCompareNote() {
     if (!state.range) {
         return
     }
-    const window = IM.comparisonWindow(state.comparison, state.range)
-    const rangeDays = IM.daysInclusive(state.range.start, state.range.end)
-    const rangeLabel = formatDateRange(state.range.start, state.range.end)
+    const range = elapsedRange()
+    const window = IM.comparisonWindow(state.comparison, range)
+    const rangeDays = IM.daysInclusive(range.start, range.end)
+    const rangeLabel = formatDateRange(range.start, range.end)
     let text
     if (window.kind === 'average') {
         text = `Comparing ${rangeLabel} (${rangeDays} days) with the ${window.count}-month average (${formats.monthShort.format(window.start)}–${formats.monthShort.format(window.end)} ${formats.year.format(window.end)}), scaled per day.`
     } else {
         text = `Comparing ${rangeLabel} (${rangeDays} days) with ${comparisonLongLabel()} (${IM.daysInclusive(window.start, window.end)} days).`
     }
-    if (window.kind !== 'average' && !isWholeMonths(state.range)) {
-        const sameYear = window.start.getFullYear() === state.range.start.getFullYear()
+    if (window.kind !== 'average' && !isWholeMonths(range)) {
+        const sameYear = window.start.getFullYear() === range.start.getFullYear()
         text += sameYear ?
             ' Partial months are compared with the matching calendar days of the previous month.' :
             ' Partial months are compared with the matching calendar days of the previous year.'
+    }
+    if (IM.toIsoDate(range.end) !== IM.toIsoDate(state.range.end)) {
+        const monthToDate = range.start.getDate() === 1 &&
+            range.start.getMonth() === range.end.getMonth() &&
+            range.start.getFullYear() === range.end.getFullYear()
+        const through = `${formats.dayMonth.format(range.end)} ${formats.year.format(range.end)}`
+        text += monthToDate ?
+            ` Figures are month to date (through ${through}); future dates are excluded.` :
+            ` Figures are through ${through}; future dates are excluded.`
     }
     els.compareNote.textContent = text
 }
@@ -223,10 +235,10 @@ function transactionsIn(currency, range, excluded) {
     })
 }
 
-function rangeTransactions() {
+function rangeTransactions(range = elapsedRange()) {
     return IM.filterTransactions(state.transactions, {
-        start: state.range.start,
-        end: state.range.end,
+        start: range.start,
+        end: range.end,
     })
 }
 
@@ -236,13 +248,16 @@ async function fetchData() {
         document.body.classList.add('is-loading')
     }
     try {
-        // The selected comparison window drives every comparison on the page,
-        // including the forecast, so it is the only extra data we fetch.
-        const window = IM.comparisonWindow(state.comparison, state.range)
-        // When the range includes today, also fetch the start of the current
-        // month so the month-to-date projection has all of its data.
-        const today = new Date()
-        let fetchStart = window.start
+        // Statistics use the elapsed part of the range, while the chart's
+        // baselines use the selected range so they can show the full
+        // comparison period.
+        const statsRange = elapsedRange()
+        const window = IM.comparisonWindow(state.comparison, statsRange)
+        const chartWindow = IM.comparisonWindow(state.comparison, state.range)
+        // Fetch enough to cover both comparison windows, the forecast's
+        // month-to-date data and the full selected range.
+        const today = dates.startOfDay(new Date())
+        let fetchStart = window.start < chartWindow.start ? window.start : chartWindow.start
         if (state.range.start <= today && today <= state.range.end) {
             const monthStart = IM.startOfMonth(today)
             if (monthStart < fetchStart) {
@@ -266,7 +281,8 @@ async function fetchData() {
             (reference.currencies || []).filter((entry) => entry.fractional).map((entry) => entry.code))
         state.comparisonData = {
             window,
-            factor: IM.comparisonFactor(window, state.range),
+            chartWindow,
+            factor: IM.comparisonFactor(window, statsRange),
         }
         syncInputs()
         renderContent()
@@ -367,10 +383,10 @@ function comparisonForSection(code, excluded) {
 }
 
 function renderContent() {
-    const rangeTxs = rangeTransactions()
-    renderTransactionsPanel(rangeTxs)
-    renderHistoryPanel(rangeTxs)
-    renderSections(rangeTxs)
+    const statTxs = rangeTransactions()
+    renderTransactionsPanel(rangeTransactions(state.range))
+    renderHistoryPanel(statTxs)
+    renderSections(statTxs)
 }
 
 // Rebuilds only the per-currency sections (used by category toggles, which
@@ -468,9 +484,8 @@ function buildKpis(code, included, comparison) {
 }
 
 function daysElapsed() {
-    const today = new Date()
-    const end = state.range.start <= today && today < state.range.end ? today : state.range.end
-    return Math.max(1, IM.daysInclusive(state.range.start, end))
+    const range = elapsedRange()
+    return Math.max(1, IM.daysInclusive(range.start, range.end))
 }
 
 function kpiTile(label, value, comparisonValue, options = {}) {
@@ -632,8 +647,12 @@ function buildTrendAndForecast(code, included, comparison, excluded) {
     })
     const baseline = cumulativeBaseline(code, excluded)
     const middle = daily[Math.floor((daily.length - 1) / 2)]
+    // The solid lines end at today; the dashed baselines span the full range.
+    const solidDays = IM.daysInclusive(state.range.start, elapsedRange().end)
     DSCPLN.chart.renderCumulative(chartHost, {
-        daily, spendCumulative, incomeCumulative,
+        daily,
+        spendCumulative: spendCumulative.slice(0, solidDays),
+        incomeCumulative: incomeCumulative.slice(0, solidDays),
         baselineSpend: baseline.spend, baselineIncome: baseline.income,
         currency: code,
         axisLabels: [
@@ -679,7 +698,7 @@ function cumulativeBaseline(code, excluded) {
     if (!data) {
         return empty
     }
-    const window = data.window
+    const window = data.chartWindow || data.window
     const days = IM.daysInclusive(state.range.start, state.range.end)
     if (window.kind === 'average') {
         const totals = IM.totals(transactionsIn(code, window, excluded))
@@ -710,7 +729,7 @@ function cumulativeBaseline(code, excluded) {
 
 function buildForecast(code, excluded) {
     const wrap = el('div', 'forecast')
-    const today = new Date()
+    const today = dates.startOfDay(new Date())
     const includesToday = state.range.start <= today && state.range.end >= today
 
     if (includesToday) {

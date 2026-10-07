@@ -20,6 +20,12 @@
             toIsoDate(end) === toIsoDate(endOfMonth(end))
     }
 
+    // A range that extends past `today` is capped at today for statistics; the
+    // selected range still drives the date inputs, URL and chart axis.
+    function elapsedRange(start, end, today) {
+        return start <= today && today < end ? { start, end: today } : { start, end }
+    }
+
     // Range compared against for the previous period. Whole calendar months
     // snap to the same number of whole months before (September -> August);
     // partial months keep their anchor (the 1st, the month end, or the same
@@ -243,6 +249,7 @@
         endOfMonth,
         daysInclusive,
         previousRange,
+        elapsedRange,
         clean,
         filterTransactions,
         totals,

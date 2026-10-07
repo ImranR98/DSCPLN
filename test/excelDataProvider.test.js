@@ -304,27 +304,30 @@ test('adds, edits and deletes transactions, preserving styles', async () => {
     assert.equal(fs.existsSync(`${workbookFile}.bak`), true)
 })
 
-test('reassigns a category without touching the other fields', async () => {
+test('lists every category and scores the ones that match', async () => {
     const { provider } = createTestProvider()
-    const created = await provider.addTransaction({
-        kind: 'expense',
-        amount: 9.5,
-        details: 'Category correction',
-        date: '2026-09-15',
-        category: 'Snacks',
-        currency: 'CAD',
-        notes: 'keep me',
-    })
-    const updated = await provider.reassignCategory(created.id, ' Rent ')
-    assert.equal(updated.category, 'Rent')
-    assert.equal(updated.details, 'Category correction')
-    assert.equal(updated.expenses, 9.5)
-    assert.equal(updated.notes, 'keep me')
-    assert.notEqual(updated.id, created.id)
 
-    await assert.rejects(provider.reassignCategory(updated.id, 'Nope'), ValidationError)
-    await assert.rejects(provider.reassignCategory(updated.id, 'Job'), ValidationError)
-    await assert.rejects(provider.reassignCategory(created.id, 'Snacks'), ConflictError)
+    // No kind: every group in sheet order, all zero, so it doubles as a list.
+    const all = await provider.scoreCategories('', null)
+    assert.deepEqual(all.map((entry) => entry.group),
+        ['Main Expenses', 'Extra Expenses', 'Special Expenses', 'Money In', 'Conversions'])
+    assert.equal(all.every((entry) => entry.categories.every((category) => category.score === 0)), true)
+    assert.equal(all.find((entry) => entry.group === 'Main Expenses').categories.some((c) => c.category === 'Rent'), true)
+
+    // A kind limits the groups; every category comes back, best match first.
+    const expense = await provider.scoreCategories('grocries', 'expense')
+    assert.equal(expense.some((entry) => entry.group === 'Money In'), false)
+    const expenseCategories = expense.flatMap((entry) => entry.categories)
+    assert.equal(expenseCategories.every((entry) => entry.score >= 0 && entry.score <= 1), true)
+    assert.ok(expenseCategories.find((entry) => entry.category === 'Food Weekly').score > 0.5)
+    assert.equal(expenseCategories.some((entry) => entry.category === 'Medical' && entry.score === 0), true)
+
+    const income = await provider.scoreCategories('Jb', 'income')
+    assert.deepEqual(income.map((entry) => entry.group), ['Money In', 'Conversions'])
+    assert.ok(income.flatMap((entry) => entry.categories).find((entry) => entry.category === 'Job').score > 0.2)
+
+    await assert.rejects(provider.scoreCategories('x', 'transfer'), ValidationError)
+    await assert.rejects(provider.scoreCategories('x', null), ValidationError)
 })
 
 test('validates transaction input', async () => {

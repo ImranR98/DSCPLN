@@ -9,7 +9,8 @@ const els = {
     copyButton: document.getElementById('copyTokenButton'),
     regenerateButton: document.getElementById('regenerateTokenButton'),
     example: document.getElementById('apiExample'),
-    editExample: document.getElementById('editExample'),
+    listExample: document.getElementById('listExample'),
+    scoreExample: document.getElementById('scoreExample'),
     reference: document.getElementById('apiReference'),
     copyReferenceButton: document.getElementById('copyReferenceButton'),
     toasts: document.getElementById('toasts'),
@@ -66,17 +67,21 @@ const referenceMarkdown = () => {
 const exampleText = (token) => `curl -X POST ${location.origin}/api/transactions \\
   -H "Authorization: Bearer ${token}" \\
   -H "Content-Type: application/json" \\
-  -d '{"amount":-12.34,"details":"Groceries","currency":"CAD"}'`
+  -d '{"amount":-12.34,"details":"Groceries","currency":"CAD","category":"Food Weekly"}'`
 
-const editExampleText = () => `curl -X PATCH ${location.origin}/api/transactions/$EDIT_TOKEN \\
+const listExampleText = () => `curl ${location.origin}/api/categories \\
+  -H "Authorization: Bearer $API_TOKEN"`
+
+const scoreExampleText = () => `curl -G ${location.origin}/api/categories \\
   -H "Authorization: Bearer $API_TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{"category":"Food Weekly"}'`
+  --data-urlencode "details=Coffee beans" \\
+  --data-urlencode "kind=expense"`
 
 function show(token) {
     els.tokenInput.value = token
     els.example.textContent = exampleText(token)
-    els.editExample.textContent = editExampleText()
+    els.listExample.textContent = listExampleText()
+    els.scoreExample.textContent = scoreExampleText()
 }
 
 async function load() {

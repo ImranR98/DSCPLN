@@ -893,6 +893,6 @@ for (const chip of document.querySelectorAll('.chip[data-range]')) {
 initTheme(els.themeButton)
 const initial = stateFromUrl()
 state.comparison = initial.comparison
-state.range = initial.range || lastMonthRange()
+state.range = initial.range || currentMonthRange()
 syncInputs()
 fetchData()

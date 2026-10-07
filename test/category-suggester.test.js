@@ -2,7 +2,7 @@
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { suggestCategories, normalize } = require('../category-suggester')
+const { suggestCategories, scoreCategories, normalize } = require('../category-suggester')
 
 const samples = [
     { details: 'Groceries', category: 'Food Weekly', date: new Date('2026-08-01') },
@@ -52,4 +52,18 @@ test('prefers the more frequent category for the same details', () => {
 test('handles empty input and empty corpora', () => {
     assert.deepEqual(suggestCategories('', samples), { confident: false, suggestions: [] })
     assert.deepEqual(suggestCategories('Groceries', []), { confident: false, suggestions: [] })
+})
+
+test('scores every requested category, best first and unmatched at zero', () => {
+    const scored = scoreCategories('Groceries run', samples, ['Haircut', 'Rent', 'Food Weekly', 'Netflix'])
+    assert.equal(scored.length, 4)
+    assert.equal(scored[0].category, 'Food Weekly')
+    assert.ok(scored[0].score > 0.7)
+    assert.equal(scored.find((entry) => entry.category === 'Haircut').score, 0)
+    assert.equal(scored.every((entry) => entry.score >= 0 && entry.score <= 1), true)
+
+    // No description means no matches, and ties keep the given order.
+    const unranked = scoreCategories('', samples, ['Rent', 'Food Weekly', 'Job'])
+    assert.deepEqual(unranked.map((entry) => entry.category), ['Rent', 'Food Weekly', 'Job'])
+    assert.equal(unranked.every((entry) => entry.score === 0), true)
 })

@@ -3,7 +3,7 @@
 // Excel workbook provider.
 // Providers must implement getData; the app optionally uses updateMonthlyBudget,
 // getTransactions, addTransaction, importTransactions, updateTransaction,
-// deleteTransaction, suggestCategories and suggestDetails.
+// deleteTransaction, suggestCategories, scoreCategories and suggestDetails.
 //
 // Transactions sheet (headers in row 1, mapped by name):
 //   Date | Details | Money In | Expenses | Currency | Type | Notes
@@ -20,7 +20,7 @@ const path = require('path')
 const crypto = require('crypto')
 const ExcelJS = require('exceljs')
 const { ValidationError, ConflictError } = require('../errors')
-const { suggestCategories: computeSuggestions } = require('../category-suggester')
+const { suggestCategories: computeSuggestions, scoreCategories: computeCategoryScores } = require('../category-suggester')
 const { assertWorkbookRepo, commitFile } = require('../workbook-git')
 
 const INCOME_GROUP = 'Money In'
@@ -605,7 +605,10 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         }
         const allowedCategories = categoriesForKind(constants, input.kind)
         const category = typeof input.category === 'string' ? input.category.trim() : ''
-        if (!category || !allowedCategories.includes(category)) {
+        if (!category) {
+            throw new ValidationError('Category is required')
+        }
+        if (!allowedCategories.includes(category)) {
             throw new ValidationError(`Category must be one of the ${input.kind} categories in the "${constantsSheetName}" sheet`)
         }
         const currency = typeof input.currency === 'string' ? input.currency.trim() : ''
@@ -1017,25 +1020,31 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         await saveWorkbook(workbook, 'D$CPLN: delete transaction')
     }
 
-    // Rewrites only the Type cell, for the narrow post-create category
-    // correction the external API exposes.
-    const reassignCategory = async (id, newCategory) => {
-        const rowNumber = parseRowInput(id)
-        const workbook = await loadWorkbook()
-        const date1904 = Boolean(workbook.properties.date1904)
-        const constants = readConstants(workbook)
-        const sheet = getSheet(workbook, transactionsSheetName, 'transactions')
-        const map = readHeaderMap(sheet)
-        const row = findTransactionRow(sheet, map, rowNumber, date1904, id)
-        const existing = parseTransactionRow(row, map, rowNumber, date1904)
-        const category = typeof newCategory === 'string' ? newCategory.trim() : ''
-        if (!category || !categoriesForKind(constants, existing.kind).includes(category)) {
-            throw new ValidationError(`Category must be one of the ${existing.kind} categories in the "${constantsSheetName}" sheet`)
+    // Scores every category for the external API: grouped as in the Constants
+    // sheet, best match first, with 0 for anything that doesn't match. Without
+    // a kind it returns every group un-scored, doubling as a category list.
+    const scoreCategories = async (description, kind) => {
+        if (kind != null && kind !== '' && kind !== 'expense' && kind !== 'income') {
+            throw new ValidationError('Kind must be "expense" or "income"')
         }
-        row.getCell(map['Type']).value = category
-        await saveWorkbook(workbook, 'D$CPLN: correct transaction category')
-        const stored = parseTransactionRow(sheet.getRow(rowNumber), map, rowNumber, date1904)
-        return serializeTransaction(stored)
+        const query = typeof description === 'string' ? description.trim() : ''
+        if (query && !kind) {
+            throw new ValidationError('kind is required when details is provided')
+        }
+        const parsed = await getParsed()
+        const groups = parsed.constants.categoryGroups.filter((entry) =>
+            !kind ||
+            (kind === 'income' ?
+                entry.group === INCOME_GROUP || entry.group === CONVERSION_GROUP :
+                entry.group !== INCOME_GROUP))
+        const samples = kind ? parsed.samplesByKind[kind] : []
+        return groups.map((entry) => ({
+            group: entry.group,
+            categories: computeCategoryScores(query, samples, entry.categories).map((score) => ({
+                category: score.category,
+                score: Math.round(score.score * 1000) / 1000,
+            })),
+        }))
     }
 
     const suggestCategories = async (description, kind) => {
@@ -1124,8 +1133,8 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         importTransactions,
         updateTransaction,
         deleteTransaction,
-        reassignCategory,
         suggestCategories,
+        scoreCategories,
         suggestDetails,
     }
 }

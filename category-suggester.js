@@ -91,10 +91,8 @@ const recencyBonus = (date, now) => {
     return days >= 0 && days <= 365 ? 0.05 : 0
 }
 
-// samples: [{ details, category, date }] already filtered to the relevant kind.
-const suggestCategories = (description, samples, options = {}) => {
-    const { limit, confidence, margin } = { ...DEFAULT_OPTIONS, ...options }
-    const now = options.now instanceof Date ? options.now : new Date()
+// Aggregates the best match, use count and latest date per category.
+const collectStats = (description, samples) => {
     const stats = new Map()
     for (const sample of samples || []) {
         if (!sample || !sample.category) {
@@ -124,10 +122,20 @@ const suggestCategories = (description, samples, options = {}) => {
             }
         }
     }
-    const suggestions = [...stats.values()]
+    return stats
+}
+
+const finalScore = (stat, now) =>
+    Math.min(1, stat.score + 0.1 * Math.min(stat.count, 5) / 5 + recencyBonus(stat.latest, now))
+
+// samples: [{ details, category, date }] already filtered to the relevant kind.
+const suggestCategories = (description, samples, options = {}) => {
+    const { limit, confidence, margin } = { ...DEFAULT_OPTIONS, ...options }
+    const now = options.now instanceof Date ? options.now : new Date()
+    const suggestions = [...collectStats(description, samples).values()]
         .map((stat) => ({
             category: stat.category,
-            score: Math.min(1, stat.score + 0.1 * Math.min(stat.count, 5) / 5 + recencyBonus(stat.latest, now)),
+            score: finalScore(stat, now),
             count: stat.count,
             example: stat.example,
         }))
@@ -139,4 +147,17 @@ const suggestCategories = (description, samples, options = {}) => {
     return { suggestions, confident }
 }
 
-module.exports = { suggestCategories, similarity, normalize, DEFAULT_OPTIONS }
+// Scores every requested category, best first (0 when nothing matches); ties
+// keep the given order.
+const scoreCategories = (description, samples, categories, options = {}) => {
+    const now = options.now instanceof Date ? options.now : new Date()
+    const stats = collectStats(description, samples)
+    return (categories || [])
+        .map((category) => ({
+            category,
+            score: stats.has(category) ? finalScore(stats.get(category), now) : 0,
+        }))
+        .sort((a, b) => b.score - a.score)
+}
+
+module.exports = { suggestCategories, scoreCategories, similarity, normalize, DEFAULT_OPTIONS }

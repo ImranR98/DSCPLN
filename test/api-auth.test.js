@@ -6,7 +6,6 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { createApiAuth } = require('../api-auth')
-const { UnauthorizedError } = require('../errors')
 
 const stateFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dscpln-api-')), 'api-state.json')
 
@@ -33,24 +32,19 @@ test('regenerating rotates the token and invalidates the old one', () => {
     assert.equal(auth.checkToken(after), true)
 })
 
-test('edit tokens verify, expire and reject tampering', () => {
-    const auth = createApiAuth(stateFile())
-    const token = auth.createEditToken('42-abcdef123456', 1000)
-    assert.equal(auth.verifyEditToken(token, 1000), '42-abcdef123456')
-    assert.throws(() => auth.verifyEditToken(`${token}x`, 1000), UnauthorizedError)
-    assert.throws(() => auth.verifyEditToken('garbage', 1000), UnauthorizedError)
-    assert.throws(() => auth.verifyEditToken(token, 1000 + 25 * 60 * 60 * 1000), UnauthorizedError)
+test('accepts state files with extra fields from older versions', () => {
+    const file = stateFile()
+    fs.writeFileSync(file, JSON.stringify({ token: 'legacy-token', editSecret: 'old', createdAt: 'x' }))
+    const auth = createApiAuth(file)
+    assert.equal(auth.getToken(), 'legacy-token')
+    assert.equal(auth.checkToken('legacy-token'), true)
 })
 
-test('regenerating invalidates outstanding edit tokens', () => {
-    const auth = createApiAuth(stateFile())
-    const token = auth.createEditToken('42-abcdef123456', 1000)
-    auth.regenerate()
-    assert.throws(() => auth.verifyEditToken(token, 1000), UnauthorizedError)
-})
-
-test('refuses a malformed state file instead of silently rotating', () => {
+test('refuses malformed state files instead of silently rotating', () => {
     const file = stateFile()
     fs.writeFileSync(file, 'not json')
+    assert.throws(() => createApiAuth(file).getToken(), /Delete it to regenerate/)
+
+    fs.writeFileSync(file, JSON.stringify({ createdAt: 'x' }))
     assert.throws(() => createApiAuth(file).getToken(), /Delete it to regenerate/)
 })

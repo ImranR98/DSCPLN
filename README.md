@@ -103,25 +103,29 @@ Transaction ids embed the row number and a hash of the row values. If the workbo
 
 ### External API
 
-`/api/*` is a small add-only JSON API meant for scripts and other automations. It is designed to
-be reachable without SSO (the deployment routes it around Authelia), so it is protected by a bearer
-token instead. Open the settings page (`/settings`, linked from the header) to copy or regenerate
-the single token; send it as `Authorization: Bearer <token>`.
+`/api/*` is a small JSON API meant for scripts and other automations. It is designed to be reachable
+without SSO (the deployment routes it around Authelia), so it is protected by a bearer token instead.
+Open the settings page (`/settings`, linked from the header) to copy or regenerate the single token;
+send it as `Authorization: Bearer <token>`.
 
 | Method | Path | Body |
 | --- | --- | --- |
-| `POST` | `/api/transactions` | `{ "amount", "details", "currency", "date"?, "notes"?, "category"? }` |
-| `PATCH` | `/api/transactions/:editToken` | `{ "category" }` |
+| `GET` | `/api/categories?details=<text>&kind=expense\|income` | - |
+| `POST` | `/api/transactions` | `{ "amount", "details", "currency", "category", "date"?, "notes"? }` |
 
-- `amount` is signed: negative is an expense (`Expenses`), positive is income (`Money In`); `0` is rejected. `date` defaults to today. `details` and `currency` are required.
-- With `category`, the transaction is added as-is and the response is `201 { "transaction": ... }`.
-- Without `category`, the app picks one from your history using the same suggestion logic as the UI. When it is confident the response adds `"assignedCategory"` and a short-lived `"editToken"`; when it is not, you get `422` with the candidate `"suggestions"` so the client can retry with a category.
-- `PATCH /api/transactions/<editToken>` corrects only that transaction's category. A successful correction changes the transaction's id, so the token is single-use (retrying returns `409`); a validation error leaves it usable.
+- `GET /api/categories` returns every category grouped as in the Constants sheet, each with `score: 0`. Adding `details` and `kind` scores every category of that kind between 0 and 1, best match first (`0` when nothing matches); `details` without `kind`, or an unknown kind, is a `400`.
+- `amount` is signed: negative is an expense (`Expenses`), positive is income (`Money In`); `0` is rejected. `date` defaults to today. `details`, `currency` and `category` are required, and the category must exist in the Constants sheet for the transaction's kind. The response is `201 { "transaction": ... }`.
 
 ```sh
+# See how each expense category scores for a description
+curl -G https://dscpln.example.com/api/categories \
+  -H "Authorization: Bearer $TOKEN" \
+  --data-urlencode "details=Coffee beans" --data-urlencode "kind=expense"
+
+# Add the transaction with the chosen category
 curl -X POST https://dscpln.example.com/api/transactions \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"amount":-12.34,"details":"Groceries","currency":"CAD"}'
+  -d '{"amount":-12.34,"details":"Coffee beans","currency":"CAD","category":"Snacks"}'
 ```
 
 ## Dashboard
@@ -148,7 +152,7 @@ On wide screens the transactions list sits in a second column on the right, with
 
 ## Insights
 
-`/insights` (linked from the dashboard header) analyzes an arbitrary date range, per currency:
+`/insights` (linked from the dashboard header) analyzes an arbitrary date range (defaulting to the current month), per currency:
 
 - **Filters**: start/end date pickers; quick ranges `This month`, `Last month`, a month chip (opens a month picker), `Last 3/6/12 full months` (complete calendar months only), `Year to date` and `All time` (first to latest transaction); and one **Compare with** selector: `Previous period` (default; whole months compare with the same number of whole months before, partial months with the matching calendar days of the previous month — e.g. This month on Oct 5 compares Oct 1–5 with Sep 1–5 — and Year to date with the same period last year), `Same period last year`, or `Trailing 3/6/12-month average`. All comparisons on the page — KPIs, categories, movers, chart baselines and the forecast — use this window. The range and comparison are kept in the URL, and a note spells out the exact windows being compared (partial-month comparisons are explained; average comparisons are scaled per day). `This month` selects the whole month, but figures stay month-to-date: statistics never count dates after today (the note calls this out), while the chart's dashed comparison baselines still show the full previous period.
 - **Transactions panel** (top, collapsed by default): all transactions in the range across currencies, read-only; future-dated rows are dimmed.

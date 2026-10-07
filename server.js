@@ -5,7 +5,7 @@
 const express = require('express')
 const path = require('path')
 const { loadConfig } = require('./config')
-const { ValidationError, ConflictError, UnprocessableError } = require('./errors')
+const { ValidationError } = require('./errors')
 const { startNotifications } = require('./notifications')
 const { createApiAuth } = require('./api-auth')
 
@@ -153,64 +153,31 @@ const createApp = (config) => {
         }
     }
 
-    // Add-only external API. A signed amount sets the direction, a missing
-    // category is auto-assigned, and auto-assigned transactions come back with
-    // a short-lived edit token for correcting that one category.
+    // Category list and scoring. Without details every category comes back
+    // with score 0, so it doubles as a "get the categories" call.
+    app.get('/api/categories', requireApiToken, asyncRoute(async (req, res) => {
+        requireApiMethod('scoreCategories', 'category suggestions')
+        const details = typeof req.query['details'] === 'string' ? req.query['details'] : ''
+        const kind = typeof req.query['kind'] === 'string' ? req.query['kind'] : null
+        res.send({ groups: await dataProvider.scoreCategories(details, kind) })
+    }))
+
+    // Add-only external API: a signed amount sets the direction and the
+    // category must be one from the Constants sheet.
     app.post('/api/transactions', requireApiToken, asyncRoute(async (req, res) => {
         requireApiMethod('addTransaction', 'transactions')
         const input = req.body || {}
         const { kind, amount } = signedAmountToInput(input.amount)
-        let category = typeof input.category === 'string' ? input.category.trim() : ''
-        let assignedCategory = null
-        if (!category) {
-            requireApiMethod('suggestCategories', 'category suggestions')
-            const details = typeof input.details === 'string' ? input.details.trim() : ''
-            if (!details) {
-                throw new ValidationError('Details is required')
-            }
-            const result = await dataProvider.suggestCategories(details, kind)
-            if (!result.confident || result.suggestions.length === 0) {
-                const error = new UnprocessableError('Could not assign a category; provide one explicitly')
-                error.suggestions = result.suggestions.map((suggestion) => suggestion.category)
-                throw error
-            }
-            category = result.suggestions[0].category
-            assignedCategory = category
-        }
         const transaction = await dataProvider.addTransaction({
             kind,
             amount,
             details: input.details,
             date: typeof input.date === 'string' && input.date.trim() ? input.date : todayIso(),
-            category,
+            category: input.category,
             currency: input.currency,
             notes: input.notes,
         })
-        const body = { transaction }
-        if (assignedCategory) {
-            body.assignedCategory = assignedCategory
-            body.editToken = apiAuth.createEditToken(transaction.id)
-        }
-        res.status(201).send(body)
-    }))
-
-    // The only edit the external API allows: correcting the category of the
-    // transaction the edit token was issued for.
-    app.patch('/api/transactions/:editToken', requireApiToken, asyncRoute(async (req, res) => {
-        requireApiMethod('reassignCategory', 'category corrections')
-        const id = apiAuth.verifyEditToken(req.params['editToken'])
-        const category = typeof req.body?.category === 'string' ? req.body.category.trim() : ''
-        if (!category) {
-            throw new ValidationError('category is required')
-        }
-        try {
-            res.send({ transaction: await dataProvider.reassignCategory(id, category) })
-        } catch (e) {
-            if (e instanceof ConflictError) {
-                throw new ConflictError('The transaction has changed since the edit token was issued')
-            }
-            throw e
-        }
+        res.status(201).send({ transaction })
     }))
 
     app.use('/api', (req, res) => {

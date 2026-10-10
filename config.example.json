@@ -16,7 +16,8 @@
   "lockStaleSeconds": 900,
   "ntfy": {
     "url": "",
-    "token": ""
+    "token": "",
+    "notifySuccess": true
   },
   "folders": [
     {

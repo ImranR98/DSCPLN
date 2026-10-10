@@ -147,8 +147,13 @@ export class Queue {
     }
     processSnapBatch(this.ctx, folder, files)
       .then((results) => {
+        const outputs = new Set();
         for (const { name, result } of results) {
-          this.#applyResults(folder, [name], result);
+          this.#applyResults(folder, [name], result, { notifySuccess: false });
+          if (result.status === STATUS.DONE && result.destName && !outputs.has(result.destName)) {
+            outputs.add(result.destName);
+            this.ctx.notify.notify("info", `${folder.def.name}: concatenated ${result.destName}`);
+          }
         }
       })
       .catch((err) => {
@@ -159,7 +164,7 @@ export class Queue {
       .finally(() => this.#release(folder.def.name));
   }
 
-  #applyResults(folder, names, result) {
+  #applyResults(folder, names, result, { notifySuccess = true } = {}) {
     const { store, config, notify, log } = this.ctx;
     for (const name of names) {
       const file = store.fileFor(folder.def.name, name);
@@ -175,6 +180,13 @@ export class Queue {
           errorKind: null,
           nextRetryAt: 0,
         });
+        if (notifySuccess) {
+          const dest = result.destName ?? file.destName;
+          const summary = result.status === STATUS.DONE
+            ? `${name}${dest ? ` → ${dest}` : ""}`
+            : `${name} already in destination`;
+          notify.notify("info", `${folder.def.name}: ${summary}`);
+        }
       } else if (result.status === STATUS.CONFLICT) {
         store.updateFile(folder.def.name, name, {
           status: STATUS.CONFLICT,

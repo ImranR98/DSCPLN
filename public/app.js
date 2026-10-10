@@ -582,6 +582,12 @@
             field('ntfy URL', input('ntfyUrl', config.ntfy?.url ?? '')),
             field('ntfy token', input('ntfyToken', config.ntfy?.token ?? ''))))
 
+        const notifySuccess = el('sl-checkbox', { id: 'cfg-notify-success', size: 'small' },
+            'Notify when files are processed successfully')
+        notifySuccess.checked = config.ntfy?.notifySuccess !== false
+        body.append(el('div', { class: 'form-grid' },
+            el('div', { class: 'field field--wide' }, notifySuccess)))
+
         body.append(el('div', { class: 'form-grid' },
             el('div', { class: 'field field--wide' }, el('span', { class: 'field__label', text: 'Staging directory' }), input('stagingDir', config.stagingDir)),
             el('div', { class: 'field field--wide' }, el('span', { class: 'field__label', text: 'Trash directory' }), input('trashDir', config.trashDir))))
@@ -605,7 +611,12 @@
         config.settleSeconds = Number(fieldValue('settle'))
         config.stagingDir = fieldValue('stagingDir').trim()
         config.trashDir = fieldValue('trashDir').trim()
-        config.ntfy = { url: fieldValue('ntfyUrl').trim(), token: fieldValue('ntfyToken').trim() }
+        config.ntfy = {
+            ...state.data.config.ntfy,
+            url: fieldValue('ntfyUrl').trim(),
+            token: fieldValue('ntfyToken').trim(),
+            notifySuccess: $('#cfg-notify-success').checked,
+        }
         config.folders = [...document.querySelectorAll('#folderEditors .folder-edit')].map((editor) => {
             const get = (name) => editor.querySelector(`[data-field="${name}"]`).value
             return {

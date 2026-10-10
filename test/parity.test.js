@@ -10,7 +10,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(HERE, "..", "bin", "media-sync.js");
 const BASH_SCRIPT =
   process.env.MEDIA_SYNC_BASH_STANDARDIZE ??
-  path.join(os.homedir(), "Main/Code/Automation/backupctl/scripts/MediaDateStandardize/mediaDateStandardize.sh");
+  path.join(os.homedir(), "Main/Code/Archive/mediaDateStandardize/mediaDateStandardize.sh");
 
 function have(cmd) {
   try {

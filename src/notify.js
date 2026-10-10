@@ -1,17 +1,21 @@
 export class Notifier {
   constructor(config, log) {
-    this.url = config.ntfy?.url?.trim() ?? "";
-    this.token = config.ntfy?.token?.trim() ?? "";
     this.log = log;
+    this.url = "";
+    this.token = "";
+    this.notifySuccess = true;
+    this.setConfig(config);
   }
 
   setConfig(config) {
     this.url = config.ntfy?.url?.trim() ?? "";
     this.token = config.ntfy?.token?.trim() ?? "";
+    this.notifySuccess = config.ntfy?.notifySuccess ?? true;
   }
 
   async notify(level, message) {
     if (!this.url) return { ok: false, error: "no ntfy URL configured" };
+    if (level === "info" && !this.notifySuccess) return { ok: true, skipped: true };
     const priority = level === "error" ? "high" : level === "warn" ? "default" : "low";
     // HTTP header values are Latin-1, so the stylized "↑" can only live in the body.
     const headers = { Title: "Media Sync", Priority: priority };

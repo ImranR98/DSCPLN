@@ -86,12 +86,21 @@ async function makeSetup({ paused = false, settleSeconds = 0, dryRun = false } =
 test("e2e: watches, standardizes, copies to destination, and cleans up to trash", { skip: !CAN_RUN }, async () => {
   const { root, src, dest, daemon } = await makeSetup();
   try {
+    const notifications = [];
+    daemon.ctx.notify.notify = async (level, message) => {
+      notifications.push({ level, message });
+    };
     const file = path.join(src, "dated.jpg");
     makeJpeg(file);
     setTags(file, ["-DateTimeOriginal=2019:04:02 10:20:30", "-CreateDate=2019:04:02 10:20:30"]);
 
     const done = await waitFor(() => daemon.store.fileFor("camera", "dated.jpg")?.status === STATUS.DONE, 75_000);
     assert.equal(done, true, "file should be processed");
+    assert.equal(
+      notifications.some((n) => n.level === "info" && n.message.includes("dated.jpg") && n.message.includes("2019-04-02-10-20-30-(dated).jpg")),
+      true,
+      `expected a success notification, got: ${JSON.stringify(notifications)}`,
+    );
 
     const expected = "2019-04-02-10-20-30-(dated).jpg";
     const destFile = path.join(dest, expected);

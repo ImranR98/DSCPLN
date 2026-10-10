@@ -21,7 +21,7 @@ export function defaultConfig() {
     syncLockFile: "~/deviceSync/.media-sync.lock",
     lockHeartbeatSeconds: 300,
     lockStaleSeconds: 900,
-    ntfy: { url: "", token: "" },
+    ntfy: { url: "", token: "", notifySuccess: true },
     folders: [
       {
         name: "Camera",

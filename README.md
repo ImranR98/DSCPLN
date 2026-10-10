@@ -60,7 +60,7 @@ Paths accept `~` and environment variables. Key fields:
 | `stagingDir` / `trashDir` | working area (same filesystem as destinations for atomic renames) and cleaned-original storage |
 | `trashRetentionDays` | days before trash is swept |
 | `concurrency` | parallel jobs (per-folder jobs are serialized) |
-| `ntfy` | optional `{url, token}` for error notifications |
+| `ntfy` | optional `{url, token, notifySuccess}`; failures always notify, successes notify unless `notifySuccess` is off |
 | `paused` / `dryRun` | persisted toggles |
 
 ## CLI

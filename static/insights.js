@@ -822,24 +822,6 @@ function buildForecast(code, excluded, chartPlan) {
     const today = dates.startOfDay(new Date())
     const includesToday = state.range.start <= today && state.range.end >= today
 
-    if (includesToday) {
-        const monthStart = IM.startOfMonth(today)
-        const monthTxs = state.transactions.filter((transaction) =>
-            transaction.currency === code &&
-            transaction.date >= IM.toIsoDate(monthStart) &&
-            transaction.date <= IM.toIsoDate(today) &&
-            !excluded.has(transaction.category))
-        const monthTotals = IM.totals(monthTxs)
-        const daysInMonth = IM.endOfMonth(today).getDate()
-        const elapsed = Math.max(1, today.getDate())
-        const projected = IM.projectMonthEnd({
-            spend: monthTotals.spend, income: monthTotals.income, elapsedDays: elapsed, daysInMonth,
-        })
-        const method = 'Straight-line projection: month-to-date figures scaled to the full month.'
-        wrap.appendChild(forecastRow('Projected month-end spend (month to date)', money(projected.spend, code), method))
-        wrap.appendChild(forecastRow('Projected month-end income (month to date)', money(projected.income, code), method))
-    }
-
     if (chartPlan.windows.length > 0 && chartPlan.days > 0) {
         const windowTxs = chartPlan.windows.flatMap((window) => transactionsIn(code, window, excluded))
         const windowTotals = IM.totals(windowTxs)

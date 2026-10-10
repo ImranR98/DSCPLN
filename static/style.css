@@ -1813,6 +1813,12 @@ sl-button.icon-button--small::part(base) {
     height: 1.9rem;
 }
 
+sl-button.icon-button--danger:hover::part(base) {
+    color: var(--over);
+    border-color: color-mix(in srgb, var(--over) 40%, var(--border));
+    background: var(--over-soft);
+}
+
 .icon-button.is-spinning svg {
     animation: spin 0.6s linear;
 }

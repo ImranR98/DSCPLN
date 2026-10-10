@@ -181,12 +181,6 @@
         return { spend: average('spend'), income: average('income') }
     }
 
-    // Projects the month total by scaling the amount so far to the full month.
-    function projectMonthEnd({ spend, income, elapsedDays, daysInMonth }) {
-        const factor = elapsedDays > 0 ? daysInMonth / elapsedDays : 0
-        return { spend: clean(spend * factor), income: clean(income * factor) }
-    }
-
     // The last `count` complete calendar months ending with the month before date.
     function lastCompleteMonths(count, date) {
         const end = new Date(date.getFullYear(), date.getMonth(), 0)
@@ -349,7 +343,6 @@
         dailySeries,
         resampleSeries,
         baselineFromPlan,
-        projectMonthEnd,
         categoryMovers,
         lastCompleteMonths,
         shiftMonths,

@@ -323,14 +323,17 @@ function buildCurrencyCard(currency) {
     },
         el('div', { class: 'currency-card__header' },
             el('span', { class: 'currency-badge' }, code),
-            el('button', {
-                type: 'button',
-                class: 'icon-button icon-button--small',
-                title: `Edit ${code} budget`,
-                'aria-label': `Edit ${code} budget`,
-                innerHTML: icons.edit,
-                onclick: () => openBudgetDialog(code),
-            })),
+            (() => {
+                const edit = el('sl-button', {
+                    size: 'small',
+                    class: 'icon-button icon-button--small',
+                    title: `Edit ${code} budget`,
+                    'aria-label': `Edit ${code} budget`,
+                })
+                edit.innerHTML = icons.edit
+                edit.addEventListener('click', () => openBudgetDialog(code))
+                return edit
+            })()),
         el('p', { class: 'currency-card__figure' },
             breakable('currency-card__spend', money(spent, code)),
             breakable('currency-card__budget', budget > 0 ? `of ${money(budget, code)}` : 'no budget')),

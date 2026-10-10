@@ -1216,21 +1216,15 @@ details.card[open] > summary::after {
     .layout {
         grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
         gap: var(--space-4);
+        align-items: start;
     }
 
     .layout__main {
         grid-column: 1;
-        grid-row: 1;
     }
 
     .layout__side {
         grid-column: 2;
-        grid-row: 1 / span 2;
-    }
-
-    #historyCard {
-        grid-column: 1;
-        grid-row: 2;
     }
 }
 

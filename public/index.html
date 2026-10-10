@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Media ingestion watcher">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0b0f15" media="(prefers-color-scheme: dark)">
+    <title>Media Sync</title>
+    <link rel="icon"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232f6fed'/%3E%3Ctext x='32' y='46' font-size='36' text-anchor='middle' fill='white' font-family='sans-serif'%3E↑%3C/text%3E%3C/svg%3E">
+    <script src="theme-boot.js"></script>
+    <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/vendor/shoelace/theme-light.css">
+    <link rel="stylesheet" href="/vendor/shoelace/theme-dark.css">
+    <link rel="stylesheet" href="style.css">
+    <script type="module" src="/vendor/shoelace/shoelace.js"></script>
+</head>
+
+<body>
+
+    <header class="app-header">
+        <div class="app-header__top">
+            <h1>Media Sync<span class="accent">↑</span>ZE</h1>
+            <div class="app-header__actions">
+                <sl-button id="pauseButton" size="small" circle data-action="pause"
+                    title="Pause processing"></sl-button>
+                <sl-button id="dryRunButton" size="small" circle data-action="dry-run"
+                    title="Toggle dry-run mode"></sl-button>
+                <sl-button id="settingsButton" size="small" circle data-action="settings"
+                    title="Settings"></sl-button>
+                <sl-button id="refreshButton" size="small" circle title="Refresh"></sl-button>
+                <sl-button id="themeButton" size="small" circle></sl-button>
+            </div>
+        </div>
+        <div class="app-header__meta">
+            <span id="statusTag" class="status-tag"><span>live</span></span>
+            <span class="app-header__meta-tools">
+                <span id="countsLabel" class="muted"></span>
+                <span id="updatedLabel" class="muted"></span>
+            </span>
+        </div>
+    </header>
+
+    <main>
+        <section class="card card--hero" id="overviewCard" aria-labelledby="overviewHeading">
+            <div class="card__header">
+                <h2 id="overviewHeading">Overview</h2>
+                <span class="card__header-tools">
+                    <span id="overviewContext" class="card__context"></span>
+                </span>
+            </div>
+            <div class="overview__grid">
+                <div class="stat-tile">
+                    <span class="stat-tile__label">Pending</span>
+                    <span id="ovPending" class="stat-tile__value">—</span>
+                </div>
+                <div class="stat-tile">
+                    <span class="stat-tile__label">Processing</span>
+                    <span id="ovProcessing" class="stat-tile__value">—</span>
+                </div>
+                <div class="stat-tile">
+                    <span class="stat-tile__label">Processed</span>
+                    <span id="ovProcessed" class="stat-tile__value">—</span>
+                </div>
+                <div class="stat-tile">
+                    <span class="stat-tile__label">Issues</span>
+                    <span id="ovIssues" class="stat-tile__value">—</span>
+                </div>
+                <div class="stat-tile">
+                    <span class="stat-tile__label">Trash</span>
+                    <span id="ovTrash" class="stat-tile__value">—</span>
+                </div>
+            </div>
+            <div class="overview__actions">
+                <sl-button size="small" data-action="trash">Trash</sl-button>
+                <sl-button id="cleanupAllButton" size="small" variant="primary" data-action="cleanup-all">Cleanup
+                    all</sl-button>
+            </div>
+        </section>
+
+        <div id="folderGrid" class="folder-grid"></div>
+
+        <div class="side-grid">
+            <section class="card" id="trashCard" aria-labelledby="trashHeading">
+                <div class="card__header">
+                    <h2 id="trashHeading">Trash</h2>
+                    <span class="card__header-tools">
+                        <span id="trashContext" class="card__context"></span>
+                        <sl-button size="small" circle data-action="refresh-trash" title="Refresh trash"></sl-button>
+                    </span>
+                </div>
+                <ul id="trashList" class="trash__list" hidden></ul>
+                <p id="trashEmpty" class="muted files-empty">Trash is empty.</p>
+                <sl-button id="emptyTrashButton" size="small" variant="danger" data-action="empty-trash" hidden>Empty
+                    trash</sl-button>
+            </section>
+
+            <section class="card" id="activityCard" aria-labelledby="activityHeading">
+                <div class="card__header">
+                    <h2 id="activityHeading">Activity</h2>
+                    <span class="card__header-tools">
+                        <sl-button size="small" circle data-action="refresh-log" title="Refresh log"></sl-button>
+                    </span>
+                </div>
+                <pre id="activityLog" class="code-block activity-log"></pre>
+            </section>
+        </div>
+    </main>
+
+    <sl-dialog id="cleanupDialog" label="Cleanup" class="wide-dialog">
+        <p id="cleanupHint" class="hint"></p>
+        <sl-checkbox id="cleanupAll" checked>Select all</sl-checkbox>
+        <div id="cleanupList" class="checklist"></div>
+        <div slot="footer" class="dialog-actions">
+            <sl-button id="cleanupCancel">Cancel</sl-button>
+            <sl-button id="cleanupConfirm" variant="danger">Move to trash</sl-button>
+        </div>
+    </sl-dialog>
+
+    <sl-dialog id="settingsDialog" label="Settings" class="wide-dialog">
+        <p class="hint">Changes are written back to the config file and applied immediately. The bind host and port
+            are fixed at deploy time.</p>
+        <div id="settingsBody"></div>
+        <div slot="footer" class="dialog-actions">
+            <sl-button id="settingsCancel">Cancel</sl-button>
+            <sl-button id="settingsSave" variant="primary">Save</sl-button>
+        </div>
+    </sl-dialog>
+
+    <sl-dialog id="setDateDialog" label="Set date" class="narrow-dialog">
+        <p class="hint">The copy will be standardized with this date and placed in the destination.</p>
+        <div class="native-fields">
+            <label class="native-field">
+                <span class="field__label">Date</span>
+                <input id="setDateValue" type="date" required>
+            </label>
+            <label class="native-field">
+                <span class="field__label">Time</span>
+                <input id="setDateTime" type="time" value="00:00">
+            </label>
+        </div>
+        <p id="setDateError" class="form-error" hidden></p>
+        <div slot="footer" class="dialog-actions">
+            <sl-button id="setDateCancel">Cancel</sl-button>
+            <sl-button id="setDateSubmit" variant="primary">Standardize</sl-button>
+        </div>
+    </sl-dialog>
+
+    <sl-dialog id="confirmDialog" label="Confirm" class="narrow-dialog">
+        <p id="confirmText" class="muted"></p>
+        <div slot="footer" class="dialog-actions">
+            <sl-button id="confirmCancel">Cancel</sl-button>
+            <sl-button id="confirmButton" variant="danger">Confirm</sl-button>
+        </div>
+    </sl-dialog>
+
+    <sl-dialog id="reportDialog" label="Report" class="wide-dialog">
+        <div id="reportList" class="checklist"></div>
+        <div slot="footer" class="dialog-actions">
+            <sl-button id="reportClose" variant="primary">Close</sl-button>
+        </div>
+    </sl-dialog>
+
+    <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+
+    <script src="core.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>

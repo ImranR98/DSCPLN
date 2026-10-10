@@ -51,12 +51,12 @@ bctl_first_glob() {  # PATTERN — print first match (e.g. MTP mounts)
   return 0
 }
 
-bctl_process_and_move() {  # SRC DEST PROCESS_SCRIPT [keep_originals]
-  # Copy SRC's files to a temp dir, run the process script once on it,
-  # move the results into DEST, delete the originals (unless kept).
-  local src="$1" dest="$2" proc="$3" keep="${4:-0}"
+bctl_standardize_into() {  # SRC DEST MEDIA_SYNC_CLI
+  # Copy SRC's files to a temp dir, standardize them with the media-sync CLI,
+  # and move the results into DEST (originals are left in place).
+  local src="$1" dest="$2" cli="$3"
   local tmp f found=0
-  tmp=$(mktemp -d -t bctl_pam.XXXXXX)
+  tmp=$(mktemp -d -t bctl_std.XXXXXX)
   for f in "$src"/*; do
     [[ -f "$f" ]] || continue
     cp -p "$f" "$tmp/$(basename "$f")"
@@ -68,8 +68,8 @@ bctl_process_and_move() {  # SRC DEST PROCESS_SCRIPT [keep_originals]
     return 0
   fi
   mkdir -p "$dest"
-  if ! bash "$proc" "$tmp"; then
-    log "Processing script failed for $src" >&2
+  if ! node "$cli" standardize "$tmp"; then
+    log "Standardize failed for $src" >&2
     rm -rf "$tmp"
     return 1
   fi
@@ -77,20 +77,18 @@ bctl_process_and_move() {  # SRC DEST PROCESS_SCRIPT [keep_originals]
     mv "$f" "$dest/$(basename "$f")"
   done
   rm -rf "$tmp"
-  if [[ $keep -eq 0 ]]; then
-    rm -f "$src"/*
-  fi
 }
 
-bctl_import_pair() {  # SRC DEST STD_DIR — deleteSynced + standardize + move
-  local src="$1" dest="$2" stddir="$3"
+bctl_import_pair() {  # SRC DEST MEDIA_SYNC_CLI — clean already-synced + standardize + move + delete originals
+  local src="$1" dest="$2" cli="$3"
   if [[ ! -d "$src" ]]; then
     log "Missing source dir: $src"
     return 0
   fi
-  bash "$stddir/deleteSynced.sh" "$src" "$dest"
+  node "$cli" clean-synced --delete "$src" "$dest"
   log "Importing $(basename "$src") → $dest..."
-  bctl_process_and_move "$src" "$dest" "$stddir/mediaDateStandardize.sh"
+  bctl_standardize_into "$src" "$dest" "$cli"
+  find "$src" -maxdepth 1 -type f -delete
 }
 
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then

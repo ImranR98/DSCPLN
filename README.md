@@ -52,7 +52,7 @@ There are no hard-coded task types — **every task is a `commands` list of bash
 bash '{{lib}}' move --git --rename bookmarks.html '{{maindir}}/Manual' {{uploads}}
 ```
 
-or by sourcing it inside a `script:` for anything with logic (media import with snapshot/standardize/delete-originals, ...). The library's functions (`bctl_extract`, `bctl_rsync`, `bctl_git_commit`, `bctl_process_and_move`, `bctl_import_pair`, ...) and subcommands (`move`, `copy`, `encrypt`, `ingest`, `git-commit`, `validate-fresh`, `prune-exports`) are rc-checked under `set -e`.
+or by sourcing it inside a `script:` for anything with logic (Quest media import, WhatsApp archiving, ...). The library's functions (`bctl_extract`, `bctl_rsync`, `bctl_git_commit`, `bctl_standardize_into`, `bctl_import_pair`, ...) and subcommands (`move`, `copy`, `encrypt`, `ingest`, `git-commit`, `validate-fresh`, `prune-exports`) are rc-checked under `set -e`.
 
 | Subcommand | Behavior |
 |---|---|
@@ -64,7 +64,7 @@ or by sourcing it inside a `script:` for anything with logic (media import with 
 | `validate-fresh DIR [MAX_AGE_SECONDS]` | fail unless the newest export dir (by name) is non-empty and modified within the max age |
 | `prune-exports DIR [--keep-newer]` | delete all but the newest export dir; `--keep-newer` keeps any dir with more files than the newest |
 
-Sourceable functions: `bctl_extract` (unzip/tar), `bctl_rsync`/`bctl_rsync_delete` (rsync -aq with optional --delete), `bctl_git_commit DIR [MSG]` (state files excluded; empty commits tolerated), `bctl_process_and_move SRC DEST SCRIPT [keep]` (copy to a temp dir, run the standardize script once, move results to dest, delete originals unless kept), `bctl_import_pair SRC DEST STD_DIR` (deleteSynced + standardize + move — the phone/Quest media import flow), `bctl_first_glob PATTERN` (first match, e.g. MTP mounts), `bctl_export_dirs ROOT` (export dirs sorted by name).
+Sourceable functions: `bctl_extract` (unzip/tar), `bctl_rsync`/`bctl_rsync_delete` (rsync -aq with optional --delete), `bctl_git_commit DIR [MSG]` (state files excluded; empty commits tolerated), `bctl_standardize_into SRC DEST MEDIA_SYNC_CLI` (copy to a temp dir, standardize via the Media Sync CLI, move results to dest, keep originals), `bctl_import_pair SRC DEST MEDIA_SYNC_CLI` (clean already-synced + standardize + move + delete originals — the Quest media import flow), `bctl_first_glob PATTERN` (first match, e.g. MTP mounts), `bctl_export_dirs ROOT` (export dirs sorted by name).
 
 Service-specific concerns — installing a CLI, validating an export is fresh, pruning old exports — are plain bash in the task's `commands` (see the ProtonMail task for the full pattern: install-if-missing → export → `validate-fresh` → `prune-exports`).
 

@@ -4,9 +4,6 @@
 [submodule "scripts/WineGameSaveBackup"]
 	path = scripts/WineGameSaveBackup
 	url = git@github.com:ImranR98/WineGameSaveBackup.git
-[submodule "scripts/MediaDateStandardize"]
-	path = scripts/MediaDateStandardize
-	url = git@github.com:ImranR98/mediaDateStandardize.git
 [submodule "scripts/BrokeETL"]
 	path = scripts/BrokeETL
 	url = git@github.com:ImranR98/BrokeETL.git
@@ -19,6 +16,3 @@
 [submodule "scripts/YTMusicDL"]
 	path = scripts/YTMusicDL
 	url = git@github.com:ImranR98/YTMusicDL.git
-[submodule "scripts/mediaConcat"]
-	path = scripts/mediaConcat
-	url = git@github.com:ImranR98/mediaConcat.git

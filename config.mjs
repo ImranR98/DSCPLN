@@ -19,6 +19,7 @@ export default {
   maindir: '~/Main',                              // root of all backup data
   manual_dir: '{{maindir}}/Backups/Manual',       // small one-shot exports, git-committed
   scriptroot: '{{repo_dir}}/scripts',             // git submodules with personal scripts
+  media-sync_cli: '{{repo_dir}}/../media-sync/bin/media-sync.js', // Media Sync CLI (replaces the bash scripts)
   quest_root: '/run/user/1000/gvfs/mtp:host=Oculus_Quest_*/Internal shared storage',
 
   hosts: {
@@ -216,7 +217,7 @@ for d in 'WhatsApp Images' 'WhatsApp Video' 'WhatsApp Video Notes'; do
   bctl_rsync "$src/" "$out"
   for child in "$src"/*/; do
     [[ -d "$child" ]] || continue
-    bctl_process_and_move "$child" "$out" '{{scriptroot}}/MediaDateStandardize/mediaDateStandardize.sh' 1
+    bctl_standardize_into "$child" "$out" '{{media-sync_cli}}'
   done
 done
 
@@ -230,8 +231,8 @@ if [[ -d "$src" ]]; then
     [[ -d "$child" ]] || continue
     processed="$child/processed"
     mkdir -p "$processed"
-    bash '{{scriptroot}}/mediaConcat/concatAudio.sh' "$child" "$processed"
-    bash '{{scriptroot}}/MediaDateStandardize/mediaDateStandardize.sh' "$processed"
+    node '{{media-sync_cli}}' concataudio "$child" "$processed"
+    node '{{media-sync_cli}}' standardize "$processed"
     for f in "$processed"/*; do mv "$f" "$out/$(basename "$f")"; done
     rm -rf "$processed"
   done
@@ -312,7 +313,7 @@ log "Import completed; originals deleted"
           commands: [
             '[ -f \'{{scriptroot}}/InstacartFlation/venv/bin/activate\' ] || python3 -m venv \'{{scriptroot}}/InstacartFlation/venv\'',
             'source \'{{scriptroot}}/InstacartFlation/venv/bin/activate\' && pip install --upgrade -r \'{{scriptroot}}/InstacartFlation/requirements.txt\'',
-            'source \'{{scriptroot}}/InstacartFlation/venv/bin/activate\' && {{scriptroot}}/InstacartFlation/backup.sh {{maindir}}/Backups/Instacart {{maindir}}/Media/Camera "{{scriptroot}}/MediaDateStandardize/mediaDateStandardize.sh -n" --after "$(date -d \'4 months ago\' \'+%Y-%m-%d %H:%M\')"',
+            'source \'{{scriptroot}}/InstacartFlation/venv/bin/activate\' && {{scriptroot}}/InstacartFlation/backup.sh {{maindir}}/Backups/Instacart {{maindir}}/Media/Camera "node \'{{media-sync_cli}}\' standardize -n" --after "$(date -d \'4 months ago\' \'+%Y-%m-%d %H:%M\')"',
           ],
         },
       ],
@@ -321,36 +322,6 @@ log "Import completed; originals deleted"
     {
       name: 'Media and Files',
       tasks: [
-        // Import and standardize media from the synced phone folders (requires
-        // phone sync to be running).
-        {
-          name: 'Media Import',
-          summary_last_line: true,
-          state_dir: '{{maindir}}/Media',
-          root: '~/deviceSync',
-          note: 'Imports and standardizes media from the synced phone folders. Requires phone sync to be running.',
-          script: `source '{{lib}}'
-SRC="$HOME/deviceSync"
-STD='{{scriptroot}}/MediaDateStandardize'
-
-bctl_import_pair "$SRC/DCIM/Camera" '{{maindir}}/Media/Camera' "$STD"
-bctl_import_pair "$SRC/Screenshots" '{{maindir}}/Media/Screenshots' "$STD"
-bctl_import_pair "$SRC/ScreenRecs" '{{maindir}}/Media/Screenshots' "$STD"
-
-# Snapchat: concatenate clips first (parking the originals), then import
-if [[ -d "$SRC/DCIM/Snapchat" ]]; then
-  bash '{{scriptroot}}/mediaConcat/snapsPre.sh' "$SRC/DCIM/Snapchat" "$HOME/Downloads/snaps_original_deletable"
-  bctl_import_pair "$SRC/DCIM/Snapchat" '{{maindir}}/Media/Camera' "$STD"
-fi
-
-# call recordings: plain move, no processing
-DEST='{{maindir}}/Media/Recordings/Call Recorder'
-mkdir -p "$DEST"
-for f in "$SRC/Calls"/*; do mv "$f" "$DEST/$(basename "$f")"; done
-log "Media import completed"
-`,
-        },
-
         // Run the backup script on bigpc over SSH and pull the results down.
         {
           name: 'Wine Game Save Files',
@@ -385,8 +356,8 @@ log "Media import completed"
           script: `source '{{lib}}'
 SRC=$(bctl_first_glob '{{quest_root}}')
 [[ -n "$SRC" ]] || { log "Source directory not found" >&2; exit 1; }
-bctl_import_pair "$SRC/Oculus/Screenshots" '{{maindir}}/Media/Camera' '{{scriptroot}}/MediaDateStandardize'
-bctl_import_pair "$SRC/Oculus/VideoShots" '{{maindir}}/Media/Camera' '{{scriptroot}}/MediaDateStandardize'
+bctl_import_pair "$SRC/Oculus/Screenshots" '{{maindir}}/Media/Camera' '{{media-sync_cli}}'
+bctl_import_pair "$SRC/Oculus/VideoShots" '{{maindir}}/Media/Camera' '{{media-sync_cli}}'
 log "Media import completed"
 `,
         },

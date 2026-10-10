@@ -104,7 +104,7 @@ test("e2e: watches, standardizes, copies to destination, and cleans up to trash"
     assert.equal(await fsp.stat(file).then(() => true).catch(() => false), false, "original should be gone after cleanup");
     const trashEntries = await fsp.readdir(daemon.ctx.config.trashDir);
     assert.equal(trashEntries.length, 1, "trash should have a day dir");
-    const trashed = await fsp.readdir(path.join(daemon.ctx.config.trashDir, trashEntries[0]));
+    const trashed = (await fsp.readdir(path.join(daemon.ctx.config.trashDir, trashEntries[0]))).filter((n) => !n.startsWith("."));
     assert.deepEqual(trashed, ["dated.jpg"]);
     assert.equal(await fsp.stat(destFile).then(() => true).catch(() => false), true, "destination must survive cleanup");
   } finally {

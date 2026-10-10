@@ -25,14 +25,14 @@
         <div class="app-header__top">
             <h1>Media Sync<span class="accent">↑</span>ZE</h1>
             <div class="app-header__actions">
-                <sl-button id="pauseButton" size="small" circle data-action="pause"
+                <sl-button id="pauseButton" size="small" class="icon-button" data-action="pause"
                     title="Pause processing"></sl-button>
-                <sl-button id="dryRunButton" size="small" circle data-action="dry-run"
+                <sl-button id="dryRunButton" size="small" class="icon-button" data-action="dry-run"
                     title="Toggle dry-run mode"></sl-button>
-                <sl-button id="settingsButton" size="small" circle data-action="settings"
+                <sl-button id="settingsButton" size="small" class="icon-button" data-action="settings"
                     title="Settings"></sl-button>
-                <sl-button id="refreshButton" size="small" circle title="Refresh"></sl-button>
-                <sl-button id="themeButton" size="small" circle></sl-button>
+                <sl-button id="refreshButton" size="small" class="icon-button" title="Refresh"></sl-button>
+                <sl-button id="themeButton" size="small" class="icon-button"></sl-button>
             </div>
         </div>
         <div class="app-header__meta">
@@ -89,20 +89,25 @@
                     <h2 id="trashHeading">Trash</h2>
                     <span class="card__header-tools">
                         <span id="trashContext" class="card__context"></span>
-                        <sl-button size="small" circle data-action="refresh-trash" title="Refresh trash"></sl-button>
+                        <sl-button size="small" class="icon-button" data-action="refresh-trash" title="Refresh trash"></sl-button>
                     </span>
                 </div>
-                <ul id="trashList" class="trash__list" hidden></ul>
+                <sl-checkbox id="trashSelectAll" size="small" hidden>Select all</sl-checkbox>
+                <div id="trashList" class="trash__list" hidden></div>
                 <p id="trashEmpty" class="muted files-empty">Trash is empty.</p>
-                <sl-button id="emptyTrashButton" size="small" variant="danger" data-action="empty-trash" hidden>Empty
-                    trash</sl-button>
+                <div class="trash-actions">
+                    <sl-button id="trashRestoreSelected" size="small" variant="primary" data-action="trash-restore-selected"
+                        hidden>Restore selected</sl-button>
+                    <sl-button id="emptyTrashButton" size="small" variant="danger" data-action="empty-trash" hidden>Empty
+                        trash</sl-button>
+                </div>
             </section>
 
             <section class="card" id="activityCard" aria-labelledby="activityHeading">
                 <div class="card__header">
                     <h2 id="activityHeading">Activity</h2>
                     <span class="card__header-tools">
-                        <sl-button size="small" circle data-action="refresh-log" title="Refresh log"></sl-button>
+                        <sl-button size="small" class="icon-button" data-action="refresh-log" title="Refresh log"></sl-button>
                     </span>
                 </div>
                 <pre id="activityLog" class="code-block activity-log"></pre>
@@ -146,6 +151,22 @@
         <div slot="footer" class="dialog-actions">
             <sl-button id="setDateCancel">Cancel</sl-button>
             <sl-button id="setDateSubmit" variant="primary">Standardize</sl-button>
+        </div>
+    </sl-dialog>
+
+    <sl-dialog id="restoreDialog" label="Restore files" class="narrow-dialog">
+        <p class="hint">Files with a recorded origin return to their original folder. Files without one are restored to
+            the directory you enter here.</p>
+        <div class="native-fields">
+            <label class="native-field">
+                <span class="field__label">Restore directory</span>
+                <input id="restoreDir" type="text" placeholder="/path/to/folder" autocomplete="off">
+            </label>
+        </div>
+        <p id="restoreError" class="form-error" hidden></p>
+        <div slot="footer" class="dialog-actions">
+            <sl-button id="restoreCancel">Cancel</sl-button>
+            <sl-button id="restoreConfirm" variant="primary">Restore</sl-button>
         </div>
     </sl-dialog>
 

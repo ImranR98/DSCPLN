@@ -109,6 +109,40 @@ test("api: health, state, pause, process-now, config validation", async () => {
   }
 });
 
+test("api: trash listing exposes files and restore moves them back", async () => {
+  const { root, daemon, base } = await makeDaemon();
+  try {
+    const day = "2020-01-02";
+    const dir = path.join(daemon.config.trashDir, day);
+    await fsp.mkdir(dir, { recursive: true });
+    await fsp.writeFile(path.join(dir, "photo.jpg"), "data");
+    await fsp.writeFile(
+      path.join(dir, ".manifest.json"),
+      JSON.stringify({ files: { "photo.jpg": { originalName: "photo.jpg", sourceDir: path.join(root, "origin"), folder: "Camera" } } }),
+    );
+
+    const listing = await (await fetch(`${base}/api/trash`)).json();
+    assert.equal(listing.entries.length, 1);
+    assert.equal(listing.entries[0].count, 1);
+    assert.equal(listing.entries[0].files[0].name, "photo.jpg");
+    assert.equal(listing.entries[0].files[0].folder, "Camera");
+
+    const restore = await (await fetch(`${base}/api/trash/restore`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files: [{ day, name: "photo.jpg" }] }),
+    })).json();
+    assert.equal(restore.results[0].ok, true);
+    assert.equal(await fsp.readFile(path.join(root, "origin", "photo.jpg"), "utf8"), "data");
+
+    const after = await (await fetch(`${base}/api/trash`)).json();
+    assert.deepEqual(after.entries, []);
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
 test("api: ntfy test endpoint posts to the supplied URL", async () => {
   const { root, daemon, base } = await makeDaemon();
   const received = [];

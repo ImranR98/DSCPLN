@@ -2,7 +2,7 @@ import http from "node:http";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { cleanupFiles, cleanupPreview, emptyTrash, listTrash } from "./cleanup.js";
+import { cleanupFiles, cleanupPreview, emptyTrash, listTrash, restoreTrashFiles } from "./cleanup.js";
 import { runAction } from "./actions.js";
 import { Notifier } from "./notify.js";
 
@@ -224,6 +224,13 @@ export class ApiServer {
 
     if (method === "GET" && pathname === "/api/trash") {
       return json(res, 200, { entries: await listTrash(this.daemon.ctx) });
+    }
+
+    if (method === "POST" && pathname === "/api/trash/restore") {
+      const body = await readBody(req);
+      const targetDir = body.targetDir ? String(body.targetDir).trim() : null;
+      const results = await restoreTrashFiles(this.daemon.ctx, body.files, { targetDir });
+      return json(res, 200, { results });
     }
 
     if (method === "POST" && pathname === "/api/trash/empty") {

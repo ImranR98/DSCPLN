@@ -49,14 +49,13 @@
         return node
     }
 
-    const iconButton = (icon, title, action, dataset = {}, extra = {}) => {
+    const iconButton = (icon, title, action, dataset = {}, { small = false } = {}) => {
         const node = el('sl-button', {
             size: 'small',
-            circle: true,
+            class: `icon-button${small ? ' icon-button--small' : ''}`,
             title,
             'aria-label': title,
             dataset: { action, ...dataset },
-            ...extra,
         })
         node.innerHTML = icon
         return node
@@ -135,14 +134,14 @@
     function fileActions(folder, file) {
         const actions = []
         if (file.status === 'error' || file.status === 'conflict') {
-            actions.push(iconButton(icons.retry, 'Retry', 'file-retry', { folder: folder.name, file: file.name }))
+            actions.push(iconButton(icons.retry, 'Retry', 'file-retry', { folder: folder.name, file: file.name }, { small: true }))
         }
         if (file.status === 'error') {
-            actions.push(iconButton(icons.wrench, 'Repair (ffmpeg remux)', 'file-repair', { folder: folder.name, file: file.name }))
-            actions.push(iconButton(icons.calendar, 'Set date and retry', 'file-setdate', { folder: folder.name, file: file.name }))
+            actions.push(iconButton(icons.wrench, 'Repair (ffmpeg remux)', 'file-repair', { folder: folder.name, file: file.name }, { small: true }))
+            actions.push(iconButton(icons.calendar, 'Set date and retry', 'file-setdate', { folder: folder.name, file: file.name }, { small: true }))
         }
         if (file.status === 'error' || file.status === 'conflict' || file.status === 'pending') {
-            actions.push(iconButton(icons.import, 'Import as-is', 'file-import', { folder: folder.name, file: file.name }))
+            actions.push(iconButton(icons.import, 'Import as-is', 'file-import', { folder: folder.name, file: file.name }, { small: true }))
         }
         return el('div', { class: 'file__actions' }, actions)
     }
@@ -277,18 +276,53 @@
 
     /* ---------- panels ---------- */
 
+    let trashIndex = new Map()
+
+    const selectedTrashItems = () =>
+        [...document.querySelectorAll('#trashList sl-checkbox')]
+            .filter((box) => box.checked)
+            .map((box) => ({ day: box.dataset.day, name: box.dataset.name }))
+
+    function updateTrashSelection() {
+        const count = selectedTrashItems().length
+        const button = $('#trashRestoreSelected')
+        button.textContent = count > 0 ? `Restore selected (${count})` : 'Restore selected'
+        button.toggleAttribute('disabled', count === 0)
+    }
+
     async function refreshTrash() {
         const { entries } = await requestJson('/api/trash')
-        const totalFiles = entries.reduce((sum, entry) => sum + entry.files, 0)
+        const totalFiles = entries.reduce((sum, entry) => sum + entry.count, 0)
         const totalBytes = entries.reduce((sum, entry) => sum + entry.bytes, 0)
+        trashIndex = new Map()
         const list = $('#trashList')
         list.textContent = ''
-        list.append(...entries.map((entry) => el('li', { class: 'trash__row' },
-            el('span', { text: entry.day }),
-            el('span', { class: 'trash__meta', text: `${entry.files} file${entry.files === 1 ? '' : 's'} · ${formatBytes(entry.bytes)}` }))))
+        for (const entry of entries) {
+            const details = el('sl-details', {
+                class: 'trash__day',
+                summary: `${entry.day} · ${entry.count} file${entry.count === 1 ? '' : 's'} · ${formatBytes(entry.bytes)}`,
+            })
+            for (const file of entry.files.slice(0, 300)) {
+                trashIndex.set(`${entry.day}/${file.name}`, file)
+                const origin = file.folder ?? file.sourceDir ?? 'origin unknown'
+                details.append(el('div', { class: 'checklist__row' },
+                    el('sl-checkbox', { size: 'small', dataset: { day: entry.day, name: file.name } }),
+                    el('span', { class: 'checklist__main', text: file.name }),
+                    el('span', { class: 'checklist__meta', text: `${formatBytes(file.size)} · ${origin}` }),
+                    iconButton(icons.restore, 'Restore this file', 'trash-restore', { day: entry.day, name: file.name }, { small: true })))
+            }
+            if (entry.count > 300) {
+                details.append(el('p', { class: 'muted files-empty', text: `… and ${entry.count - 300} more` }))
+            }
+            list.append(details)
+        }
         list.hidden = entries.length === 0
         $('#trashEmpty').hidden = entries.length > 0
+        $('#trashSelectAll').hidden = entries.length === 0
+        $('#trashSelectAll').checked = false
         $('#emptyTrashButton').hidden = entries.length === 0
+        $('#trashRestoreSelected').hidden = entries.length === 0
+        updateTrashSelection()
         $('#trashContext').textContent = `keeping ${state.data ? state.data.trashRetentionDays : '?'} days`
         const trashTile = $('#ovTrash')
         trashTile.textContent = totalFiles > 0 ? formatBytes(totalBytes) : '—'
@@ -470,6 +504,47 @@
         }
     })
 
+    /* ---------- trash restore ---------- */
+
+    const restoreDialog = $('#restoreDialog')
+    let pendingRestore = null
+
+    function openRestore(items) {
+        pendingRestore = items
+        $('#restoreDir').value = ''
+        $('#restoreError').hidden = true
+        restoreDialog.show()
+    }
+
+    async function restoreItems(items, targetDir) {
+        const { results } = await requestJson('/api/trash/restore', {
+            method: 'POST',
+            body: JSON.stringify({ files: items, targetDir: targetDir || null }),
+        })
+        const ok = results.filter((result) => result.ok).length
+        const failed = results.filter((result) => !result.ok)
+        showToast(toastContainer, `Restored ${ok} file(s).`, failed.length ? 'error' : 'success')
+        if (failed.length > 0) {
+            showReport('Restore finished with issues', failed.map((f) => ({ name: f.name, reason: f.reason })))
+        }
+        await refreshTrash()
+        await refreshLog()
+    }
+
+    $('#restoreCancel').addEventListener('click', () => restoreDialog.hide())
+    $('#restoreConfirm').addEventListener('click', async () => {
+        const dir = $('#restoreDir').value.trim()
+        if (!dir) {
+            $('#restoreError').textContent = 'Enter a directory first.'
+            $('#restoreError').hidden = false
+            return
+        }
+        const items = pendingRestore ?? []
+        pendingRestore = null
+        restoreDialog.hide()
+        await restoreItems(items, dir)
+    })
+
     /* ---------- settings ---------- */
 
     const settingsDialog = $('#settingsDialog')
@@ -480,7 +555,7 @@
         const editor = el('div', { class: 'folder-edit' })
         editor.append(el('div', { class: 'folder-edit__head' },
             el('h3', { text: folder.name || 'New folder' }),
-            iconButton(icons.close, 'Remove this folder', 'remove-folder')))
+            iconButton(icons.close, 'Remove this folder', 'remove-folder', {}, { small: true })))
         editor.append(el('div', { class: 'form-grid' },
             field('Name', input('name', folder.name)),
             field('Source', input('source', folder.source)),
@@ -607,6 +682,26 @@
                 openSettings()
             } else if (action === 'trash') {
                 $('#trashCard').scrollIntoView({ behavior: 'smooth', block: 'start' })
+            } else if (action === 'trash-restore') {
+                const item = { day: target.dataset.day, name: target.dataset.name }
+                const info = trashIndex.get(`${item.day}/${item.name}`)
+                if (info?.sourceDir) {
+                    await restoreItems([item], null)
+                } else {
+                    openRestore([item])
+                }
+            } else if (action === 'trash-restore-selected') {
+                const items = selectedTrashItems()
+                if (items.length === 0) {
+                    showToast(toastContainer, 'No files selected.', 'error')
+                    return
+                }
+                const allHaveOrigin = items.every((item) => trashIndex.get(`${item.day}/${item.name}`)?.sourceDir)
+                if (allHaveOrigin) {
+                    await restoreItems(items, null)
+                } else {
+                    openRestore(items)
+                }
             } else if (action === 'refresh-log') {
                 await refreshLog()
             } else if (action === 'refresh-trash') {
@@ -678,6 +773,17 @@
         await refresh()
         await refreshLog()
         await refreshTrash()
+    })
+    $('#trashSelectAll').addEventListener('sl-change', (event) => {
+        for (const box of document.querySelectorAll('#trashList sl-checkbox')) {
+            box.checked = event.target.checked
+        }
+        updateTrashSelection()
+    })
+    document.addEventListener('sl-change', (event) => {
+        if (event.target?.closest?.('#trashList')) {
+            updateTrashSelection()
+        }
     })
 
     for (const dialog of document.querySelectorAll('sl-dialog')) {

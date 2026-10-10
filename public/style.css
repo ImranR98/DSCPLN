@@ -632,31 +632,23 @@ main {
 }
 
 .trash__list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+    margin-top: var(--space-2);
 }
 
-.trash__row {
+.trash__day {
+    margin-top: var(--space-1);
+}
+
+.trash-actions {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    padding: var(--space-2) 0;
-    border-top: 1px solid var(--border);
-    font-size: var(--fs-sm);
-}
-
-.trash__row:first-child {
-    border-top: 0;
-}
-
-.trash__meta {
-    color: var(--text-muted);
-}
-
-#emptyTrashButton {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-2);
     margin-top: var(--space-3);
+}
+
+#trashSelectAll {
+    margin-top: var(--space-2);
 }
 
 .activity-log {
@@ -932,8 +924,8 @@ main {
     }
 }
 
-/* Icon sizing for Shoelace buttons (SVGs are slotted content), centered in
-   the button's label slot. */
+/* Shoelace buttons: sized/centered icons; icon buttons are square rounded
+   rectangles like the rest of the design system. */
 sl-button svg {
     width: 1rem;
     height: 1rem;
@@ -946,6 +938,17 @@ sl-button::part(label) {
     justify-content: center;
 }
 
-sl-button[circle]::part(label) {
+sl-button.icon-button::part(base) {
+    width: 2.25rem;
+    height: 2.25rem;
     padding: 0;
+}
+
+sl-button.icon-button::part(label) {
+    padding: 0;
+}
+
+sl-button.icon-button--small::part(base) {
+    width: 1.9rem;
+    height: 1.9rem;
 }

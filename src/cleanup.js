@@ -3,8 +3,11 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { findExpectedDestName, verificationFor } from "./verify.js";
 import { probeDuration } from "./ffmpeg.js";
-import { pathExists, sha256File, uniqueSuffix } from "./util.js";
+import { DestExistsError, moveIntoPlace } from "./processors/place.js";
+import { atomicWriteFile, pathExists, sha256File, uniqueSuffix } from "./util.js";
 import { STATUS } from "./store.js";
+
+const MANIFEST_NAME = ".manifest.json";
 
 export async function verifyCleanupTarget(ctx, folder, file) {
   const { store, exiftool } = ctx;
@@ -41,27 +44,62 @@ export async function verifyCleanupTarget(ctx, folder, file) {
   return { ok: true, destPath, how: verification.how, note: verification.note };
 }
 
-export async function trashFile(ctx, sourcePath) {
+async function readManifest(dir) {
+  try {
+    const parsed = JSON.parse(await fsp.readFile(path.join(dir, MANIFEST_NAME), "utf8"));
+    if (parsed && typeof parsed === "object" && parsed.files && typeof parsed.files === "object") {
+      return parsed;
+    }
+  } catch {
+    // missing or unreadable manifest
+  }
+  return { files: {} };
+}
+
+async function writeManifest(dir, manifest) {
+  if (Object.keys(manifest.files).length === 0) {
+    await fsp.rm(path.join(dir, MANIFEST_NAME), { force: true });
+    return;
+  }
+  await atomicWriteFile(path.join(dir, MANIFEST_NAME), JSON.stringify(manifest, null, 2) + "\n");
+}
+
+export async function trashFile(ctx, sourcePath, origin = {}) {
   const { config } = ctx;
   const day = new Date().toISOString().slice(0, 10);
   const dir = path.join(config.trashDir, day);
   await fsp.mkdir(dir, { recursive: true });
   const base = path.basename(sourcePath);
-  let target = path.join(dir, base);
-  if (await pathExists(target)) target = path.join(dir, `${uniqueSuffix()}-${base}`);
+  let storedName = base;
+  if (await pathExists(path.join(dir, storedName))) {
+    storedName = `${uniqueSuffix()}-${base}`;
+  }
+  const target = path.join(dir, storedName);
+  let moved = false;
   try {
     await fsp.rename(sourcePath, target);
-    return target;
+    moved = true;
   } catch (err) {
     if (err.code !== "EXDEV") throw err;
   }
-  await fsp.copyFile(sourcePath, target, fs.constants.COPYFILE_EXCL);
-  const [srcHash, dstHash] = await Promise.all([sha256File(sourcePath), sha256File(target)]);
-  if (srcHash !== dstHash) {
-    await fsp.rm(target, { force: true });
-    throw new Error("trash copy failed hash verification");
+  if (!moved) {
+    await fsp.copyFile(sourcePath, target, fs.constants.COPYFILE_EXCL);
+    const [srcHash, dstHash] = await Promise.all([sha256File(sourcePath), sha256File(target)]);
+    if (srcHash !== dstHash) {
+      await fsp.rm(target, { force: true });
+      throw new Error("trash copy failed hash verification");
+    }
+    await fsp.unlink(sourcePath);
   }
-  await fsp.unlink(sourcePath);
+  const manifest = await readManifest(dir);
+  manifest.files[storedName] = {
+    originalName: base,
+    sourceDir: origin.sourceDir ?? null,
+    folder: origin.folder ?? null,
+    destName: origin.destName ?? null,
+    cleanedAt: new Date().toISOString(),
+  };
+  await writeManifest(dir, manifest);
   return target;
 }
 
@@ -93,7 +131,11 @@ export async function cleanupFiles(ctx, folder, names) {
     }
     try {
       const sourcePath = path.join(folder.def.source, name);
-      const trashPath = await trashFile(ctx, sourcePath);
+      const trashPath = await trashFile(ctx, sourcePath, {
+        sourceDir: folder.def.source,
+        folder: folder.def.name,
+        destName: verify.destPath ? path.basename(verify.destPath) : file.destName ?? null,
+      });
       store.removeFile(folder.def.name, name, STATUS.CLEANED);
       results.push({ name, ok: true, destPath: verify.destPath, trashPath });
       trashed++;
@@ -120,23 +162,95 @@ function dayString(offsetDays = 0) {
   return d.toISOString().slice(0, 10);
 }
 
+export function isValidDay(day) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(day);
+}
+
+export function isValidTrashName(name) {
+  return typeof name === "string" && name.length > 0 && !name.startsWith(".") && !name.includes("/") && !name.includes("\\");
+}
+
 export async function listTrash(ctx) {
   const { config } = ctx;
   const entries = [];
   const days = await fsp.readdir(config.trashDir).catch(() => []);
   for (const day of days) {
+    if (!isValidDay(day)) continue;
     const dir = path.join(config.trashDir, day);
     const stat = await fsp.stat(dir).catch(() => null);
     if (!stat?.isDirectory()) continue;
-    const files = await fsp.readdir(dir).catch(() => []);
+    const manifest = await readManifest(dir);
+    const names = await fsp.readdir(dir).catch(() => []);
+    const files = [];
     let bytes = 0;
-    for (const f of files) {
-      const s = await fsp.stat(path.join(dir, f)).catch(() => null);
-      if (s?.isFile()) bytes += s.size;
+    for (const name of names) {
+      if (name.startsWith(".")) continue;
+      const s = await fsp.stat(path.join(dir, name)).catch(() => null);
+      if (!s?.isFile()) continue;
+      bytes += s.size;
+      const origin = manifest.files[name] ?? {};
+      files.push({
+        name,
+        originalName: origin.originalName ?? name,
+        size: s.size,
+        sourceDir: origin.sourceDir ?? null,
+        folder: origin.folder ?? null,
+        destName: origin.destName ?? null,
+        cleanedAt: origin.cleanedAt ?? null,
+      });
     }
-    entries.push({ day, files: files.length, bytes });
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    if (files.length === 0) continue;
+    entries.push({ day, count: files.length, bytes, files });
   }
   return entries.sort((a, b) => b.day.localeCompare(a.day));
+}
+
+export async function restoreTrashFiles(ctx, items, { targetDir = null } = {}) {
+  const { config, log, notify } = ctx;
+  const results = [];
+  for (const item of items ?? []) {
+    const day = item?.day;
+    const name = item?.name;
+    if (!isValidDay(day) || !isValidTrashName(name)) {
+      results.push({ name: String(name ?? "?"), ok: false, reason: "invalid trash entry" });
+      continue;
+    }
+    const dir = path.join(config.trashDir, day);
+    const trashPath = path.join(dir, name);
+    const stat = await fsp.stat(trashPath).catch(() => null);
+    if (!stat?.isFile()) {
+      results.push({ name, ok: false, reason: "no longer in trash" });
+      continue;
+    }
+    const manifest = await readManifest(dir);
+    const origin = manifest.files[name] ?? {};
+    const restoreDir = origin.sourceDir || targetDir || null;
+    if (!restoreDir) {
+      results.push({ name, ok: false, reason: "no recorded origin; provide a restore directory" });
+      continue;
+    }
+    const restoreName = origin.originalName ?? name.replace(/^[^-]+-[^-]+-/, "");
+    const destPath = path.join(restoreDir, restoreName);
+    try {
+      await moveIntoPlace(trashPath, destPath);
+    } catch (err) {
+      const reason = err instanceof DestExistsError
+        ? `${restoreName} already exists in ${restoreDir}`
+        : err.message;
+      results.push({ name, ok: false, reason });
+      continue;
+    }
+    delete manifest.files[name];
+    await writeManifest(dir, manifest);
+    await fsp.rm(dir).catch(() => {});
+    log(`restored ${name} → ${destPath}`);
+    results.push({ name, ok: true, destPath });
+  }
+  if (results.some((r) => !r.ok)) {
+    notify.notify("warn", `${results.filter((r) => !r.ok).length} trash file(s) could not be restored`);
+  }
+  return results;
 }
 
 export async function emptyTrash(ctx) {
@@ -154,7 +268,7 @@ export async function sweepTrash(ctx) {
   const days = await fsp.readdir(config.trashDir).catch(() => []);
   let removed = 0;
   for (const day of days) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+    if (!isValidDay(day)) continue;
     if (day < cutoff) {
       await fsp.rm(path.join(config.trashDir, day), { recursive: true, force: true });
       removed++;

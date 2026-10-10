@@ -13,7 +13,10 @@
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232f6fed'/%3E%3Ctext x='32' y='45' font-size='38' text-anchor='middle' fill='white' font-family='sans-serif'%3E%24%3C/text%3E%3C/svg%3E">
     <script src="theme-boot.js"></script>
     <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/vendor/shoelace/theme-light.css">
+    <link rel="stylesheet" href="/vendor/shoelace/theme-dark.css">
     <link rel="stylesheet" href="style.css">
+    <script type="module" src="/vendor/shoelace/shoelace.js"></script>
 </head>
 
 <body class="is-loading">
@@ -22,17 +25,17 @@
         <div class="app-header__top">
             <h1><a class="app-header__brand" href="/">D<span class="accent">$</span>CPLN</a></h1>
             <div class="app-header__actions">
-                <a class="button button--small" href="/">Dashboard</a>
-                <a class="icon-button" href="/settings" title="API settings" aria-label="API settings">
+                <sl-button size="small" href="/">Dashboard</sl-button>
+                <sl-button class="icon-button" href="/settings" title="API settings" aria-label="API settings">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
                         stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="7.5" cy="15.5" r="5.5" />
                         <path d="m21 2-9.6 9.6" />
                         <path d="m15.5 7.5 3 3L22 7l-3-3" />
                     </svg>
-                </a>
-                <button id="themeButton" class="icon-button" type="button" title="Theme: auto"
-                    aria-label="Theme: auto. Click to change."></button>
+                </sl-button>
+                <sl-button id="themeButton" class="icon-button" title="Theme: auto"
+                    aria-label="Theme: auto. Click to change."></sl-button>
             </div>
         </div>
         <div class="app-header__meta">
@@ -76,7 +79,7 @@
                 <button class="chip" type="button" data-range="all-time">All time</button>
             </div>
             <input id="monthPickerInput" class="visually-hidden" type="month" tabindex="-1" aria-hidden="true">
-            <p id="compareNote" class="insights-note muted"></p>
+            <p id="compareNote" class="insights-note"></p>
         </section>
 
         <details class="card" id="transactionsCard">

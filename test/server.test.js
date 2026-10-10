@@ -14,6 +14,8 @@ test('serves workbook data with categories, currencies and income stats', async 
     assert.deepEqual(data.currencies.map((entry) => entry.code), ['CAD', 'USD', 'XMR'])
     const cad = data.currencies.find((entry) => entry.code === 'CAD')
     assert.equal(cad.primary, true)
+    assert.equal(cad.symbol, '$')
+    assert.equal(data.currencies.find((entry) => entry.code === 'XMR').symbol, null)
     assert.equal(cad.monthlyBudget, 3000)
     assert.equal(cad.firstDayBias, 1500)
     assert.equal(cad.monthsIncome, 2645)

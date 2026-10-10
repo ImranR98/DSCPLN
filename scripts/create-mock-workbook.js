@@ -15,6 +15,7 @@ const CATEGORY_GROUPS = [
     ['Money In', ['Job', 'From Parents', 'Tax Returns', 'Other Earnings', 'Loan', 'Other Money in', 'Investment Sell', 'Dividend', 'Interest']],
     ['Conversions', ['Conversion']],
     ['Currencies', ['CAD', 'USD', 'XMR']],
+    ['Symbols', ['$', '$', '']],
 ]
 
 const money = (value) => Math.round(value * 100) / 100

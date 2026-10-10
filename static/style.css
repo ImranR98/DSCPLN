@@ -211,122 +211,6 @@ h1 .accent {
     gap: var(--space-2);
 }
 
-/* ---------- Buttons ---------- */
-
-.button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-4);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
-    font: inherit;
-    font-size: var(--fs-sm);
-    font-weight: 600;
-    cursor: pointer;
-    transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
-}
-
-.button svg {
-    width: 1rem;
-    height: 1rem;
-}
-
-.button:hover {
-    border-color: var(--border-strong);
-    background: var(--surface-2);
-}
-
-.button:active {
-    transform: translateY(1px);
-}
-
-.button--primary {
-    background: var(--accent);
-    color: var(--accent-contrast);
-    border-color: transparent;
-    box-shadow: var(--shadow-sm);
-}
-
-.button--primary:hover {
-    background: var(--accent-hover);
-    border-color: transparent;
-}
-
-.button--small {
-    padding: var(--space-2) var(--space-3);
-    font-size: var(--fs-sm);
-}
-
-.button--danger {
-    background: var(--over);
-    color: #ffffff;
-    border-color: transparent;
-}
-
-.button--danger:hover {
-    background: color-mix(in srgb, var(--over) 88%, #000000);
-    border-color: transparent;
-}
-
-.button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.icon-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.25rem;
-    height: 2.25rem;
-    padding: 0;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
-}
-
-.icon-button:hover {
-    color: var(--text);
-    border-color: var(--border-strong);
-    background: var(--surface-2);
-}
-
-.icon-button:active {
-    transform: translateY(1px);
-}
-
-.icon-button svg {
-    width: 1.1rem;
-    height: 1.1rem;
-}
-
-.icon-button--small {
-    width: 1.9rem;
-    height: 1.9rem;
-}
-
-.icon-button--small svg {
-    width: 0.95rem;
-    height: 0.95rem;
-}
-
-.icon-button--danger:hover {
-    color: var(--over);
-    border-color: color-mix(in srgb, var(--over) 40%, var(--border));
-    background: var(--over-soft);
-}
-
-.icon-button.is-spinning svg {
-    animation: spin 0.6s linear;
-}
-
 /* ---------- Cards ---------- */
 
 .card {
@@ -991,58 +875,7 @@ details.card[open] > summary::after {
 
 /* ---------- Dialog ---------- */
 
-.dialog {
-    width: min(26rem, calc(100vw - 2rem));
-    padding: 0;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-    color: var(--text);
-    box-shadow: var(--shadow-lg);
-}
-
-.dialog--wide {
-    width: min(34rem, calc(100vw - 2rem));
-}
-
-.dialog::backdrop {
-    background: rgba(16, 24, 40, 0.45);
-    backdrop-filter: blur(3px);
-}
-
-.dialog form,
-.dialog__content {
-    display: flex;
-    flex-direction: column;
-    max-height: 88dvh;
-    overflow: hidden;
-}
-
-.dialog__body {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-height: 0;
-    padding: var(--space-5) var(--space-5) var(--space-4);
-    overflow: auto;
-}
-
-.dialog h2 {
-    font-size: var(--fs-xl);
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    margin: 0 0 var(--space-1);
-}
-
-.dialog label {
-    margin-top: var(--space-2);
-    font-size: var(--fs-sm);
-    font-weight: 600;
-    color: var(--text-muted);
-}
-
-:is(.dialog, .field) :is(input, select),
-.dialog__textarea {
+.field :is(input, select) {
     font: inherit;
     font-size: var(--fs-md);
     padding: 0.6rem 0.8rem;
@@ -1113,27 +946,6 @@ details.card[open] > summary::after {
     flex: 0 0 auto;
     color: var(--text-muted);
     font-size: var(--fs-2xs);
-}
-
-.dialog__textarea {
-    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-    font-size: var(--fs-sm);
-    line-height: 1.5;
-    min-height: 15rem;
-    resize: vertical;
-    tab-size: 8;
-    white-space: pre;
-    overflow-x: auto;
-}
-
-.dialog__actions {
-    flex: 0 0 auto;
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-    padding: var(--space-3) var(--space-5) var(--space-4);
-    background: var(--surface);
-    border-top: 1px solid var(--border);
 }
 
 .segmented {
@@ -1224,17 +1036,10 @@ details.card[open] > summary::after {
     margin-top: var(--space-2);
 }
 
-.token-row input {
+.token-row sl-input {
     flex: 1 1 16rem;
     min-width: 0;
-    font: inherit;
-    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-    font-size: var(--fs-sm);
-    padding: 0.6rem 0.8rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    color: var(--text);
+    --sl-input-font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
 .code-block {
@@ -1493,44 +1298,6 @@ details.card[open] > summary::after {
     }
 }
 
-/* Mobile dialogs become bottom sheets. */
-@media (max-width: 40rem) {
-    .dialog {
-        position: fixed;
-        inset: auto 0 0 0;
-        width: 100%;
-        max-width: 100%;
-        margin: 0;
-        border-width: 1px 0 0;
-        border-radius: var(--radius) var(--radius) 0 0;
-        max-height: 92dvh;
-        overflow: hidden;
-    }
-
-    .dialog[open] {
-        animation: sheet-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
-    }
-
-    .dialog::before {
-        content: "";
-        display: block;
-        width: 2.25rem;
-        height: 0.25rem;
-        margin: var(--space-2) auto 0;
-        border-radius: var(--radius-pill);
-        background: var(--border-strong);
-    }
-
-    .dialog form,
-    .dialog__content {
-        max-height: calc(92dvh - 1.25rem);
-    }
-
-    .dialog__actions {
-        padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
-    }
-}
-
 /* ---------- Insights page ---------- */
 
 .app-header__brand {
@@ -1625,6 +1392,10 @@ details.card[open] > summary::after {
 .insights-section__code {
     font-size: var(--fs-lg);
     font-weight: 700;
+}
+
+.insights-section__meta {
+    text-align: right;
 }
 
 .kpi-grid {
@@ -1986,4 +1757,120 @@ details.card[open] > summary::after {
     .insights-grid {
         grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
     }
+}
+
+/* ---------- Shoelace theme mapping + control tweaks ---------- */
+
+:root {
+    --sl-font-sans: var(--font);
+    --sl-border-radius-medium: var(--radius-sm);
+    --sl-border-radius-small: var(--radius-xs);
+    --sl-panel-background-color: var(--surface);
+    --sl-panel-border-color: var(--border);
+    --sl-color-primary-100: var(--accent-soft);
+    --sl-color-primary-500: var(--accent);
+    --sl-color-primary-600: var(--accent);
+    --sl-color-primary-700: var(--accent-hover);
+    --sl-color-success-600: var(--ok);
+    --sl-color-success-700: var(--ok);
+    --sl-color-warning-600: var(--warn);
+    --sl-color-warning-700: var(--warn);
+    --sl-color-danger-600: var(--over);
+    --sl-color-danger-700: var(--over);
+    --sl-input-background-color: var(--surface-2);
+    --sl-input-background-color-hover: var(--surface-2);
+    --sl-input-background-color-focus: var(--surface-2);
+    --sl-input-border-color: var(--border);
+    --sl-input-border-color-hover: var(--border-strong);
+    --sl-input-border-color-focus: var(--accent);
+    --sl-input-color: var(--text);
+    --sl-input-color-hover: var(--text);
+    --sl-input-color-focus: var(--text);
+    --sl-input-placeholder-color: var(--text-muted);
+    --sl-input-help-text-color: var(--text-muted);
+    --sl-input-label-color: var(--text-muted);
+    --sl-input-focus-ring-color: var(--accent-soft);
+}
+
+sl-button svg {
+    width: 1rem;
+    height: 1rem;
+    display: block;
+}
+
+sl-button::part(label) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+sl-button.icon-button::part(base) {
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+}
+
+sl-button.icon-button::part(label) {
+    padding: 0;
+}
+
+sl-button.icon-button--small::part(base) {
+    width: 1.9rem;
+    height: 1.9rem;
+}
+
+.icon-button.is-spinning svg {
+    animation: spin 0.6s linear;
+}
+
+.dialog--wide {
+    --width: min(92vw, 50rem);
+}
+
+.dialog--narrow {
+    --width: min(92vw, 31rem);
+}
+
+sl-dialog form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+sl-dialog sl-input,
+sl-dialog sl-textarea {
+    width: 100%;
+}
+
+.dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+}
+
+.native-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: var(--space-3);
+}
+
+.native-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.native-field input {
+    font: inherit;
+    font-size: var(--fs-md);
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.native-field input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
 }

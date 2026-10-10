@@ -3,7 +3,17 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const http = require('http')
-const { requestJson } = require('../static/core')
+const { requestJson, moneyFor } = require('../static/core')
+
+test('moneyFor uses stored symbols and leaves symbol-less currencies bare', () => {
+    const symbols = { CAD: '$', GBP: '£', TZS: 'TSh' }
+    const money = moneyFor(() => false, (code) => symbols[code])
+    assert.equal(money(12.5, 'CAD'), '$12.50')
+    assert.equal(money(-12.5, 'GBP'), '−£12.50')
+    assert.equal(money(0.05, 'TZS'), 'TSh0.05')
+    // No symbol means no prefix (the currency code is shown elsewhere).
+    assert.equal(money(12.5, 'XMR'), '12.50')
+})
 
 test('requestJson parses JSON and tolerates empty success bodies', async (t) => {
     const server = http.createServer((req, res) => {

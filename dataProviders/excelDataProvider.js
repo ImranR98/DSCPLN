@@ -25,6 +25,8 @@ const { assertWorkbookRepo, commitFile } = require('../workbook-git')
 
 const INCOME_GROUP = 'Money In'
 const CONVERSION_GROUP = 'Conversions'
+const CURRENCIES_HEADER = 'Currencies'
+const CURRENCY_SYMBOLS_HEADER = 'Symbols'
 const BUDGETS_LABEL = 'Budgets'
 const BUDGET_MONTHLY_LABEL = 'Monthly Budget'
 const BUDGET_BIAS_LABEL = 'First Day Bias'
@@ -454,11 +456,24 @@ module.exports = (config = {}, configDir = process.cwd()) => {
             previousRow = rowNumber
         })
         for (const entry of columns) {
-            if (entry.header === 'Currencies') {
+            if (entry.header === CURRENCIES_HEADER) {
                 currencies.push(...entry.values)
-            } else if (entry.values.length) {
+            } else if (entry.header !== CURRENCY_SYMBOLS_HEADER && entry.values.length) {
                 categoryGroups.push({ group: entry.header, categories: entry.values })
             }
+        }
+
+        // Symbols pair with currencies by row, so gaps (currencies with no
+        // symbol) are fine instead of stopping the column early.
+        const currencySymbols = {}
+        const symbolsColumn = columns.find((entry) => entry.header === CURRENCY_SYMBOLS_HEADER)
+        if (symbolsColumn) {
+            currencies.forEach((code, index) => {
+                const symbol = cellString(sheet.getRow(3 + index).getCell(symbolsColumn.column).value).trim()
+                if (symbol) {
+                    currencySymbols[code] = symbol
+                }
+            })
         }
 
         if (budgetsLabelRow > 0) {
@@ -470,7 +485,7 @@ module.exports = (config = {}, configDir = process.cwd()) => {
                 }
             })
         }
-        return { categoryGroups, currencies, budgets }
+        return { categoryGroups, currencies, currencySymbols, budgets }
     }
 
     const getBudgetForCurrency = (constants, currency) =>
@@ -714,46 +729,84 @@ module.exports = (config = {}, configDir = process.cwd()) => {
         return row
     }
 
-    // Current-month totals per currency, ignoring days after the viewed date.
-    const buildCurrentTotals = (monthTransactions, day, conversionCategories) => {
+    // Per-currency monthly totals counting only days up to `day`, so months can
+    // be compared month-to-date as well as at their end.
+    const buildToDateTotals = (transactions, day, conversionCategories) => {
         const totals = new Map()
-        for (const transaction of monthTransactions) {
+        for (const transaction of transactions) {
             if (transaction.date.day > day) {
                 continue
             }
-            let entry = totals.get(transaction.currency)
+            const key = `${transaction.currency}|${transaction.date.year}|${transaction.date.month}`
+            let entry = totals.get(key)
             if (!entry) {
                 entry = emptyTotals()
-                totals.set(transaction.currency, entry)
+                totals.set(key, entry)
             }
             addTransactionToBuckets(entry, transaction, conversionCategories.has(transaction.category))
         }
         return totals
     }
 
-    // Per-currency current, previous-month and 12-month-trailing stats.
-    const buildCurrencyStats = (constants, monthly, currentByCurrency, date, daysInMonth) => {
+    // The earliest month in which each currency has a transaction.
+    const buildFirstMonths = (transactions) => {
+        const first = new Map()
+        for (const transaction of transactions) {
+            const current = first.get(transaction.currency)
+            if (!current ||
+                transaction.date.year < current.year ||
+                (transaction.date.year === current.year && transaction.date.month < current.month)) {
+                first.set(transaction.currency, { year: transaction.date.year, month: transaction.date.month })
+            }
+        }
+        return first
+    }
+
+    // Per-currency current, previous-month and trailing 12-month stats. Past
+    // months also carry month-to-date figures so they can be compared with a
+    // partial current month, and trailing averages skip months before the
+    // currency's first transaction.
+    const buildCurrencyStats = (constants, monthly, toDate, firstMonths, date, daysInMonth) => {
         const year = date.getFullYear()
         const month = date.getMonth() + 1
         const day = date.getDate()
         const previousMonthDate = new Date(year, month - 2, 1)
         const previousYear = previousMonthDate.getFullYear()
         const previousMonth = previousMonthDate.getMonth() + 1
+        const average = (total, count) => count > 0 ? cleanAmount(total / count) : 0
         return constants.currencies.map((code, index) => {
             const budget = getBudgetForCurrency(constants, code)
-            const current = currentByCurrency.get(code) || emptyTotals()
+            const current = toDate.get(`${code}|${year}|${month}`) || emptyTotals()
+            const firstMonth = firstMonths.get(code)
             const trailing = emptyTotals()
+            const trailingToDate = emptyTotals()
+            let trailingMonths = 0
             for (let offset = 1; offset <= 12; offset++) {
                 const target = new Date(year, month - 1 - offset, 1)
-                const entry = monthly.get(`${code}|${target.getFullYear()}|${target.getMonth() + 1}`)
+                const targetYear = target.getFullYear()
+                const targetMonth = target.getMonth() + 1
+                if (firstMonth && (targetYear < firstMonth.year ||
+                    (targetYear === firstMonth.year && targetMonth < firstMonth.month))) {
+                    continue
+                }
+                trailingMonths += 1
+                const entry = monthly.get(`${code}|${targetYear}|${targetMonth}`)
                 if (entry) {
                     trailing.spend += entry.spend
                     trailing.income += entry.income
                     trailing.convertedOut += entry.convertedOut
                     trailing.convertedIn += entry.convertedIn
                 }
+                const toDateEntry = toDate.get(`${code}|${targetYear}|${targetMonth}`)
+                if (toDateEntry) {
+                    trailingToDate.spend += toDateEntry.spend
+                    trailingToDate.income += toDateEntry.income
+                    trailingToDate.convertedOut += toDateEntry.convertedOut
+                    trailingToDate.convertedIn += toDateEntry.convertedIn
+                }
             }
             const previous = monthly.get(`${code}|${previousYear}|${previousMonth}`) || emptyTotals()
+            const previousToDate = toDate.get(`${code}|${previousYear}|${previousMonth}`) || emptyTotals()
             const monthsSpend = cleanAmount(current.spend)
             const monthsIncome = cleanAmount(current.income)
             const monthsConvertedOut = cleanAmount(current.convertedOut)
@@ -764,18 +817,29 @@ module.exports = (config = {}, configDir = process.cwd()) => {
                 hasActivity: monthsSpend > 0 || monthsIncome > 0 || monthsConvertedOut > 0 || monthsConvertedIn > 0,
                 monthlyBudget: budget.monthlyBudget,
                 firstDayBias: budget.firstDayBias,
+                firstMonth: firstMonth ? datePartsToIso({ ...firstMonth, day: 1 }) : null,
+                symbol: (constants.currencySymbols || {})[code] || null,
+                trailingMonths,
                 monthsSpend,
                 previousMonthsSpend: cleanAmount(previous.spend),
-                trailingSpendAverage: cleanAmount(trailing.spend / 12),
+                previousMonthsSpendToDate: cleanAmount(previousToDate.spend),
+                trailingSpendAverage: average(trailing.spend, trailingMonths),
+                trailingSpendAverageToDate: average(trailingToDate.spend, trailingMonths),
                 monthsIncome,
                 previousMonthsIncome: cleanAmount(previous.income),
-                trailingIncomeAverage: cleanAmount(trailing.income / 12),
+                previousMonthsIncomeToDate: cleanAmount(previousToDate.income),
+                trailingIncomeAverage: average(trailing.income, trailingMonths),
+                trailingIncomeAverageToDate: average(trailingToDate.income, trailingMonths),
                 monthsConvertedOut,
                 previousMonthsConvertedOut: cleanAmount(previous.convertedOut),
-                trailingConvertedOutAverage: cleanAmount(trailing.convertedOut / 12),
+                previousMonthsConvertedOutToDate: cleanAmount(previousToDate.convertedOut),
+                trailingConvertedOutAverage: average(trailing.convertedOut, trailingMonths),
+                trailingConvertedOutAverageToDate: average(trailingToDate.convertedOut, trailingMonths),
                 monthsConvertedIn,
                 previousMonthsConvertedIn: cleanAmount(previous.convertedIn),
-                trailingConvertedInAverage: cleanAmount(trailing.convertedIn / 12),
+                previousMonthsConvertedInToDate: cleanAmount(previousToDate.convertedIn),
+                trailingConvertedInAverage: average(trailing.convertedIn, trailingMonths),
+                trailingConvertedInAverageToDate: average(trailingToDate.convertedIn, trailingMonths),
                 monthsExpectedSpend: getMonthExpectedSpend(budget.monthlyBudget, budget.firstDayBias, day, daysInMonth),
             }
         })
@@ -784,7 +848,7 @@ module.exports = (config = {}, configDir = process.cwd()) => {
     // The last 12 months of per-currency totals, oldest first. The viewed month
     // is capped at the viewed day (matching the month figures) and flagged as
     // partial when it is not over yet.
-    const buildHistory = (constants, monthly, currentByCurrency, date, daysInMonth) => {
+    const buildHistory = (constants, monthly, toDate, date, daysInMonth) => {
         const year = date.getFullYear()
         const month = date.getMonth() + 1
         const day = date.getDate()
@@ -797,7 +861,7 @@ module.exports = (config = {}, configDir = process.cwd()) => {
             const currencyTotals = {}
             for (const code of constants.currencies) {
                 const entry = isCurrentMonth ?
-                    (currentByCurrency.get(code) || emptyTotals()) :
+                    (toDate.get(`${code}|${targetYear}|${targetMonth}`) || emptyTotals()) :
                     (monthly.get(`${code}|${targetYear}|${targetMonth}`) || emptyTotals())
                 currencyTotals[code] = {
                     spend: cleanAmount(entry.spend),
@@ -834,10 +898,11 @@ module.exports = (config = {}, configDir = process.cwd()) => {
                 fractional.add(transaction.currency)
             }
         }
-        const currentByCurrency = buildCurrentTotals(monthTransactions, day, conversionCategories)
-        const currencies = buildCurrencyStats(constants, monthly, currentByCurrency, date, daysInMonth)
+        const toDate = buildToDateTotals(transactions, day, conversionCategories)
+        const firstMonths = buildFirstMonths(transactions)
+        const currencies = buildCurrencyStats(constants, monthly, toDate, firstMonths, date, daysInMonth)
             .map((entry) => ({ ...entry, fractional: fractional.has(entry.code) }))
-        const history = buildHistory(constants, monthly, currentByCurrency, date, daysInMonth)
+        const history = buildHistory(constants, monthly, toDate, date, daysInMonth)
         return {
             currencies,
             categories: constants.categoryGroups,

@@ -107,10 +107,12 @@
         return result
     }
 
+    // Percent change against the comparison's magnitude, so a negative
+    // comparison (a net loss) still yields an intuitive signed direction.
     function delta(current, previous) {
         return {
             amount: clean(current - previous),
-            pct: previous > 0 ? clean(((current - previous) / previous) * 100) : null,
+            pct: previous !== 0 ? clean(((current - previous) / Math.abs(previous)) * 100) : null,
         }
     }
 
@@ -150,12 +152,16 @@
         })
     }
 
-    // The average of the months' cumulative curves, resampled to targetDays,
-    // so the trailing-average baseline keeps the shape of a typical month.
-    function averageCumulative(transactions, months, targetDays) {
-        const series = months.map((entry) => {
-            const start = new Date(entry.year, entry.month - 1, 1)
-            const daily = dailySeries(transactions, start, endOfMonth(start))
+    // The average cumulative curve of the plan's windows, resampled to the
+    // chart's day count. Range plans have one window, so their curve is drawn
+    // as-is; average plans draw the mean of their months' curves. The result is
+    // scaled so the curve ends at the same figure the comparison totals use.
+    function baselineFromPlan(transactions, plan, targetDays) {
+        if (plan.windows.length === 0 || targetDays <= 0) {
+            return { spend: [], income: [] }
+        }
+        const curves = plan.windows.map((window) => {
+            const daily = dailySeries(filterTransactions(transactions, window), window.start, window.end)
             let spend = 0
             let income = 0
             return {
@@ -169,8 +175,9 @@
                 }), targetDays),
             }
         })
+        const scale = plan.factor * curves.length
         const average = (key) => Array.from({ length: targetDays }, (_, index) =>
-            clean(series.reduce((sum, entry) => sum + entry[key][index], 0) / series.length))
+            clean(curves.reduce((sum, curve) => sum + curve[key][index], 0) / curves.length * scale))
         return { spend: average('spend'), income: average('income') }
     }
 
@@ -233,30 +240,77 @@
     const isYtdRange = (start, end) => start.getMonth() === 0 && start.getDate() === 1 &&
         end.getFullYear() === start.getFullYear() && end.getMonth() > 0
 
-    // Window compared against for a mode: 'prev', 'yoy', 'avg3', 'avg6', 'avg12'.
-    function comparisonWindow(mode, range) {
-        if (mode === 'yoy') {
-            return { kind: 'range', mode, start: shiftYear(range.start), end: shiftYear(range.end) }
-        }
-        if (mode === 'avg3' || mode === 'avg6' || mode === 'avg12') {
-            const count = Number(mode.slice(3))
-            return { kind: 'average', mode, count, ...lastCompleteMonths(count, range.start) }
-        }
-        if (isYtdRange(range.start, range.end)) {
-            return { kind: 'range', mode: 'prev', start: shiftYear(range.start), end: shiftYear(range.end) }
-        }
-        return { kind: 'range', mode: 'prev', ...previousRange(range.start, range.end) }
+    // One window per month, starting on the anchor's day-of-month and spanning
+    // `length` days, clamped to the month's bounds.
+    function alignedMonthWindows(months, anchor, length) {
+        return months.map(({ year, month }) => {
+            const lastDay = new Date(year, month, 0).getDate()
+            const startDay = Math.min(anchor.getDate(), lastDay)
+            const endDay = Math.min(anchor.getDate() + length - 1, lastDay)
+            return { start: new Date(year, month - 1, startDay), end: new Date(year, month - 1, endDay) }
+        })
     }
 
-    // Average-mode windows scale to the range length so per-day rates are
-    // compared fairly; range-mode windows are compared as raw totals.
-    function comparisonFactor(window, range) {
-        if (window.kind !== 'average') {
-            return 1
+    // The complete months before `date`, oldest first, never starting before the
+    // first month that has data, so a young workbook doesn't average empty months.
+    function trailingMonths(count, date, firstDataMonth) {
+        const end = new Date(date.getFullYear(), date.getMonth(), 0)
+        let start = new Date(end.getFullYear(), end.getMonth() - (count - 1), 1)
+        if (firstDataMonth && startOfMonth(firstDataMonth) > start) {
+            start = startOfMonth(firstDataMonth)
         }
-        const rangeDays = daysInclusive(range.start, range.end)
-        const windowDays = daysInclusive(window.start, window.end)
-        return windowDays > 0 ? rangeDays / windowDays : 0
+        return start <= end ? monthPartials(start, end) : []
+    }
+
+    function planOf(kind, windows, factor, count) {
+        return {
+            kind,
+            windows,
+            factor,
+            count: count == null ? windows.length : count,
+            days: windows.reduce((sum, window) => sum + daysInclusive(window.start, window.end), 0),
+        }
+    }
+
+    // How a mode's comparison is assembled for a range: 'prev', 'yoy', 'avg3',
+    // 'avg6', 'avg12'. `range` is the elapsed range for statistics and the full
+    // selected range for the chart and forecast.
+    //
+    // - prev/yoy: the same calendar days of the previous period (or last year).
+    // - avgN within one calendar month: one window per trailing month with data,
+    //   covering the same day-of-month span, averaged (so an Oct 1-7 comparison
+    //   looks at the Jul/Aug/Sep 1-7s, not a flat per-day rate).
+    // - avgN over a multi-month range: the trailing complete months, scaled per
+    //   day to the range length.
+    //
+    // `windows` are what to aggregate, `factor` turns the summed totals into a
+    // comparable figure, and `days` is the summed window length for per-day rates.
+    function comparisonPlan(mode, range, firstDataMonth) {
+        if (mode === 'yoy') {
+            const window = { start: shiftYear(range.start), end: shiftYear(range.end) }
+            return planOf('range', [window], 1)
+        }
+        if (mode === 'prev' && isYtdRange(range.start, range.end)) {
+            const window = { start: shiftYear(range.start), end: shiftYear(range.end) }
+            return planOf('range', [window], 1)
+        }
+        if (mode === 'prev') {
+            return planOf('range', [previousRange(range.start, range.end)], 1)
+        }
+        const months = trailingMonths(Number(mode.slice(3)), range.start, firstDataMonth)
+        if (months.length === 0) {
+            return { kind: 'average', windows: [], factor: 0, days: 0, count: 0 }
+        }
+        const length = daysInclusive(range.start, range.end)
+        if (!spansMultipleMonths(range.start, range.end)) {
+            const windows = alignedMonthWindows(months, range.start, length)
+            return planOf('average', windows, 1 / windows.length, windows.length)
+        }
+        const window = {
+            start: new Date(months[0].year, months[0].month - 1, 1),
+            end: new Date(months[months.length - 1].year, months[months.length - 1].month, 0),
+        }
+        return planOf('average', [window], length / daysInclusive(window.start, window.end), months.length)
     }
 
     function categoryMovers(currentMap, previousMap, limit = 3) {
@@ -294,7 +348,7 @@
         delta,
         dailySeries,
         resampleSeries,
-        averageCumulative,
+        baselineFromPlan,
         projectMonthEnd,
         categoryMovers,
         lastCompleteMonths,
@@ -302,8 +356,9 @@
         shiftYear,
         spansMultipleMonths,
         monthPartials,
-        comparisonWindow,
-        comparisonFactor,
+        alignedMonthWindows,
+        trailingMonths,
+        comparisonPlan,
         isWholeMonthsRange,
     }
     if (typeof module !== 'undefined' && module.exports) {

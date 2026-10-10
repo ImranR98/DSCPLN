@@ -126,6 +126,25 @@
             </section>
 
             <div id="otherCurrencies" class="currency-grid"></div>
+
+            <section class="card" id="historyCard" aria-labelledby="historyHeading" hidden>
+                <div class="card__header">
+                    <h2 id="historyHeading">Last 12 months</h2>
+                    <span class="card__header-tools">
+                        <span id="historyRange" class="card__context"></span>
+                        <span class="chart-legend">
+                            <span class="chart-legend__item">
+                                <span class="chart-legend__swatch"></span>Out
+                            </span>
+                            <span class="chart-legend__item">
+                                <span class="chart-legend__swatch chart-legend__swatch--in"></span>In
+                            </span>
+                        </span>
+                    </span>
+                </div>
+                <div id="historyChart" class="chart-host"></div>
+                <div id="historyTooltip" class="chart-tooltip" hidden></div>
+            </section>
         </div>
 
         <div class="layout__side">
@@ -144,24 +163,6 @@
             </details>
         </div>
 
-        <section class="card" id="historyCard" aria-labelledby="historyHeading" hidden>
-            <div class="card__header">
-                <h2 id="historyHeading">Last 12 months</h2>
-                <span class="card__header-tools">
-                    <span id="historyRange" class="card__context"></span>
-                    <span class="chart-legend">
-                        <span class="chart-legend__item">
-                            <span class="chart-legend__swatch"></span>Out
-                        </span>
-                        <span class="chart-legend__item">
-                            <span class="chart-legend__swatch chart-legend__swatch--in"></span>In
-                        </span>
-                    </span>
-                </span>
-            </div>
-            <div id="historyChart" class="chart-host"></div>
-            <div id="historyTooltip" class="chart-tooltip" hidden></div>
-        </section>
     </main>
 
     <sl-dialog id="budgetDialog" label="Edit budget" class="dialog--narrow">

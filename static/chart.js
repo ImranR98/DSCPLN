@@ -28,17 +28,18 @@
         return nice * base
     }
 
-    const tickMoney = (value) => {
+    const tickMoney = (value, symbol) => {
         const amount = Number.isFinite(value) ? value : 0
+        const prefix = symbol || ''
         const absolute = Math.abs(amount)
         if (absolute >= 1000) {
-            return `$${compactNumberFormat.format(amount)}`
+            return `${prefix}${compactNumberFormat.format(amount)}`
         }
         if (absolute >= 1) {
-            return `$${Math.round(amount).toLocaleString()}`
+            return `${prefix}${Math.round(amount).toLocaleString()}`
         }
         const decimals = fractionDigits(amount, 3)
-        return `$${amount.toFixed(decimals).replace(/0+$/, '').replace(/\.$/, '')}`
+        return `${prefix}${amount.toFixed(decimals).replace(/0+$/, '').replace(/\.$/, '')}`
     }
 
     const historyMonthLabel = (entry, index) => {
@@ -118,7 +119,7 @@
         }))
     }
 
-    const draw = (container, tooltipEl, months, active, money) => {
+    const draw = (container, tooltipEl, months, active, money, symbolFor) => {
         const history = months
         const width = Math.max(240, Math.round(container.clientWidth || 720))
         const topPad = 6
@@ -136,9 +137,10 @@
                 const totals = entry.currencies[code] || { spend: 0, income: 0 }
                 return Math.max(totals.spend, totals.income)
             })))
+            const symbol = symbolFor && symbolFor(code)
             for (const factor of [0.5, 1]) {
                 if (max > 0) {
-                    maxTickWidth = Math.max(maxTickWidth, measureTextWidth(tickMoney(max * factor), 'chart__tick'))
+                    maxTickWidth = Math.max(maxTickWidth, measureTextWidth(tickMoney(max * factor, symbol), 'chart__tick'))
                 }
             }
             laneMax.set(code, max)
@@ -251,6 +253,7 @@
             const max = laneMax.get(code)
 
             const laneColor = currencyColor(code) || 'var(--accent)'
+            const symbol = symbolFor && symbolFor(code)
             const laneDot = svgElement('circle', {
                 cx: 3.5,
                 cy: laneTop + 6,
@@ -275,7 +278,7 @@
                 }))
                 if (factor > 0 && max > 0) {
                     const tick = svgElement('text', { x: leftPad - 6, y: y + 3.5, class: 'chart__tick' })
-                    tick.textContent = tickMoney(max * factor)
+                    tick.textContent = tickMoney(max * factor, symbol)
                     svg.appendChild(tick)
                 }
             }
@@ -440,7 +443,7 @@
         const redraw = () => {
             container.textContent = ''
             tooltipEl.hidden = true
-            draw(container, tooltipEl, months, active, money)
+            draw(container, tooltipEl, months, active, money, options.symbolFor)
         }
         redraw()
         observeWidth(container, redraw)
@@ -481,7 +484,7 @@
                     class: factor === 0 ? 'chart__baseline' : 'chart__grid',
                 }))
                 const tick = svgElement('text', { x: pad.left - 6, y: lineY + 3.5, class: 'chart__tick' })
-                tick.textContent = tickMoney(max * factor)
+                tick.textContent = tickMoney(max * factor, data.symbol)
                 svg.appendChild(tick)
             }
 

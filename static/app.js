@@ -24,6 +24,9 @@ const els = {
     monthDaysLeft: $('monthDaysLeft'),
     monthPace: $('monthPace'),
     monthPaceMarker: $('monthPaceMarker'),
+    monthThisHeader: $('monthThisHeader'),
+    monthPrevHeader: $('monthPrevHeader'),
+    monthAvgHeader: $('monthAvgHeader'),
     monthSpentThis: $('monthSpentThis'),
     monthSpentPrev: $('monthSpentPrev'),
     monthSpentAvg: $('monthSpentAvg'),
@@ -63,7 +66,6 @@ const els = {
     budgetSaveButton: $('budgetSaveButton'),
     transactionDialog: $('transactionDialog'),
     transactionForm: $('transactionForm'),
-    transactionDialogTitle: $('transactionDialogTitle'),
     transactionKindInputs: [...document.querySelectorAll('input[name="kind"]')],
     transactionAmountInput: $('transactionAmountInput'),
     transactionDetailsInput: $('transactionDetailsInput'),
@@ -93,6 +95,7 @@ const state = {
     data: null,
     lastFetchAt: 0,
     fractionalCurrencies: new Set(),
+    symbols: new Map(),
     editingBudgetCurrency: null,
     editingTransaction: null,
     pendingDelete: null,
@@ -109,7 +112,10 @@ let fetchSequence = 0
 
 // Currencies whose data needs more than cents (e.g. XMR) keep significant
 // digits even for values of 1 or more; everything else uses plain 2 decimals.
-const money = moneyFor((code) => Boolean(code) && state.fractionalCurrencies.has(code))
+// Currencies without a symbol render amounts with no prefix.
+const money = moneyFor(
+    (code) => Boolean(code) && state.fractionalCurrencies.has(code),
+    (code) => state.symbols.get(code))
 
 function applyCurrencyAccent(element, code) {
     const color = currencyColor(code)
@@ -137,6 +143,8 @@ async function fetchData({ silent = false } = {}) {
         state.lastFetchAt = Date.now()
         state.fractionalCurrencies = new Set(
             (data.currencies || []).filter((entry) => entry.fractional).map((entry) => entry.code))
+        state.symbols = new Map(
+            (data.currencies || []).filter((entry) => entry.symbol).map((entry) => [entry.code, entry.symbol]))
         render()
     } catch (e) {
         if (sequence === fetchSequence) {
@@ -228,24 +236,66 @@ function renderMonth(currency) {
     }
     els.monthDaysLeft.textContent = String(daysLeft)
     setBreakableText(els.monthSpentThis, money(spent, code))
-    setBreakableText(els.monthSpentPrev, money(value('previousMonthsSpend'), code))
-    setBreakableText(els.monthSpentAvg, money(value('trailingSpendAverage'), code))
+
+    // Last month and the trailing average are shown through the same day of
+    // month as today, so all three figure columns are directly comparable; the
+    // full-month figures stay in each cell's tooltip.
+    const months = Math.max(0, Math.round(value('trailingMonths')))
+    const previousMonthDate = new Date(date.getFullYear(), date.getMonth() - 1, 1)
+    const daysInPreviousMonth = new Date(previousMonthDate.getFullYear(), previousMonthDate.getMonth() + 1, 0).getDate()
+    const previousThrough = Math.min(day, daysInPreviousMonth)
+    const monthToDate = day < daysInMonth
+    const pick = (full, toDate) => (monthToDate ? toDate : full)
+    const throughLabel = (through) => `days 1–${through}`
+    els.monthThisHeader.textContent = monthToDate ? `This month (${throughLabel(day)})` : 'This month'
+    els.monthPrevHeader.textContent = monthToDate ? `Last month (${throughLabel(previousThrough)})` : 'Last month'
+    els.monthAvgHeader.textContent = months > 0 ?
+        (monthToDate ? `${months}-mo avg (${throughLabel(day)})` : `${months}-mo avg`) : '—'
+    const previousName = formats.monthName.format(previousMonthDate)
+
+    setBreakableText(els.monthSpentPrev,
+        months > 0 ? money(pick(value('previousMonthsSpend'), value('previousMonthsSpendToDate')), code) : '—')
+    els.monthSpentPrev.title = months > 0 ? `${previousName} full month: ${money(value('previousMonthsSpend'), code)}` : ''
+    setBreakableText(els.monthSpentAvg,
+        months > 0 ? money(pick(value('trailingSpendAverage'), value('trailingSpendAverageToDate')), code) : '—')
+    els.monthSpentAvg.title = months > 0 ?
+        `${months}-month average (full months): ${money(value('trailingSpendAverage'), code)}` : ''
+
     setBreakableText(els.monthEarnThis, `+${money(value('monthsIncome'), code)}`)
-    setBreakableText(els.monthEarnPrev, `+${money(value('previousMonthsIncome'), code)}`)
-    setBreakableText(els.monthEarnAvg, `+${money(value('trailingIncomeAverage'), code)}`)
+    setBreakableText(els.monthEarnPrev, months > 0 ?
+        `+${money(pick(value('previousMonthsIncome'), value('previousMonthsIncomeToDate')), code)}` : '—')
+    els.monthEarnPrev.title = months > 0 ? `${previousName} full month: +${money(value('previousMonthsIncome'), code)}` : ''
+    setBreakableText(els.monthEarnAvg, months > 0 ?
+        `+${money(pick(value('trailingIncomeAverage'), value('trailingIncomeAverageToDate')), code)}` : '—')
+    els.monthEarnAvg.title = months > 0 ?
+        `${months}-month average (full months): +${money(value('trailingIncomeAverage'), code)}` : ''
 
     const convertedThis = { out: value('monthsConvertedOut'), in: value('monthsConvertedIn') }
-    const convertedPrev = { out: value('previousMonthsConvertedOut'), in: value('previousMonthsConvertedIn') }
-    const convertedAvg = { out: value('trailingConvertedOutAverage'), in: value('trailingConvertedInAverage') }
-    const setConvertedCell = (element, totals) => {
+    const convertedPrev = {
+        out: pick(value('previousMonthsConvertedOut'), value('previousMonthsConvertedOutToDate')),
+        in: pick(value('previousMonthsConvertedIn'), value('previousMonthsConvertedInToDate')),
+    }
+    const convertedAvg = {
+        out: pick(value('trailingConvertedOutAverage'), value('trailingConvertedOutAverageToDate')),
+        in: pick(value('trailingConvertedInAverage'), value('trailingConvertedInAverageToDate')),
+    }
+    const convertedPrevFull = { out: value('previousMonthsConvertedOut'), in: value('previousMonthsConvertedIn') }
+    const convertedAvgFull = { out: value('trailingConvertedOutAverage'), in: value('trailingConvertedInAverage') }
+    const convertedText = (totals) => {
         const net = clean(totals.in - totals.out)
-        setBreakableText(element, `${net > 0 ? '+' : net < 0 ? '−' : ''}${money(Math.abs(net), code)}`)
-        element.title = `out ${money(totals.out, code)} · in ${money(totals.in, code)}`
+        return `${net > 0 ? '+' : net < 0 ? '−' : ''}${money(Math.abs(net), code)}`
+    }
+    const convertedTitle = (totals) => `out ${money(totals.out, code)} · in ${money(totals.in, code)}`
+    const setConvertedCell = (element, totals, full, fullLabel, available = true) => {
+        setBreakableText(element, available ? convertedText(totals) : '—')
+        element.title = available ?
+            [full && fullLabel ? `${fullLabel}: ${convertedTitle(full)}` : '', convertedTitle(totals)]
+                .filter(Boolean).join('\n') : ''
     }
     setConvertedCell(els.monthConvThis, convertedThis)
-    setConvertedCell(els.monthConvPrev, convertedPrev)
-    setConvertedCell(els.monthConvAvg, convertedAvg)
-    const hasConversions = [convertedThis, convertedPrev, convertedAvg]
+    setConvertedCell(els.monthConvPrev, convertedPrev, convertedPrevFull, `${previousName} full month`, months > 0)
+    setConvertedCell(els.monthConvAvg, convertedAvg, convertedAvgFull, `${months}-month average (full months)`, months > 0)
+    const hasConversions = [convertedThis, convertedPrev, convertedAvg, convertedPrevFull, convertedAvgFull]
         .some((totals) => totals.out > 0 || totals.in > 0)
     for (const cell of [els.monthConvLabel, els.monthConvThis, els.monthConvPrev, els.monthConvAvg]) {
         cell.hidden = !hasConversions
@@ -333,7 +383,12 @@ function renderOtherCurrencies() {
 function renderHistory() {
     const history = state.data.history || []
     const codes = (state.data.currencies || []).map((currency) => currency.code)
-    const rendered = DSCPLN.chart.renderMonthly(els.historyChart, els.historyTooltip, { months: history, codes, money })
+    const rendered = DSCPLN.chart.renderMonthly(els.historyChart, els.historyTooltip, {
+        months: history,
+        codes,
+        money,
+        symbolFor: (code) => state.symbols.get(code),
+    })
     els.historyCard.hidden = !rendered
     if (!rendered) {
         els.historyRange.textContent = ''
@@ -539,7 +594,7 @@ function openAddTransactionDialog() {
     if (!state.data || state.data.writable === false) return
     state.editingTransaction = null
     state.categoryTouched = false
-    els.transactionDialogTitle.textContent = 'Add transaction'
+    els.transactionDialog.setAttribute('label', 'Add transaction')
     els.transactionForm.reset()
     renderCategoryOptions('expense')
     renderCurrencyOptions()
@@ -549,14 +604,14 @@ function openAddTransactionDialog() {
     els.transactionCategoryHint.hidden = true
     els.transactionFormError.hidden = true
     hideDetailsSuggestions()
-    els.transactionDialog.showModal()
+    els.transactionDialog.show()
     els.transactionDetailsInput.focus()
 }
 
 function openEditTransactionDialog(transaction) {
     state.editingTransaction = transaction
     state.categoryTouched = true
-    els.transactionDialogTitle.textContent = 'Edit transaction'
+    els.transactionDialog.setAttribute('label', 'Edit transaction')
     for (const input of els.transactionKindInputs) {
         input.checked = input.value === transaction.kind
     }
@@ -572,7 +627,7 @@ function openEditTransactionDialog(transaction) {
     els.transactionCategoryHint.hidden = true
     els.transactionFormError.hidden = true
     hideDetailsSuggestions()
-    els.transactionDialog.showModal()
+    els.transactionDialog.show()
     els.transactionAmountInput.focus()
 }
 
@@ -594,12 +649,12 @@ async function submitTransaction(event) {
             method: editing ? 'PUT' : 'POST',
             body: JSON.stringify(payload),
         })
-        els.transactionDialog.close()
+        els.transactionDialog.hide()
         toast(editing ? 'Transaction updated' : 'Transaction added')
         await fetchData({ silent: true })
     } catch (e) {
         if (e.status === 409) {
-            els.transactionDialog.close()
+            els.transactionDialog.hide()
             toast(e.message, 'error')
             await fetchData({ silent: true })
         } else {
@@ -665,7 +720,7 @@ function openImportDialog() {
     els.importTextarea.value = ''
     els.importFormError.hidden = true
     resetImportConfirmation()
-    els.importDialog.showModal()
+    els.importDialog.show()
     els.importTextarea.focus()
 }
 
@@ -693,7 +748,7 @@ async function submitImport(event) {
             method: 'POST',
             body: JSON.stringify({ text }),
         })
-        els.importDialog.close()
+        els.importDialog.hide()
         toast(`Imported ${result.imported} ${result.imported === 1 ? 'transaction' : 'transactions'}`)
         await fetchData({ silent: true })
     } catch (e) {
@@ -708,7 +763,7 @@ function openDeleteTransactionDialog(transaction) {
     const amount = transaction.kind === 'income' ? transaction.moneyIn : transaction.expenses
     els.deleteDialogText.textContent = `${money(amount || 0, transaction.currency)} · ${transaction.details || 'No details'}`
     els.deleteDialogError.hidden = true
-    els.deleteDialog.showModal()
+    els.deleteDialog.show()
 }
 
 async function confirmDeleteTransaction() {
@@ -717,13 +772,13 @@ async function confirmDeleteTransaction() {
     els.deleteConfirmButton.disabled = true
     try {
         await requestJson(`/transactions/${encodeURIComponent(transaction.id)}`, { method: 'DELETE' })
-        els.deleteDialog.close()
+        els.deleteDialog.hide()
         state.pendingDelete = null
         toast('Transaction deleted')
         await fetchData({ silent: true })
     } catch (e) {
         if (e.status === 409) {
-            els.deleteDialog.close()
+            els.deleteDialog.hide()
             state.pendingDelete = null
             toast(e.message, 'error')
             await fetchData({ silent: true })
@@ -747,7 +802,7 @@ function openBudgetDialog(currencyCode) {
     els.firstDayBiasInput.value = currency ? number(currency.firstDayBias) : 0
     els.budgetCurrencyNote.textContent = `Editing the ${currencyCode} budget.`
     updateBudgetFormValidity()
-    els.budgetDialog.showModal()
+    els.budgetDialog.show()
 }
 
 function getBudgetFormValues() {
@@ -783,7 +838,7 @@ async function submitBudget(event) {
             method: 'POST',
             body: JSON.stringify({ monthlyBudget, firstDayBias, currency: state.editingBudgetCurrency }),
         })
-        els.budgetDialog.close()
+        els.budgetDialog.hide()
         toast('Budget updated')
         await fetchData({ silent: true })
     } catch (e) {
@@ -806,30 +861,21 @@ els.primaryBudgetButton.addEventListener('click', () => {
         openBudgetDialog(primary.code)
     }
 })
-els.budgetCancelButton.addEventListener('click', () => els.budgetDialog.close())
+els.budgetCancelButton.addEventListener('click', () => els.budgetDialog.hide())
 els.budgetForm.addEventListener('submit', submitBudget)
-els.budgetForm.addEventListener('input', updateBudgetFormValidity)
-els.budgetDialog.addEventListener('click', (event) => {
-    if (event.target === els.budgetDialog) els.budgetDialog.close()
-})
+els.budgetForm.addEventListener('sl-input', updateBudgetFormValidity)
 
 els.addTransactionButton.addEventListener('click', openAddTransactionDialog)
 els.importButton.addEventListener('click', openImportDialog)
 els.importForm.addEventListener('submit', submitImport)
-els.importTextarea.addEventListener('input', () => {
+els.importTextarea.addEventListener('sl-input', () => {
     if (importPastConfirmed) {
         resetImportConfirmation()
     }
 })
-els.importCancelButton.addEventListener('click', () => els.importDialog.close())
-els.importDialog.addEventListener('click', (event) => {
-    if (event.target === els.importDialog) els.importDialog.close()
-})
+els.importCancelButton.addEventListener('click', () => els.importDialog.hide())
 els.transactionForm.addEventListener('submit', submitTransaction)
-els.transactionCancelButton.addEventListener('click', () => els.transactionDialog.close())
-els.transactionDialog.addEventListener('click', (event) => {
-    if (event.target === els.transactionDialog) els.transactionDialog.close()
-})
+els.transactionCancelButton.addEventListener('click', () => els.transactionDialog.hide())
 
 for (const input of els.transactionKindInputs) {
     input.addEventListener('change', () => {
@@ -885,18 +931,12 @@ els.transactionCategorySelect.addEventListener('change', () => {
     state.categoryTouched = true
     els.transactionCategoryHint.hidden = true
 })
-els.transactionDialog.addEventListener('close', hideDetailsSuggestions)
+els.transactionDialog.addEventListener('sl-after-hide', hideDetailsSuggestions)
 
 els.deleteConfirmButton.addEventListener('click', confirmDeleteTransaction)
 els.deleteCancelButton.addEventListener('click', () => {
     state.pendingDelete = null
-    els.deleteDialog.close()
-})
-els.deleteDialog.addEventListener('click', (event) => {
-    if (event.target === els.deleteDialog) {
-        state.pendingDelete = null
-        els.deleteDialog.close()
-    }
+    els.deleteDialog.hide()
 })
 
 document.addEventListener('visibilitychange', () => {

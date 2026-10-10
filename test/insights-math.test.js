@@ -117,10 +117,14 @@ test('totals, net and per-category aggregation', () => {
     assert.deepEqual(math.categoryTotalsMap(transactions, 'expense'), { Rent: 20, Snacks: 10 })
 })
 
-test('computes deltas with null percent when there is no previous amount', () => {
+test('computes deltas, using the comparison magnitude for negatives', () => {
     assert.deepEqual(math.delta(150, 100), { amount: 50, pct: 50 })
     assert.deepEqual(math.delta(50, 100), { amount: -50, pct: -50 })
     assert.deepEqual(math.delta(10, 0), { amount: 10, pct: null })
+    // Negative comparators (net losses) use their magnitude as the denominator.
+    assert.deepEqual(math.delta(-300, -500), { amount: 200, pct: 40 })
+    assert.deepEqual(math.delta(50, -100), { amount: 150, pct: 150 })
+    assert.deepEqual(math.delta(-600, -500), { amount: -100, pct: -20 })
 })
 
 test('builds a daily series', () => {
@@ -136,33 +140,52 @@ test('builds a daily series', () => {
     assert.deepEqual(daily[2], { date: '2026-09-03', spend: 2.5, income: 100 })
 })
 
-test('averages the trailing months into a shaped cumulative baseline', () => {
-    const transactions = [
-        tx('2026-07-10', 'expense', 100, { category: 'Rent' }),
-        tx('2026-08-05', 'expense', 50, { category: 'Rent' }),
-        tx('2026-09-20', 'expense', 30, { category: 'Rent' }),
-    ]
-    const months = math.monthPartials(new Date(2026, 6, 1), new Date(2026, 8, 30))
-    assert.equal(months.length, 3)
-    const average = math.averageCumulative(transactions, months, 30)
-    assert.equal(average.spend.length, 30)
-    // Ends at the mean of the months' totals, starting at zero.
-    assert.equal(average.spend[0], 0)
-    assert.equal(average.spend[29], 60)
-    // The increments differ (the spends land on different days), so the curve
-    // is not a straight line.
-    const increments = average.spend.slice(1).map((value, index) => Number((value - average.spend[index]).toFixed(6)))
-    assert.ok(new Set(increments).size > 1)
+test('builds aligned month windows clamped to month bounds', () => {
+    const months = math.monthPartials(new Date(2026, 5, 1), new Date(2026, 7, 31))
+    const windows = math.alignedMonthWindows(months, new Date(2026, 6, 1), 7)
+    assert.deepEqual(windows.map((window) => [math.toIsoDate(window.start), math.toIsoDate(window.end)]), [
+        ['2026-06-01', '2026-06-07'],
+        ['2026-07-01', '2026-07-07'],
+        ['2026-08-01', '2026-08-07'],
+    ])
+    // A day-31 anchor clamps to shorter months.
+    const monthEnd = math.alignedMonthWindows(months, new Date(2026, 7, 31), 1)
+    assert.deepEqual(monthEnd.map((window) => [math.toIsoDate(window.start), math.toIsoDate(window.end)]), [
+        ['2026-06-30', '2026-06-30'],
+        ['2026-07-31', '2026-07-31'],
+        ['2026-08-31', '2026-08-31'],
+    ])
 })
 
-test('averages a zero-data month into the baseline', () => {
+test('averages the trailing months into an aligned cumulative baseline', () => {
     const transactions = [
-        tx('2026-07-01', 'expense', 100, { category: 'Rent' }),
-        tx('2026-09-30', 'expense', 60, { category: 'Rent' }),
+        tx('2026-07-03', 'expense', 100, { category: 'Rent' }),
+        tx('2026-08-03', 'expense', 50, { category: 'Rent' }),
+        tx('2026-09-20', 'expense', 30, { category: 'Rent' }),
     ]
-    const months = math.monthPartials(new Date(2026, 6, 1), new Date(2026, 8, 30))
-    const average = math.averageCumulative(transactions, months, 30)
-    assert.equal(Number(average.spend[29].toFixed(6)), Number((160 / 3).toFixed(6)))
+    const plan = math.comparisonPlan('avg3', { start: new Date(2026, 9, 1), end: new Date(2026, 9, 7) })
+    const baseline = math.baselineFromPlan(transactions, plan, 7)
+    assert.equal(baseline.spend.length, 7)
+    // Each month contributes only its first 7 days.
+    assert.equal(baseline.spend[0], 0)
+    assert.equal(baseline.spend[2], 50)
+    assert.equal(baseline.spend[6], 50)
+})
+
+test('charts the full trailing months for a month-long range', () => {
+    const transactions = [
+        tx('2026-07-01', 'expense', 310, { category: 'Rent' }),
+        tx('2026-08-01', 'expense', 300, { category: 'Rent' }),
+        tx('2026-09-01', 'expense', 290, { category: 'Rent' }),
+        tx('2026-07-20', 'expense', 10, { category: 'Rent' }),
+        tx('2026-08-20', 'expense', 10, { category: 'Rent' }),
+        tx('2026-09-20', 'expense', 10, { category: 'Rent' }),
+    ]
+    const plan = math.comparisonPlan('avg3', { start: new Date(2026, 9, 1), end: new Date(2026, 9, 31) })
+    const baseline = math.baselineFromPlan(transactions, plan, 31)
+    // Average of the three full trailing months, split by day.
+    assert.equal(baseline.spend[30], 310)
+    assert.equal(baseline.spend[6], 300)
 })
 
 test('resamples a series to a target length', () => {
@@ -183,39 +206,95 @@ test('projects month-end spending', () => {
     })
 })
 
-test('builds complete-month presets and comparison windows', () => {
+test('builds complete-month presets and comparison plans', () => {
     const preset = math.lastCompleteMonths(3, new Date(2026, 9, 15))
     assert.equal(math.toIsoDate(preset.start), '2026-07-01')
     assert.equal(math.toIsoDate(preset.end), '2026-09-30')
 
-    const prev = math.comparisonWindow('prev', { start: new Date(2026, 8, 1), end: new Date(2026, 8, 30) })
+    const prev = math.comparisonPlan('prev', { start: new Date(2026, 8, 1), end: new Date(2026, 8, 30) })
     assert.equal(prev.kind, 'range')
-    assert.equal(math.toIsoDate(prev.start), '2026-08-01')
-    assert.equal(math.toIsoDate(prev.end), '2026-08-31')
+    assert.deepEqual(prev.windows.map((window) => [math.toIsoDate(window.start), math.toIsoDate(window.end)]), [
+        ['2026-08-01', '2026-08-31'],
+    ])
+    assert.equal(prev.factor, 1)
 
-    const yoy = math.comparisonWindow('yoy', { start: new Date(2026, 8, 15), end: new Date(2026, 9, 4) })
-    assert.equal(math.toIsoDate(yoy.start), '2025-09-15')
-    assert.equal(math.toIsoDate(yoy.end), '2025-10-04')
+    const yoy = math.comparisonPlan('yoy', { start: new Date(2026, 8, 15), end: new Date(2026, 9, 4) })
+    assert.deepEqual(yoy.windows.map((window) => [math.toIsoDate(window.start), math.toIsoDate(window.end)]), [
+        ['2025-09-15', '2025-10-04'],
+    ])
     assert.equal(math.toIsoDate(math.shiftYear(new Date(2024, 1, 29))), '2023-02-28')
+})
 
-    const range = { start: new Date(2026, 8, 15), end: new Date(2026, 9, 4) }
-    const avg = math.comparisonWindow('avg3', range)
+test('compares the elapsed days like-for-like for every mode', () => {
+    const elapsed = { start: new Date(2026, 9, 1), end: new Date(2026, 9, 7) }
+    const prev = math.comparisonPlan('prev', elapsed)
+    assert.deepEqual(prev.windows.map((window) => [math.toIsoDate(window.start), math.toIsoDate(window.end)]), [
+        ['2026-09-01', '2026-09-07'],
+    ])
+    const yoy = math.comparisonPlan('yoy', elapsed)
+    assert.deepEqual(yoy.windows.map((window) => [math.toIsoDate(window.start), math.toIsoDate(window.end)]), [
+        ['2025-10-01', '2025-10-07'],
+    ])
+    // Trailing averages use the same days of each trailing month, averaged.
+    const avg = math.comparisonPlan('avg3', elapsed)
     assert.equal(avg.kind, 'average')
     assert.equal(avg.count, 3)
-    assert.equal(math.toIsoDate(avg.start), '2026-06-01')
-    assert.equal(math.toIsoDate(avg.end), '2026-08-31')
-    assert.equal(Number(math.comparisonFactor(avg, range).toFixed(6)), Number((20 / 92).toFixed(6)))
-    assert.equal(math.comparisonFactor(prev, range), 1)
+    assert.equal(avg.factor, 1 / 3)
+    assert.equal(avg.days, 21)
+    assert.deepEqual(avg.windows.map((window) => [math.toIsoDate(window.start), math.toIsoDate(window.end)]), [
+        ['2026-07-01', '2026-07-07'],
+        ['2026-08-01', '2026-08-07'],
+        ['2026-09-01', '2026-09-07'],
+    ])
+})
+
+test('compares a partial month against the same days of the trailing months', () => {
+    const transactions = [
+        tx('2026-07-01', 'expense', 310),
+        tx('2026-08-01', 'expense', 300),
+        tx('2026-09-01', 'expense', 290),
+        tx('2026-10-01', 'expense', 300),
+    ]
+    const elapsed = { start: new Date(2026, 9, 1), end: new Date(2026, 9, 7) }
+    const plan = math.comparisonPlan('avg3', elapsed)
+    const windowTxs = plan.windows.flatMap((window) => math.filterTransactions(transactions, window))
+    assert.equal(math.totals(windowTxs).spend * plan.factor, 300)
+    assert.equal(math.totals(math.filterTransactions(transactions, elapsed)).spend, 300)
+})
+
+test('clamps average windows to months with data', () => {
+    const elapsed = { start: new Date(2026, 9, 1), end: new Date(2026, 9, 7) }
+    const plan = math.comparisonPlan('avg12', elapsed, new Date(2026, 7, 15))
+    assert.equal(plan.count, 2)
+    assert.deepEqual(plan.windows.map((window) => [math.toIsoDate(window.start), math.toIsoDate(window.end)]), [
+        ['2026-08-01', '2026-08-07'],
+        ['2026-09-01', '2026-09-07'],
+    ])
+    const none = math.comparisonPlan('avg3', elapsed, new Date(2026, 9, 3))
+    assert.deepEqual(none.windows, [])
+    assert.equal(none.count, 0)
+    assert.equal(none.factor, 0)
+})
+
+test('scales average comparisons for multi-month ranges per day', () => {
+    const range = { start: new Date(2026, 8, 1), end: new Date(2026, 9, 7) }
+    const plan = math.comparisonPlan('avg3', range)
+    assert.equal(plan.kind, 'average')
+    assert.equal(plan.count, 3)
+    assert.deepEqual(plan.windows.map((window) => [math.toIsoDate(window.start), math.toIsoDate(window.end)]), [
+        ['2026-06-01', '2026-08-31'],
+    ])
+    assert.equal(Number(plan.factor.toFixed(6)), Number((37 / 92).toFixed(6)))
 })
 
 test('compares year-to-date against the same period last year', () => {
-    const ytd = math.comparisonWindow('prev', { start: new Date(2026, 0, 1), end: new Date(2026, 9, 5) })
-    assert.equal(math.toIsoDate(ytd.start), '2025-01-01')
-    assert.equal(math.toIsoDate(ytd.end), '2025-10-05')
+    const ytd = math.comparisonPlan('prev', { start: new Date(2026, 0, 1), end: new Date(2026, 9, 5) })
+    assert.equal(math.toIsoDate(ytd.windows[0].start), '2025-01-01')
+    assert.equal(math.toIsoDate(ytd.windows[0].end), '2025-10-05')
     // January month-to-date still compares with the previous month.
-    const january = math.comparisonWindow('prev', { start: new Date(2026, 0, 1), end: new Date(2026, 0, 5) })
-    assert.equal(math.toIsoDate(january.start), '2025-12-01')
-    assert.equal(math.toIsoDate(january.end), '2025-12-05')
+    const january = math.comparisonPlan('prev', { start: new Date(2026, 0, 1), end: new Date(2026, 0, 5) })
+    assert.equal(math.toIsoDate(january.windows[0].start), '2025-12-01')
+    assert.equal(math.toIsoDate(january.windows[0].end), '2025-12-05')
 })
 
 test('flags partial and multi-month ranges', () => {

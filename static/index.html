@@ -13,7 +13,10 @@
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232f6fed'/%3E%3Ctext x='32' y='45' font-size='38' text-anchor='middle' fill='white' font-family='sans-serif'%3E%24%3C/text%3E%3C/svg%3E">
     <script src="theme-boot.js"></script>
     <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/vendor/shoelace/theme-light.css">
+    <link rel="stylesheet" href="/vendor/shoelace/theme-dark.css">
     <link rel="stylesheet" href="style.css">
+    <script type="module" src="/vendor/shoelace/shoelace.js"></script>
 </head>
 
 <body class="is-loading">
@@ -22,31 +25,30 @@
         <div class="app-header__top">
             <h1>D<span class="accent">$</span>CPLN</h1>
             <div class="app-header__actions">
-                <a class="icon-button" href="/insights" title="Insights" aria-label="Insights">
+                <sl-button class="icon-button" href="/insights" title="Insights" aria-label="Insights">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
                         stroke-linecap="round" stroke-linejoin="round">
                         <path d="M3 20h18" />
                         <path d="M7 20v-6M12 20V8M17 20V4" />
                     </svg>
-                </a>
-                <a class="icon-button" href="/settings" title="API settings" aria-label="API settings">
+                </sl-button>
+                <sl-button class="icon-button" href="/settings" title="API settings" aria-label="API settings">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
                         stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="7.5" cy="15.5" r="5.5" />
                         <path d="m21 2-9.6 9.6" />
                         <path d="m15.5 7.5 3 3L22 7l-3-3" />
                     </svg>
-                </a>
-                <button id="refreshButton" class="icon-button" type="button" title="Refresh"
-                    aria-label="Refresh data">
+                </sl-button>
+                <sl-button id="refreshButton" class="icon-button" title="Refresh" aria-label="Refresh data">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
                         stroke-linecap="round" stroke-linejoin="round">
                         <path d="M20 11a8 8 0 1 0-2.34 5.66" />
                         <path d="M20 4v7h-7" />
                     </svg>
-                </button>
-                <button id="themeButton" class="icon-button" type="button" title="Theme: auto"
-                    aria-label="Theme: auto. Click to change."></button>
+                </sl-button>
+                <sl-button id="themeButton" class="icon-button" title="Theme: auto"
+                    aria-label="Theme: auto. Click to change."></sl-button>
             </div>
         </div>
         <div class="app-header__meta">
@@ -59,86 +61,87 @@
 
     <main class="layout">
         <div class="layout__main">
-        <section class="card card--hero" id="monthCard" aria-labelledby="monthHeading">
-            <div class="card__header">
-                <h2 class="currency-badge">
-                    <span id="monthHeading">Main</span>
-                </h2>
-                <span class="card__header-tools">
-                    <span id="monthName" class="card__context"></span>
-                    <button id="primaryBudgetButton" class="icon-button icon-button--small" type="button"
-                        title="Edit budget" aria-label="Edit budget">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 20h9" />
-                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                        </svg>
-                    </button>
-                </span>
-            </div>
-            <p class="figure">
-                <span id="monthSpend" class="figure__spend">—</span>
-                <span class="figure__meta">
-                    <span class="figure__of">of</span>
-                    <span id="monthBudget" class="figure__budget">—</span>
-                </span>
-            </p>
-            <div class="progress" id="monthProgress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
-                aria-valuenow="0">
-                <div class="progress__fill" id="monthProgressFill"></div>
-                <div class="progress__pace" id="monthPaceMarker" hidden></div>
-            </div>
-            <p id="monthPace" class="pace"></p>
-            <div class="stat-tiles">
-                <div class="stat-tile">
-                    <span class="stat-tile__label">Left</span>
-                    <span id="monthRemaining" class="stat-tile__value">—</span>
+            <section class="card card--hero" id="monthCard" aria-labelledby="monthHeading">
+                <div class="card__header">
+                    <h2 class="currency-badge">
+                        <span id="monthHeading">Main</span>
+                    </h2>
+                    <span class="card__header-tools">
+                        <span id="monthName" class="card__context"></span>
+                        <sl-button id="primaryBudgetButton" class="icon-button icon-button--small" title="Edit budget"
+                            aria-label="Edit budget">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 20h9" />
+                                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                            </svg>
+                        </sl-button>
+                    </span>
                 </div>
-                <div class="stat-tile">
-                    <span class="stat-tile__label">Per day</span>
-                    <span id="monthDaily" class="stat-tile__value">—</span>
+                <p class="figure">
+                    <span id="monthSpend" class="figure__spend">—</span>
+                    <span class="figure__meta">
+                        <span class="figure__of">of</span>
+                        <span id="monthBudget" class="figure__budget">—</span>
+                    </span>
+                </p>
+                <div class="progress" id="monthProgress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+                    aria-valuenow="0">
+                    <div class="progress__fill" id="monthProgressFill"></div>
+                    <div class="progress__pace" id="monthPaceMarker" hidden></div>
                 </div>
-                <div class="stat-tile">
-                    <span class="stat-tile__label">Days left</span>
-                    <span id="monthDaysLeft" class="stat-tile__value">—</span>
+                <p id="monthPace" class="pace"></p>
+                <div class="stat-tiles">
+                    <div class="stat-tile">
+                        <span class="stat-tile__label">Left</span>
+                        <span id="monthRemaining" class="stat-tile__value">—</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-tile__label">Per day</span>
+                        <span id="monthDaily" class="stat-tile__value">—</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-tile__label">Days left</span>
+                        <span id="monthDaysLeft" class="stat-tile__value">—</span>
+                    </div>
                 </div>
-            </div>
-            <div class="mini-grid mini-grid--primary">
-                <span class="mini-grid__label"></span>
-                <span class="mini-grid__header">This month</span>
-                <span class="mini-grid__header">Last month</span>
-                <span class="mini-grid__header">12-mo avg</span>
-                <span class="mini-grid__label">Spent</span>
-                <span id="monthSpentThis" class="mini-grid__value"></span>
-                <span id="monthSpentPrev" class="mini-grid__value"></span>
-                <span id="monthSpentAvg" class="mini-grid__value"></span>
-                <span class="mini-grid__label">Earned</span>
-                <span id="monthEarnThis" class="mini-grid__value mini-grid__value--in"></span>
-                <span id="monthEarnPrev" class="mini-grid__value mini-grid__value--in"></span>
-                <span id="monthEarnAvg" class="mini-grid__value mini-grid__value--in"></span>
-                <span id="monthConvLabel" class="mini-grid__label">Converted</span>
-                <span id="monthConvThis" class="mini-grid__value mini-grid__value--conv"></span>
-                <span id="monthConvPrev" class="mini-grid__value mini-grid__value--conv"></span>
-                <span id="monthConvAvg" class="mini-grid__value mini-grid__value--conv"></span>
-            </div>
-        </section>
+                <div class="mini-grid mini-grid--primary">
+                    <span class="mini-grid__label"></span>
+                    <span id="monthThisHeader" class="mini-grid__header">This month</span>
+                    <span id="monthPrevHeader" class="mini-grid__header">Last month</span>
+                    <span id="monthAvgHeader" class="mini-grid__header">12-mo avg</span>
+                    <span class="mini-grid__label">Spent</span>
+                    <span id="monthSpentThis" class="mini-grid__value"></span>
+                    <span id="monthSpentPrev" class="mini-grid__value"></span>
+                    <span id="monthSpentAvg" class="mini-grid__value"></span>
+                    <span class="mini-grid__label">Earned</span>
+                    <span id="monthEarnThis" class="mini-grid__value mini-grid__value--in"></span>
+                    <span id="monthEarnPrev" class="mini-grid__value mini-grid__value--in"></span>
+                    <span id="monthEarnAvg" class="mini-grid__value mini-grid__value--in"></span>
+                    <span id="monthConvLabel" class="mini-grid__label">Converted</span>
+                    <span id="monthConvThis" class="mini-grid__value mini-grid__value--conv"></span>
+                    <span id="monthConvPrev" class="mini-grid__value mini-grid__value--conv"></span>
+                    <span id="monthConvAvg" class="mini-grid__value mini-grid__value--conv"></span>
+                </div>
+            </section>
 
-        <div id="otherCurrencies" class="currency-grid"></div>
+            <div id="otherCurrencies" class="currency-grid"></div>
         </div>
 
         <div class="layout__side">
-        <details class="card" id="expensesCard" open>
-            <summary>
-                <span>This month</span>
-                <span id="expensesMeta" class="muted"></span>
-            </summary>
-            <div class="expenses__actions">
-                <button id="importButton" class="button button--small" type="button" hidden>Import</button>
-                <button id="addTransactionButton" class="button button--primary button--small" type="button" hidden>Add transaction</button>
-            </div>
-            <ul id="expensesList" class="expenses__list"></ul>
-            <p id="expensesEmpty" class="muted" hidden>No transactions recorded this month.</p>
-        </details>
+            <details class="card" id="expensesCard" open>
+                <summary>
+                    <span>This month</span>
+                    <span id="expensesMeta" class="muted"></span>
+                </summary>
+                <div class="expenses__actions">
+                    <sl-button id="importButton" size="small" hidden>Import</sl-button>
+                    <sl-button id="addTransactionButton" size="small" variant="primary" hidden>Add
+                        transaction</sl-button>
+                </div>
+                <ul id="expensesList" class="expenses__list"></ul>
+                <p id="expensesEmpty" class="muted" hidden>No transactions recorded this month.</p>
+            </details>
         </div>
 
         <section class="card" id="historyCard" aria-labelledby="historyHeading" hidden>
@@ -161,45 +164,38 @@
         </section>
     </main>
 
-    <dialog id="budgetDialog" class="dialog" aria-labelledby="budgetDialogTitle">
+    <sl-dialog id="budgetDialog" label="Edit budget" class="dialog--narrow">
         <form id="budgetForm" novalidate>
-            <div class="dialog__body">
-                <h2 id="budgetDialogTitle">Edit budget</h2>
-                <p id="budgetCurrencyNote" class="hint"></p>
-                <label for="monthlyBudgetInput">Monthly budget</label>
-                <input id="monthlyBudgetInput" name="monthlyBudget" type="number" step="0.01" min="0"
-                    inputmode="decimal" autocomplete="off" required>
-                <label for="firstDayBiasInput">First day bias</label>
-                <input id="firstDayBiasInput" name="firstDayBias" type="number" step="0.01" min="0"
-                    inputmode="decimal" autocomplete="off" required>
-                <p class="hint">Extra amount assigned to the first day of the month.</p>
-                <p id="budgetFormError" class="form-error" hidden></p>
-            </div>
-            <div class="dialog__actions">
-                <button id="budgetCancelButton" class="button" type="button">Cancel</button>
-                <button id="budgetSaveButton" class="button button--primary" type="submit">Save</button>
-            </div>
+            <p id="budgetCurrencyNote" class="hint"></p>
+            <sl-input id="monthlyBudgetInput" name="monthlyBudget" type="number" step="0.01" min="0"
+                inputmode="decimal" autocomplete="off" label="Monthly budget" required></sl-input>
+            <sl-input id="firstDayBiasInput" name="firstDayBias" type="number" step="0.01" min="0"
+                inputmode="decimal" autocomplete="off" label="First day bias" required></sl-input>
+            <p class="hint">Extra amount assigned to the first day of the month.</p>
+            <p id="budgetFormError" class="form-error" hidden></p>
         </form>
-    </dialog>
+        <div slot="footer" class="dialog-actions">
+            <sl-button id="budgetCancelButton">Cancel</sl-button>
+            <sl-button id="budgetSaveButton" type="submit" form="budgetForm" variant="primary">Save</sl-button>
+        </div>
+    </sl-dialog>
 
-    <dialog id="transactionDialog" class="dialog" aria-labelledby="transactionDialogTitle">
+    <sl-dialog id="transactionDialog" label="Add transaction" class="dialog--wide">
         <form id="transactionForm">
-            <div class="dialog__body">
-                <h2 id="transactionDialogTitle">Add transaction</h2>
-                <div class="segmented" role="radiogroup" aria-label="Transaction kind">
-                    <label class="segmented__option">
-                        <input type="radio" name="kind" value="expense" checked>
-                        <span>Expense</span>
-                    </label>
-                    <label class="segmented__option">
-                        <input type="radio" name="kind" value="income">
-                        <span>Income</span>
-                    </label>
-                </div>
-                <label for="transactionAmountInput">Amount</label>
-                <input id="transactionAmountInput" name="amount" type="number" step="any" min="0.000000000001"
-                    inputmode="decimal" autocomplete="off" required>
-                <label for="transactionDetailsInput">Details</label>
+            <div class="segmented" role="radiogroup" aria-label="Transaction kind">
+                <label class="segmented__option">
+                    <input type="radio" name="kind" value="expense" checked>
+                    <span>Expense</span>
+                </label>
+                <label class="segmented__option">
+                    <input type="radio" name="kind" value="income">
+                    <span>Income</span>
+                </label>
+            </div>
+            <sl-input id="transactionAmountInput" name="amount" type="number" step="any" min="0.000000000001"
+                inputmode="decimal" autocomplete="off" label="Amount" required></sl-input>
+            <div class="field">
+                <span class="field__label">Details</span>
                 <div class="autocomplete">
                     <input id="transactionDetailsInput" name="details" type="text" autocomplete="off" required
                         role="combobox" aria-expanded="false" aria-autocomplete="list"
@@ -207,54 +203,54 @@
                     <ul id="detailsSuggestions" class="autocomplete__menu" role="listbox"
                         aria-label="Previously used details" hidden></ul>
                 </div>
-                <label for="transactionDateInput">Date</label>
-                <input id="transactionDateInput" name="date" type="date" required>
-                <label for="transactionCategorySelect">Category</label>
-                <select id="transactionCategorySelect" name="category" required></select>
-                <p id="transactionCategoryHint" class="hint" hidden></p>
-                <label for="transactionCurrencySelect">Currency</label>
-                <select id="transactionCurrencySelect" name="currency" required></select>
-                <label for="transactionNotesInput">Notes <span class="label-optional">(optional)</span></label>
-                <input id="transactionNotesInput" name="notes" type="text" autocomplete="off">
-                <p id="transactionFormError" class="form-error" hidden></p>
             </div>
-            <div class="dialog__actions">
-                <button id="transactionCancelButton" class="button" type="button">Cancel</button>
-                <button id="transactionSaveButton" class="button button--primary" type="submit">Save</button>
+            <div class="native-fields">
+                <div class="native-field">
+                    <span class="field__label">Date</span>
+                    <input id="transactionDateInput" name="date" type="date" required>
+                </div>
+                <div class="field">
+                    <span class="field__label">Category</span>
+                    <select id="transactionCategorySelect" name="category" required></select>
+                </div>
+                <div class="field">
+                    <span class="field__label">Currency</span>
+                    <select id="transactionCurrencySelect" name="currency" required></select>
+                </div>
             </div>
+            <p id="transactionCategoryHint" class="hint" hidden></p>
+            <sl-input id="transactionNotesInput" name="notes" label="Notes (optional)" autocomplete="off"></sl-input>
+            <p id="transactionFormError" class="form-error" hidden></p>
         </form>
-    </dialog>
-
-    <dialog id="importDialog" class="dialog dialog--wide" aria-labelledby="importDialogTitle">
-        <form id="importForm">
-            <div class="dialog__body">
-                <h2 id="importDialogTitle">Import transactions</h2>
-                <p id="importHint" class="hint"></p>
-                <textarea id="importTextarea" class="dialog__textarea" rows="14" spellcheck="false" autocapitalize="off"
-                    autocomplete="off" placeholder="2026-09-08	CASH Dividend	29.77		CAD	Dividend"></textarea>
-                <p id="importPastWarning" class="form-warning" hidden></p>
-                <p id="importFormError" class="form-error" hidden></p>
-            </div>
-            <div class="dialog__actions">
-                <button id="importCancelButton" class="button" type="button">Cancel</button>
-                <button id="importSubmitButton" class="button button--primary" type="submit">Import</button>
-            </div>
-        </form>
-    </dialog>
-
-    <dialog id="deleteDialog" class="dialog" aria-labelledby="deleteDialogTitle">
-        <div class="dialog__content">
-            <div class="dialog__body">
-                <h2 id="deleteDialogTitle">Delete transaction</h2>
-                <p id="deleteDialogText" class="muted"></p>
-                <p id="deleteDialogError" class="form-error" hidden></p>
-            </div>
-            <div class="dialog__actions">
-                <button id="deleteCancelButton" class="button" type="button">Cancel</button>
-                <button id="deleteConfirmButton" class="button button--danger" type="button">Delete</button>
-            </div>
+        <div slot="footer" class="dialog-actions">
+            <sl-button id="transactionCancelButton">Cancel</sl-button>
+            <sl-button id="transactionSaveButton" type="submit" form="transactionForm" variant="primary">Save</sl-button>
         </div>
-    </dialog>
+    </sl-dialog>
+
+    <sl-dialog id="importDialog" label="Import transactions" class="dialog--wide">
+        <form id="importForm">
+            <p id="importHint" class="hint"></p>
+            <sl-textarea id="importTextarea" name="text" rows="14" spellcheck="false" autocapitalize="off"
+                autocomplete="off"
+                placeholder="2026-09-08	CASH Dividend	29.77		CAD	Dividend"></sl-textarea>
+            <p id="importPastWarning" class="form-warning" hidden></p>
+            <p id="importFormError" class="form-error" hidden></p>
+        </form>
+        <div slot="footer" class="dialog-actions">
+            <sl-button id="importCancelButton">Cancel</sl-button>
+            <sl-button id="importSubmitButton" type="submit" form="importForm" variant="primary">Import</sl-button>
+        </div>
+    </sl-dialog>
+
+    <sl-dialog id="deleteDialog" label="Delete transaction" class="dialog--narrow">
+        <p id="deleteDialogText" class="muted"></p>
+        <p id="deleteDialogError" class="form-error" hidden></p>
+        <div slot="footer" class="dialog-actions">
+            <sl-button id="deleteCancelButton">Cancel</sl-button>
+            <sl-button id="deleteConfirmButton" variant="danger">Delete</sl-button>
+        </div>
+    </sl-dialog>
 
     <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
 

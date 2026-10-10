@@ -80,8 +80,10 @@
     }
 
     // Returns a `money(value, code)` formatter whose precision follows whether
-    // the currency needs sub-cent digits (e.g. XMR).
-    const moneyFor = (isFractional) => (value, code) => {
+    // the currency needs sub-cent digits (e.g. XMR). `symbolFor` supplies the
+    // currency's symbol; currencies without one render with no prefix (their
+    // code is shown elsewhere in the UI).
+    const moneyFor = (isFractional, symbolFor = () => null) => (value, code) => {
         const amount = Number.isFinite(value) ? value : 0
         const decimals = isFractional(code) ?
             fractionDigits(amount, 12) :
@@ -91,7 +93,8 @@
             formatter = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: decimals })
             moneyFormatters.set(decimals, formatter)
         }
-        return `${amount < 0 ? '−' : ''}$${formatter.format(Math.abs(amount))}`
+        const symbol = (code && symbolFor(code)) || ''
+        return `${amount < 0 ? '−' : ''}${symbol}${formatter.format(Math.abs(amount))}`
     }
 
     /* ---------- Currency colors ---------- */
@@ -234,8 +237,9 @@
             theme = THEME_ORDER.includes(stored) ? stored : 'auto'
         } catch (e) { }
         const apply = () => {
-            document.documentElement.dataset.theme =
-                theme === 'dark' || (theme === 'auto' && prefersDark.matches) ? 'dark' : 'light'
+            const dark = theme === 'dark' || (theme === 'auto' && prefersDark.matches)
+            document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+            document.documentElement.classList.toggle('sl-theme-dark', dark)
             button.innerHTML = THEME_ICONS[theme]
             button.title = `Theme: ${theme}`
             button.setAttribute('aria-label', `Theme: ${theme}. Click to change.`)

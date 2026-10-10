@@ -40,6 +40,7 @@ const state = {
     reference: null,
     transactions: [],
     fractionalCurrencies: new Set(),
+    symbols: new Map(),
     excluded: new Map(),
     comparisonData: null,
 }
@@ -51,7 +52,9 @@ const el = (tag, className, text, ...children) => DSCPLN.el(tag, { class: classN
 
 const categoryColor = (name) => DSCPLN.colorFrom(CATEGORY_PALETTE, String(name || ''))
 
-const money = moneyFor((code) => state.fractionalCurrencies.has(code))
+const money = moneyFor(
+    (code) => state.fractionalCurrencies.has(code),
+    (code) => state.symbols.get(code))
 
 function toast(message, type = 'error') {
     showToast(els.toasts, message, type)
@@ -121,56 +124,109 @@ function isWholeMonths(range) {
 const formatDateRange = (start, end) =>
     `${formats.dayMonth.format(start)} ${formats.year.format(start)} – ${formats.dayMonth.format(end)} ${formats.year.format(end)}`
 
-function comparisonShortLabel() {
-    const range = elapsedRange()
-    const window = IM.comparisonWindow(state.comparison, range)
-    if (window.kind === 'average') {
-        return `${window.count}-mo avg`
-    }
-    if (window.start.getFullYear() !== range.start.getFullYear()) {
-        return 'last year'
-    }
-    return IM.spansMultipleMonths(range.start, range.end) ? 'previous period' : 'previous month'
+// A compact date range ("1 Oct – 7 Oct"), with the year when it is not the
+// selected range's year (so last-year comparisons stay unambiguous).
+function shortRange(window) {
+    const start = formats.dayMonth.format(window.start)
+    const end = formats.dayMonth.format(window.end)
+    const body = window.start.getTime() === window.end.getTime() ? start : `${start} – ${end}`
+    return window.start.getFullYear() === state.range.start.getFullYear() ?
+        body : `${body} ${formats.year.format(window.start)}`
 }
 
-function comparisonLongLabel() {
-    const window = IM.comparisonWindow(state.comparison, elapsedRange())
-    if (window.kind === 'average') {
-        return `${window.count}-month average of ${formats.monthShort.format(window.start)}–${formats.monthShort.format(window.end)} ${formats.year.format(window.end)}`
+function comparisonShortLabel(plan) {
+    if (plan.kind === 'average') {
+        return plan.count > 0 ? `${plan.count}-mo avg` : 'no prior data'
     }
-    return formatDateRange(window.start, window.end)
+    const window = plan.windows[0]
+    if (window.start.getFullYear() !== state.comparisonData.statsRange.start.getFullYear()) {
+        return 'last year'
+    }
+    return IM.spansMultipleMonths(window.start, window.end) ? 'previous period' : 'previous month'
+}
+
+function comparisonLongLabel(plan) {
+    if (plan.windows.length === 0) {
+        return 'no prior data'
+    }
+    const first = plan.windows[0]
+    const last = plan.windows[plan.windows.length - 1]
+    if (plan.kind !== 'average') {
+        return formatDateRange(first.start, first.end)
+    }
+    if (IM.isWholeMonthsRange(first.start, first.end)) {
+        return `${plan.count}-month average of ${formats.monthShort.format(first.start)}–${formats.monthShort.format(last.start)} ${formats.year.format(last.start)}`
+    }
+    if (!IM.spansMultipleMonths(first.start, first.end)) {
+        const span = `${formats.dayMonth.format(first.start)}–${formats.dayMonth.format(first.end)}`
+        return plan.count === 1 ?
+            `the same days of ${formats.monthYear.format(first.start)} (${span})` :
+            `the average of the same days of each month ${formats.monthShort.format(first.start)}–${formats.monthShort.format(last.start)} ${formats.year.format(last.start)} (e.g. ${span})`
+    }
+    return `${plan.count}-month average of ${formats.monthShort.format(first.start)}–${formats.monthShort.format(last.end)} ${formats.year.format(last.end)}`
+}
+
+// The comparison note is deliberately one short line; the full explanation
+// lives in its tooltip.
+function setCompareNote(text, details) {
+    els.compareNote.textContent = text
+    els.compareNote.title = details || ''
+}
+
+function comparisonDetails(statsRange, statsPlan, partial) {
+    const parts = [`Figures cover ${formatDateRange(statsRange.start, statsRange.end)}.`]
+    if (statsPlan.kind === 'average') {
+        parts.push(statsPlan.count === 0 ?
+            'No earlier complete month has data for the average.' :
+            `Compared with ${comparisonLongLabel(statsPlan)}.`)
+    } else {
+        const window = statsPlan.windows[0]
+        const matching = IM.isWholeMonthsRange(window.start, window.end) ? '' :
+            window.start.getFullYear() === statsRange.start.getFullYear() ?
+                ' (matching calendar days of the previous month)' :
+                ' (matching calendar days of the previous year)'
+        parts.push(`Compared with ${comparisonLongLabel(statsPlan)}${matching}.`)
+    }
+    if (partial) {
+        parts.push('Future dates are excluded.')
+    }
+    return parts.join(' ')
 }
 
 function updateCompareNote() {
-    if (!state.range) {
+    if (!state.range || !state.comparisonData) {
         return
     }
-    const range = elapsedRange()
-    const window = IM.comparisonWindow(state.comparison, range)
-    const rangeDays = IM.daysInclusive(range.start, range.end)
-    const rangeLabel = formatDateRange(range.start, range.end)
-    let text
-    if (window.kind === 'average') {
-        text = `Comparing ${rangeLabel} (${rangeDays} days) with the ${window.count}-month average (${formats.monthShort.format(window.start)}–${formats.monthShort.format(window.end)} ${formats.year.format(window.end)}), scaled per day.`
-    } else {
-        text = `Comparing ${rangeLabel} (${rangeDays} days) with ${comparisonLongLabel()} (${IM.daysInclusive(window.start, window.end)} days).`
+    const statsRange = elapsedRange()
+    if (state.range.start > dates.startOfDay(new Date())) {
+        setCompareNote('This range has not started yet.', '')
+        return
     }
-    if (window.kind !== 'average' && !isWholeMonths(range)) {
-        const sameYear = window.start.getFullYear() === range.start.getFullYear()
-        text += sameYear ?
-            ' Partial months are compared with the matching calendar days of the previous month.' :
-            ' Partial months are compared with the matching calendar days of the previous year.'
+    const statsPlan = IM.comparisonPlan(state.comparison, statsRange, state.comparisonData.earliest)
+    const partial = IM.toIsoDate(statsRange.end) !== IM.toIsoDate(state.range.end)
+    const comparison = statsPlan.count === 0 ? 'no earlier data' : comparisonBasisLabel(statsPlan)
+    setCompareNote(`${shortRange(statsRange)} vs ${comparison}`,
+        comparisonDetails(statsRange, statsPlan, partial))
+}
+
+// A short statement of what the KPI figures are compared with.
+function comparisonBasisLabel(plan) {
+    if (plan.windows.length === 0) {
+        return 'no prior data'
     }
-    if (IM.toIsoDate(range.end) !== IM.toIsoDate(state.range.end)) {
-        const monthToDate = range.start.getDate() === 1 &&
-            range.start.getMonth() === range.end.getMonth() &&
-            range.start.getFullYear() === range.end.getFullYear()
-        const through = `${formats.dayMonth.format(range.end)} ${formats.year.format(range.end)}`
-        text += monthToDate ?
-            ` Figures are month to date (through ${through}); future dates are excluded.` :
-            ` Figures are through ${through}; future dates are excluded.`
+    if (plan.kind === 'average') {
+        const aligned = !IM.isWholeMonthsRange(plan.windows[0].start, plan.windows[0].end) &&
+            !IM.spansMultipleMonths(plan.windows[0].start, plan.windows[0].end)
+        if (!aligned) {
+            return comparisonShortLabel(plan)
+        }
+        const range = state.comparisonData.statsRange
+        const span = range.start.getDate() === range.end.getDate() ?
+            `${range.start.getDate()}` :
+            `${range.start.getDate()}–${range.end.getDate()}`
+        return `${comparisonShortLabel(plan)} (${span})`
     }
-    els.compareNote.textContent = text
+    return shortRange(plan.windows[0])
 }
 
 function syncInputs() {
@@ -248,25 +304,26 @@ async function fetchData() {
         document.body.classList.add('is-loading')
     }
     try {
-        // Statistics use the elapsed part of the range, while the chart's
-        // baselines use the selected range so they can show the full
-        // comparison period.
+        // Statistics use the elapsed part of the range, while the chart and
+        // forecast use the selected range so they can show the full comparison
+        // periods. Plans fetched without the per-currency data-age clamp cover a
+        // superset of the windows used for display.
         const statsRange = elapsedRange()
-        const window = IM.comparisonWindow(state.comparison, statsRange)
-        const chartWindow = IM.comparisonWindow(state.comparison, state.range)
-        // Fetch enough to cover both comparison windows, the forecast's
-        // month-to-date data and the full selected range.
+        const chartRange = state.range
+        const statsPlan = IM.comparisonPlan(state.comparison, statsRange)
+        const chartPlan = IM.comparisonPlan(state.comparison, chartRange)
         const today = dates.startOfDay(new Date())
-        let fetchStart = window.start < chartWindow.start ? window.start : chartWindow.start
-        if (state.range.start <= today && today <= state.range.end) {
+        let fetchStart = [...statsPlan.windows, ...chartPlan.windows].reduce((earliest, window) =>
+            !earliest || window.start < earliest ? window.start : earliest, null)
+        if (chartRange.start <= today && today <= chartRange.end) {
             const monthStart = IM.startOfMonth(today)
-            if (monthStart < fetchStart) {
+            if (!fetchStart || monthStart < fetchStart) {
                 fetchStart = monthStart
             }
         }
         const params = new URLSearchParams({
-            start: IM.toIsoDate(fetchStart),
-            end: IM.toIsoDate(state.range.end),
+            start: IM.toIsoDate(fetchStart || chartRange.start),
+            end: IM.toIsoDate(chartRange.end),
         })
         const [reference, transactions] = await Promise.all([
             state.reference ? Promise.resolve(state.reference) : requestJson('/data'),
@@ -279,10 +336,21 @@ async function fetchData() {
         state.transactions = transactions.transactions || []
         state.fractionalCurrencies = new Set(
             (reference.currencies || []).filter((entry) => entry.fractional).map((entry) => entry.code))
+        state.symbols = new Map(
+            (reference.currencies || []).filter((entry) => entry.symbol).map((entry) => [entry.code, entry.symbol]))
+        const firstMonths = new Map((reference.currencies || []).map((entry) => [
+            entry.code,
+            entry.firstMonth ? IM.parseIsoDate(entry.firstMonth) : null,
+        ]))
+        // The note and basis labels use the earliest month any currency has
+        // data; each section clamps further to its own currency's first month.
+        const earliest = [...firstMonths.values()].reduce((min, date) =>
+            date && (!min || date < min) ? date : min, null)
         state.comparisonData = {
-            window,
-            chartWindow,
-            factor: IM.comparisonFactor(window, statsRange),
+            statsRange,
+            chartRange,
+            earliest,
+            firstMonths,
         }
         syncInputs()
         renderContent()
@@ -349,7 +417,13 @@ function renderHistoryPanel(rangeTxs) {
     els.historyCard.hidden = false
     els.historyRange.textContent = `${formats.monthYear.format(state.range.start)} – ${formats.monthYear.format(state.range.end)}`
     const codes = (state.reference.currencies || []).map((currency) => currency.code)
-    if (!DSCPLN.chart.renderMonthly(els.historyChart, els.historyTooltip, { months, codes, money })) {
+    const rendered = DSCPLN.chart.renderMonthly(els.historyChart, els.historyTooltip, {
+        months,
+        codes,
+        money,
+        symbolFor: (code) => state.symbols.get(code),
+    })
+    if (!rendered) {
         els.historyCard.hidden = true
     }
 }
@@ -362,29 +436,60 @@ function scaleMap(map, factor) {
     return scaled
 }
 
-function comparisonForSection(code, excluded) {
+// The comparison plans for one currency. Months before a currency's first
+// transaction are skipped so its averages only cover months with data.
+function sectionPlans(code) {
     const data = state.comparisonData
-    const windowTxs = transactionsIn(code, data.window, excluded)
-    const raw = IM.totals(windowTxs)
-    const factor = data.factor
-    const windowDays = IM.daysInclusive(data.window.start, data.window.end)
+    const firstDataMonth = data.firstMonths.get(code) || null
     return {
-        kind: data.window.kind,
+        stats: IM.comparisonPlan(state.comparison, data.statsRange, firstDataMonth),
+        chart: IM.comparisonPlan(state.comparison, data.chartRange, firstDataMonth),
+    }
+}
+
+function comparisonForSection(code, excluded, plan) {
+    if (plan.windows.length === 0) {
+        return {
+            kind: plan.kind,
+            hasData: false,
+            spend: null,
+            income: null,
+            net: null,
+            count: null,
+            dailySpend: null,
+            dailyIncome: null,
+            spendMap: {},
+            incomeMap: {},
+        }
+    }
+    const windowTxs = plan.windows.flatMap((window) => transactionsIn(code, window, excluded))
+    const raw = IM.totals(windowTxs)
+    const factor = plan.factor
+    return {
+        kind: plan.kind,
         hasData: raw.count > 0,
         spend: raw.spend * factor,
         income: raw.income * factor,
         net: raw.net * factor,
-        count: data.window.kind === 'range' ? raw.count : null,
-        dailySpend: windowDays > 0 ? raw.spend / windowDays : 0,
-        dailyIncome: windowDays > 0 ? raw.income / windowDays : 0,
+        count: raw.count * factor,
+        dailySpend: plan.days > 0 ? raw.spend / plan.days : 0,
+        dailyIncome: plan.days > 0 ? raw.income / plan.days : 0,
         spendMap: scaleMap(IM.categoryTotalsMap(windowTxs, 'expense'), factor),
         incomeMap: scaleMap(IM.categoryTotalsMap(windowTxs, 'income'), factor),
     }
 }
 
 function renderContent() {
+    const today = dates.startOfDay(new Date())
     const statTxs = rangeTransactions()
     renderTransactionsPanel(rangeTransactions(state.range))
+    if (state.range.start > today) {
+        els.historyCard.hidden = true
+        els.content.textContent = ''
+        els.content.appendChild(el('section', 'card', '',
+            el('p', 'muted', 'This range is in the future. Statistics will appear once the period starts.')))
+        return
+    }
     renderHistoryPanel(statTxs)
     renderSections(statTxs)
 }
@@ -434,7 +539,8 @@ function buildSection(code, rangeTxs) {
     }
 
     const included = rangeTxs.filter((transaction) => !excluded.has(transaction.category))
-    const comparison = comparisonForSection(code, excluded)
+    const plans = sectionPlans(code)
+    const comparison = comparisonForSection(code, excluded, plans.stats)
 
     const section = el('section', 'card insights-section')
     section.dataset.currency = code
@@ -444,12 +550,15 @@ function buildSection(code, rangeTxs) {
     const badge = el('span', 'currency-badge')
     badge.appendChild(el('span', 'insights-section__code', code))
     header.appendChild(badge)
-    header.appendChild(el('span', 'muted', TX.formatCount(included.length)))
+    const meta = el('span', 'muted insights-section__meta',
+        `${TX.formatCount(included.length)} · ${comparisonBasisLabel(plans.stats)}`)
+    meta.title = comparisonLongLabel(plans.stats)
+    header.appendChild(meta)
     section.appendChild(header)
 
-    section.appendChild(buildKpis(code, included, comparison))
-    section.appendChild(buildColumns(code, included, rangeTxs, comparison, excluded))
-    section.appendChild(buildMovers(code, included, comparison))
+    section.appendChild(buildKpis(code, included, comparison, plans.stats))
+    section.appendChild(buildColumns(code, included, rangeTxs, comparison, excluded, plans))
+    section.appendChild(buildMovers(code, included, comparison, plans.stats))
     return section
 }
 
@@ -464,33 +573,40 @@ function netColor(net, spend, income) {
     return `color-mix(in srgb, ${base} ${percent}%, var(--text-muted))`
 }
 
-function buildKpis(code, included, comparison) {
+function buildKpis(code, included, comparison, plan) {
     const current = IM.totals(included)
     const days = daysElapsed()
     const grid = el('div', 'kpi-grid')
     grid.append(
-        kpiTile('Spent', current.spend, comparison.spend, { tone: 'spend', code }),
-        kpiTile('Earned', current.income, comparison.income, { tone: 'income', code }),
+        kpiTile('Spent', current.spend, comparison.spend, { tone: 'spend', code, plan }),
+        kpiTile('Earned', current.income, comparison.income, { tone: 'income', code, plan }),
         kpiTile('Net', current.net, comparison.net, {
             tone: 'income',
             code,
+            plan,
+            // Net colors by sign and intensity; the delta colors by direction.
             color: netColor(current.net, current.spend, current.income),
         }),
-        kpiTile('Avg / day', current.spend / days, comparison.dailySpend, { tone: 'spend', code }),
-        kpiTile('Avg earned / day', current.income / days, comparison.dailyIncome, { tone: 'income', code }),
-        kpiTile('Transactions', current.count, comparison.count, { tone: 'neutral' })
+        kpiTile('Avg / day', current.spend / days, comparison.dailySpend, { tone: 'spend', code, plan }),
+        kpiTile('Avg earned / day', current.income / days, comparison.dailyIncome, { tone: 'income', code, plan }),
+        kpiTile('Transactions', current.count, comparison.count, { tone: 'neutral', plan })
     )
     return grid
 }
 
 function daysElapsed() {
-    const range = elapsedRange()
+    const range = state.comparisonData ? state.comparisonData.statsRange : elapsedRange()
     return Math.max(1, IM.daysInclusive(range.start, range.end))
 }
 
 function kpiTile(label, value, comparisonValue, options = {}) {
     const tile = el('div', 'kpi')
-    tile.appendChild(el('span', 'kpi__label', label))
+    const labelEl = el('span', 'kpi__label', label)
+    const range = state.comparisonData && state.comparisonData.statsRange
+    if (range) {
+        labelEl.title = `Current period: ${formatDateRange(range.start, range.end)}`
+    }
+    tile.appendChild(labelEl)
     const valueEl = el('span', 'kpi__value')
     setBreakableText(valueEl, options.code ? money(value, options.code) : String(value))
     if (options.color) {
@@ -499,19 +615,25 @@ function kpiTile(label, value, comparisonValue, options = {}) {
     tile.appendChild(valueEl)
 
     const delta = el('span', 'kpi__delta')
-    if (comparisonValue == null || (comparisonValue <= 0 && value <= 0)) {
+    if (comparisonValue == null || (value === 0 && comparisonValue === 0)) {
         delta.textContent = '—'
         delta.classList.add('muted')
     } else {
         const change = IM.delta(value, comparisonValue)
-        const up = change.amount > 0
-        const short = comparisonShortLabel()
-        delta.textContent = change.pct == null ? `new vs ${short}` : `${up ? '+' : ''}${change.pct.toFixed(0)}% vs ${short}`
-        delta.title = comparisonLongLabel()
+        const short = comparisonShortLabel(options.plan)
+        if (change.pct == null) {
+            const amount = options.code ?
+                money(Math.abs(change.amount), options.code) :
+                String(IM.clean(Math.abs(change.amount)))
+            delta.textContent = `${change.amount > 0 ? '+' : change.amount < 0 ? '−' : ''}${amount} vs ${short}`
+        } else {
+            delta.textContent = `${change.pct > 0 ? '+' : ''}${change.pct.toFixed(0)}% vs ${short}`
+        }
+        delta.title = comparisonLongLabel(options.plan)
         if (options.tone === 'spend') {
-            delta.classList.add(change.amount === 0 ? 'muted' : up ? 'kpi__delta--bad' : 'kpi__delta--good')
+            delta.classList.add(change.amount === 0 ? 'muted' : change.amount > 0 ? 'kpi__delta--bad' : 'kpi__delta--good')
         } else if (options.tone === 'income') {
-            delta.classList.add(change.amount === 0 ? 'muted' : up ? 'kpi__delta--good' : 'kpi__delta--bad')
+            delta.classList.add(change.amount === 0 ? 'muted' : change.amount > 0 ? 'kpi__delta--good' : 'kpi__delta--bad')
         } else {
             delta.classList.add('muted')
         }
@@ -520,16 +642,16 @@ function kpiTile(label, value, comparisonValue, options = {}) {
     return tile
 }
 
-function buildColumns(code, included, all, comparison, excluded) {
+function buildColumns(code, included, all, comparison, excluded, plans) {
     const grid = el('div', 'insights-grid')
     grid.append(
-        buildCategories(all, comparison, excluded, code),
-        buildTrendAndForecast(code, included, comparison, excluded)
+        buildCategories(all, comparison, excluded, code, plans.stats),
+        buildTrendAndForecast(code, included, excluded, plans)
     )
     return grid
 }
 
-function buildCategories(all, comparison, excluded, code) {
+function buildCategories(all, comparison, excluded, code, plan) {
     const panel = el('div', 'insights-panel')
     const toggleAll = (categories, include) => {
         for (const category of categories) {
@@ -569,7 +691,7 @@ function buildCategories(all, comparison, excluded, code) {
 
         const list = el('div', 'category-list')
         for (const row of rows) {
-            list.appendChild(buildCategoryRow(row, max, total, comparisonMap[row.category] || 0, excluded, code))
+            list.appendChild(buildCategoryRow(row, max, total, comparisonMap[row.category] || 0, excluded, code, plan))
         }
         panel.appendChild(list)
     }
@@ -579,7 +701,7 @@ function buildCategories(all, comparison, excluded, code) {
     return panel
 }
 
-function buildCategoryRow(row, max, total, comparisonAmount, excluded, code) {
+function buildCategoryRow(row, max, total, comparisonAmount, excluded, code, plan) {
     const item = document.createElement('label')
     item.className = 'category-row'
     if (excluded.has(row.category)) {
@@ -614,7 +736,11 @@ function buildCategoryRow(row, max, total, comparisonAmount, excluded, code) {
     if (delta.pct != null) {
         const deltaEl = el('span', `category-row__delta ${delta.amount > 0 ? 'is-up' : delta.amount < 0 ? 'is-down' : 'muted'}`,
             `${delta.amount > 0 ? '+' : ''}${delta.pct.toFixed(0)}%`)
-        deltaEl.title = `vs ${comparisonLongLabel()}`
+        deltaEl.title = `vs ${comparisonLongLabel(plan)}`
+        amountWrap.appendChild(deltaEl)
+    } else if (row.amount > 0) {
+        const deltaEl = el('span', 'category-row__delta is-up', 'new')
+        deltaEl.title = `vs ${comparisonLongLabel(plan)}`
         amountWrap.appendChild(deltaEl)
     }
 
@@ -628,7 +754,7 @@ function buildCategoryRow(row, max, total, comparisonAmount, excluded, code) {
     return item
 }
 
-function buildTrendAndForecast(code, included, comparison, excluded) {
+function buildTrendAndForecast(code, included, excluded, plans) {
     const panel = el('div', 'insights-panel')
     panel.appendChild(el('h3', 'panel__title', 'Cumulative spent & earned'))
     const chartHost = el('div', 'insights-chart-host')
@@ -645,7 +771,7 @@ function buildTrendAndForecast(code, included, comparison, excluded) {
         runningIncome += day.income
         return IM.clean(runningIncome)
     })
-    const baseline = cumulativeBaseline(code, excluded)
+    const baseline = cumulativeBaseline(code, excluded, plans.chart)
     const middle = daily[Math.floor((daily.length - 1) / 2)]
     // The solid lines end at today; the dashed baselines span the full range.
     const solidDays = IM.daysInclusive(state.range.start, elapsedRange().end)
@@ -655,6 +781,7 @@ function buildTrendAndForecast(code, included, comparison, excluded) {
         incomeCumulative: incomeCumulative.slice(0, solidDays),
         baselineSpend: baseline.spend, baselineIncome: baseline.income,
         currency: code,
+        symbol: state.symbols.get(code),
         axisLabels: [
             formats.dayMonth.format(state.range.start),
             middle ? formats.dayMonth.format(dates.parseIso(middle.date)) : '',
@@ -662,7 +789,7 @@ function buildTrendAndForecast(code, included, comparison, excluded) {
         ],
     })
 
-    const short = comparisonShortLabel()
+    const short = comparisonShortLabel(plans.stats)
     const laneColor = currencyColor(code) || 'var(--accent)'
     panel.appendChild(el('div', 'series-legend', '',
         legendItem('Spent', laneColor),
@@ -670,7 +797,7 @@ function buildTrendAndForecast(code, included, comparison, excluded) {
         legendItem(`Spent vs ${short}`, laneColor, true),
         legendItem(`Earned vs ${short}`, 'var(--ok)', true)))
 
-    panel.appendChild(buildForecast(code, excluded))
+    panel.appendChild(buildForecast(code, excluded, plans.chart))
     return panel
 }
 
@@ -680,44 +807,17 @@ function legendItem(label, color, baseline = false) {
     return el('span', `series-legend__item${baseline ? ' series-legend__item--baseline' : ''}`, '', swatch, label)
 }
 
-function cumulativeBaseline(code, excluded) {
-    const data = state.comparisonData
+function cumulativeBaseline(code, excluded, plan) {
     const empty = { spend: [], income: [] }
-    if (!data) {
+    if (!plan || plan.windows.length === 0) {
         return empty
     }
-    const window = data.chartWindow || data.window
     const days = IM.daysInclusive(state.range.start, state.range.end)
-    if (window.kind === 'average') {
-        // Average the trailing months' cumulative curves, then scale so the
-        // line still ends at the comparison total (windowTotal * rangeDays /
-        // windowDays) instead of the raw average month.
-        const months = IM.monthPartials(window.start, window.end)
-        const averages = IM.averageCumulative(transactionsIn(code, window, excluded), months, days)
-        const scale = IM.comparisonFactor(window, state.range) * months.length
-        return {
-            spend: averages.spend.map((value) => IM.clean(value * scale)),
-            income: averages.income.map((value) => IM.clean(value * scale)),
-        }
-    }
-    const daily = IM.dailySeries(transactionsIn(code, window, excluded), window.start, window.end)
-    let runningSpend = 0
-    let runningIncome = 0
-    const spend = daily.map((day) => {
-        runningSpend += day.spend
-        return IM.clean(runningSpend)
-    })
-    const income = daily.map((day) => {
-        runningIncome += day.income
-        return IM.clean(runningIncome)
-    })
-    return {
-        spend: IM.resampleSeries(spend, days),
-        income: IM.resampleSeries(income, days),
-    }
+    const transactions = IM.filterTransactions(state.transactions, { currency: code, excludedCategories: excluded })
+    return IM.baselineFromPlan(transactions, plan, days)
 }
 
-function buildForecast(code, excluded) {
+function buildForecast(code, excluded, chartPlan) {
     const wrap = el('div', 'forecast')
     const today = dates.startOfDay(new Date())
     const includesToday = state.range.start <= today && state.range.end >= today
@@ -735,21 +835,20 @@ function buildForecast(code, excluded) {
         const projected = IM.projectMonthEnd({
             spend: monthTotals.spend, income: monthTotals.income, elapsedDays: elapsed, daysInMonth,
         })
-        wrap.appendChild(forecastRow('Projected month-end spend (month to date)', money(projected.spend, code)))
-        wrap.appendChild(forecastRow('Projected month-end income (month to date)', money(projected.income, code)))
+        const method = 'Straight-line projection: month-to-date figures scaled to the full month.'
+        wrap.appendChild(forecastRow('Projected month-end spend (month to date)', money(projected.spend, code), method))
+        wrap.appendChild(forecastRow('Projected month-end income (month to date)', money(projected.income, code), method))
     }
 
-    const data = state.comparisonData
-    const window = data.window
-    const windowTotals = IM.totals(transactionsIn(code, window, excluded))
-    const windowDays = IM.daysInclusive(window.start, window.end)
-    if (windowDays > 0 && (windowTotals.spend > 0 || windowTotals.income > 0)) {
-        const factor = 30 / windowDays
-        const label = window.kind === 'average' ?
-            `Next 30 days (avg of ${formats.monthShort.format(window.start)}–${formats.monthShort.format(window.end)} ${formats.year.format(window.end)})` :
-            `Next 30 days (based on ${formats.dayMonth.format(window.start)}–${formats.dayMonth.format(window.end)} ${formats.year.format(window.end)})`
-        wrap.appendChild(forecastRow(label,
-            `${money(windowTotals.spend * factor, code)} out · ${money(windowTotals.income * factor, code)} in`))
+    if (chartPlan.windows.length > 0 && chartPlan.days > 0) {
+        const windowTxs = chartPlan.windows.flatMap((window) => transactionsIn(code, window, excluded))
+        const windowTotals = IM.totals(windowTxs)
+        if (windowTotals.spend > 0 || windowTotals.income > 0) {
+            const factor = 30 / chartPlan.days
+            wrap.appendChild(forecastRow(`Next 30 days (based on ${comparisonLongLabel(chartPlan)})`,
+                `${money(windowTotals.spend * factor, code)} out · ${money(windowTotals.income * factor, code)} in`,
+                'Extrapolates the comparison period’s average daily rate over 30 days.'))
+        }
     }
     if (wrap.children.length === 0) {
         wrap.appendChild(el('p', 'muted', 'Not enough data to forecast this range.'))
@@ -757,19 +856,22 @@ function buildForecast(code, excluded) {
     return wrap
 }
 
-function forecastRow(label, value) {
+function forecastRow(label, value, title) {
     const row = el('div', 'forecast__row')
     row.appendChild(el('span', '', label))
     const strong = el('strong')
+    if (title) {
+        strong.title = title
+    }
     setBreakableText(strong, value)
     row.appendChild(strong)
     return row
 }
 
-function buildMovers(code, included, comparison) {
+function buildMovers(code, included, comparison, plan) {
     const wrap = el('div', 'movers')
     if (!comparison.hasData) {
-        wrap.appendChild(el('p', 'muted', `No comparison data for ${comparisonLongLabel()}.`))
+        wrap.appendChild(el('p', 'muted', `No comparison data for ${comparisonLongLabel(plan)}.`))
         return wrap
     }
     const addBlock = (title, currentMap, comparisonMap) => {

@@ -62,6 +62,10 @@ test('reads constants, categories, currencies and budget', async () => {
     assert.equal(usd.monthlyBudget, 500)
     assert.equal(usd.firstDayBias, 100)
     assert.equal(currencyOf(data, 'XMR').monthlyBudget, 0)
+    // Symbols pair with the Currencies column by row; a blank is no symbol.
+    assert.equal(currencyOf(data, 'CAD').symbol, '$')
+    assert.equal(currencyOf(data, 'USD').symbol, '$')
+    assert.equal(currencyOf(data, 'XMR').symbol, null)
     assert.deepEqual(data.categories.map((entry) => entry.group), ['Main Expenses', 'Extra Expenses', 'Special Expenses', 'Money In', 'Conversions'])
     assert.equal(data.categories.find((entry) => entry.group === 'Money In').categories.includes('Job'), true)
 })
@@ -121,17 +125,29 @@ test('computes previous month and trailing 12 month averages', async () => {
     const data2026 = currencyOf(await custom.getData(new Date(2026, 2, 15)), 'CAD')
     assert.equal(data2026.monthsIncome, 0)
     assert.equal(data2026.previousMonthsIncome, 300)
-    assert.equal(data2026.trailingIncomeAverage, 50)
+    // Only the months since the first transaction (Dec 2025) count toward the
+    // trailing average, so it is not diluted by pre-data months.
+    assert.equal(data2026.firstMonth, '2025-12-01')
+    assert.equal(data2026.trailingMonths, 3)
+    assert.equal(data2026.trailingIncomeAverage, 200)
+    // Jobs land on the 20th, so a March 15 view sees none of that income yet
+    // in any trailing month; rent on the 6th is fully visible.
+    assert.equal(data2026.trailingIncomeAverageToDate, 0)
+    assert.equal(data2026.previousMonthsIncomeToDate, 0)
     assert.equal(data2026.monthsSpend, 400)
     assert.equal(data2026.previousMonthsSpend, 300)
-    assert.equal(data2026.trailingSpendAverage, 50)
+    assert.equal(data2026.previousMonthsSpendToDate, 300)
+    assert.equal(data2026.trailingSpendAverage, 200)
+    assert.equal(data2026.trailingSpendAverageToDate, 200)
     assert.equal(data2026.monthlyBudget, 1000)
     assert.equal(data2026.firstDayBias, 500)
+    // Workbooks without a Symbols column simply have no symbols.
+    assert.equal(data2026.symbol, null)
     assert.equal(Math.round(data2026.monthsExpectedSpend * 100) / 100, 741.94)
     const march = currencyOf(await custom.getData(new Date(2026, 2, 21)), 'CAD')
     assert.equal(march.monthsIncome, 400)
     assert.equal(march.previousMonthsIncome, 300)
-    assert.equal(march.trailingIncomeAverage, 50)
+    assert.equal(march.trailingIncomeAverage, 200)
     const dayOne = currencyOf(await custom.getData(new Date(2026, 2, 1)), 'CAD')
     assert.equal(Math.round(dayOne.monthsExpectedSpend * 100) / 100, 516.13)
     const lastDay = currencyOf(await custom.getData(new Date(2026, 2, 31)), 'CAD')

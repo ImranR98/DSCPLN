@@ -13,7 +13,10 @@
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232f6fed'/%3E%3Ctext x='32' y='45' font-size='38' text-anchor='middle' fill='white' font-family='sans-serif'%3E%24%3C/text%3E%3C/svg%3E">
     <script src="theme-boot.js"></script>
     <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/vendor/shoelace/theme-light.css">
+    <link rel="stylesheet" href="/vendor/shoelace/theme-dark.css">
     <link rel="stylesheet" href="style.css">
+    <script type="module" src="/vendor/shoelace/shoelace.js"></script>
 </head>
 
 <body class="is-loading">
@@ -22,9 +25,9 @@
         <div class="app-header__top">
             <h1><a class="app-header__brand" href="/">D<span class="accent">$</span>CPLN</a></h1>
             <div class="app-header__actions">
-                <a class="button button--small" href="/">Dashboard</a>
-                <button id="themeButton" class="icon-button" type="button" title="Theme: auto"
-                    aria-label="Theme: auto. Click to change."></button>
+                <sl-button size="small" href="/">Dashboard</sl-button>
+                <sl-button id="themeButton" class="icon-button" title="Theme: auto"
+                    aria-label="Theme: auto. Click to change."></sl-button>
             </div>
         </div>
         <div class="app-header__meta">
@@ -42,9 +45,9 @@
                 invalidates the old token immediately.
             </p>
             <div class="token-row">
-                <input id="apiTokenInput" type="text" readonly spellcheck="false" aria-label="API token">
-                <button id="copyTokenButton" class="button" type="button">Copy</button>
-                <button id="regenerateTokenButton" class="button button--danger" type="button">Regenerate</button>
+                <sl-input id="apiTokenInput" type="text" readonly spellcheck="false" aria-label="API token"></sl-input>
+                <sl-button id="copyTokenButton" size="small">Copy</sl-button>
+                <sl-button id="regenerateTokenButton" size="small" variant="danger">Regenerate</sl-button>
             </div>
         </section>
 
@@ -52,7 +55,7 @@
             <div class="card__header">
                 <h2>API reference</h2>
                 <span class="card__header-tools">
-                    <button id="copyReferenceButton" class="button button--small" type="button">Copy as Markdown</button>
+                    <sl-button id="copyReferenceButton" size="small">Copy as Markdown</sl-button>
                 </span>
             </div>
             <p class="hint">

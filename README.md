@@ -65,13 +65,14 @@ The first row holds the headers, which are matched by name (other sheets and ext
 
 Row 2 holds a header per column, and each column lists the allowed values for that group:
 
-| Main Expenses | Extra Expenses | Special Expenses | Money In | Currencies |
-| --- | --- | --- | --- | --- |
-| Rent | Entertainment | School Fees | Job | CAD |
-| Subscriptions | Snacks | Loan Repayment | From Parents | USD |
-| ... | ... | ... | ... | XMR |
+| Main Expenses | Extra Expenses | Special Expenses | Money In | Currencies | Symbols |
+| --- | --- | --- | --- | --- | --- |
+| Rent | Entertainment | School Fees | Job | CAD | $ |
+| Subscriptions | Snacks | Loan Repayment | From Parents | USD | $ |
+| ... | ... | ... | ... | XMR | |
 
-- Category names and currencies are never hardcoded: edit this sheet to add, rename, or remove them. Two group names are special: `Money In` defines income categories, and `Conversions` marks currency-conversion categories. Conversion categories are valid for both kinds and are tracked separately from spending/earning (see below); everything not in `Money In` is an expense category.
+- Category names and currencies are never hardcoded: edit this sheet to add, rename, or remove them.
+- `Symbols` pairs with `Currencies` by row and prefixes every amount shown for that currency (e.g. `$1,234.56`, `TSh1,234.56`). Leave it blank for currencies without a symbol; their amounts are shown as bare numbers, since the currency code is displayed elsewhere (row, section, chart lane). Two group names are special: `Money In` defines income categories, and `Conversions` marks currency-conversion categories. Conversion categories are valid for both kinds and are tracked separately from spending/earning (see below); everything not in `Money In` is an expense category.
 - Budgets live below the table, one row per currency:
   ```
   Budgets
@@ -97,7 +98,7 @@ These routes are used by the web UI (and only support what it needs).
 | `DELETE` | `/transactions/:id` | - |
 | `POST` | `/budget` | `{ "monthlyBudget", "firstDayBias", "currency" }` |
 
-`/data` also returns `conversionCategories` (the categories in the `Conversions` group), `transactionRange` (the first and last dated transactions, used by the insights "All time" preset), and a `fractional` flag per currency (whether any amount needs sub-cent precision).
+`/data` also returns `conversionCategories` (the categories in the `Conversions` group), `transactionRange` (the first and last dated transactions, used by the insights "All time" preset), and a `fractional` flag per currency (whether any amount needs sub-cent precision). Each currency also carries `firstMonth` (its earliest transaction month, so averages skip months before the data begins), `trailingMonths` (how many months the trailing averages cover), and month-to-date variants of the previous-month and trailing-average figures (`previousMonths*ToDate`, `trailing*AverageToDate`) used for same-days comparisons on the dashboard.
 
 Transaction ids embed the row number and a hash of the row values. If the workbook changes underneath the app, stale ids are rejected with `409 Conflict` and the UI refreshes.
 
@@ -132,8 +133,8 @@ curl -X POST https://dscpln.example.com/api/transactions \
 
 The dashboard covers the current month, per currency:
 
-- The **main currency** (the first one in Constants) gets the full Month card: spend against its budget with progress, pace, remaining/day, previous-month spend, and 12-month average spend.
-- **Earnings** for the main currency: `Money In` for the current month, the previous calendar month, and the running average of the 12 complete months before the current month (missing months count as $0).
+- The **main currency** (the first one in Constants) gets the full Month card: spend against its budget with progress, pace, remaining/day, and a This month / Last month / N-mo avg grid for spend, earnings and conversions. While the month is in progress, the Last month and average columns cover only the same elapsed days as today (e.g. days 1–7), with the full-month figures in each cell's tooltip, so the three columns are directly comparable.
+- **Earnings** for the main currency: `Money In` for the current month to date, the previous month through the same day (full month once it is over), and the running average of the complete months since the currency's first transaction (months before the data begins are not counted as zero; the column is labeled with the number of months used).
 - **Other currencies** appear as compact tiles below, each with spend vs budget, a progress bar, remaining, and income. Currencies with no spending or income this month are hidden; the main currency is always shown.
 - **Last 12 months** charts money in and out per month for every currency with activity in that window, as small multiples (one lane per currency, each with its own scale), a 12-month Total column, and a hover tooltip. The current month is capped at today and marked with an asterisk. Each currency keeps a stable accent color across its tile, chips, and chart lane.
 - **This month** lists all currencies' transactions newest first, with the date on each row; future-dated rows are dimmed.
@@ -154,14 +155,15 @@ On wide screens the transactions list sits in a second column on the right, with
 
 `/insights` (linked from the dashboard header) analyzes an arbitrary date range (defaulting to the current month), per currency:
 
-- **Filters**: start/end date pickers; quick ranges `This month`, `Last month`, a month chip (opens a month picker), `Last 3/6/12 full months` (complete calendar months only), `Year to date` and `All time` (first to latest transaction); and one **Compare with** selector: `Previous period` (default; whole months compare with the same number of whole months before, partial months with the matching calendar days of the previous month — e.g. This month on Oct 5 compares Oct 1–5 with Sep 1–5 — and Year to date with the same period last year), `Same period last year`, or `Trailing 3/6/12-month average`. All comparisons on the page — KPIs, categories, movers, chart baselines and the forecast — use this window. The range and comparison are kept in the URL, and a note spells out the exact windows being compared (partial-month comparisons are explained; average comparisons are scaled per day). `This month` selects the whole month, but figures stay month-to-date: statistics never count dates after today (the note calls this out), while the chart's dashed comparison baselines still show the full previous period.
+- **Filters**: start/end date pickers; quick ranges `This month`, `Last month`, a month chip (opens a month picker), `Last 3/6/12 full months` (complete calendar months only), `Year to date` and `All time` (first to latest transaction); and one **Compare with** selector: `Previous period` (default), `Same period last year`, or `Trailing 3/6/12-month average`. The range and comparison are kept in the URL, and a one-line note shows what the figures are compared with (hover it for the exact windows and caveats).
+- **Comparison windows**: each stat uses the window that makes it comparable. KPI, category and mover figures use the elapsed part of the selected range and compare it with the matching elapsed window: the same calendar days of the previous period (e.g. Oct 1–7 with Sep 1–7; whole months with the same whole months; Year to date with the same period last year), or, for trailing averages, the average of the same days of each complete month with data (e.g. the 1st–7th of the last three months). Trailing averages skip months before a currency's first transaction. When a range spans several months, average comparisons scale the trailing months per day to the range length instead. The chart's dashed baselines and the 30-day forecast use the full comparison periods (the full previous month(s) or trailing months), which is why the dashed line can show the rest of a month while the KPI compares only the elapsed days.
 - **Transactions panel** (top, collapsed by default): all transactions in the range across currencies, read-only; future-dated rows are dimmed.
 - **Monthly totals chart** (above the currency sections, when the range spans more than one month): the same chart as the dashboard, with an asterisk marking partial months.
 - **Per-currency sections** (primary first, then by volume), each with:
-  - KPI tiles for spent, earned, net (colored by sign, with intensity based on the smaller of spent/earned), average spend per day, average earned per day and transaction count — all vs the selected comparison, with the exact window in the tooltip.
+  - KPI tiles for spent, earned, net (colored by sign, with intensity based on the smaller of spent/earned), average spend per day, average earned per day and transaction count — all vs the selected comparison, with the exact comparison window in the tooltip. Net deltas are percentages of the previous net's magnitude (green when net improved), or a signed amount when there is no previous net to compare with.
   - Category breakdowns for spending and earning with include/exclude checkboxes that recompute the totals, percentages, charts and forecast (select all/none included).
-  - A cumulative spent-and-earned chart (over the selected range, starting/ending at its actual dates) with dashed spent/earned baselines for the selected comparison.
-  - Forecasts: projected month-end spend/income when the range includes today, plus a next-30-days estimate based on the selected comparison window (labeled with the exact dates/months used).
+  - A cumulative spent-and-earned chart (over the selected range, starting/ending at its actual dates) with dashed spent/earned baselines for the selected comparison, spanning the full comparison periods.
+  - Forecasts: projected month-end spend/income when the range includes today (a straight-line projection from month-to-date figures), plus a next-30-days estimate from the comparison period's daily rate (labeled with the periods used).
   - Biggest spending and earning increases/decreases vs the comparison.
 - Budgets are not referenced on this page.
 - Conversion categories are de-selected by default in every section (they remain in the list and can be re-enabled).

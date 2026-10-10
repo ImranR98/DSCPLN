@@ -51,8 +51,9 @@ const startNotifications = (config, dataProvider) => {
                 const unchanged = entry.monthsSpend === previousSpend.get(entry.code)
                 let settled = true
                 if (overBudget && !alreadyWarned && !unchanged) {
+                    const symbol = entry.symbol || ''
                     settled = await send(
-                        `${entry.code} $${plainAmount(entry.monthsSpend)} of $${plainAmount(entry.monthlyBudget)}`,
+                        `${entry.code} ${symbol}${plainAmount(entry.monthsSpend)} of ${symbol}${plainAmount(entry.monthlyBudget)}`,
                         `Monthly Budget Limit Reached (${entry.code})`)
                     if (settled) {
                         warnedCurrencies.add(entry.code)

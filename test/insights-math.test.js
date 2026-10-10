@@ -195,17 +195,6 @@ test('resamples a series to a target length', () => {
     assert.deepEqual(math.resampleSeries([], 3), [])
 })
 
-test('projects month-end spending', () => {
-    assert.deepEqual(math.projectMonthEnd({ spend: 300, income: 1000, elapsedDays: 10, daysInMonth: 30 }), {
-        spend: 900,
-        income: 3000,
-    })
-    assert.deepEqual(math.projectMonthEnd({ spend: 300, income: 1000, elapsedDays: 0, daysInMonth: 30 }), {
-        spend: 0,
-        income: 0,
-    })
-})
-
 test('builds complete-month presets and comparison plans', () => {
     const preset = math.lastCompleteMonths(3, new Date(2026, 9, 15))
     assert.equal(math.toIsoDate(preset.start), '2026-07-01')

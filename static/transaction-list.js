@@ -15,23 +15,23 @@
         return formats.weekday.format(date)
     }
 
+    const buildActionButton = (icon, title, ariaLabel, variant, onClick) => {
+        const node = el('sl-button', {
+            size: 'small',
+            class: `icon-button${variant ? ` icon-button--${variant}` : ''}`,
+            title,
+            'aria-label': ariaLabel,
+        })
+        node.innerHTML = icon
+        node.addEventListener('click', onClick)
+        return node
+    }
+
     const buildActions = (transaction, onEdit, onDelete) => el('span', { class: 'expense__actions' },
-        el('button', {
-            type: 'button',
-            class: 'icon-button',
-            title: 'Edit',
-            'aria-label': `Edit ${transaction.details || 'transaction'}`,
-            innerHTML: icons.edit,
-            onclick: () => onEdit && onEdit(transaction),
-        }),
-        el('button', {
-            type: 'button',
-            class: 'icon-button icon-button--danger',
-            title: 'Delete',
-            'aria-label': `Delete ${transaction.details || 'transaction'}`,
-            innerHTML: icons.delete,
-            onclick: () => onDelete && onDelete(transaction),
-        }))
+        buildActionButton(icons.edit, 'Edit', `Edit ${transaction.details || 'transaction'}`, null,
+            () => onEdit && onEdit(transaction)),
+        buildActionButton(icons.delete, 'Delete', `Delete ${transaction.details || 'transaction'}`, 'danger',
+            () => onDelete && onDelete(transaction)))
 
     const buildRow = (transaction, options) => {
         const date = dates.parseIso(transaction.date)

@@ -47,20 +47,20 @@ test('shell UI: header, archives card, targets editor and key panel', async (t) 
   })
 
   await page.goto(base)
-  await page.waitForSelector('#overviewCard')
+  await page.waitForSelector('[data-testid="run-now"]')
   assert.equal(await page.title(), 'D$CPLN ⋅ Infra Compose State')
-  await page.waitForSelector('#archivesCard')
-  assert.match(await page.textContent('#archivesCard'), /No archives yet/)
 
-  await page.click('#settingsButton')
-  await page.waitForSelector('sl-dialog[open] .target-row')
-  const targetInputs = await page.$$eval('sl-dialog[open] [data-path^="targets."]',
-    (els) => els.map((el) => el.getAttribute('data-path')))
-  assert.ok(targetInputs.includes('targets.0.name'))
-  assert.ok(targetInputs.includes('targets.1.path'))
-  await page.waitForSelector('sl-dialog[open] .key-block')
-  assert.match(await page.textContent('sl-dialog[open] .key-block'), /ssh-ed25519/)
-  assert.equal(await page.locator('sl-dialog[open] sl-button', { hasText: 'Regenerate key' }).count(), 1)
+  const archivesCard = page.locator('article', { hasText: 'Archives' }).first()
+  await archivesCard.waitFor()
+  assert.match(await archivesCard.textContent(), /No archives yet/)
+
+  await page.click('[aria-label="Settings"]')
+  await page.waitForSelector('dialog[open] .target-row')
+  const targetNames = await page.$$eval('dialog[open] .target-row input:first-of-type',
+    (els) => els.map((el) => el.getAttribute('placeholder')))
+  assert.equal(targetNames.length, 2)
+  assert.match(await page.textContent('dialog[open] .code-block'), /ssh-ed25519/)
+  assert.equal(await page.locator('dialog[open] button', { hasText: 'Regenerate key' }).count(), 1)
 
   assert.deepEqual(errors, [])
 })

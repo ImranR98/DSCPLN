@@ -23,8 +23,16 @@ export async function getJson(path, { timeout = 5000, ...options } = {}) {
 }
 
 export async function postJson(path, body = {}, { timeout = 30000, ...options } = {}) {
+  return sendJson('POST', path, body, { timeout, ...options })
+}
+
+export async function putJson(path, body = {}, { timeout = 30000, ...options } = {}) {
+  return sendJson('PUT', path, body, { timeout, ...options })
+}
+
+async function sendJson(method, path, body, { timeout = 30000, ...options } = {}) {
   const response = await fetch(apiUrl(path), {
-    method: 'POST',
+    method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(timeout),

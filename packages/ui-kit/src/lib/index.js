@@ -1,4 +1,4 @@
-export { apiUrl, getJson, postJson, subscribe } from './api.js'
+export { apiUrl, getJson, postJson, putJson, subscribe } from './api.js'
 export {
   formatTime,
   formatDateTime,
@@ -9,4 +9,8 @@ export {
   humanAgo,
 } from './format.js'
 export { currentTheme, setTheme, effectiveTheme, toggleTheme } from './theme.js'
+export { getPath, setPath } from './paths.js'
 export { default as ThemeToggle } from './ThemeToggle.svelte'
+export { default as Shell } from './Shell.svelte'
+export { default as LogDialog } from './LogDialog.svelte'
+export { default as SettingsDialog } from './SettingsDialog.svelte'

@@ -1,5 +1,12 @@
 # D$CPLN Monorepo Migration — Full Execution Plan
 
+> **Status: complete (P0–P5).** Single host `dscpln.home.example.com` with all
+> functions at subpaths + portal; deployments renamed (`balance-xlsx`,
+> `media-sync`, `whatsapp-txt`, `task-runner`); absorbed repos archived; old
+> local checkouts removed; stale image repos deleted. Remaining: the Contacts +
+> Calendar Task Runner task retires after the user enters a Nextcloud app
+> password and verifies an export.
+>
 > **Fresh session: read this entire file before touching anything, then execute
 > phases P0 → P5 in order. The user has approved the whole plan ("GO"). Work
 > autonomously; only stop to ask when something is destructive/irreversible or

@@ -99,6 +99,8 @@ test('discover merges saved choices and run records state + log', async (t) => {
     assert.equal(personal.enabled, true)
     const fresh = body.collections.find((c) => c.displayName === 'TODO')
     assert.equal(fresh.enabled, true, 'newly discovered collections are enabled by default')
+    assert.equal(fresh.filename, 'TODO.ics', 'known collections keep the historical file names')
+    assert.equal(body.collections.find((c) => c.displayName === 'My Contacts').filename, 'My Contacts.vcf')
 
     const run = await fetch(`${base}/api/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     assert.equal(run.status, 200)

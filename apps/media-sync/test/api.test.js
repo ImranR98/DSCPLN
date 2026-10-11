@@ -103,7 +103,8 @@ test("api: health, state, pause, process-now, config validation", async () => {
     assert.equal(page.status, 200);
     assert.match(page.headers.get("content-type"), /text\/html/);
     assert.match(await page.text(), /D\$CPLN . Media Sync/);
-    const css = await fetch(`${base}/style.css`);
+    // The UI is styled entirely by the shared kit (no per-app stylesheet).
+    const css = await fetch(`${base}/ui/style.css`);
     assert.equal(css.status, 200);
     assert.match(css.headers.get("content-type"), /text\/css/);
     const font = await fetch(`${base}/ui/fonts/inter-latin-wght-normal.woff2`);

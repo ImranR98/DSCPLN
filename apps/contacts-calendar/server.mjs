@@ -47,13 +47,6 @@ export function validateConfig(cfg) {
   }
 }
 
-// Filenames that match the manual task this app replaces, so first-time
-// discovery keeps updating the files already in ~/Main/Backups/Manual.
-const KNOWN_FILENAMES = {
-  calendar: { Personal: 'Events.ics', TODO: 'TODO.ics', 'Regular or Long Term': 'Regular.ics' },
-  addressbook: { Contacts: 'My Contacts.vcf' },
-}
-
 // Merges freshly discovered collections with the saved configuration: keeps
 // the user's enabled/filename choices for hrefs that still exist.
 export function mergeCollections(discovered, saved = []) {
@@ -68,7 +61,7 @@ export function mergeCollections(discovered, saved = []) {
       // Discovered collections export by default (the old manual task exported
       // all of them); unchecking one in the UI sticks across rediscoveries.
       enabled: existing.enabled ?? true,
-      filename: existing.filename || KNOWN_FILENAMES[entry.type]?.[entry.displayName] || `${entry.displayName || 'export'}.${extension}`,
+      filename: existing.filename || `${entry.displayName || 'export'}.${extension}`,
     }
   })
 }

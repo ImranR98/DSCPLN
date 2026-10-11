@@ -6,7 +6,7 @@
   let { fields = [], schedule = true, notice = null, onsave, extra } = $props()
 
   let dialog = $state(null)
-  let draft = $state(schedule ? { schedule: { enabled: false, days: [], at: '03:00', catchUp: true } } : {})
+  let draft = $state({ schedule: { enabled: false, days: [], at: '03:00', catchUp: true } })
   let error = $state('')
 
   export function show(config) {

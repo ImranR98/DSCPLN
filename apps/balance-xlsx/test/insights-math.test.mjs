@@ -2,7 +2,7 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import math from '../static/insights-math.js'
+import * as math from '../ui/src/lib/insights-math.js'
 
 const tx = (date, kind, amount, extra = {}) => ({
     date,

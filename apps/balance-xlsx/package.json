@@ -5,9 +5,11 @@
   "main": "server.js",
   "workspaces": [],
   "scripts": {
-    "test": "node --test",
+    "build:ui": "vite build",
+    "watch:ui": "vite build --watch",
     "mock": "node scripts/create-mock-workbook.js",
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "test": "npm run build:ui && node --test"
   },
   "author": "Imran Remtulla",
   "license": "MIT",
@@ -16,5 +18,12 @@
     "axios": "^1.5.1",
     "exceljs": "^4.4.0",
     "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "@dscpln/ui-kit": "*",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "chart.js": "^4.5.1",
+    "svelte": "^5.57.2",
+    "vite": "^8.3.4"
   }
 }

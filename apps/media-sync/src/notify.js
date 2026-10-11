@@ -1,35 +1,39 @@
+// Media Sync notifications: thin level-based wrapper over the shared kit
+// Notifier so titles, auth, header sanitizing and click-through stay uniform.
+
+import { Notifier as KitNotifier } from "@dscpln/server-kit";
+
+const LEVELS = {
+  error: { priority: "high", tags: ["warning"] },
+  warn: { priority: "default", tags: ["warning"] },
+  info: { priority: "low", tags: ["white_check_mark"] },
+};
+
 export class Notifier {
   constructor(config, log) {
     this.log = log;
-    this.url = "";
-    this.token = "";
-    this.notifySuccess = true;
+    this.inner = new KitNotifier({}, (line) => log.log(line));
     this.setConfig(config);
   }
 
   setConfig(config) {
-    this.url = config.ntfy?.url?.trim() ?? "";
-    this.token = config.ntfy?.token?.trim() ?? "";
     this.notifySuccess = config.ntfy?.notifySuccess ?? true;
+    const origin = String(process.env.DSCPLN_ORIGIN ?? "").trim().replace(/\/+$/, "");
+    this.inner.setConfig({
+      ntfy: { ...(config.ntfy ?? {}), notifySuccess: true },
+      click: /^https?:\/\//i.test(origin) ? `${origin}/media` : "",
+    });
   }
 
   async notify(level, message) {
-    if (!this.url) return { ok: false, error: "no ntfy URL configured" };
     if (level === "info" && !this.notifySuccess) return { ok: true, skipped: true };
-    const priority = level === "error" ? "high" : level === "warn" ? "default" : "low";
-    // HTTP header values are Latin-1, so the stylized "↑" can only live in the body.
-    const headers = { Title: "Media Sync", Priority: priority };
-    if (this.token) headers.Authorization = `Basic ${Buffer.from(`:${this.token}`).toString("base64")}`;
-    try {
-      const res = await fetch(this.url, { method: "POST", headers, body: message });
-      if (!res.ok) {
-        this.log.log(`ntfy notification failed: HTTP ${res.status}`);
-        return { ok: false, error: `ntfy responded with HTTP ${res.status}` };
-      }
-      return { ok: true };
-    } catch (err) {
-      this.log.log(`ntfy notification failed: ${err.message}`);
-      return { ok: false, error: err.message };
-    }
+    const { priority, tags } = LEVELS[level] ?? LEVELS.info;
+    const result = await this.inner.notify(message, {
+      title: "D$CPLN · Media Sync",
+      priority,
+      tags,
+    });
+    if (!result.ok && this.inner.configured) this.log.log(`ntfy notification failed: ${result.error}`);
+    return result;
   }
 }

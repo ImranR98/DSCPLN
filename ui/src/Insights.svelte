@@ -58,10 +58,15 @@
   const currentTotals = $derived(totals(inRange))
   const previousTotals = $derived(totals(previous))
 
+  const monthKey = (value) => {
+    const date = value instanceof Date ? value : new Date(value)
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+  }
+
   const monthly = $derived.by(() => {
     const months = new Map()
     for (const tx of inRange) {
-      const key = tx.date.slice(0, 7)
+      const key = monthKey(tx.date)
       if (!months.has(key)) months.set(key, { spend: 0, income: 0 })
       const entry = months.get(key)
       if (tx.kind === 'income') entry.income += tx.moneyIn ?? 0

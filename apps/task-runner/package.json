@@ -1,0 +1,20 @@
+{
+  "name": "backupctl",
+  "version": "3.0.0",
+  "description": "Local web GUI for config-driven backup workflows",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "backupctl": "server.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -141,6 +141,17 @@
         return control.value
     }
 
+    // Applies every [data-path] control under `container` to a clone of
+    // `base` (used by the settings dialog and by custom settings sections that
+    // want the current form values, e.g. before a Discover call).
+    function readForm(container, base) {
+        const config = structuredClone(base ?? {})
+        for (const control of container.querySelectorAll('[data-path]')) {
+            setPath(config, control.dataset.path, readField(control, control.dataset.type))
+        }
+        return config
+    }
+
     function makeSettingsDialog({ fields = [], schedule = true, notice = null, extra = null, onSave, getConfig }) {
         const body = el('div', { class: 'settings-body' })
         const error = el('p', { class: 'form-error', hidden: true })
@@ -196,9 +207,7 @@
                     days: scheduleControls.dayBoxes.filter((box) => box.checked).map((box) => Number(box.dataset.day)),
                 }
             }
-            for (const control of body.querySelectorAll('[data-path]')) {
-                setPath(config, control.dataset.path, readField(control, control.dataset.type))
-            }
+            Object.assign(config, readForm(body, config))
             try {
                 const saved = await onSave(config)
                 dialog.hide()
@@ -433,5 +442,5 @@
         return { refresh, renderState, log: logDialog, settings, header }
     }
 
-    global.DSCPLNShell = { mount, connectEvents, makeLogDialog, makeSettingsDialog, iconButton }
+    global.DSCPLNShell = { mount, connectEvents, makeLogDialog, makeSettingsDialog, iconButton, readForm, getPath, setPath }
 })(window)

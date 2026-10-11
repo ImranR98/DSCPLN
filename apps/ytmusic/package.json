@@ -1,0 +1,15 @@
+{
+  "name": "dscpln-ytmusic",
+  "version": "1.0.0",
+  "description": "YTMusic Downloads — scheduled YouTube Music library downloads",
+  "private": true,
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@dscpln/server-kit": "*"
+  }
+}

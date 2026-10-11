@@ -17,8 +17,14 @@ import { classifyExistingDest } from "./existingDest.js";
 export async function stageCopy(sourcePath, stagingDir, fileName) {
   await fsp.mkdir(stagingDir, { recursive: true });
   const staged = path.join(stagingDir, `${uniqueSuffix()}-${fileName}`);
+  const srcStat = await fsp.stat(sourcePath);
   await fsp.copyFile(sourcePath, staged);
-  const [srcStat, stagedStat] = await Promise.all([fsp.stat(sourcePath), fsp.stat(staged)]);
+  // Preserve the source timestamps: files without embedded dates fall back to
+  // FileModifyDate, and if the staged copy carried the copy time instead, the
+  // destination name would change on every run (duplicate standardized copies)
+  // and never match the expected name used by cleanup/adoption.
+  await fsp.utimes(staged, srcStat.atime, srcStat.mtime);
+  const stagedStat = await fsp.stat(staged);
   if (srcStat.size !== stagedStat.size) {
     await fsp.rm(staged, { force: true });
     throw new Error("staging copy size mismatch");

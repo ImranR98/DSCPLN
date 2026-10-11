@@ -1,0 +1,8 @@
+.msg.ok {
+    color: var(--ok);
+}
+
+sl-textarea[data-path="browserJson"]::part(textarea) {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: var(--fs-xs);
+}

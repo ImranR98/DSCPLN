@@ -1,0 +1,15 @@
+{
+  "name": "dscpln-compose",
+  "version": "1.0.0",
+  "description": "Infra Compose State — scheduled srv0/vps0 compose runtime-state backups",
+  "private": true,
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@dscpln/server-kit": "*"
+  }
+}

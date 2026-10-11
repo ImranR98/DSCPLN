@@ -1,6 +1,12 @@
 // ntfy.sh-compatible push notifications. Apps call notifyResult() after a run:
 // failures always notify, successes only when notifySuccess is on.
 
+// HTTP header values are ByteString (latin-1); a stray emoji in a title makes
+// fetch throw and silently loses the notification. Replace what cannot encode.
+function headerSafe(value) {
+  return String(value).replace(/[^\u0000-\u00ff]/g, '?')
+}
+
 export class Notifier {
   constructor(config = {}, log = () => {}) {
     this.setConfig(config)
@@ -27,7 +33,7 @@ export class Notifier {
     }
     try {
       const headers = { 'Content-Type': 'text/plain' }
-      if (title) headers['Title'] = String(title)
+      if (title) headers['Title'] = headerSafe(title)
       if (priority) headers['Priority'] = String(priority)
       if (tags.length) headers['Tags'] = tags.join(',')
       if (this.token) headers['Authorization'] = `Bearer ${this.token}`
@@ -53,7 +59,7 @@ export class Notifier {
     const send = !ok || this.notifySuccess
     if (!send) return { ok: true, skipped: true }
     const result = await this.notify(summary || (ok ? 'Completed' : 'Failed'), {
-      title: `D$CPLN · ${app} ${ok ? '✓' : '✗'}`,
+      title: `D$CPLN · ${app} ${ok ? 'OK' : 'FAILED'}`,
       priority: ok ? 'default' : 'high',
       tags: ok ? ['white_check_mark'] : ['warning'],
     })

@@ -97,6 +97,92 @@ Every app mounts everything under `BASE_PATH` (`""` for local dev):
   uses the `D$CPLN ⋅ <Function>` header; app stylesheets only contain
   app-specific rules (kit tokens/components come from the shared file).
 
+## Operations runbook
+
+Everything is served from `https://dscpln.home.example.com/<function>` (portal at
+`/`) behind Authelia SSO; only `/balance/api` bypasses SSO (token-protected).
+
+| App | Path | Deployment | Config/state | Schedule |
+|---|---|---|---|---|
+| Portal | `/` | `portal` | — | — |
+| Balance XLSX | `/balance` | `balance-xlsx` | config Secret → `/app/config.json`; API state next to the workbook | — (limit checks every 30 min) |
+| Media Sync | `/media` | `media-sync` | `media-sync-config-pvc` → `/config/config.json` | daemon (no scheduler) |
+| WhatsApp TXT | `/watxt` | `whatsapp-txt` | `wa-txt` PVC → `/data` (conversations) | — |
+| Task Runner | `/tasks` | `task-runner` | config from the synced repo (`/config-src/...`), state in `~/.backupctl` | per-task `schedule:` |
+| Contacts + Calendar | `/contacts` | `contacts-calendar` | `contacts-config-pvc` → `/data/{config,state}.json` | Sun 03:00 |
+| Infra Compose State | `/compose` | `compose-state` | `compose-state-pvc` → `/data/{config,state}.json` | Sun 04:00 |
+| YTMusic Downloads | `/ytmusic` | `ytmusic` | `ytmusic-pvc` → `/data/{config,state}.json` | daily 05:00 |
+
+**Checking an app**
+
+- Portal pills: `online`/`unreachable` from `GET /<path>/api/health`, plus the
+  next run for the scheduled apps (from `/api/state`, refreshed every 60 s).
+- State: `GET /<path>/api/state` → `lastRun`, `history` (bounded), `nextRun`,
+  `missed`, `runMarker` (non-null while a run is active).
+- Logs: the UI log dialog (SSE), `GET /<path>/api/log`, `kubectl -n apps logs
+  deploy/<name>`, and the runner's `<data>/logs/last.log`.
+- If helm/kubectl reports `permission denied`, the kubeconfig has relocked —
+  run `bash scripts/kubeconfig-unlock.sh` in `~/Main/Infra` on srv0.
+
+**Notifications**
+
+- Every app posts to the single in-cluster topic
+  `http://ntfy.base.svc.cluster.local:3000/srv0_services_dscpln` with the
+  write-only token stored in each app's config (balance uses the same URL via
+  its config Secret).
+- Failures always notify; successes only when each app's `ntfy.notifySuccess`
+  is on (contacts/compose on; ytmusic off — daily runs would be spam).
+- Titles must stay latin-1 (`HTTP` headers are ByteString): the kit's Notifier
+  sanitizes non-ASCII automatically and uses `D$CPLN · <app> OK|FAILED`.
+- Media Sync has a test button/endpoint: `POST /media/api/ntfy-test`.
+
+**Scheduler semantics** (`packages/server-kit/scheduler.mjs`)
+
+- Spec `{enabled, days: [0..6] (empty = daily), at: "HH:MM" local, catchUp}`;
+  30 s tick.
+- Fresh install (no persisted `lastScheduledRun`): the latest occurrence is
+  adopted without firing.
+- `catchUp: true` fires any occurrence newer than the persisted marker (app was
+  down over the scheduled time); `catchUp: false` records it as missed unless it
+  is < 90 s old.
+- A due occurrence that lands while a run is active is counted as missed.
+
+**Retention & trash**
+
+- Compose State: retention 1 archive per target; the old archive is removed only
+  after the new one is written (destination `~/Main/Infra/compose_state_backups`).
+- Media Sync: staged copies are verified before originals move to trash; review
+  items park in the review dir until approved.
+- WhatsApp TXT: merges write temp files that are fsynced+renamed; old outputs
+  are deleted only after every write succeeds.
+- Contacts: exports replace files atomically and git-commit in
+  `~/Main/Backups/Manual`.
+- YTMusic: existing video IDs are skipped; playlist `.m3u8` files are rebuilt
+  each run.
+
+**Building & deploying an image**
+
+```bash
+# on the PC, from the monorepo root (context = repo root):
+podman build --platform linux/amd64 -f apps/<app>/Dockerfile -t docker.io/imranrdev/dscpln-<image>:latest .
+podman push --digestfile /tmp/<image>.digest docker.io/imranrdev/dscpln-<image>:latest
+skopeo inspect docker://docker.io/imranrdev/dscpln-<image>:latest --format '{{.Digest}}'
+
+# pin the digest in ~/Main/Infra/targets/srv0/k3s-apps/templates/<app>.yaml, then on srv0:
+cd ~/Main/Infra && bash scripts/validate.sh srv0
+helm upgrade --install srv0-apps targets/srv0/k3s-apps -n apps
+kubectl -n apps rollout status deploy/<deployment>
+```
+
+Renovate bumps the pinned digests; never leave a floating tag unpinned.
+
+**Balance API**
+
+The old standalone Balance host is retired; the token-protected API keeps its
+path on the shared host: `https://dscpln.home.example.com/balance/api` (no
+trailing rewrite needed). On-disk automations use the new host; if a phone
+shortcut still points at the old hostname, update it.
+
 ## New-app recipe
 
 1. `apps/<name>/package.json` depending on `@dscpln/server-kit`;

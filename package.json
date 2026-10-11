@@ -1,23 +1,24 @@
 {
   "name": "dscpln",
   "version": "1.0.0",
-  "description": "Budget tracker backed by an Excel workbook, with a dashboard, insights, and push notifications",
-  "main": "server.js",
-  "scripts": {
-    "test": "node --test",
-    "mock": "node scripts/create-mock-workbook.js",
-    "start": "node server.js",
-    "vendor": "node scripts/vendor-shoelace.mjs"
-  },
-  "author": "Imran Remtulla",
+  "private": true,
+  "description": "Every D$CPLN data backup/sync function in one monorepo: a portal, scheduled apps and tools",
   "license": "MIT",
-  "dependencies": {
-    "axios": "^1.5.1",
-    "exceljs": "^4.4.0",
-    "express": "^4.18.2"
+  "author": "Imran Remtulla",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "balance": "npm run start --workspace dscpln-balance-xlsx",
+    "mock": "npm run mock --workspace dscpln-balance-xlsx",
+    "vendor:shoelace": "npm run vendor --workspace @dscpln/ui-kit"
   },
   "devDependencies": {
-    "@shoelace-style/shoelace": "^2.20.1",
-    "esbuild": "^0.28.2"
+    "playwright-core": "1.63.0"
   }
 }

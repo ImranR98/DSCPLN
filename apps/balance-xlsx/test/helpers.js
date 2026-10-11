@@ -44,7 +44,7 @@ const createTestProvider = () => {
     return { ...repo, provider: createProvider({ workbookFile: repo.workbookFile }, repo.dir) }
 }
 
-const startServer = async () => {
+const startServer = async (extraConfig = {}) => {
     const { dir, workbookFile } = createWorkbookRepo('dscpln-server-')
     fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
         port: 3300,
@@ -54,6 +54,7 @@ const startServer = async () => {
                 workbookFile: `./${path.basename(workbookFile)}`,
             },
         },
+        ...extraConfig,
     }))
     const config = loadConfig(path.join(dir, 'config.json'))
     const { app } = createApp(config)

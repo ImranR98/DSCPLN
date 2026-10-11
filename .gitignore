@@ -4,3 +4,7 @@ DEPLOY.md
 api-state.json
 *.xlsx.bak
 *.xlsx.tmp
+*.log
+logs/
+data/
+.env

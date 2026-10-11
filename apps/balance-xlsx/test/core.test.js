@@ -3,7 +3,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const http = require('http')
-const { requestJson, moneyFor } = require('../static/core')
+const { requestJson, moneyFor } = require('@dscpln/ui-kit/core')
 
 test('moneyFor uses stored symbols and leaves symbol-less currencies bare', () => {
     const symbols = { CAD: '$', GBP: '£', TZS: 'TSh' }

@@ -1,0 +1,53 @@
+'use strict'
+
+// Browser smoke test: the UI must work under a non-empty BASE_PATH (/balance),
+// which is where path migrations regress. Skips cleanly when Chromium (from
+// playwright-core) is not installed.
+
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const { startServer } = require('./helpers')
+
+async function launchBrowser() {
+    const { chromium } = require('playwright-core')
+    try {
+        return await chromium.launch()
+    } catch (e) {
+        return null
+    }
+}
+
+test('dashboard loads under BASE_PATH with the shared kit', async (t) => {
+    const browser = await launchBrowser()
+    if (!browser) {
+        t.skip('chromium not available (playwright browsers missing)')
+        return
+    }
+    t.after(() => browser.close())
+
+    const { server, baseUrl } = await startServer({ basePath: '/balance' })
+    t.after(() => new Promise((resolve) => server.close(resolve)))
+
+    const page = await browser.newPage()
+    const errors = []
+    page.on('pageerror', (err) => errors.push(err.message))
+    page.on('console', (msg) => {
+        if (msg.type() === 'error') errors.push(msg.text())
+    })
+
+    await page.goto(`${baseUrl}/balance/`)
+    await page.waitForFunction(() => {
+        const el = document.querySelector('#monthSpend')
+        return el && el.textContent.trim() !== '—'
+    })
+    assert.equal(await page.title(), 'D$CPLN ⋅ Balance XLSX')
+    assert.match(await page.textContent('h1'), /Balance XLSX/)
+    // Shoelace and the ui-kit stylesheet must have loaded.
+    await page.waitForFunction(() => customElements.get('sl-button') !== undefined)
+    assert.deepEqual(errors, [])
+
+    await page.click('sl-button[href="insights"]')
+    await page.waitForFunction(() => document.querySelector('#insightsContent')?.children.length > 0)
+    assert.match(await page.title(), /Insights/)
+    assert.deepEqual(errors, [])
+})

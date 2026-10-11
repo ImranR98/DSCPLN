@@ -124,7 +124,7 @@ test('serves transactions for a date range and the insights page', async (t) => 
 
     response = await fetch(`${baseUrl}/insights`)
     assert.equal(response.status, 200)
-    assert.match(await response.text(), /<title>D\$CPLN Insights<\/title>/)
+    assert.match(await response.text(), /<title>D\$CPLN ⋅ Balance XLSX — Insights<\/title>/)
 })
 
 test('imports transactions and rejects invalid batches atomically', async (t) => {

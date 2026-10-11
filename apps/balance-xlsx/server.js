@@ -1,0 +1,202 @@
+'use strict'
+
+// HTTP server: static pages and the JSON API, mounted through the server kit so
+// the app works both at the host root (local dev) and under BASE_PATH (e.g.
+// /balance). Budget-limit notifications live in notifications.js.
+const path = require('path')
+const { createApp: createKitApp } = require('@dscpln/server-kit')
+const { loadConfig } = require('./config')
+const { ValidationError } = require('./errors')
+const { startNotifications } = require('./notifications')
+const { createApiAuth } = require('./api-auth')
+
+const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
+
+const todayIso = () => {
+    const date = new Date()
+    const pad = (value) => String(value).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+// The external API takes a signed amount: negative is an expense, positive is
+// income. The sign is stripped before the amount reaches the provider.
+const signedAmountToInput = (value) => {
+    const amount = Number.parseFloat(value)
+    if (!Number.isFinite(amount) || amount === 0) {
+        throw new ValidationError('Amount must be a non-zero number')
+    }
+    return { kind: amount < 0 ? 'expense' : 'income', amount: Math.abs(amount) }
+}
+
+const parseDateQuery = (dateStr) => {
+    if (!dateStr) {
+        return new Date()
+    }
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr)
+    const date = match ?
+        new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) :
+        new Date(dateStr)
+    if (isNaN(date.getTime()) ||
+        (match && (date.getFullYear() != Number(match[1]) ||
+            date.getMonth() != Number(match[2]) - 1 ||
+            date.getDate() != Number(match[3])))) {
+        throw new ValidationError('Invalid date')
+    }
+    return date
+}
+
+const createApp = (config) => {
+    let providerFactory
+    try {
+        providerFactory = require(path.join(__dirname, 'dataProviders', config.dataProvider))
+    } catch (e) {
+        throw new Error(`Could not load data provider "${config.dataProvider}": ${e.message}`)
+    }
+    if (typeof providerFactory !== 'function') {
+        throw new Error(`Data provider "${config.dataProvider}" must export a factory function`)
+    }
+    const dataProvider = providerFactory(config.providers[config.dataProvider] || {}, config.configDir || process.cwd())
+
+    const apiStateFile = config.api?.stateFile || './api-state.json'
+    const apiAuth = createApiAuth(path.resolve(config.configDir || process.cwd(), apiStateFile))
+    apiAuth.getToken() // create the state file up front so permission errors surface early
+
+    const staticDir = path.join(__dirname, 'static')
+    const basePath = config.basePath ?? process.env.BASE_PATH ?? ''
+
+    const requireProviderMethod = (method, feature = 'transactions') => (req, res, next) => {
+        if (typeof dataProvider[method] !== 'function') {
+            res.status(501).send(`This data provider does not support ${feature}`)
+            return
+        }
+        next()
+    }
+
+    const requireApiToken = (req, res, next) => {
+        const match = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || '')
+        if (!match || !apiAuth.checkToken(match[1].trim())) {
+            res.status(401).json({ error: 'Invalid or missing API token' })
+            return
+        }
+        next()
+    }
+
+    const requireApiMethod = (method, feature) => {
+        if (typeof dataProvider[method] !== 'function') {
+            const error = new Error(`This data provider does not support ${feature}`)
+            error.statusCode = 501
+            throw error
+        }
+    }
+
+    const app = createKitApp({
+        title: 'Balance XLSX',
+        pageTitle: null,
+        basePath,
+        staticDir,
+        bodyLimit: '256kb',
+        healthExtra: () => ({ provider: config.dataProvider }),
+        routes: (router) => {
+            router.get('/data', asyncRoute(async (req, res) => {
+                res.send(await dataProvider.getData(parseDateQuery(req.query['date'])))
+            }))
+
+            router.post('/budget', asyncRoute(async (req, res) => {
+                await dataProvider.updateMonthlyBudget(req.body?.monthlyBudget, req.body?.firstDayBias ?? 0, req.body?.currency)
+                res.send()
+            }))
+
+            router.get('/transactions', requireProviderMethod('getTransactions'), asyncRoute(async (req, res) => {
+                const start = req.query['start']
+                const end = req.query['end']
+                if (!start || !end) {
+                    throw new ValidationError('start and end query parameters are required')
+                }
+                res.send(await dataProvider.getTransactions(start, end))
+            }))
+
+            router.post('/transactions', requireProviderMethod('addTransaction'), asyncRoute(async (req, res) => {
+                res.status(201).send(await dataProvider.addTransaction(req.body))
+            }))
+
+            router.post('/transactions/import', requireProviderMethod('importTransactions'), asyncRoute(async (req, res) => {
+                res.status(201).send(await dataProvider.importTransactions(req.body?.text))
+            }))
+
+            router.put('/transactions/:id', requireProviderMethod('updateTransaction'), asyncRoute(async (req, res) => {
+                res.send(await dataProvider.updateTransaction(req.params['id'], req.body))
+            }))
+
+            router.delete('/transactions/:id', requireProviderMethod('deleteTransaction'), asyncRoute(async (req, res) => {
+                await dataProvider.deleteTransaction(req.params['id'])
+                res.status(204).send()
+            }))
+
+            router.get('/details-suggestions', requireProviderMethod('suggestDetails', 'details suggestions'), asyncRoute(async (req, res) => {
+                res.send(await dataProvider.suggestDetails(req.query['q'], req.query['kind']))
+            }))
+
+            router.get('/category-suggestions', requireProviderMethod('suggestCategories', 'category suggestions'), asyncRoute(async (req, res) => {
+                res.send(await dataProvider.suggestCategories(req.query['q'], req.query['kind']))
+            }))
+
+            router.get('/token', (req, res) => {
+                res.send({ token: apiAuth.getToken() })
+            })
+
+            router.post('/token/regenerate', (req, res) => {
+                // Requiring JSON keeps cross-site form posts from rotating the token.
+                if (!req.is('application/json')) {
+                    res.status(415).send('Expected application/json')
+                    return
+                }
+                res.send({ token: apiAuth.regenerate() })
+            })
+
+            // Category list and scoring. Without details every category comes back
+            // with score 0, so it doubles as a "get the categories" call.
+            router.get('/api/categories', requireApiToken, asyncRoute(async (req, res) => {
+                requireApiMethod('scoreCategories', 'category suggestions')
+                const details = typeof req.query['details'] === 'string' ? req.query['details'] : ''
+                const kind = typeof req.query['kind'] === 'string' ? req.query['kind'] : null
+                res.send({ groups: await dataProvider.scoreCategories(details, kind) })
+            }))
+
+            // Add-only external API: a signed amount sets the direction and the
+            // category must be one from the Constants sheet.
+            router.post('/api/transactions', requireApiToken, asyncRoute(async (req, res) => {
+                requireApiMethod('addTransaction', 'transactions')
+                const input = req.body || {}
+                const { kind, amount } = signedAmountToInput(input.amount)
+                const transaction = await dataProvider.addTransaction({
+                    kind,
+                    amount,
+                    details: input.details,
+                    date: typeof input.date === 'string' && input.date.trim() ? input.date : todayIso(),
+                    category: input.category,
+                    currency: input.currency,
+                    notes: input.notes,
+                })
+                res.status(201).send({ transaction })
+            }))
+        },
+    })
+
+    return { app, dataProvider }
+}
+
+const start = (config) => {
+    const { app, dataProvider } = createApp(config)
+    const server = app.listen(config.port, () => {
+        console.log(`Server is running on port ${config.port}`)
+        startNotifications(config, dataProvider)
+    })
+    return server
+}
+
+if (require.main === module) {
+    const config = loadConfig()
+    start(config)
+}
+
+module.exports = { createApp, start }

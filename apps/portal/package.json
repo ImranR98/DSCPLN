@@ -1,0 +1,15 @@
+{
+  "name": "dscpln-portal",
+  "version": "1.0.0",
+  "description": "D$CPLN portal: links to every function",
+  "private": true,
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@dscpln/server-kit": "*"
+  }
+}

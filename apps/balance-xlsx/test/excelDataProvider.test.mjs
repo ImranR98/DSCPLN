@@ -1,14 +1,14 @@
 'use strict'
 
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
-const ExcelJS = require('exceljs')
-const { ValidationError, ConflictError } = require('../errors')
-const createProvider = require('../dataProviders/excelDataProvider')
-const { git, createWorkbookRepo, createTestProvider } = require('./helpers')
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import ExcelJS from 'exceljs'
+import { ValidationError, ConflictError } from '../errors.mjs'
+import createProvider from '../dataProviders/excelDataProvider.mjs'
+import { git, createWorkbookRepo, createTestProvider } from './helpers.mjs'
 
 const createCustomWorkbook = async (file, rows, options = {}) => {
     const workbook = new ExcelJS.Workbook()

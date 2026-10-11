@@ -3,12 +3,19 @@
 // HTTP server: static pages and the JSON API, mounted through the server kit so
 // the app works both at the host root (local dev) and under BASE_PATH (e.g.
 // /balance). Budget-limit notifications live in notifications.js.
-const path = require('path')
-const { createApp: createKitApp } = require('@dscpln/server-kit')
-const { loadConfig } = require('./config')
-const { ValidationError } = require('./errors')
-const { startNotifications } = require('./notifications')
-const { createApiAuth } = require('./api-auth')
+import path from 'node:path'
+import { createApp as createKitApp } from '@dscpln/server-kit'
+import { loadConfig } from './config.mjs'
+import { ValidationError } from './errors.mjs'
+import { startNotifications } from './notifications.mjs'
+import { createApiAuth } from './api-auth.mjs'
+
+import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url))
+const require = createRequire(import.meta.url)
+
 
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 
@@ -48,7 +55,8 @@ const parseDateQuery = (dateStr) => {
 const createApp = (config) => {
     let providerFactory
     try {
-        providerFactory = require(path.join(__dirname, 'dataProviders', config.dataProvider))
+        const loaded = require(path.join(__dirname, 'dataProviders', `${config.dataProvider}.mjs`))
+        providerFactory = loaded.default ?? loaded
     } catch (e) {
         throw new Error(`Could not load data provider "${config.dataProvider}": ${e.message}`)
     }
@@ -218,9 +226,8 @@ const start = (config) => {
     return server
 }
 
-if (require.main === module) {
-    const config = loadConfig()
-    start(config)
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+    start(loadConfig())
 }
 
-module.exports = { createApp, start }
+export { createApp, start }

@@ -4,8 +4,8 @@
 // Uses an app-specific author/committer identity and never signs commits, so it
 // works on machines with no personal git identity (or with signing configured).
 
-const path = require('path')
-const { execFileSync } = require('child_process')
+import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 
 const APP_IDENTITY = {
     name: 'D$CPLN',
@@ -81,4 +81,4 @@ const commitFile = (file, message) => {
     }
 }
 
-module.exports = { assertWorkbookRepo, commitFile }
+export { assertWorkbookRepo, commitFile }

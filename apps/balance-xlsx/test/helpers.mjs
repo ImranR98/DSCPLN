@@ -2,14 +2,16 @@
 
 // Shared test scaffolding: temporary git-backed workbooks and a test server.
 
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
-const { execFileSync } = require('child_process')
-const { loadConfig } = require('../config')
-const { createApp } = require('../server')
-const createProvider = require('../dataProviders/excelDataProvider')
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { execFileSync } from 'node:child_process'
+import { loadConfig } from '../config.mjs'
+import { createApp } from '../server.mjs'
+import createProvider from '../dataProviders/excelDataProvider.mjs'
 
+const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const MOCK = path.join(__dirname, '..', 'mock-data.xlsx')
 
 // Git with a deterministic identity and signing disabled, so tests can assert
@@ -72,4 +74,4 @@ const jsonRequest = (baseUrl, url, body, method = 'POST') => fetch(`${baseUrl}${
     body: JSON.stringify(body),
 })
 
-module.exports = { git, MOCK, createWorkbookRepo, createTestProvider, startServer, jsonRequest }
+export { git, MOCK, createWorkbookRepo, createTestProvider, startServer, jsonRequest }

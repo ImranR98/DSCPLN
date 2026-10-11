@@ -4,12 +4,12 @@
 // which is where path migrations regress. Skips cleanly when Chromium (from
 // playwright-core) is not installed.
 
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const { startServer } = require('./helpers')
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { startServer } from './helpers.mjs'
 
 async function launchBrowser() {
-    const { chromium } = require('playwright-core')
+    const { chromium } = await import('playwright-core')
     try {
         return await chromium.launch()
     } catch (e) {

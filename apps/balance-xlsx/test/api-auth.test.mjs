@@ -1,11 +1,11 @@
 'use strict'
 
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
-const { createApiAuth } = require('../api-auth')
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { createApiAuth } from '../api-auth.mjs'
 
 const stateFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dscpln-api-')), 'api-state.json')
 

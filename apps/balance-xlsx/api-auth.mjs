@@ -3,9 +3,9 @@
 // Credentials for the external API: a single bearer token kept in a small JSON
 // state file that is created on first use, so regenerating the token from the
 // UI is enough to rotate it.
-const crypto = require('crypto')
-const fs = require('fs')
-const path = require('path')
+import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
 
 const randomToken = () => crypto.randomBytes(32).toString('base64url')
 
@@ -75,4 +75,4 @@ const createApiAuth = (stateFile) => {
     }
 }
 
-module.exports = { createApiAuth }
+export { createApiAuth }

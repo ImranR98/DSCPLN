@@ -1,9 +1,9 @@
 'use strict'
 
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const http = require('http')
-const { startNotifications } = require('../notifications')
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import http from 'node:http'
+import { startNotifications } from '../notifications.mjs'
 
 const waitFor = async (predicate) => {
     for (let i = 0; i < 100; i++) {

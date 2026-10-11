@@ -1,8 +1,8 @@
 'use strict'
 
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const { startServer, jsonRequest } = require('./helpers')
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { startServer, jsonRequest } from './helpers.mjs'
 
 test('serves workbook data with categories, currencies and income stats', async (t) => {
     const { server, baseUrl } = await startServer()

@@ -8,7 +8,7 @@ COPY packages ./packages
 COPY apps ./apps
 RUN npm install --no-audit --no-fund
 USER node
-CMD ["node", "apps/balance-xlsx/server.js"]
+CMD ["node", "apps/balance-xlsx/server.mjs"]
 
 # Build from the monorepo root:
 #   podman build --platform linux/amd64 -f apps/balance-xlsx/Dockerfile -t docker.io/imranrdev/dscpln-balance:latest .

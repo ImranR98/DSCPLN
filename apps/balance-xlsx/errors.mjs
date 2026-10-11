@@ -20,4 +20,4 @@ class ConflictError extends AppError {
     }
 }
 
-module.exports = { ValidationError, ConflictError }
+export { ValidationError, ConflictError }

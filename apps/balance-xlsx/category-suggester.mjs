@@ -160,4 +160,4 @@ const scoreCategories = (description, samples, categories, options = {}) => {
         .sort((a, b) => b.score - a.score)
 }
 
-module.exports = { suggestCategories, scoreCategories, similarity, normalize, DEFAULT_OPTIONS }
+export { suggestCategories, scoreCategories, similarity, normalize, DEFAULT_OPTIONS }

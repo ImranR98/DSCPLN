@@ -2,7 +2,7 @@
 
 // Monthly budget-limit notifications over an ntfy-compatible endpoint.
 
-const axios = require('axios')
+import axios from 'axios'
 
 // Plain (unformatted) compact amount for notification text: 2 decimals at
 // least, more for values below 1.
@@ -84,4 +84,4 @@ const startNotifications = (config, dataProvider) => {
     setInterval(checkLimits, intervalMs)
 }
 
-module.exports = { startNotifications }
+export { startNotifications }

@@ -1,8 +1,8 @@
 'use strict'
 
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const math = require('../static/insights-math')
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import math from '../static/insights-math.js'
 
 const tx = (date, kind, amount, extra = {}) => ({
     date,

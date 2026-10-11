@@ -187,62 +187,8 @@ export default {
           commands: 'mkdir -p "{{maindir}}/Backups/WhatsApp TXT" && unzip -oq {{uploads}} -d "$TMPDIR" && for z in "$TMPDIR"/*.zip; do [ -f "$z" ] || continue; unzip -oq "$z" -d "$TMPDIR"; rm -f "$z"; done && rm -f "$TMPDIR"/*.vcf && node \'{{scriptroot}}/WhatsAppTXT/WhatsAppTXT.js\' "{{maindir}}/Backups/WhatsApp TXT" "$TMPDIR"',
         },
 
-        // Archive the live WhatsApp folder: snapshot it, standardize the media
-        // into the staging dir (concatenating voice notes per chat), then delete
-        // the originals. set -e means originals are only deleted when every step
-        // succeeded; the confirm prompt is required before anything is deleted.
-        {
-          name: 'WhatsApp',
-          summary_last_line: true,
-          state_dir: '{{maindir}}/Backups/Archive/WhatsApp-AllMedia',
-          root: '{{maindir}}/WhatsApp/Media',
-          note: 'Archives the live WhatsApp folder, then standardizes media into a staging dir and deletes the originals on success.',
-          script: `source '{{lib}}'
-SRC='{{maindir}}/WhatsApp'
-MEDIA="$SRC/Media"
-OUT="$HOME/Downloads/WAMedia"
-ARCHIVE='{{maindir}}/Backups/Archive/WhatsApp-AllMedia'
-
-# snapshot the whole live folder first
-log "Snapshotting $SRC → $ARCHIVE..."
-mkdir -p "$ARCHIVE"
-bctl_rsync "$SRC/" "$ARCHIVE"
-
-# plain subdirs: raw copy, then standardize each chat folder
-for d in 'WhatsApp Images' 'WhatsApp Video' 'WhatsApp Video Notes'; do
-  src="$MEDIA/$d"
-  [[ -d "$src" ]] || continue
-  out="$OUT/$d"
-  mkdir -p "$out"
-  bctl_rsync "$src/" "$out"
-  for child in "$src"/*/; do
-    [[ -d "$child" ]] || continue
-    bctl_standardize_into "$child" "$out" '{{media-sync_cli}}'
-  done
-done
-
-# voice notes: concatenate each chat's segments first, then standardize
-src="$MEDIA/WhatsApp Voice Notes"
-if [[ -d "$src" ]]; then
-  out="$OUT/WhatsApp Voice Notes"
-  mkdir -p "$out"
-  bctl_rsync "$src/" "$out"
-  for child in "$src"/*/; do
-    [[ -d "$child" ]] || continue
-    processed="$child/processed"
-    mkdir -p "$processed"
-    bctl_media-sync '{{media-sync_cli}}' concataudio "$child" "$processed"
-    bctl_media-sync '{{media-sync_cli}}' standardize "$processed"
-    for f in "$processed"/*; do mv "$f" "$out/$(basename "$f")"; done
-    rm -rf "$processed"
-  done
-fi
-
-# everything succeeded: delete the originals
-rm -rf "$MEDIA/WhatsApp Images" "$MEDIA/WhatsApp Video" "$MEDIA/WhatsApp Video Notes" "$MEDIA/WhatsApp Voice Notes"
-log "Import completed; originals deleted"
-`,
-        },
+        // The WhatsApp media archive and voice-note processing moved to the
+        // Media Sync app (WhatsApp AllMedia mirror + WhatsApp Voice Notes review).
 
         // Export the ProtonMail mailbox. Password + TOTP prompted. The CLI is
         // downloaded on first use; the export is validated (validate-fresh)

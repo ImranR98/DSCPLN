@@ -122,3 +122,4 @@ The UI is a thin loop: `loadTasks()` fetches `/api/tasks` and rebuilds the card 
 - `scripts/` — git submodules with the personal automation scripts referenced by the config
 - `config.mjs` — the committed personal config (values + groups of tasks)
 - `tests/` — `node:test` sandbox suites (`npm test`)
+- `docs/` — the server-app replacement plan (`REPLACEMENT-PLAN.md`) and the record of completed replacements (`media-sync-whatsapp.md`)

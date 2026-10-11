@@ -6,7 +6,9 @@ RUN apt-get update \
 COPY package.json package-lock.json ./
 COPY packages ./packages
 COPY apps ./apps
-RUN npm install --no-audit --no-fund
+RUN npm install --no-audit --no-fund \
+    && npm run build:ui --workspace dscpln-balance-xlsx \
+    && npm prune --omit=dev
 USER node
 CMD ["node", "apps/balance-xlsx/server.mjs"]
 

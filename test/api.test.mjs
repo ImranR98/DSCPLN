@@ -29,7 +29,9 @@ test('serves the settings page and rotates the API token', async (t) => {
 
     const page = await fetch(`${baseUrl}/settings`)
     assert.equal(page.status, 200)
-    assert.match(await page.text(), /API token/)
+    const html = await page.text()
+    assert.match(html, /<title>D\$CPLN ⋅ Balance XLSX — Settings<\/title>/)
+    assert.match(html, /assets\/[^"]+\.js/)
 
     const first = await token(baseUrl)
     assert.ok(first.length > 20)

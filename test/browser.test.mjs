@@ -42,11 +42,9 @@ test('dashboard loads under BASE_PATH with the shared kit', async (t) => {
     })
     assert.equal(await page.title(), 'D$CPLN ⋅ Balance XLSX')
     assert.match(await page.textContent('h1'), /Balance XLSX/)
-    // Shoelace and the ui-kit stylesheet must have loaded.
-    await page.waitForFunction(() => customElements.get('sl-button') !== undefined)
     assert.deepEqual(errors, [])
 
-    await page.click('sl-button[href="insights"]')
+    await page.click('a[href="insights"]')
     await page.waitForFunction(() => document.querySelector('#insightsContent')?.children.length > 0)
     assert.match(await page.title(), /Insights/)
     assert.deepEqual(errors, [])

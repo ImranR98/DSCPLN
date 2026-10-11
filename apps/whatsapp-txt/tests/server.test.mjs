@@ -361,7 +361,7 @@ test('base path: the app mounts under BASE_PATH with the shared kit', async () =
         assert.equal(page.status, 200)
         const html = await page.text()
         assert.match(html, /<base href="\/watxt\/">/)
-        assert.match(html, /<title>D\$CPLN &middot; WhatsApp TXT<\/title>/)
+        assert.match(html, /<title>D\$CPLN ⋅ WhatsApp TXT<\/title>/)
 
         const meta = await getJson(base, '/watxt/api/state')
         assert.equal(meta.status, 200)

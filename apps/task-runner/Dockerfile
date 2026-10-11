@@ -10,12 +10,11 @@ RUN apt-get update \
 WORKDIR /app
 
 # Monorepo install (build context = repo root): the shared kits, this app and
-# the tools/. Tasks may provision venvs/npm deps at run time, so the app tree
+# the config/state. Tasks may provision venvs/npm deps at run time, so the app tree
 # must be writable by the runtime user.
 COPY package.json package-lock.json ./
 COPY packages ./packages
 COPY apps ./apps
-COPY tools ./tools
 RUN npm install --no-audit --no-fund \
     && npm run build:ui --workspace dscpln-task-runner \
     && npm prune --omit=dev

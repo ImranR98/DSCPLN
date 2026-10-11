@@ -25,7 +25,7 @@ declare -A IMAGE_NAMES=(
     [ytmusic]=dscpln-ytmusic
     [portal]=dscpln-portal
 )
-# app -> Infra template (the digest gets pinned there)
+# app -> deployment-template name used by --pin (edit for your repo)
 declare -A TEMPLATES=(
     [balance-xlsx]=dscpln.yaml
     [media-sync]=media-sync.yaml

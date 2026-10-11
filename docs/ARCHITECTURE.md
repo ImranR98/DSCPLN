@@ -6,17 +6,17 @@ One monorepo, one host, one design system.
 DSCPLN/
   packages/
     server-kit/     shared Node/express primitives (no app logic)
-    ui-kit/         shared browser kit, design system, vendored Shoelace
+    ui-kit/         shared Svelte components, helpers, Pico-based styling
+    test-kit/       shared test helpers (servers, temp dirs, polling)
   apps/
     portal/         root landing page (host root)
-    balance-xlsx/   Balance XLSX      /balance    (k8s deployment: dscpln)
-    media-sync/     Media Sync        /media      (k8s deployment: media-sync)
-    whatsapp-txt/   WhatsApp TXT      /watxt      (k8s deployment: whatsapp-txt-browser)
-    task-runner/    Task Runner       /tasks      (k8s deployment: backupctl)
+    balance-xlsx/   Balance XLSX          /balance
+    media-sync/     Media Sync            /media
+    whatsapp-txt/   WhatsApp TXT          /watxt
+    task-runner/    Task Runner           /tasks
     contacts-calendar/ Contacts + Calendar /contacts
     compose-state/  Infra Compose State    /compose
-    ytmusic/        YTMusic Downloads      /ytmusic
-  tools/            absorbed helper scripts invoked by Task Runner (no UI)
+    ytmusic/        YTMusic Downloads     /ytmusic
   scripts/          build helpers (one image per app)
 ```
 
@@ -28,7 +28,7 @@ DSCPLN/
 | images | `imranrdev/dscpln-<app>` |
 | config/state on a PVC | `config.json`, `.dscpln-*-state.json`, mode `0600`, atomic writes |
 | app state files excluded from git commits | `.backup-state-*` (Task Runner), keep the exclusion pattern |
-| media XMP tags | `XMP-media-sync:*` — the name is frozen, do not rename tags |
+| media XMP tags | `XMP-media-sync:*` (written on concatenated outputs) |
 
 ## Base-path contract
 
@@ -112,19 +112,21 @@ prunes them. Balance builds three pages from one Vite config
 
 ## Operations runbook
 
-Everything is served from `https://dscpln.home.example.com/<function>` (portal at
-`/`) behind Authelia SSO; only `/balance/api` bypasses SSO (token-protected).
+In the example deployment everything is served from one host
+(`https://dscpln.example.com/<function>`, portal at `/`) behind a forward-auth
+proxy (Authelia); only `/balance/api` bypasses it (token-protected). Any
+reverse proxy works — the apps only need `BASE_PATH` set per subpath.
 
 | App | Path | Deployment | Config/state | Schedule |
 |---|---|---|---|---|
 | Portal | `/` | `portal` | — | — |
 | Balance XLSX | `/balance` | `balance-xlsx` | config Secret → `/app/config.json`; API state next to the workbook | — (limit checks every 30 min) |
-| Media Sync | `/media` | `media-sync` | `media-sync-config-pvc` → `/config/config.json` | daemon (no scheduler) |
-| WhatsApp TXT | `/watxt` | `whatsapp-txt` | `wa-txt` PVC → `/data` (conversations) | — |
-| Task Runner | `/tasks` | `task-runner` | config from the synced repo (`/config-src/...`), state in `~/.backupctl` | per-task `schedule:` |
-| Contacts + Calendar | `/contacts` | `contacts-calendar` | `contacts-config-pvc` → `/data/{config,state}.json` | Sun 03:00 |
-| Infra Compose State | `/compose` | `compose-state` | `compose-state-pvc` → `/data/{config,state}.json` | Sun 04:00 |
-| YTMusic Downloads | `/ytmusic` | `ytmusic` | `ytmusic-pvc` → `/data/{config,state}.json` | daily 05:00 |
+| Media Sync | `/media` | `media-sync` | config PVC → `/config/config.json` | daemon (no scheduler) |
+| WhatsApp TXT | `/watxt` | `whatsapp-txt` | data PVC → `/data` (conversations) | — |
+| Task Runner | `/tasks` | `task-runner` | mounted config file, state in `~/.backupctl` | per-task `serial_key` |
+| Contacts + Calendar | `/contacts` | `contacts-calendar` | config PVC → `/data/{config,state}.json` | Sun 03:00 |
+| Infra Compose State | `/compose` | `compose-state` | config PVC → `/data/{config,state}.json` | Sun 04:00 |
+| YTMusic Downloads | `/ytmusic` | `ytmusic` | config PVC → `/data/{config,state}.json` | daily 05:00 |
 
 **Checking an app**
 
@@ -139,15 +141,16 @@ Everything is served from `https://dscpln.home.example.com/<function>` (portal a
   `missed`, `runMarker` (non-null while a run is active).
 - Logs: the UI log dialog (SSE), `GET /<path>/api/log`, `kubectl -n apps logs
   deploy/<name>`, and the runner's `<data>/logs/last.log`.
-- If helm/kubectl reports `permission denied`, the kubeconfig has relocked —
-  run `bash scripts/kubeconfig-unlock.sh` in `~/Main/Infra` on srv0.
+- Kubeconfigs that are re-encrypted at rest (as in the example deployment)
+  need unlocking before helm/kubectl work; that mechanism lives in the
+  deployment repo, not here.
 
 **Notifications**
 
-- Every app posts to the single in-cluster topic
-  `http://ntfy.base.svc.cluster.local:3000/srv0_services_dscpln` with the
-  write-only token stored in each app's config (balance uses the same URL via
-  its config Secret), `Bearer` auth.
+- Every app posts to one ntfy topic (URL + write-only token stored in each
+  app's config; balance uses the same values via its config Secret) with
+  `Bearer` auth. The example deployment uses a single in-cluster topic for all
+  apps.
 - Titles are latin-1 (`HTTP` headers are ByteString): the kit's Notifier
   sanitizes non-ASCII automatically and follows one convention —
   run results `D$CPLN - <Function> OK|FAILED`, event notifications
@@ -178,7 +181,7 @@ Everything is served from `https://dscpln.home.example.com/<function>` (portal a
 **Retention & trash**
 
 - Compose State: retention 1 archive per target; the old archive is removed only
-  after the new one is written (destination `~/Main/Infra/compose_state_backups`).
+  after the new one is written (destination `~/compose_state_backups`).
 - Media Sync: staged copies are verified before originals move to trash; review
   items park in the review dir until approved.
 - WhatsApp TXT: merges write temp files that are fsynced+renamed; old outputs
@@ -196,27 +199,25 @@ podman build --platform linux/amd64 -f apps/<app>/Dockerfile -t docker.io/imranr
 podman push --digestfile /tmp/<image>.digest docker.io/imranrdev/dscpln-<image>:latest
 skopeo inspect docker://docker.io/imranrdev/dscpln-<image>:latest --format '{{.Digest}}'
 
-# pin the digest in ~/Main/Infra/targets/srv0/k3s-apps/templates/<app>.yaml, then on srv0:
-cd ~/Main/Infra && bash scripts/validate.sh srv0
-helm upgrade --install srv0-apps targets/srv0/k3s-apps -n apps
+# pin the digest in your deployment repo's template for the app, then deploy:
+helm upgrade --install <release> <chart> -n apps
 kubectl -n apps rollout status deploy/<deployment>
 ```
 
 `scripts/build-all.sh` wraps the per-app loop: it builds/pushes each app, prints
-a digest table, and with `--pin` rewrites the digests straight into the Infra
-templates (`INFRA_DIR` overrides `~/Main/Infra`; it refuses a dirty checkout).
-The app templates share `templates/_helpers.tpl` (`dscpln.podSecurityContext`,
-`dscpln.containerSecurityContext`, `dscpln.readinessProbe`, `dscpln.service`) so
-the hardening posture and Service shape stay uniform.
+a digest table, and with `--pin` writes the digests into your deployment repo
+(`INFRA_DIR`; it refuses a dirty checkout). `REGISTRY`/`IMAGE_ORG` choose where
+images are pushed. The example Kubernetes templates share a `_helpers.tpl`
+(pod/container security contexts, readiness probe, Service) so the hardening
+posture and Service shape stay uniform.
 
 Renovate bumps the pinned digests; never leave a floating tag unpinned.
 
 **Balance API**
 
-The old standalone Balance host is retired; the token-protected API keeps its
-path on the shared host: `https://dscpln.home.example.com/balance/api` (no
-trailing rewrite needed). On-disk automations use the new host; if a phone
-shortcut still points at the old hostname, update it.
+The token-protected API lives under the app's path:
+`https://<your-host>/balance/api` (no trailing rewrite needed). Update any
+phone shortcuts or scripts that still point at an older hostname.
 
 ## New-app recipe
 

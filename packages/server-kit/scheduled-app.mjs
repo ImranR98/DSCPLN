@@ -28,6 +28,15 @@ import { createApp } from './app.mjs'
 // call is rejected, and the run itself is fire-and-forget (state + notify are
 // recorded when it finishes).
 
+// Deep link for notification taps: the app's public URL when the deployment
+// provides one (DSCPLN_ORIGIN + BASE_PATH), otherwise nothing.
+export function clickFor(basePath = '', originEnv = process.env.DSCPLN_ORIGIN) {
+  const origin = String(originEnv ?? '').trim().replace(/\/+$/, '')
+  if (!/^https?:\/\//i.test(origin)) return ''
+  const base = basePath ? `/${String(basePath).replace(/^\/+|\/+$/g, '')}` : ''
+  return `${origin}${base}`
+}
+
 export function scheduledApp(options) {
   const {
     name,
@@ -131,9 +140,10 @@ export function scheduledApp(options) {
   const start = async () => {
     await config.load()
     await state.load()
-    notifier.setConfig({ ntfy: config.get().ntfy ?? {} })
+    const clickUrl = clickFor(basePath)
+    notifier.setConfig({ ntfy: config.get().ntfy ?? {}, click: clickUrl })
     config.onChange((cfg) => {
-      notifier.setConfig({ ntfy: cfg.ntfy ?? {} })
+      notifier.setConfig({ ntfy: cfg.ntfy ?? {}, click: clickUrl })
       onConfigChanged?.(cfg)
     })
     scheduler.start()

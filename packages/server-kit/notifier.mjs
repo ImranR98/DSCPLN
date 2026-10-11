@@ -18,6 +18,7 @@ export class Notifier {
     this.url = String(ntfy.url ?? '').trim()
     this.token = String(ntfy.token ?? '').trim()
     this.notifySuccess = Boolean(ntfy.notifySuccess)
+    this.click = String(config.click ?? ntfy.click ?? '').trim()
   }
 
   get configured() {
@@ -36,6 +37,7 @@ export class Notifier {
       if (title) headers['Title'] = headerSafe(title)
       if (priority) headers['Priority'] = String(priority)
       if (tags.length) headers['Tags'] = tags.join(',')
+      if (this.click && /^https?:\/\//i.test(this.click)) headers['Click'] = headerSafe(this.click)
       if (this.token) headers['Authorization'] = `Bearer ${this.token}`
       const response = await fetch(this.url, {
         method: 'POST',

@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Notifier } from '../notifier.mjs'
+import { clickFor } from '../scheduled-app.mjs'
 
 const latin1Safe = (value) => Buffer.from(value, 'latin1').toString('latin1') === value
 
@@ -56,4 +57,27 @@ test('missing or invalid URL is reported without throwing', async () => {
     ok: false,
     error: 'ntfy URL not configured',
   })
+})
+
+test('notifications carry a click-through to the app when configured', async (t) => {
+  const calls = mockFetch(t)
+  const notifier = new Notifier({
+    ntfy: { url: 'http://ntfy.test/topic' },
+    click: 'https://dscpln.example/contacts',
+  })
+  await notifier.notify('done', { title: 'x' })
+  assert.equal(calls[0].init.headers.Click, 'https://dscpln.example/contacts')
+
+  const relative = new Notifier({ ntfy: { url: 'http://ntfy.test/topic' }, click: '/contacts' })
+  await relative.notify('done', { title: 'x' })
+  assert.equal(calls[1].init.headers.Click, undefined)
+})
+
+test('clickFor builds the public app URL from origin and base path', () => {
+  assert.equal(clickFor('/contacts', 'https://dscpln.example/'), 'https://dscpln.example/contacts')
+  assert.equal(clickFor('/x/', 'https://dscpln.example//'), 'https://dscpln.example/x')
+  assert.equal(clickFor('', 'https://dscpln.example'), 'https://dscpln.example')
+  assert.equal(clickFor('/x', ''), '')
+  assert.equal(clickFor('/x', 'not a url'), '')
+  assert.equal(clickFor('/x', ''), '')
 })

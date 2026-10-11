@@ -105,10 +105,10 @@ prunes them. Balance builds three pages from one Vite config
   `seccompProfile: RuntimeDefault` and `readOnlyRootFilesystem: true` plus a
   memory-backed `/tmp`; Task Runner is the exception (its tasks provision tools
   into the image tree at runtime, so its root stays writable).
-- **UI consistency**: every app loads `ui/theme-boot.js`, the vendored Shoelace
-  themes, `ui/style.css`, `ui/core.js` (+ `ui/shell.js` for scheduled apps) and
-  uses the `D$CPLN ⋅ <Function>` header; app stylesheets only contain
-  app-specific rules (kit tokens/components come from the shared file).
+- **UI consistency**: every app builds its `ui/` (Svelte + Pico via
+  `@dscpln/ui-kit`), uses the `D$CPLN ⋅ <Function>` header, and keeps custom
+  CSS to a few app-specific rules — Pico and the kit supply the rest. Tests use
+  `data-testid` selectors so they survive markup changes.
 
 ## Operations runbook
 

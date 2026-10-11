@@ -35,9 +35,8 @@ then `npm start --workspace <pkg>`). In the cluster every app gets its
 `BASE_PATH` (`/balance`, `/media`, …) and is routed through one TLS host.
 
 See `docs/ARCHITECTURE.md` for the kit APIs, the base-path contract and the
-new-app recipe. `docs/MONOREPO-MIGRATION-PLAN.md` is the migration plan this
-repo was consolidated under; `docs/REPLACEMENT-PLAN.md` tracks which old
-workflows have been replaced.
+new-app recipe; `docs/REPLACEMENT-PLAN.md` tracks which old workflows have been
+replaced.
 
 ## Safety
 

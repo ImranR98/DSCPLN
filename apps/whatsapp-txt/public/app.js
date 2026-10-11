@@ -11,12 +11,9 @@ const api = async (route, params) => {
     return response.json()
 }
 
-const el = (tag, className, text) => {
-    const node = document.createElement(tag)
-    if (className) node.className = className
-    if (text !== undefined) node.textContent = text
-    return node
-}
+// Thin wrapper over the shared kit builder so every app creates DOM the same
+// way; keeps the historical (tag, className, text) call sites.
+const el = (tag, className, text) => window.DSCPLN.el(tag, { class: className, text })
 
 const debounce = (fn, ms) => {
     let timer = null
@@ -932,7 +929,7 @@ const openImport = () => {
     setImportStatus('')
     $('#import-result').hidden = true
     renderImportList()
-    $('#import-dialog').showModal()
+    $('#import-dialog').show()
 }
 
 // Dismissing the panel (backdrop click or Escape) acts as a cancel: staged
@@ -944,7 +941,7 @@ const dismissImport = async () => {
         await discardImport()
         showBanner('Import cancelled — staged uploads discarded.')
     }
-    $('#import-dialog').close()
+    $('#import-dialog').hide()
 }
 
 const setupImport = () => {
@@ -968,26 +965,21 @@ const setupImport = () => {
     $('#import-preview').addEventListener('click', () => runImport(true))
     $('#import-run').addEventListener('click', () => runImport(false))
     $('#import-discard').addEventListener('click', discardImport)
-    $('#import-done').addEventListener('click', () => $('#import-dialog').close())
+    $('#import-done').addEventListener('click', () => $('#import-dialog').hide())
 
     const dialog = $('#import-dialog')
-    // Backdrop clicks: the target is the dialog element itself; check the
-    // coordinates so clicks on the dialog's own padding do not dismiss it.
-    dialog.addEventListener('click', event => {
-        if (event.target !== dialog) return
-        const rect = dialog.getBoundingClientRect()
-        const outside = event.clientX < rect.left || event.clientX > rect.right
-            || event.clientY < rect.top || event.clientY > rect.bottom
-        if (outside) dismissImport()
-    })
-    // Escape (native cancel event) follows the same rules.
-    dialog.addEventListener('cancel', event => {
+    // Backdrop clicks and Escape arrive as `sl-request-close`. Dismissal acts
+    // as a cancel, but while an upload or merge is running the panel stays
+    // open so an in-flight operation is never lost track of.
+    dialog.addEventListener('sl-request-close', event => {
         event.preventDefault()
+        if (importState.busy) return
         dismissImport()
     })
 }
 
 const setup = async () => {
+    window.DSCPLN.initTheme($('#themeButton'))
     $('#sidebar-toggle').append(svgIcon('menu'))
     $('#import').append(svgIcon('import'))
     $('#reload').append(svgIcon('reload'))
@@ -1015,6 +1007,8 @@ const setup = async () => {
     })
 
     document.addEventListener('keydown', event => {
+        // The import dialog owns its keyboard interactions while open.
+        if ($('#import-dialog').open) return
         const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName ?? '')
         const searchView = Boolean(state.searchController)
         if (event.key === '/' && !typing) {

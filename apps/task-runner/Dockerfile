@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim
+FROM node:24-slim
 
 # Runtime tools used by the configured bash tasks: file operations, git
 # commits, age encryption, archives, JSON, SSH and the Python pty helper.

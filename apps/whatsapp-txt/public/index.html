@@ -3,48 +3,60 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
     <title>D$CPLN ⋅ WhatsApp TXT</title>
+    <link rel="icon"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232f6fed'/%3E%3Ctext x='32' y='45' font-size='34' text-anchor='middle' fill='white' font-family='sans-serif'%3E%E2%9C%93%3C/text%3E%3C/svg%3E">
+    <script src="ui/theme-boot.js"></script>
+    <link rel="stylesheet" href="ui/vendor/shoelace/theme-light.css">
+    <link rel="stylesheet" href="ui/vendor/shoelace/theme-dark.css">
+    <link rel="stylesheet" href="ui/style.css">
     <link rel="stylesheet" href="style.css">
+    <script type="module" src="ui/vendor/shoelace/shoelace.js"></script>
 </head>
 <body>
-    <header class="topbar">
-        <button id="sidebar-toggle" class="icon-btn" aria-label="Toggle conversation list"></button>
-        <span class="brand">D<span class="brand-accent">$</span>CPLN <span class="brand-suffix">⋅ WhatsApp TXT</span></span>
-        <form id="search-form" role="search" class="search-form">
-            <span class="search-box">
-                <input id="search-input" type="search" placeholder="Search messages…  /" autocomplete="off" spellcheck="false" aria-label="Search messages">
-                <button type="button" id="search-clear" class="clear-btn" aria-label="Clear search" hidden></button>
+    <header class="topbar app-header">
+        <div class="app-header__top">
+            <sl-button id="sidebar-toggle" size="small" class="icon-button" aria-label="Toggle conversation list"></sl-button>
+            <h1>D<span class="accent">$</span>CPLN <span class="app-header__app">⋅ WhatsApp TXT</span></h1>
+            <form id="search-form" role="search" class="search-form">
+                <span class="search-box">
+                    <input id="search-input" type="search" placeholder="Search messages…  /" autocomplete="off" spellcheck="false" aria-label="Search messages">
+                    <button type="button" id="search-clear" class="clear-btn" aria-label="Clear search" hidden></button>
+                </span>
+            </form>
+            <span id="status" class="status muted" role="status"></span>
+            <span class="app-header__actions">
+                <sl-button id="import" size="small" class="icon-button" aria-label="Import chat exports" title="Import exports"></sl-button>
+                <sl-button id="reload" size="small" class="icon-button" aria-label="Reindex the data directory" title="Reindex"></sl-button>
+                <sl-button id="themeButton" size="small" class="icon-button"></sl-button>
             </span>
-        </form>
-        <span id="status" class="status" role="status"></span>
-        <button id="import" class="icon-btn" aria-label="Import chat exports" title="Import exports"></button>
-        <button id="reload" class="icon-btn" aria-label="Reindex the data directory" title="Reindex"></button>
+        </div>
     </header>
     <div id="banner" class="banner" hidden role="alert">
         <span id="banner-text"></span>
         <button id="banner-close" class="icon-btn" aria-label="Dismiss notification"></button>
     </div>
-    <dialog id="import-dialog" class="import-dialog" aria-labelledby="import-title">
-        <h2 id="import-title">Import chat exports</h2>
+    <sl-dialog id="import-dialog" label="Import chat exports" class="import-dialog">
         <p class="import-hint">Upload WhatsApp exports (<code>.zip</code> or <code>.txt</code>). They are merged with the
             conversations stored here; nothing changes until you press Import. Preview shows the plan without writing
             anything.</p>
         <div id="import-drop" class="import-drop">
             <input type="file" id="import-files" multiple accept=".zip,.txt,application/zip,text/plain" hidden>
-            <button type="button" id="import-browse">Choose files</button>
+            <sl-button type="button" id="import-browse">Choose files</sl-button>
             <span class="import-drop__hint">or drop them here</span>
         </div>
         <ul id="import-list" class="import-list"></ul>
         <p id="import-status" class="import-status" hidden></p>
         <pre id="import-result" class="import-result" hidden></pre>
         <div class="import-actions">
-            <button type="button" id="import-discard" class="ghost" hidden>Discard uploads</button>
+            <sl-button type="button" id="import-discard" size="small" hidden>Discard uploads</sl-button>
             <span class="import-actions__spacer"></span>
-            <button type="button" id="import-preview">Preview</button>
-            <button type="button" id="import-run" class="primary">Import</button>
-            <button type="button" id="import-done" hidden>Done</button>
+            <sl-button type="button" id="import-preview">Preview</sl-button>
+            <sl-button type="button" id="import-run" variant="primary">Import</sl-button>
+            <sl-button type="button" id="import-done" variant="primary" hidden>Done</sl-button>
         </div>
-    </dialog>
+    </sl-dialog>
     <main class="layout">
         <aside id="sidebar" class="sidebar" aria-label="Conversations">
             <div class="sidebar-head">
@@ -55,6 +67,7 @@
         <section id="content" class="content"></section>
     </main>
     <script src="ui/core.js"></script>
+    <script src="ui/shell.js"></script>
     <script type="module" src="app.js"></script>
 </body>
 </html>

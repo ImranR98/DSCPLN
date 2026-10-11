@@ -1,42 +1,20 @@
 :root {
-    color-scheme: light;
-    --bg: #f4f4f6;
-    --panel: #ffffff;
-    --panel-alt: #f7f7f9;
-    --text: #1c1c1e;
-    --muted: #6e6e73;
-    --border: #e3e3e7;
-    --accent: #0a7c66;
-    --accent-soft: #e2f2ee;
+    /* Design tokens come from the shared ui-kit (ui/style.css); these aliases
+       map the app's historical variable names onto the shared palette. */
+    --panel: var(--surface);
+    --panel-alt: var(--surface-2);
+    --muted: var(--text-muted);
     --mark: #ffe58a;
     --mark-text: #4a3800;
-    --system: #8a8a8e;
-    --danger: #b3261e;
-    --danger-soft: #fdecea;
-    --radius: 10px;
-    --radius-lg: 14px;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 14px rgba(0, 0, 0, 0.05);
-    --topbar-height: 54px;
-}
-
-@media (prefers-color-scheme: dark) {
-    :root {
-        color-scheme: dark;
-        --bg: #111113;
-        --panel: #1a1a1d;
-        --panel-alt: #202024;
-        --text: #f1f1f3;
-        --muted: #9b9ba2;
-        --border: #2c2c31;
-        --accent: #46c9ab;
-        --accent-soft: #153a32;
-        --mark: #f6d365;
-        --mark-text: #3a2d00;
-        --system: #8f8f96;
-        --danger: #ff8a80;
-        --danger-soft: #3a1f1d;
-        --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 18px rgba(0, 0, 0, 0.35);
-    }
+    --system: var(--text-muted);
+    --danger: var(--over);
+    --danger-soft: var(--over-soft);
+    --done: var(--ok);
+    --error: var(--over);
+    --radius: var(--radius-sm);
+    --radius-lg: var(--radius);
+    --shadow: var(--shadow-sm);
+    --topbar-height: 3.5rem;
 }
 
 * { box-sizing: border-box; }
@@ -51,8 +29,14 @@ body {
     flex-direction: column;
     background: var(--bg);
     color: var(--text);
-    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--font);
+    font-size: var(--fs-md);
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    /* The app is a full-viewport two-pane layout; undo the kit's page column. */
+    max-width: none;
+    margin: 0;
+    padding: 0;
 }
 
 * {
@@ -84,13 +68,26 @@ select:focus-visible,
     display: flex;
     align-items: center;
     gap: 10px;
+    margin: 0;
     padding: 10px 14px;
-    background: var(--panel);
+    background: var(--surface);
     border-bottom: 1px solid var(--border);
     position: sticky;
     top: 0;
     z-index: 10;
 }
+
+.topbar h1 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+}
+
+.topbar h1 .accent { color: var(--accent); }
+.topbar h1 .app-header__app { color: var(--text-muted); font-weight: 600; }
+.topbar .app-header__actions { display: inline-flex; align-items: center; gap: var(--space-2); }
 
 .brand {
     font-weight: 650;
@@ -193,6 +190,8 @@ select:focus-visible,
     flex: 1;
     display: flex;
     min-height: 0;
+    gap: 0;
+    align-items: stretch;
 }
 
 .sidebar {
@@ -698,18 +697,8 @@ select:focus-visible,
 
 /* import dialog ----------------------------------------------------------- */
 
-.import-dialog {
-    width: min(640px, calc(100vw - 32px));
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    background: var(--panel);
-    color: var(--text);
-    padding: 20px 22px;
-    box-shadow: var(--shadow);
-}
-
-.import-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.4);
+sl-dialog.import-dialog {
+    --width: min(40rem, 92vw);
 }
 
 .import-dialog h2 {

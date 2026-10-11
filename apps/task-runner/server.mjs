@@ -324,7 +324,7 @@ export function createApp(options = {}) {
   const app = createKitApp({
     title: 'Task Runner',
     basePath,
-    staticDir: REPO_DIR,
+    staticDir: path.join(REPO_DIR, 'static'),
     jsonBody: false, // /api/upload streams raw bytes, JSON-typed uploads included
     healthExtra: () => ({ tasks: TASK_LIST.length, missingConfig: MISSING_CONFIG }),
     routes: (router) => {

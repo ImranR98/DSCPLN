@@ -65,14 +65,14 @@ test('ui: header, groups and task cards render on the shared kit', async () => {
         if (msg.type() === 'error') errors.push(msg.text());
       });
       await page.goto(base);
-      await page.waitForSelector('.task-card');
+      await page.waitForSelector('[data-testid^="task-"]');
       assert.equal(await page.title(), 'D$CPLN ⋅ Task Runner');
       assert.match(await page.textContent('h1'), /Task Runner/);
-      const names = await page.$$eval('.task-card .card-title', (els) => els.map((e) => e.textContent));
+      const names = await page.$$eval('[data-testid^="task-"] strong', (els) => els.map((e) => e.textContent));
       assert.deepEqual(names.sort(), ['Drop Task', 'Plain Task']);
-      assert.equal(await page.locator('.task-card[data-task="Drop Task"] .dropzone-box').count(), 1);
+      assert.equal(await page.locator('[data-testid="task-Drop Task"] input[type="file"]').count(), 1);
       assert.equal(await page.locator('#global-dropzone').count(), 1);
-      assert.equal(await page.locator('.task-card[data-task="Plain Task"] sl-button', { hasText: 'Run' }).count(), 1);
+      assert.equal(await page.locator('[data-testid="task-Plain Task"] button', { hasText: 'Run' }).count(), 1);
       await page.click('#refreshButton');
       await page.waitForTimeout(300);
       assert.deepEqual(errors, []);

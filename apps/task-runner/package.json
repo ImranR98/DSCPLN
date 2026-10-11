@@ -8,8 +8,10 @@
     "backupctl": "server.mjs"
   },
   "scripts": {
-    "start": "node server.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "build:ui": "vite build",
+    "watch:ui": "vite build --watch",
+    "start": "node server.mjs --no-browser",
+    "test": "npm run build:ui && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@dscpln/server-kit": "*",
@@ -17,5 +19,11 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "@dscpln/ui-kit": "*",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "svelte": "^5.57.2",
+    "vite": "^8.3.4"
   }
 }

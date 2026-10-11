@@ -16,7 +16,9 @@ COPY package.json package-lock.json ./
 COPY packages ./packages
 COPY apps ./apps
 COPY tools ./tools
-RUN npm install --omit=dev --no-audit --no-fund
+RUN npm install --no-audit --no-fund \
+    && npm run build:ui --workspace dscpln-task-runner \
+    && npm prune --omit=dev
 RUN chown -R node:node /app
 
 # The server instance uses a mounted config (BACKUPCTL_CONFIG_FILE), the

@@ -188,6 +188,13 @@ helm upgrade --install srv0-apps targets/srv0/k3s-apps -n apps
 kubectl -n apps rollout status deploy/<deployment>
 ```
 
+`scripts/build-all.sh` wraps the per-app loop: it builds/pushes each app, prints
+a digest table, and with `--pin` rewrites the digests straight into the Infra
+templates (`INFRA_DIR` overrides `~/Main/Infra`; it refuses a dirty checkout).
+The app templates share `templates/_helpers.tpl` (`dscpln.podSecurityContext`,
+`dscpln.containerSecurityContext`, `dscpln.readinessProbe`, `dscpln.service`) so
+the hardening posture and Service shape stay uniform.
+
 Renovate bumps the pinned digests; never leave a floating tag unpinned.
 
 **Balance API**

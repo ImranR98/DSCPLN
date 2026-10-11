@@ -180,11 +180,12 @@ On wide screens the transactions list sits in a second column on the right, with
 ### Docker
 
 ```sh
-docker build -t dscpln .
-docker run -p 3300:3300 -v ./config.json:/app/config.json -v ./dscpln-data:/data dscpln
+# from the monorepo root (the build context is the repo root):
+docker build -f apps/balance-xlsx/Dockerfile -t dscpln-balance .
+docker run -p 3300:3300 -v ./config.json:/app/config.json -v ./balance-data:/data dscpln-balance
 ```
 
-The image includes git and runs as the non-root `node` user (uid 1000), so mount the workbook's repository directory (with its `.git` directory) writable by that uid and point `workbookFile` at the file inside it (for example `/data/Balance.xlsx`). `./build.sh` builds and pushes `imranrdev/dscpln:latest` for linux/amd64 and prints the digest to pin in your deployment.
+The image includes git and runs as the non-root `node` user (uid 1000), so mount the workbook's repository directory (with its `.git` directory) writable by that uid and point `workbookFile` at the file inside it (for example `/data/Balance.xlsx`). Build and push with `scripts/build.sh balance-xlsx` from the monorepo root (set `IMAGE_ORG` to your registry namespace) and pin the printed digest in your deployment.
 
 ### Tests
 

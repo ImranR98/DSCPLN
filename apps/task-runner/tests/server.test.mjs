@@ -986,3 +986,39 @@ test('config: host must be a machine name string', async () => {
   assert.equal(tasks[0].host, 'any');
   assert.equal(typeof local.host, 'undefined', 'local.host is set at boot, not by loadConfig');
 });
+
+test('base path: the app mounts under BASE_PATH with the shared kit', async () => {
+  await bootWith(makeConfig([task('Prefixed', { commands: 'true' })]));
+  const app = bctl.createApp({ basePath: '/tasks' });
+  const srv = await new Promise((resolve) => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  try {
+    const base = `http://127.0.0.1:${srv.address().port}`;
+
+    const page = await fetch(`${base}/tasks`);
+    assert.equal(page.status, 200);
+    const html = await page.text();
+    assert.match(html, /<base href="\/tasks\/">/)
+    assert.match(html, /<title>D\$CPLN ⋅ Task Runner<\/title>/)
+
+    const tasks = await (await fetch(`${base}/tasks/api/tasks`)).json();
+    assert.equal(tasks.groups[0].tasks[0].name, 'Prefixed');
+
+    const health = await (await fetch(`${base}/tasks/api/health`)).json();
+    assert.equal(health.ok, true);
+    assert.equal(health.basePath, '/tasks');
+
+    const ui = await fetch(`${base}/tasks/ui/core.js`);
+    assert.equal(ui.status, 200);
+
+    const crossOrigin = await fetch(`${base}/tasks/api/run/Prefixed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://evil.example' },
+      body: '{}',
+    });
+    assert.equal(crossOrigin.status, 403);
+  } finally {
+    await new Promise((r) => srv.close(r));
+  }
+});

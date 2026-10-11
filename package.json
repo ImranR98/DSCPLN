@@ -16,6 +16,7 @@
     "test": "npm run test --workspaces --if-present",
     "balance": "npm run start --workspace dscpln-balance-xlsx",
     "mock": "npm run mock --workspace dscpln-balance-xlsx",
+    "task-runner": "BACKUPCTL_REPO_DIR=\"$PWD\" node apps/task-runner/server.mjs --no-browser",
     "vendor:shoelace": "npm run vendor --workspace @dscpln/ui-kit"
   },
   "devDependencies": {

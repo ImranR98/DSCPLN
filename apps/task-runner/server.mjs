@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-/* backupctl — Express server, generic bash runner, and CLI entry, in one module.
+/* Task Runner (formerly backupctl) — Express server, generic bash runner, and
+ * CLI entry, in one module.
  *
  * Tasks are bash: each task has a `commands` list (or a single string) —
  * or a `script:`/`move:`/`ingest:` shorthand that is normalized into a
@@ -22,12 +23,31 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import express from 'express';
+import { createApp as createKitApp } from '@dscpln/server-kit';
 
 export const REPO_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const CONFIG_FILE = process.env.BACKUPCTL_CONFIG_FILE ?? path.join(REPO_DIR, 'config.mjs');
 export const LIB_PATH = path.join(REPO_DIR, 'lib.sh');
-const INDEX_PATH = path.join(REPO_DIR, 'index.html');
 const DAY_SECONDS = 86400;
+
+/* The monorepo root: walk up from this app to the nearest package.json with a
+ * `workspaces` field. Used when BACKUPCTL_REPO_DIR is not set, so
+ * `node apps/task-runner/server.mjs` resolves {{repo_dir}} correctly. */
+export function findRepoRoot(startDir = REPO_DIR) {
+  let dir = startDir;
+  for (let i = 0; i < 8; i++) {
+    const pkgFile = path.join(dir, 'package.json');
+    if (fs.existsSync(pkgFile)) {
+      try {
+        if (JSON.parse(fs.readFileSync(pkgFile, 'utf8')).workspaces) return dir;
+      } catch { /* unreadable package.json: keep walking */ }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return startDir;
+}
 
 // config ---------------------------------------------------------------------
 
@@ -75,7 +95,7 @@ export async function loadConfig(configPath = CONFIG_FILE) {
   const groups = data.groups ?? [];
   const local = { ...data };
   delete local.groups;
-  local.repo_dir ??= process.env.BACKUPCTL_REPO_DIR ?? REPO_DIR;
+  local.repo_dir ??= process.env.BACKUPCTL_REPO_DIR ?? findRepoRoot(REPO_DIR);
   local.lib ??= LIB_PATH;
   if (!Array.isArray(groups)) throw new ConfigError("Config needs a 'groups' array");
   const tasks = [];
@@ -677,149 +697,138 @@ export function taskJson(t) {
   };
 }
 
-export function createApp() {
-  const app = express();
+export function createApp(options = {}) {
+  const basePath = options.basePath ?? process.env.BASE_PATH ?? ''
+  const app = createKitApp({
+    title: 'Task Runner',
+    basePath,
+    staticDir: REPO_DIR,
+    jsonBody: false, // /api/upload streams raw bytes, JSON-typed uploads included
+    healthExtra: () => ({ tasks: TASK_LIST.length, missingConfig: MISSING_CONFIG }),
+    routes: (router) => {
+      // JSON body parsing only for the endpoints that need it; /api/upload
+      // streams raw bytes straight to disk (JSON-typed uploads included).
+      router.use(['/api/run', '/api/cancel', '/api/paste_done'], express.json({ limit: '1mb' }))
 
-  // CSRF guard: reject cross-origin POSTs to /api/*
-  app.use((req, res, next) => {
-    if (req.method === 'POST' && req.url.startsWith('/api/')) {
-      const origin = req.headers.origin || req.headers.referer;
-      if (origin) {
-        try {
-          if (new URL(origin).host !== req.headers.host) {
-            return res.status(403).json({ detail: 'cross-origin request blocked' });
+      // most-specific pattern wins; ties listed as `ambiguous`
+      router.post('/api/detect', (req, res) => {
+        const name = path.basename(String(req.query.name ?? ''))
+        const candidates = []
+        for (const t of TASK_LIST) {
+          if (!supportsUploads(t)) continue
+          for (const p of uploadPatterns(t, LOCAL)) {
+            if (globMatch(name, p)) candidates.push({ task: t.name, score: matchScore(p) })
           }
-        } catch { /* malformed origin: ignore */ }
-      }
-    }
-    next();
-  });
+        }
+        if (!candidates.length) return res.json({ result: null })
+        const best = Math.max(...candidates.map((c) => c.score))
+        const tied = candidates.filter((c) => c.score === best).map((c) => c.task)
+        res.json({ result: { task: tied[0], ambiguous: tied } })
+      })
 
-  // JSON body parsing only for the endpoints that need it; /api/upload
-  // streams raw bytes straight to disk (JSON-typed uploads included).
-  app.use(['/api/run', '/api/cancel', '/api/paste_done'], express.json({ limit: '1mb' }));
+      router.get('/api/tasks', (req, res) => {
+        const names = [...new Set(TASK_LIST.map((t) => t.group))]
+        res.json({
+          groups: names.map((name) => ({ name, tasks: TASK_LIST.filter((t) => t.group === name).map(taskJson) })),
+          missing_config: MISSING_CONFIG,
+        })
+      })
 
-  // most-specific pattern wins; ties listed as `ambiguous`
-  app.post('/api/detect', (req, res) => {
-    const name = path.basename(String(req.query.name ?? ''));
-    const candidates = [];
-    for (const t of TASK_LIST) {
-      if (!supportsUploads(t)) continue;
-      for (const p of uploadPatterns(t, LOCAL)) {
-        if (globMatch(name, p)) candidates.push({ task: t.name, score: matchScore(p) });
-      }
-    }
-    if (!candidates.length) return res.json({ result: null });
-    const best = Math.max(...candidates.map((c) => c.score));
-    const tied = candidates.filter((c) => c.score === best).map((c) => c.task);
-    res.json({ result: { task: tied[0], ambiguous: tied } });
-  });
+      // The body is streamed into a .part file and renamed on completion, so a
+      // half-written upload is never picked up by a run (runs skip .part files).
+      router.post('/api/upload/:taskName', (req, res) => {
+        const task = TASK_MAP.get(req.params.taskName)
+        if (!task || !supportsUploads(task)) return res.status(404).json({ detail: 'Unknown task' })
+        const filename = path.basename(String(req.query.name ?? ''))
+        const patterns = uploadPatterns(task, LOCAL)
+        if (!patterns.some((p) => globMatch(filename, p))) {
+          return res
+            .status(400)
+            .json({ detail: `${filename} does not match the expected pattern(s): ${patterns.join(', ')}` })
+        }
+        const partPath = path.join(stagingDir(task.name), filename + '.part')
+        const finalPath = partPath.slice(0, -'.part'.length)
+        const ws = fs.createWriteStream(partPath)
+        ws.on('error', () => {
+          if (!res.headersSent) res.status(500).json({ detail: 'Upload failed' })
+        })
+        req.pipe(ws)
+        ws.on('finish', () => {
+          fs.renameSync(partPath, finalPath)
+          res.json({ queued: filename })
+        })
+      })
 
-  app.get('/api/tasks', (req, res) => {
-    const names = [...new Set(TASK_LIST.map((t) => t.group))];
-    res.json({
-      groups: names.map((name) => ({ name, tasks: TASK_LIST.filter((t) => t.group === name).map(taskJson) })),
-      missing_config: MISSING_CONFIG,
-    });
-  });
+      router.post('/api/run/:taskName', (req, res) => {
+        const taskName = req.params.taskName
+        const task = TASK_MAP.get(taskName)
+        if (!task) return res.status(404).json({ detail: 'Unknown task' })
+        if (RUNS.has(taskName)) return res.status(409).json({ detail: 'This task is already running' })
+        if (serialKeyHeld(task.serial_key)) {
+          if (isQueued(taskName, task.serial_key)) return res.json({ started: true, queued: true })
+          const q = SERIAL_QUEUES.get(task.serial_key) ?? []
+          q.push({ taskName, payload: req.body ?? {} })
+          SERIAL_QUEUES.set(task.serial_key, q)
+          return res.json({ started: true, queued: true })
+        }
+        const [avail, reason] = availability(task, LOCAL)
+        if (!avail) return res.status(400).json({ detail: reason })
+        startRun(taskName, req.body ?? {})
+        res.json({ started: true })
+      })
 
-  // The body is streamed into a .part file and renamed on completion, so a
-  // half-written upload is never picked up by a run (runs skip .part files).
-  app.post('/api/upload/:taskName', (req, res) => {
-    const task = TASK_MAP.get(req.params.taskName);
-    if (!task || !supportsUploads(task)) return res.status(404).json({ detail: 'Unknown task' });
-    const filename = path.basename(String(req.query.name ?? ''));
-    const patterns = uploadPatterns(task, LOCAL);
-    if (!patterns.some((p) => globMatch(filename, p))) {
-      return res
-        .status(400)
-        .json({ detail: `${filename} does not match the expected pattern(s): ${patterns.join(', ')}` });
-    }
-    const partPath = path.join(stagingDir(task.name), filename + '.part');
-    const finalPath = partPath.slice(0, -'.part'.length);
-    const ws = fs.createWriteStream(partPath);
-    ws.on('error', () => {
-      if (!res.headersSent) res.status(500).json({ detail: 'Upload failed' });
-    });
-    req.pipe(ws);
-    ws.on('finish', () => {
-      fs.renameSync(partPath, finalPath);
-      res.json({ queued: filename });
-    });
-  });
+      router.get('/api/status', (req, res) => {
+        const runs = []
+        for (const [taskName, rec] of RUNS) {
+          const newLines = rec.log.slice(rec.read)
+          rec.read = rec.log.length
+          runs.push({ task: taskName, log: newLines })
+        }
+        res.json({ runs, done: DONE.splice(0) })
+      })
 
-  app.post('/api/run/:taskName', (req, res) => {
-    const taskName = req.params.taskName;
-    const task = TASK_MAP.get(taskName);
-    if (!task) return res.status(404).json({ detail: 'Unknown task' });
-    if (RUNS.has(taskName)) return res.status(409).json({ detail: 'This task is already running' });
-    if (serialKeyHeld(task.serial_key)) {
-      if (isQueued(taskName, task.serial_key)) return res.json({ started: true, queued: true });
-      const q = SERIAL_QUEUES.get(task.serial_key) ?? [];
-      q.push({ taskName, payload: req.body ?? {} });
-      SERIAL_QUEUES.set(task.serial_key, q);
-      return res.json({ started: true, queued: true });
-    }
-    const [avail, reason] = availability(task, LOCAL);
-    if (!avail) return res.status(400).json({ detail: reason });
-    startRun(taskName, req.body ?? {});
-    res.json({ started: true });
-  });
+      // last run's full log, fetched lazily by the Log dialog
+      router.get('/api/log/:taskName', (req, res) => {
+        const task = TASK_MAP.get(req.params.taskName)
+        if (!task) return res.status(404).json({ detail: 'Unknown task' })
+        res.json({ output: loadTaskState(task, LOCAL)?.output ?? '' })
+      })
 
-  app.get('/api/status', (req, res) => {
-    const runs = [];
-    for (const [taskName, rec] of RUNS) {
-      const newLines = rec.log.slice(rec.read);
-      rec.read = rec.log.length;
-      runs.push({ task: taskName, log: newLines });
-    }
-    res.json({ runs, done: DONE.splice(0) });
-  });
+      router.post('/api/cancel', (req, res) => {
+        const taskName = req.body?.task
+        if (!taskName) return res.status(409).json({ detail: 'No task specified' })
+        const rec = RUNS.get(taskName)
+        if (rec) {
+          rec.cancelled = true
+          for (const pid of [...rec.groups]) killpg(pid)
+          return res.json({ cancelled: true })
+        }
+        const task = TASK_MAP.get(taskName)
+        const q = task?.serial_key ? SERIAL_QUEUES.get(task.serial_key) : null
+        if (q?.some((e) => e.taskName === taskName)) {
+          SERIAL_QUEUES.set(task.serial_key, q.filter((e) => e.taskName !== taskName))
+          return res.json({ cancelled: true, queued: true })
+        }
+        res.status(409).json({ detail: 'Task is not running' })
+      })
 
-  // last run's full log, fetched lazily by the Log dialog
-  app.get('/api/log/:taskName', (req, res) => {
-    const task = TASK_MAP.get(req.params.taskName);
-    if (!task) return res.status(404).json({ detail: 'Unknown task' });
-    res.json({ output: loadTaskState(task, LOCAL)?.output ?? '' });
-  });
+      router.post('/api/paste_done/:taskName', async (req, res) => {
+        const task = TASK_MAP.get(req.params.taskName)
+        if (!task) return res.status(404).json({ detail: 'Unknown task' })
+        const commitDir = task.commit_dir
+        if (!commitDir) return res.json({ committed: false })
+        const dest = expand(resolve(commitDir, LOCAL))
+        const message = shellQuote(`${task.name} · ${new Date().toLocaleString()}`)
+        const { rc, err } = await shCapture(`bash ${shellQuote(LIB_PATH)} git-commit ${shellQuote(dest)} ${message}`)
+        if (rc !== 0) {
+          return res.status(500).json({ detail: `git commit failed: ${err.trim()}` })
+        }
+        res.json({ committed: true, dest })
+      })
+    },
+  })
 
-  app.post('/api/cancel', (req, res) => {
-    const taskName = req.body?.task;
-    if (!taskName) return res.status(409).json({ detail: 'No task specified' });
-    const rec = RUNS.get(taskName);
-    if (rec) {
-      rec.cancelled = true;
-      for (const pid of [...rec.groups]) killpg(pid);
-      return res.json({ cancelled: true });
-    }
-    const task = TASK_MAP.get(taskName);
-    const q = task?.serial_key ? SERIAL_QUEUES.get(task.serial_key) : null;
-    if (q?.some((e) => e.taskName === taskName)) {
-      SERIAL_QUEUES.set(task.serial_key, q.filter((e) => e.taskName !== taskName));
-      return res.json({ cancelled: true, queued: true });
-    }
-    res.status(409).json({ detail: 'Task is not running' });
-  });
-
-  app.post('/api/paste_done/:taskName', async (req, res) => {
-    const task = TASK_MAP.get(req.params.taskName);
-    if (!task) return res.status(404).json({ detail: 'Unknown task' });
-    const commitDir = task.commit_dir;
-    if (!commitDir) return res.json({ committed: false });
-    const dest = expand(resolve(commitDir, LOCAL));
-    const message = shellQuote(`${task.name} · ${new Date().toLocaleString()}`);
-    const { rc, err } = await shCapture(`bash ${shellQuote(LIB_PATH)} git-commit ${shellQuote(dest)} ${message}`);
-    if (rc !== 0) {
-      return res.status(500).json({ detail: `git commit failed: ${err.trim()}` });
-    }
-    res.json({ committed: true, dest });
-  });
-
-  app.get('/', (req, res) => {
-    res.sendFile(INDEX_PATH);
-  });
-
-  return app;
+  return app
 }
 
 // CLI ------------------------------------------------------------------------

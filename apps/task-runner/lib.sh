@@ -51,7 +51,7 @@ bctl_first_glob() {  # PATTERN — print first match (e.g. MTP mounts)
   return 0
 }
 
-bctl_ensure_media-sync() {  # CLI — install the CLI's dependencies once
+bctl_ensure_media_sync() {  # CLI — install the CLI's dependencies once
   local cli="$1" dir
   dir="$(cd "$(dirname "$cli")/.." && pwd)"
   if [[ ! -d "$dir/node_modules" ]]; then
@@ -60,14 +60,14 @@ bctl_ensure_media-sync() {  # CLI — install the CLI's dependencies once
   fi
 }
 
-bctl_media-sync() {  # CLI ARGS... — ensure dependencies, then run the CLI
+bctl_media_sync() {  # CLI ARGS... — ensure dependencies, then run the CLI
   local cli="$1"; shift
-  bctl_ensure_media-sync "$cli"
+  bctl_ensure_media_sync "$cli"
   node "$cli" "$@"
 }
 
 bctl_standardize_into() {  # SRC DEST MEDIA_SYNC_CLI
-  # Copy SRC's files to a temp dir, standardize them with the media-sync CLI,
+  # Copy SRC's files to a temp dir, standardize them with the Media Sync CLI,
   # and move the results into DEST (originals are left in place).
   local src="$1" dest="$2" cli="$3"
   local tmp f found=0
@@ -83,7 +83,7 @@ bctl_standardize_into() {  # SRC DEST MEDIA_SYNC_CLI
     return 0
   fi
   mkdir -p "$dest"
-  if ! bctl_media-sync "$cli" standardize "$tmp"; then
+  if ! bctl_media_sync "$cli" standardize "$tmp"; then
     log "Standardize failed for $src" >&2
     rm -rf "$tmp"
     return 1
@@ -100,7 +100,7 @@ bctl_import_pair() {  # SRC DEST MEDIA_SYNC_CLI — clean already-synced + stand
     log "Missing source dir: $src"
     return 0
   fi
-  bctl_media-sync "$cli" clean-synced --delete "$src" "$dest"
+  bctl_media_sync "$cli" clean-synced --delete "$src" "$dest"
   log "Importing $(basename "$src") → $dest..."
   bctl_standardize_into "$src" "$dest" "$cli"
   find "$src" -maxdepth 1 -type f -delete

@@ -100,6 +100,7 @@ export function createApp(options = {}) {
     runner = null,
     run = null,
     bodyLimit = '1mb',
+    jsonBody = true,
     allowPause = Boolean(state),
     events = null,
     stateExtra = null,
@@ -115,7 +116,9 @@ export function createApp(options = {}) {
   app.disable('x-powered-by')
   app.set('trust proxy', true)
   app.use(csrfGuard)
-  app.use(express.json({ limit: bodyLimit, type: ['application/json'] }))
+  if (jsonBody) {
+    app.use(express.json({ limit: bodyLimit, type: ['application/json'] }))
+  }
 
   const router = express.Router()
 

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <title>backupctl</title>
+  <title>D$CPLN ⋅ Task Runner</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Cstyle%3Erect%7Bfill:%23131a23%7D@media%20(prefers-color-scheme:light)%7Brect%7Bfill:%23ffffff%7D%7D%3C/style%3E%3Crect%20width='32'%20height='32'%20rx='8'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='7.5'%20fill='%23e5484d'/%3E%3C/svg%3E">
   <style>
 
@@ -83,6 +83,7 @@ html, body {
 }
 
 .app-title { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.app-title .app-suffix { color: var(--muted); font-weight: 600; }
 .app-subtitle { color: var(--muted); font-size: 13px; margin-top: 2px; }
 
 .alert-badge {
@@ -403,7 +404,7 @@ html, body {
     <div class="title-wrap">
       <span class="logo-dot"></span>
       <div>
-        <div class="app-title">backupctl</div>
+        <div class="app-title">D<span class="accent">$</span>CPLN <span class="app-suffix">⋅ Task Runner</span></div>
         <div class="app-subtitle">Config-driven local backups</div>
       </div>
     </div>
@@ -428,6 +429,7 @@ html, body {
 
   <div id="modal-root"></div>
 
+  <script src="ui/core.js"></script>
   <script>
 const STATE = { tasks: [], groups: [], queues: {}, uploading: new Map(), uploadAborts: new Map(), liveLogs: new Map(), openLogRef: null };
 
@@ -439,7 +441,7 @@ function el(tag, cls, text) {
 }
 
 async function api(path, options = {}) {
-  const res = await fetch(path, options);
+  const res = await fetch(window.DSCPLN.apiUrl(path), options);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     data.error = data.error || (data.detail || `HTTP ${res.status}`);
@@ -670,7 +672,7 @@ function wireDropzone(zone, input, handler) {
 function uploadFile(task, file, onProgress = () => {}) {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `/api/upload/${encodeURIComponent(task.name)}?name=${encodeURIComponent(file.name)}`);
+    xhr.open('POST', window.DSCPLN.apiUrl(`/api/upload/${encodeURIComponent(task.name)}?name=${encodeURIComponent(file.name)}`));
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
     };

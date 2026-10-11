@@ -1,13 +1,24 @@
-# backupctl
+# Task Runner (backupctl)
 
-A local web app that runs config-driven backup workflows. This repo is **personal**: `config.mjs` (values + grouped tasks) is committed, and personal automation scripts are referenced as git submodules under `scripts/`. This README is both the usage guide and the schema/code reference.
+A local web app that runs config-driven backup workflows. It lives in the
+D$CPLN monorepo (`apps/task-runner`); personal automation scripts are absorbed
+under `tools/` and the Media Sync CLI under `apps/media-sync`. This README is
+both the usage guide and the schema/code reference.
 
 ## Usage
 
+From the monorepo root:
+
 ```sh
-git clone --recurse-submodules git@github.com:ImranR98/ImranR-Backup.git   # or: git submodule update --init --recursive after cloning
 npm install
-npm start      # = node server.mjs — config.mjs is committed; edit it to match your machine
+npm run task-runner    # = BACKUPCTL_REPO_DIR=$PWD node apps/task-runner/server.mjs --no-browser
+```
+
+Or from this directory (`config.mjs` is committed; edit it to match your
+machine):
+
+```sh
+BACKUPCTL_REPO_DIR="$(git rev-parse --show-toplevel)" npm start
 ```
 
 This starts a local server (http://127.0.0.1:8080) and opens your browser. To run without opening a browser: `node server.mjs --no-browser`. Different port: `node server.mjs --port 8081`. Unknown flags are an error (`--help` shows the options).

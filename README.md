@@ -27,8 +27,9 @@ npm test               # runs every workspace's test suite
 npm run balance        # start Balance XLSX locally (http://localhost:3300)
 ```
 
-Each app runs standalone from its directory (`node server.js` / `node
-server.mjs`) with `BASE_PATH` empty. In the cluster every app gets its
+Each app runs standalone from its directory with `BASE_PATH` empty; apps on
+the Svelte stack build their UI first (`npm run build:ui --workspace <pkg>`,
+then `npm start --workspace <pkg>`). In the cluster every app gets its
 `BASE_PATH` (`/balance`, `/media`, …) and is routed through one TLS host.
 
 See `docs/ARCHITECTURE.md` for the kit APIs, the base-path contract and the

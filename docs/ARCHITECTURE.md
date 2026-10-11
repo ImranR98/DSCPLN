@@ -63,17 +63,25 @@ Every app mounts everything under `BASE_PATH` (`""` for local dev):
   `POST /api/cancel`, `POST /api/pause`, `GET /api/log`, `GET /api/events`
   (SSE), `GET /api/health`
 
-`packages/ui-kit` (served at `${BASE_PATH}/ui/*`):
+`packages/ui-kit` (two generations, converging):
 
-- `core.js` — `apiUrl`, `el`, `requestJson`, dates/formatters, money,
-  `formatBytes/Duration/time/DateTime`, `humanAgo`, theme, toasts;
-  `window.DSCPLN` (also `require('@dscpln/ui-kit/core')` for node)
-- `shell.js` — standard frame: header (`D$CPLN ⋅ <name>`, status, actions),
-  overview card (last/next run, Run now/Stop, history), live log dialog,
-  settings dialog (schedule + app fields), SSE wiring
-- `style.css` — the design system (tokens with `.light`/`[data-theme="dark"]`
-  variants, cards, pills, progress, dialogs, toasts, forms, code blocks)
-- `theme-boot.js`, `fonts/`, `vendor/shoelace/`
+- **Svelte kit** (`src/lib`, consumed by migrated apps): `api.js`
+  (`apiUrl`/`getJson`/`postJson`/`putJson`/SSE `subscribe`), `format.js`
+  (`formatTime/DateTime/Date/Duration/Bytes/Number`, `humanAgo`), `theme.js`
+  (Pico `data-theme`), components `Shell` (header, status pill, overview tiles,
+  run/pause, log + settings dialogs), `LogDialog`, `SettingsDialog`,
+  `ThemeToggle`; `src/app.css` imports Pico CSS and holds the few custom rules.
+- **Legacy vanilla kit** (`core.js`, `shell.js`, `style.css`, vendored Shoelace,
+  fonts) — still used by the not-yet-migrated apps (Media Sync, WhatsApp TXT,
+  Balance); delete it once the last one moves.
+
+## App UI pipeline (Svelte apps)
+
+Each migrated app has `apps/<app>/ui/` (Vite + Svelte + Pico) that builds into
+`apps/<app>/static/` (gitignored). The server keeps serving `static/` and
+injects `<base href>` for `BASE_PATH`; Vite uses `base: './'` so the build works
+under any prefix. `npm run build:ui --workspace <pkg>` builds; `npm test` builds
+first; the Dockerfile installs dev deps, builds, then prunes them.
 
 ## Hardening & safety conventions (review pass)
 
@@ -207,11 +215,12 @@ shortcut still points at the old hostname, update it.
 
 ## New-app recipe
 
-1. `apps/<name>/package.json` depending on `@dscpln/server-kit`;
-2. `server.mjs`: `configStore` + `stateStore` + `Runner` + `Scheduler`
-   (`onDue: () => runNow('schedule')`), a `runNow` that guards against
-   concurrent runs, records state and notifies;
-3. `static/index.html` links `ui/vendor/shoelace/*`, `ui/style.css`,
-   `ui/core.js`, `ui/shell.js`; `app.js` calls `DSCPLNShell.mount(...)`;
-4. a `Dockerfile` (context = repo root), an Infra template, and tests
-   (unit + a Playwright check under a non-empty `BASE_PATH`).
+1. `apps/<name>/` with `server.mjs` (`scheduledApp` for scheduled apps) and
+   `package.json` depending on `@dscpln/server-kit`;
+2. `ui/` with `index.html`, `src/main.js` and `src/App.svelte` using
+   `@dscpln/ui-kit` (`Shell` + `app.css`); `vite.config.mjs` (root `ui`, outDir
+   `../static`, `base: './'`); scripts `build:ui` and `test`
+   (`npm run build:ui && node --test`);
+3. tests under `test/` (unit + a Playwright browser test using `data-testid`
+   selectors), plus the Infra template and Dockerfile (build UI, prune dev
+   deps).

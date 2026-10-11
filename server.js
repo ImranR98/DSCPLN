@@ -101,6 +101,30 @@ const createApp = (config) => {
                 res.send(await dataProvider.getData(parseDateQuery(req.query['date'])))
             }))
 
+            // Compact budget status for the portal tile. Memoized briefly so the
+            // portal's 60s poll does not re-read the workbook every time.
+            let statusCache = null
+            router.get('/status', asyncRoute(async (req, res) => {
+                if (!statusCache || Date.now() - statusCache.at > 60_000) {
+                    const overview = await dataProvider.getData()
+                    const currencies = (overview.currencies || []).map((entry) => ({
+                        code: entry.code,
+                        symbol: entry.symbol || '',
+                        monthlyBudget: entry.monthlyBudget,
+                        monthsSpend: entry.monthsSpend,
+                        overBudget: entry.monthlyBudget > 0 && entry.monthsSpend >= entry.monthlyBudget,
+                    }))
+                    statusCache = {
+                        at: Date.now(),
+                        body: {
+                            currencies,
+                            overBudget: currencies.filter((c) => c.overBudget).map((c) => c.code),
+                        },
+                    }
+                }
+                res.send(statusCache.body)
+            }))
+
             router.post('/budget', asyncRoute(async (req, res) => {
                 await dataProvider.updateMonthlyBudget(req.body?.monthlyBudget, req.body?.firstDayBias ?? 0, req.body?.currency)
                 res.send()

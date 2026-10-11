@@ -72,7 +72,7 @@ export function createYtmusicApp(options = {}) {
   const dataDir = options.dataDir ?? process.env.DSCPLN_DATA_DIR ?? '/data'
   const basePath = options.basePath ?? process.env.BASE_PATH ?? ''
   const commands = options.commands ?? (() => [
-    [process.execPath, path.join(APP_DIR, 'run.mjs'), '--config', path.join(dataDir, 'config.json')],
+    [process.execPath, path.join(APP_DIR, 'run.mjs'), '--config', path.join(dataDir, 'config.json'), '--data-dir', dataDir],
   ])
   const testAuth = options.testAuth ?? defaultTestAuth
 

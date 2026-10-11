@@ -20,17 +20,20 @@ export function pythonFor(downloaderDir) {
   return fs.existsSync(venv) ? venv : 'python3'
 }
 
-export function buildSteps(config, downloaderDir = DOWNLOADER_DIR) {
+// The downloader scripts run FROM a writable work dir (browser.json lives
+// there) so the app tree itself can be mounted read-only.
+export function buildSteps(config, downloaderDir = DOWNLOADER_DIR, workDir = downloaderDir) {
   const python = pythonFor(downloaderDir)
   return [
-    { file: python, args: ['ytmusic_dl.py', '--dir', config.musicDir], cwd: downloaderDir },
-    { file: 'bash', args: ['validate_m3u8s.sh', config.musicDir], cwd: downloaderDir },
+    { file: python, args: [path.join(downloaderDir, 'ytmusic_dl.py'), '--dir', config.musicDir], cwd: workDir },
+    { file: 'bash', args: [path.join(downloaderDir, 'validate_m3u8s.sh'), config.musicDir], cwd: workDir },
   ]
 }
 
-// ytmusicapi reads browser.json from the process working directory; write it
-// fresh for every run (0600) so rotated headers take effect immediately.
-export async function writeBrowserJson(config, downloaderDir = DOWNLOADER_DIR) {
+// ytmusicapi reads browser.json relative to the process working directory;
+// write it fresh for every run (0600) into the work dir so rotated headers
+// take effect immediately.
+export async function writeBrowserJson(config, workDir = DOWNLOADER_DIR) {
   const contents = String(config.browserJson ?? '').trim()
   if (!contents) {
     throw new Error('browser.json is not configured — paste fresh browser headers in Settings')
@@ -40,16 +43,18 @@ export async function writeBrowserJson(config, downloaderDir = DOWNLOADER_DIR) {
   } catch (err) {
     throw new Error(`browser.json is not valid JSON: ${err.message}`)
   }
-  const file = path.join(downloaderDir, 'browser.json')
+  await fsp.mkdir(workDir, { recursive: true })
+  const file = path.join(workDir, 'browser.json')
   await fsp.writeFile(file, contents, { mode: 0o600 })
   return file
 }
 
-export async function runYtmusic({ config, log = console.log, downloaderDir = DOWNLOADER_DIR }) {
-  await writeBrowserJson(config, downloaderDir)
+export async function runYtmusic({ config, dataDir = null, log = console.log, downloaderDir = DOWNLOADER_DIR }) {
+  const workDir = path.join(dataDir ?? process.env.DSCPLN_DATA_DIR ?? '/data', 'work')
+  await writeBrowserJson(config, workDir)
   const musicDir = config.musicDir
   log(`Downloading into ${musicDir}`)
-  for (const step of buildSteps(config, downloaderDir)) {
+  for (const step of buildSteps(config, downloaderDir, workDir)) {
     execFileSync(step.file, step.args, { cwd: step.cwd, stdio: ['ignore', 'inherit', 'inherit'] })
   }
   log('Download and playlist validation finished.')
@@ -70,7 +75,7 @@ if (isMain) {
   }
   const config = JSON.parse(await fsp.readFile(values.config, 'utf8'))
   try {
-    await runYtmusic({ config })
+    await runYtmusic({ config, dataDir: values['data-dir'] ?? null })
   } catch (err) {
     console.error(`Download failed: ${err.message}`)
     process.exit(1)

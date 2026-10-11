@@ -16,7 +16,8 @@ RUN npm install --omit=dev --no-audit --no-fund
 # The downloader's Python environment (ytmusicapi, yt-dlp, dotenv).
 RUN python3 -m venv apps/ytmusic/venv \
     && apps/ytmusic/venv/bin/pip install --no-cache-dir --upgrade pip \
-    && apps/ytmusic/venv/bin/pip install --no-cache-dir -r apps/ytmusic/downloader/requirements.txt
+    && apps/ytmusic/venv/bin/pip install --no-cache-dir -r apps/ytmusic/downloader/requirements.txt \
+    && chown -R node:node apps/ytmusic
 
 ENV NODE_ENV=production
 # The Main tree is mounted at /home/node/Main so ~/Main defaults resolve.

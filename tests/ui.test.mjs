@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createApp, createState } from '../server.mjs'
 
-// Browser test for the import dialog. Playwright is a devDependency and
+// Browser tests for the import dialog. Playwright is a devDependency and
 // Chromium may not be installed everywhere, so the file skips unless launch
 // succeeds.
 
@@ -33,7 +33,8 @@ const TXT_EXPORT = [
     ''
 ].join('\n')
 
-test('ui: import dialog uploads, previews, and merges an export', { skip: !CAN_LAUNCH }, async () => {
+// Starts the server and a browser page over a fresh data dir.
+const withApp = async (fn) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'whatsapptxt-ui-'))
     const work = fs.mkdtempSync(path.join(os.tmpdir(), 'whatsapptxt-ui-work-'))
     fs.writeFileSync(path.join(dir, '20240101 - Existing.json'), JSON.stringify([
@@ -47,17 +48,36 @@ test('ui: import dialog uploads, previews, and merges an export', { skip: !CAN_L
     const server = await new Promise(resolve => {
         const s = app.listen(0, '127.0.0.1', () => resolve(s))
     })
-    const base = `http://127.0.0.1:${server.address().port}`
     const browser = await chromium.launch({ headless: true })
     try {
         const page = await browser.newPage()
+        await fn({ page, dir, fixture, base: `http://127.0.0.1:${server.address().port}` })
+    } finally {
+        await browser.close()
+        server.close()
+        fs.rmSync(dir, { recursive: true, force: true })
+        fs.rmSync(work, { recursive: true, force: true })
+    }
+}
+
+const uploadFixture = async (page, fixture) => {
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('#import-browse')])
+    await chooser.setFiles(fixture)
+    await page.waitForSelector('.import-item--done')
+}
+
+const incomingDirs = (dir) => {
+    const root = path.join(dir, '.watxt-incoming')
+    return fs.existsSync(root) ? fs.readdirSync(root) : []
+}
+
+test('ui: import dialog uploads, previews, and merges an export', { skip: !CAN_LAUNCH }, async () => {
+    await withApp(async ({ page, dir, fixture, base }) => {
         await page.goto(base)
         await page.click('#import')
         await page.waitForSelector('#import-dialog[open]')
 
-        const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('#import-browse')])
-        await chooser.setFiles(fixture)
-        await page.waitForSelector('.import-item--done')
+        await uploadFixture(page, fixture)
         assert.match(await page.textContent('.import-item__meta'), /uploaded/)
 
         await page.click('#import-preview')
@@ -74,10 +94,60 @@ test('ui: import dialog uploads, previews, and merges an export', { skip: !CAN_L
 
         await page.waitForFunction(() =>
             [...document.querySelectorAll('#conversation-list li')].some(node => node.textContent.includes('UI')))
-    } finally {
-        await browser.close()
-        server.close()
-        fs.rmSync(dir, { recursive: true, force: true })
-        fs.rmSync(work, { recursive: true, force: true })
-    }
+    })
+})
+
+test('ui: clicking outside the import dialog closes it and discards staged uploads', { skip: !CAN_LAUNCH }, async () => {
+    await withApp(async ({ page, dir, fixture, base }) => {
+        await page.goto(base)
+        await page.click('#import')
+        await page.waitForSelector('#import-dialog[open]')
+        await uploadFixture(page, fixture)
+        assert.equal(incomingDirs(dir).length, 1, 'the upload is staged while the dialog is open')
+
+        // Click the backdrop well outside the centered dialog.
+        await page.mouse.click(4, 4)
+        await page.waitForFunction(() => !document.querySelector('#import-dialog').open)
+        assert.match(await page.textContent('#banner-text'), /Import cancelled/)
+        assert.deepEqual(incomingDirs(dir), [], 'dismissing must discard the staged batch')
+
+        // Reopening starts clean.
+        await page.click('#import')
+        await page.waitForSelector('#import-dialog[open]')
+        assert.equal(await page.locator('.import-item').count(), 0)
+    })
+})
+
+test('ui: Escape dismisses the import dialog the same way', { skip: !CAN_LAUNCH }, async () => {
+    await withApp(async ({ page, dir, fixture, base }) => {
+        await page.goto(base)
+        await page.click('#import')
+        await page.waitForSelector('#import-dialog[open]')
+        await uploadFixture(page, fixture)
+        await page.keyboard.press('Escape')
+        await page.waitForFunction(() => !document.querySelector('#import-dialog').open)
+        assert.deepEqual(incomingDirs(dir), [])
+    })
+})
+
+test('ui: dismissing is ignored while a merge is running', { skip: !CAN_LAUNCH }, async () => {
+    await withApp(async ({ page, dir, fixture, base }) => {
+        await page.goto(base)
+        await page.click('#import')
+        await page.waitForSelector('#import-dialog[open]')
+        await uploadFixture(page, fixture)
+
+        // Slow the merge down so the dismiss attempt lands mid-flight.
+        await page.route('**/api/import/merge', async route => {
+            await new Promise(resolve => setTimeout(resolve, 1500))
+            await route.continue()
+        })
+        await page.click('#import-run')
+        await page.mouse.click(4, 4)
+        await new Promise(resolve => setTimeout(resolve, 300))
+        assert.equal(await page.locator('#import-dialog[open]').count(), 1, 'the dialog must stay open while merging')
+
+        await page.waitForSelector('#import-done:not([hidden])', { timeout: 15_000 })
+        assert.equal(fs.existsSync(path.join(dir, '20240115 - UI.json')), true, 'the merge must still complete')
+    })
 })

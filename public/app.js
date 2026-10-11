@@ -935,6 +935,18 @@ const openImport = () => {
     $('#import-dialog').showModal()
 }
 
+// Dismissing the panel (backdrop click or Escape) acts as a cancel: staged
+// uploads are discarded. While an upload or merge is running the panel stays
+// open so an in-flight operation is never lost track of.
+const dismissImport = async () => {
+    if (importState.busy) return
+    if (importState.files.length > 0 && importState.batch) {
+        await discardImport()
+        showBanner('Import cancelled — staged uploads discarded.')
+    }
+    $('#import-dialog').close()
+}
+
 const setupImport = () => {
     $('#import').addEventListener('click', openImport)
     $('#import-browse').addEventListener('click', () => $('#import-files').click())
@@ -957,6 +969,22 @@ const setupImport = () => {
     $('#import-run').addEventListener('click', () => runImport(false))
     $('#import-discard').addEventListener('click', discardImport)
     $('#import-done').addEventListener('click', () => $('#import-dialog').close())
+
+    const dialog = $('#import-dialog')
+    // Backdrop clicks: the target is the dialog element itself; check the
+    // coordinates so clicks on the dialog's own padding do not dismiss it.
+    dialog.addEventListener('click', event => {
+        if (event.target !== dialog) return
+        const rect = dialog.getBoundingClientRect()
+        const outside = event.clientX < rect.left || event.clientX > rect.right
+            || event.clientY < rect.top || event.clientY > rect.bottom
+        if (outside) dismissImport()
+    })
+    // Escape (native cancel event) follows the same rules.
+    dialog.addEventListener('cancel', event => {
+        event.preventDefault()
+        dismissImport()
+    })
 }
 
 const setup = async () => {

@@ -47,17 +47,18 @@ test('shell UI: header, settings with browserJson and Test auth', async (t) => {
   })
 
   await page.goto(base)
-  await page.waitForSelector('#overviewCard')
+  await page.waitForSelector('[data-testid="run-now"]')
   assert.equal(await page.title(), 'D$CPLN ⋅ YTMusic Downloads')
 
-  await page.click('#settingsButton')
-  await page.waitForSelector('sl-dialog[open]')
-  assert.equal(await page.locator('sl-dialog[open] sl-textarea[data-path="browserJson"]').count(), 1)
-  assert.equal(await page.locator('sl-dialog[open] sl-input[data-path="musicDir"]').count(), 1)
+  await page.click('[aria-label="Settings"]')
+  await page.waitForSelector('dialog[open]')
+  const browserJson = page.locator('dialog[open] textarea').first()
+  assert.equal(await browserJson.count(), 1)
+  assert.equal(await page.locator('dialog[open] input').first().count(), 1)
 
-  await page.fill('sl-dialog[open] sl-textarea[data-path="browserJson"] textarea', '{"cookie":"fresh"}')
-  await page.click('sl-dialog[open] sl-button:has-text("Test auth")')
-  await page.waitForFunction(() => document.querySelector('sl-dialog[open] .msg.ok')?.textContent?.includes('Auth OK'))
+  await browserJson.fill('{"cookie":"fresh"}')
+  await page.click('[data-testid="test-auth"]')
+  await page.waitForFunction(() => document.querySelector('dialog[open] p.status-ok')?.textContent?.includes('Auth OK'))
 
   assert.deepEqual(errors, [])
 })

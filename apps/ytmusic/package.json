@@ -1,15 +1,23 @@
 {
   "name": "dscpln-ytmusic",
   "version": "1.0.0",
-  "description": "YTMusic Downloads — scheduled YouTube Music library downloads",
+  "description": "YTMusic Downloads \u2014 scheduled YouTube Music library downloads",
   "private": true,
   "type": "module",
   "main": "server.mjs",
   "scripts": {
+    "build:ui": "vite build",
+    "watch:ui": "vite build --watch",
     "start": "node server.mjs",
-    "test": "node --test"
+    "test": "npm run build:ui && node --test"
   },
   "dependencies": {
     "@dscpln/server-kit": "*"
+  },
+  "devDependencies": {
+    "@dscpln/ui-kit": "*",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "svelte": "^5.57.2",
+    "vite": "^8.3.4"
   }
 }

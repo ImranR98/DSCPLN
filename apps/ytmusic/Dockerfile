@@ -11,7 +11,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages ./packages
 COPY apps ./apps
-RUN npm install --omit=dev --no-audit --no-fund
+RUN npm install --no-audit --no-fund \
+    && npm run build:ui --workspace dscpln-ytmusic \
+    && npm prune --omit=dev
 
 # The downloader's Python environment (ytmusicapi, yt-dlp, dotenv).
 RUN python3 -m venv apps/ytmusic/venv \

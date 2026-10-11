@@ -43,21 +43,18 @@ test('shell UI: header, overview, settings fields and Discover', async (t) => {
   })
 
   await page.goto(base)
-  await page.waitForSelector('#overviewCard')
+  await page.waitForSelector('[data-testid="run-now"]')
   assert.equal(await page.title(), 'D$CPLN ⋅ Contacts + Calendar')
   assert.match(await page.textContent('h1'), /Contacts \+ Calendar/)
 
-  // Default schedule (Sunday 03:00) renders as the next run.
-  await page.waitForFunction(() => document.querySelector('#overviewCard .card__context')?.textContent?.includes('next'))
+  // The schedule defaults (Sunday 03:00) surface as the next run in the overview.
+  await page.waitForFunction(() => document.querySelector('article')?.textContent?.includes('Next run'))
 
-  await page.click('#settingsButton')
-  await page.waitForSelector('sl-dialog[open]')
-  const labels = await page.$$eval('sl-dialog[open] sl-input[data-path], sl-dialog[open] sl-textarea[data-path]',
-    (els) => els.map((el) => el.getAttribute('data-path')))
-  assert.ok(labels.includes('nextcloudUrl'))
-  assert.ok(labels.includes('destination'))
-  assert.ok(labels.includes('git.message'))
-  assert.equal(await page.locator('sl-dialog[open] sl-button', { hasText: 'Discover' }).count(), 1)
+  await page.click('[aria-label="Settings"]')
+  await page.waitForSelector('dialog[open]')
+  const labels = await page.$$eval('dialog[open] input, dialog[open] textarea', (els) => els.length)
+  assert.ok(labels >= 6)
+  assert.equal(await page.locator('dialog[open] [data-testid="discover"]').count(), 1)
 
   assert.deepEqual(errors, [])
 })

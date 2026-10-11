@@ -22,7 +22,7 @@ RUN python3 -m venv apps/ytmusic/venv \
     && chown -R node:node apps/ytmusic
 
 ENV NODE_ENV=production
-# The Main tree is mounted at /home/node/Main so ~/Main defaults resolve.
+# Media and cache directories are mounted under /data; ~ paths resolve to $HOME.
 ENV HOME=/home/node
 ENV DSCPLN_DATA_DIR=/data
 ENV XDG_CACHE_HOME=/data/cache

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Contacts + Calendar — scheduled Nextcloud CardDAV/CalDAV exports into
-// ~/Main/Backups/Manual (git-committed). Config + state live on the app's PVC.
+// a destination folder (git-committed). Config + state live on the app's PVC.
 
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,7 +13,7 @@ export const DEFAULT_CONFIG = {
   nextcloudUrl: 'http://nextcloud:80',
   username: '',
   appPassword: '',
-  destination: '~/Main/Backups/Manual',
+  destination: '~/Backups/Manual',
   collections: [],
   git: { enabled: true, message: '' },
   ntfy: { url: '', token: '', notifySuccess: false },

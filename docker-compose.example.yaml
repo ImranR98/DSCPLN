@@ -1,0 +1,58 @@
+# Example: run a few D$CPLN apps with Docker Compose.
+#
+# Every app is an independent container. Apps are configured either from the
+# files mounted below or from their own web UI (Settings). When you put apps
+# behind a reverse proxy on one host, set BASE_PATH=/<name> and mount them under
+# subpaths; running each on its own port (as below) needs no BASE_PATH.
+#
+# Replace the paths and image tags as needed. Portal is stateless; the other
+# apps keep their config/state in the directories you mount.
+services:
+  portal:
+    image: imranrdev/dscpln-portal:latest
+    ports:
+      - "8080:8080"
+
+  media-sync:
+    image: imranrdev/dscpln-media-sync:latest
+    ports:
+      - "8791:8791"
+    volumes:
+      # config.json + staging/review/trash/logs live here ("~" is HOME=/config).
+      - ./media-sync:/config
+      # Your phone-sync folder and the media destination:
+      - /path/to/phone-sync:/phone-sync:ro
+      - /path/to/media:/media
+
+  ytmusic:
+    image: imranrdev/dscpln-ytmusic:latest
+    ports:
+      - "8082:8080"
+    volumes:
+      # config/state (including the pasted browser.json) and the music library.
+      # The default music folder is ~/Music inside the container.
+      - ./ytmusic:/data
+      - /path/to/music:/home/node/Music
+
+  contacts-calendar:
+    image: imranrdev/dscpln-contacts:latest
+    ports:
+      - "8083:8080"
+    volumes:
+      - ./contacts:/data
+      # Exports are written here (default destination is ~/Backups/Manual):
+      - /path/to/backups:/home/node/Backups/Manual
+
+  task-runner:
+    image: imranrdev/dscpln-task-runner:latest
+    ports:
+      - "8085:8085"
+    environment:
+      # Point this at your task config file (see apps/task-runner/config.example.mjs).
+      BACKUPCTL_CONFIG_FILE: /config/config.mjs
+      BACKUPCTL_STATE_DIR: /data/state
+    volumes:
+      - ./task-runner:/config:ro
+      - ./task-runner-data:/data
+      # The tree your tasks operate on:
+      - /path/to/data:/data/tree

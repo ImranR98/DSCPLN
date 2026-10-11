@@ -5,7 +5,7 @@
   let archivesError = $state('')
 
   const FIELDS = [
-    { path: 'destination', label: 'Destination folder', help: 'Archives land here (e.g. ~/Main/Infra/compose_state_backups).' },
+    { path: 'destination', label: 'Destination folder', help: 'Archives land here (e.g. ~/compose_state_backups).' },
     { path: 'retention', label: 'Retention (archives kept per target)', type: 'number' },
   ]
 

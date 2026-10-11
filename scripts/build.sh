@@ -24,7 +24,9 @@ declare -A IMAGE_NAMES=(
     [ytmusic]=dscpln-ytmusic
     [portal]=dscpln-portal
 )
-IMAGE="${2:-docker.io/imranrdev/${IMAGE_NAMES[$APP]:-dscpln-$APP}:latest}"
+REGISTRY="${REGISTRY:-docker.io}"
+IMAGE_ORG="${IMAGE_ORG:-imranrdev}"
+IMAGE="${2:-${REGISTRY}/${IMAGE_ORG}/${IMAGE_NAMES[$APP]:-dscpln-$APP}:latest}"
 
 ENGINE="${ENGINE:-}"
 if [ -z "$ENGINE" ]; then

@@ -55,10 +55,12 @@ test('shell UI: header, archives card, targets editor and key panel', async (t) 
   assert.match(await archivesCard.textContent(), /No archives yet/)
 
   await page.click('[aria-label="Settings"]')
-  await page.waitForSelector('dialog[open] .target-row')
-  const targetNames = await page.$$eval('dialog[open] .target-row input:first-of-type',
-    (els) => els.map((el) => el.getAttribute('placeholder')))
-  assert.equal(targetNames.length, 2)
+  await page.waitForSelector('dialog[open]')
+  // Fresh installs have no targets; the editor starts empty and Add target works.
+  assert.equal(await page.locator('dialog[open] .target-row').count(), 0)
+  await page.click('dialog[open] button:has-text("Add target")')
+  await page.click('dialog[open] button:has-text("Add target")')
+  assert.equal(await page.locator('dialog[open] .target-row').count(), 2)
   assert.match(await page.textContent('dialog[open] .code-block'), /ssh-ed25519/)
   assert.equal(await page.locator('dialog[open] button', { hasText: 'Regenerate key' }).count(), 1)
 

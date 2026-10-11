@@ -15,11 +15,8 @@ const APP_DIR = path.dirname(fileURLToPath(import.meta.url))
 const execFileAsync = promisify(execFile)
 
 export const DEFAULT_CONFIG = {
-  targets: [
-    { name: 'srv0', mode: 'local', host: '', user: '', path: '~/Main/Infra/current_target/compose_live_state' },
-    { name: 'vps0', mode: 'ssh', host: 'vps0.example.com', user: 'root', path: '/root/Infra/current_target/compose_live_state' },
-  ],
-  destination: '~/Main/Infra/compose_state_backups',
+  targets: [],
+  destination: '~/compose_state_backups',
   retention: 1,
   sshPrivateKey: '',
   sshPublicKey: '',
@@ -41,9 +38,7 @@ export function normalizeConfig(raw) {
 
 export function validateConfig(cfg) {
   if (!cfg.destination) throw new ValidationError('destination is required')
-  if (!Array.isArray(cfg.targets) || cfg.targets.length === 0) {
-    throw new ValidationError('at least one target is required')
-  }
+  if (!Array.isArray(cfg.targets)) throw new ValidationError('targets must be a list')
   const seen = new Set()
   for (const target of cfg.targets) {
     if (!target?.name) throw new ValidationError('every target needs a name')

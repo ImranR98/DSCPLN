@@ -72,13 +72,12 @@ test('archives endpoint lists per-target archives', async () => {
 
 test('config validation enforces targets and retention', async () => {
   await withApp(async ({ base }) => {
-    const badTargets = await fetch(`${base}/api/config`, {
+    const emptyTargets = await fetch(`${base}/api/config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ targets: [] }),
     })
-    assert.equal(badTargets.status, 400)
-    assert.match((await badTargets.json()).error, /at least one target/)
+    assert.equal(emptyTargets.status, 200, 'a fresh install may have no targets yet')
 
     const badSsh = await fetch(`${base}/api/config`, {
       method: 'PUT',
@@ -108,6 +107,18 @@ test('config validation enforces targets and retention', async () => {
 
 test('run records state and streams the log under BASE_PATH', async () => {
   await withApp(async ({ base }) => {
+    // Fresh installs start with no targets; add two for this run.
+    const put = await fetch(`${base}/compose/api/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        targets: [
+          { name: 'alpha', mode: 'local', path: '/tmp/alpha' },
+          { name: 'beta', mode: 'local', path: '/tmp/beta' },
+        ],
+      }),
+    })
+    assert.equal(put.status, 200)
     const run = await fetch(`${base}/compose/api/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     assert.equal(run.status, 200)
     const state = await waitFor(async () => {
@@ -115,7 +126,7 @@ test('run records state and streams the log under BASE_PATH', async () => {
       return body.lastRun ? body : null
     })
     assert.equal(state.lastRun.ok, true)
-    assert.match(state.lastRun.summary, /Backed up 2 target/)
+    assert.match(state.lastRun.summary, /Backed up 2 targets: alpha, beta/)
     const log = await (await fetch(`${base}/compose/api/log`)).json()
     assert.ok(log.lines.some((line) => line.includes('stub: backed up')))
   }, { basePath: '/compose' })

@@ -17,7 +17,7 @@ const APP_DIR = path.dirname(fileURLToPath(import.meta.url))
 const execFileAsync = promisify(execFile)
 
 export const DEFAULT_CONFIG = {
-  musicDir: '~/Main/Media/Music',
+  musicDir: '~/Music',
   browserJson: '',
   ntfy: { url: '', token: '', notifySuccess: false },
   schedule: { enabled: true, days: [], at: '05:00', catchUp: true },

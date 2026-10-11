@@ -6,11 +6,12 @@
 #   scripts/build-all.sh ytmusic portal  # build a subset
 #   scripts/build-all.sh --pin           # build all + rewrite Infra templates
 #
-# INFRA_DIR defaults to ~/Main/Infra; --pin refuses to touch a dirty checkout.
+# REGISTRY/IMAGE_ORG choose where images are pushed (default docker.io/imranrdev);
+# --pin rewrites a deployment repo via INFRA_DIR and refuses a dirty checkout.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-INFRA_DIR="${INFRA_DIR:-$HOME/Main/Infra}"
+INFRA_DIR="${INFRA_DIR:-}"
 
 ALL_APPS=(portal balance-xlsx media-sync whatsapp-txt task-runner contacts-calendar compose-state ytmusic)
 # app -> image name suffix (matches scripts/build.sh)
@@ -49,6 +50,10 @@ if [ "${#APPS[@]}" -eq 0 ]; then
     APPS=("${ALL_APPS[@]}")
 fi
 
+if [ "$PIN" = 1 ] && [ -z "$INFRA_DIR" ]; then
+    echo "Error: --pin needs INFRA_DIR pointing at your deployment repo" >&2
+    exit 1
+fi
 if [ "$PIN" = 1 ] && [ -n "$(git -C "$INFRA_DIR" status --porcelain 2>/dev/null)" ]; then
     echo "Error: $INFRA_DIR has uncommitted changes; commit or stash before --pin" >&2
     exit 1
@@ -56,7 +61,7 @@ fi
 
 declare -A DIGESTS=()
 for app in "${APPS[@]}"; do
-    image="docker.io/imranrdev/${IMAGE_NAMES[$app]:-dscpln-$app}:latest"
+    image="${REGISTRY:-docker.io}/${IMAGE_ORG:-imranrdev}/${IMAGE_NAMES[$app]:-dscpln-$app}:latest"
     echo "=================== $app ==================="
     output="$("$ROOT/scripts/build.sh" "$app")"
     digest="$(grep -oE 'sha256:[0-9a-f]{64}' <<<"$output" | tail -1)"
@@ -90,8 +95,5 @@ if [ "$PIN" = 1 ]; then
             console.log(`pinned ${process.env.APP} -> ${file}`);
         '
     done
-    echo "==> Review, commit, and deploy from srv0:"
-    echo "  git -C $INFRA_DIR diff"
-    echo "  git -C $INFRA_DIR commit -am 'srv0: image digests'"
-    echo "  ssh user@192.0.2.247  # then: cd ~/Main/Infra && git fetch origin && git reset --hard origin/master && bash scripts/validate.sh srv0 && helm upgrade --install srv0-apps targets/srv0/k3s-apps -n apps -f targets/srv0/k3s-apps/values.yaml -f config/srv0/values.yaml"
+    echo "==> Review and commit the digest changes in $INFRA_DIR, then deploy as usual."
 fi

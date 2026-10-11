@@ -6,7 +6,7 @@
       path: 'musicDir',
       label: 'Music folder',
       type: 'text',
-      help: 'Downloads and the playlist .m3u8 files land here (e.g. ~/Main/Media/Music).',
+      help: 'Downloads and the playlist .m3u8 files land here (e.g. ~/Music).',
     },
     {
       path: 'browserJson',

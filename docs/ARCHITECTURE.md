@@ -115,8 +115,13 @@ Everything is served from `https://dscpln.home.example.com/<function>` (portal a
 
 **Checking an app**
 
-- Portal pills: `online`/`unreachable` from `GET /<path>/api/health`, plus the
-  next run for the scheduled apps (from `/api/state`, refreshed every 60 s).
+- Portal pills: `online`/`unreachable` from `GET /<path>/api/health`, plus a
+  detail line per app and an "N need attention" count. What the portal reads:
+  scheduled apps `GET /<path>/api/state` (last run, next run, missed, paused),
+  Media Sync `GET /media/api/state` (queue/error counts), WhatsApp TXT
+  `GET /watxt/api/state` (conversations/messages), Task Runner
+  `GET /tasks/api/tasks` (per-task last run), Balance `GET /balance/status`
+  (budget overage; memoized 60 s so the poll stays cheap).
 - State: `GET /<path>/api/state` → `lastRun`, `history` (bounded), `nextRun`,
   `missed`, `runMarker` (non-null while a run is active).
 - Logs: the UI log dialog (SSE), `GET /<path>/api/log`, `kubectl -n apps logs
@@ -129,11 +134,20 @@ Everything is served from `https://dscpln.home.example.com/<function>` (portal a
 - Every app posts to the single in-cluster topic
   `http://ntfy.base.svc.cluster.local:3000/srv0_services_dscpln` with the
   write-only token stored in each app's config (balance uses the same URL via
-  its config Secret).
+  its config Secret), `Bearer` auth.
+- Titles are latin-1 (`HTTP` headers are ByteString): the kit's Notifier
+  sanitizes non-ASCII automatically and follows one convention —
+  run results `D$CPLN · <Function> OK|FAILED`, event notifications
+  `D$CPLN · <Function>: <event>`.
+- Priority/tags: success `default` + `white_check_mark`; failure `high` +
+  `warning`; warnings (balance over budget) `default` + `warning`; Media Sync
+  info `low` + `white_check_mark`.
+- Tapping a notification opens the app when the pod has `DSCPLN_ORIGIN`
+  (`https://dscpln.<domain>`) — the kit builds `DSCPLN_ORIGIN + BASE_PATH` and
+  sends it as the ntfy `Click` header.
 - Failures always notify; successes only when each app's `ntfy.notifySuccess`
-  is on (contacts/compose on; ytmusic off — daily runs would be spam).
-- Titles must stay latin-1 (`HTTP` headers are ByteString): the kit's Notifier
-  sanitizes non-ASCII automatically and uses `D$CPLN · <app> OK|FAILED`.
+  is on (contacts/compose on; ytmusic off — daily runs would be spam). Media
+  Sync keeps its per-folder `notify: all|errors` setting.
 - Media Sync has a test button/endpoint: `POST /media/api/ntfy-test`.
 
 **Scheduler semantics** (`packages/server-kit/scheduler.mjs`)

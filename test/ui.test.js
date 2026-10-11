@@ -181,3 +181,71 @@ test("ui: settings editor round-trips the new folder options", { skip: !CAN_RUN 
     await fsp.rm(root, { recursive: true, force: true });
   }
 });
+
+test("ui: discard requires confirmation and leaves the destination untouched", { skip: !CAN_RUN }, async () => {
+  const { root, daemon, dest, base } = await makeSetup();
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(base);
+    await page.locator('sl-button[data-action="review"]').first().click();
+    await page.locator("#reviewDialog[open]").waitFor({ state: "visible" });
+    await page.locator("#reviewBody sl-checkbox[data-review-group]").first().waitFor({ state: "visible" });
+    await page.locator('sl-button[data-action="review-process"]').click();
+    await page.locator("#reviewBody .review-row").first().waitFor({ state: "visible", timeout: 60_000 });
+
+    await page.locator('sl-button[data-action="review-discard"]').first().click();
+    await page.locator("#confirmDialog[open]").waitFor({ state: "visible" });
+    await page.locator("#confirmButton").click();
+
+    const discarded = await waitFor(async () => {
+      const state = await (await fetch(`${base}/api/state`)).json();
+      return state.folders[0].counts.discarded === 1;
+    });
+    assert.equal(discarded, true, "the clip must be marked discarded");
+    assert.deepEqual(await fsp.readdir(dest), [], "discard must never write to the destination");
+    assert.deepEqual((await (await fetch(`${base}/api/review`)).json()).entries, []);
+  } finally {
+    await browser.close();
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ui: archive folders (cleanup disabled) expose no Cleanup button", { skip: !CAN_RUN }, async () => {
+  const { root, daemon, base } = await makeSetup();
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const config = await (await fetch(`${base}/api/config`)).json();
+    config.reviewDir = path.join(root, "review");
+    config.folders.push({
+      name: "archive",
+      source: path.join(root, "archive-src"),
+      destination: path.join(root, "archive-dest"),
+      method: "copy",
+      recursive: true,
+      includeHidden: true,
+      cleanup: false,
+      settleSeconds: 0,
+    });
+    await fsp.mkdir(path.join(root, "archive-src"), { recursive: true });
+    const saved = await fetch(`${base}/api/config`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
+    assert.equal(saved.ok, true);
+
+    const page = await browser.newPage();
+    await page.goto(base);
+    const archiveCard = page.locator(".folder-card", { hasText: "archive" }).first();
+    await archiveCard.waitFor({ state: "visible" });
+    assert.equal(await archiveCard.locator('sl-button[data-action="cleanup"]').count(), 0, "cleanup must be hidden for cleanup:false folders");
+    const voicenotesCard = page.locator(".folder-card", { hasText: "voicenotes" }).first();
+    assert.equal(await voicenotesCard.locator('sl-button[data-action="review"]').count(), 1, "manual folders expose Review");
+  } finally {
+    await browser.close();
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});

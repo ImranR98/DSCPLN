@@ -64,6 +64,13 @@ export class Daemon {
     }
     await rehydrateReview(this.ctx);
     this.watchers.rebuild(this.config);
+    await this.watchers.whenReady();
+    // One more scan once the watchers are live: files created during startup
+    // (after chokidar's initial traversal but before its watch was active)
+    // would otherwise wait for the periodic rescan.
+    for (const folder of this.store.listFolders()) {
+      await this.store.scanFolder(folder.def.name);
+    }
 
     this.queue.start();
     this.rescanTimer = setInterval(() => this.#rescan(), 60_000);
@@ -134,6 +141,11 @@ export class Daemon {
       await this.store.scanFolder(folder.def.name);
     }
     await rehydrateReview(this.ctx);
+    this.watchers.whenReady().then(() => {
+      for (const folder of this.store.listFolders()) {
+        this.store.scanFolder(folder.def.name).catch(() => {});
+      }
+    }).catch(() => {});
     this.log.log("config updated");
     this.queue.tick();
     return next;

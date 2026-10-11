@@ -406,3 +406,35 @@ test("api: place-all moves every parked entry at once", { skip: !CAN_RUN }, asyn
     await fsp.rm(root, { recursive: true, force: true });
   }
 });
+
+test("api: discard-all clears every parked entry without touching the destination", { skip: !CAN_RUN }, async () => {
+  const { root, daemon, base, src, dest } = await makeReviewDaemon();
+  try {
+    for (const day of ["29", "30"]) {
+      execFileSync("ffmpeg", [
+        "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "sine=frequency=440:duration=0.5",
+        "-c:a", "libopus", path.join(src, "201301", `PTT-201905${day}-WA0001.opus`),
+      ]);
+    }
+    await waitFor(() => daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0001.opus")?.status === STATUS.PENDING
+      && daemon.store.fileFor("voicenotes", "201301/PTT-20190530-WA0001.opus")?.status === STATUS.PENDING);
+    await fetch(`${base}/api/process/voicenotes`, { method: "POST" });
+    await waitFor(async () => (await (await fetch(`${base}/api/review`)).json()).entries.length === 2);
+
+    const result = await (await fetch(`${base}/api/review/discard-all`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folder: "voicenotes" }),
+    })).json();
+    assert.equal(result.results.length, 2);
+    assert.equal(result.results.every((entry) => entry.ok), true, JSON.stringify(result.results));
+    assert.deepEqual((await (await fetch(`${base}/api/review`)).json()).entries, []);
+    assert.deepEqual(await fsp.readdir(dest), []);
+    assert.equal(daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0001.opus").status, STATUS.DISCARDED);
+    assert.equal(daemon.store.fileFor("voicenotes", "201301/PTT-20190530-WA0001.opus").status, STATUS.DISCARDED);
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});

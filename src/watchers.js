@@ -37,8 +37,29 @@ export class Watchers {
         this.store.removeFile(name, this.#keyFor(name, p), null);
       });
       watcher.on("error", (err) => this.log.log(`watcher error for ${def.source}: ${err.message}`));
-      this.map.set(name, { watcher, source: def.source, recursive: def.recursive });
+      this.map.set(name, { watcher, source: def.source, recursive: def.recursive, ready: false });
     }
+  }
+
+  // Resolves when every watcher has completed its initial traversal. Until
+  // then there is a window where a file created after the traversal's readdir
+  // but before the OS watch is active could be missed; callers re-scan after
+  // this resolves to close that gap.
+  whenReady(timeoutMs = 15_000) {
+    const waits = [];
+    for (const entry of this.map.values()) {
+      if (entry.ready) continue;
+      waits.push(new Promise((resolve) => {
+        const done = () => {
+          entry.ready = true;
+          resolve();
+        };
+        entry.watcher.once("ready", done);
+        const timer = setTimeout(done, timeoutMs);
+        timer.unref?.();
+      }));
+    }
+    return Promise.all(waits);
   }
 
   #def(folderName) {

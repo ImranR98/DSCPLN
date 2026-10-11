@@ -517,3 +517,121 @@ test("voicenotes: files that do not match datePattern are ignored, not left pend
     await fsp.rm(root, { recursive: true, force: true });
   }
 });
+
+function readInputs(file) {
+  const out = execFileSync("exiftool", ["-m", "-s", "-j", "-XMP-media-sync:Inputs", file], { encoding: "utf8" });
+  const raw = JSON.parse(out)[0]?.Inputs ?? null;
+  return raw ? JSON.parse(raw) : null;
+}
+
+test("voicenotes: a late clip offers a verified replace of the earlier merge", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, configPath } = await makeSetup();
+  const daemon = new Daemon(configPath, {});
+  try {
+    makeVoiceNote(path.join(src, "201301", "PTT-20190529-WA0001.opus"));
+    await daemon.start();
+    await daemon.queue.processNow("voicenotes");
+    await waitFor(() => daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0001.opus")?.status === STATUS.REVIEW);
+    const folder = daemon.store.getFolder("voicenotes");
+    const first = (await listReview(daemon.ctx))[0];
+    assert.equal((await placeReview(daemon.ctx, folder, first.destName)).ok, true);
+    assert.deepEqual(readInputs(path.join(dest, first.destName)), ["201301/PTT-20190529-WA0001.opus"]);
+
+    makeVoiceNote(path.join(src, "201301", "PTT-20190529-WA0002.opus"));
+    await waitFor(() => daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0002.opus")?.status === STATUS.PENDING);
+    await daemon.queue.processNow("voicenotes", { files: ["201301/PTT-20190529-WA0002.opus"] });
+    await waitFor(async () => (await listReview(daemon.ctx)).length === 1);
+
+    const refused = await placeReview(daemon.ctx, folder, first.destName);
+    assert.equal(refused.ok, false);
+    assert.equal(refused.canReplace, true, "an earlier merge of the same group is a verified replace candidate");
+    assert.deepEqual(readInputs(path.join(dest, first.destName)), ["201301/PTT-20190529-WA0001.opus"], "destination must be untouched before the replace is confirmed");
+
+    const replaced = await placeReview(daemon.ctx, folder, first.destName, { replace: true });
+    assert.equal(replaced.ok, true);
+    assert.equal(replaced.replaced, true);
+    assert.deepEqual(
+      readInputs(path.join(dest, first.destName)).sort(),
+      ["201301/PTT-20190529-WA0001.opus", "201301/PTT-20190529-WA0002.opus"],
+      "the replacement merge must contain every clip",
+    );
+    assert.deepEqual(await listReview(daemon.ctx), []);
+
+    const cleaned = await cleanupFiles(daemon.ctx, folder, [
+      "201301/PTT-20190529-WA0001.opus",
+      "201301/PTT-20190529-WA0002.opus",
+    ]);
+    assert.deepEqual(cleaned.map((r) => r.ok), [true, true], JSON.stringify(cleaned));
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("voicenotes: replace is refused for a destination file that is not an earlier merge", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, configPath } = await makeSetup();
+  const daemon = new Daemon(configPath, {});
+  try {
+    makeVoiceNote(path.join(src, "201301", "PTT-20190529-WA0001.opus"));
+    await daemon.start();
+    await daemon.queue.processNow("voicenotes");
+    await waitFor(() => daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0001.opus")?.status === STATUS.REVIEW);
+    const folder = daemon.store.getFolder("voicenotes");
+    const entry = (await listReview(daemon.ctx))[0];
+    await fsp.writeFile(path.join(dest, entry.destName), "not one of ours");
+    const refused = await placeReview(daemon.ctx, folder, entry.destName, { replace: true });
+    assert.equal(refused.ok, false);
+    assert.equal(refused.canReplace, false);
+    assert.equal(await fsp.readFile(path.join(dest, entry.destName), "utf8"), "not one of ours");
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("voicenotes: an undecodable clip fails its group without parking or deleting anything", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, configPath } = await makeSetup();
+  const daemon = new Daemon(configPath, {});
+  try {
+    const bad = path.join(src, "201301", "PTT-20190529-WA0001.opus");
+    const good = path.join(src, "201301", "PTT-20190529-WA0002.opus");
+    await fsp.mkdir(path.dirname(bad), { recursive: true });
+    await fsp.writeFile(bad, "definitely not audio");
+    makeVoiceNote(good);
+    await daemon.start();
+    await daemon.queue.processNow("voicenotes");
+    const errored = await waitFor(() =>
+      daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0001.opus")?.status === STATUS.ERROR
+      && daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0002.opus")?.status === STATUS.ERROR,
+    );
+    assert.equal(errored, true, "a group with a corrupt clip must error as a whole");
+    assert.deepEqual(await listReview(daemon.ctx), [], "nothing may be parked when the merge fails");
+    assert.deepEqual(await fsp.readdir(dest), [], "nothing may reach the destination when the merge fails");
+    assert.equal(await fsp.readFile(bad, "utf8"), "definitely not audio", "source clips must be untouched");
+    assert.equal(await fsp.stat(good).then((s) => s.size > 0).catch(() => false), true);
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("voicenotes: a tampered parked file is refused at place time", { skip: !CAN_RUN }, async () => {
+  const { root, src, configPath } = await makeSetup();
+  const daemon = new Daemon(configPath, {});
+  try {
+    makeVoiceNote(path.join(src, "201301", "PTT-20190529-WA0001.opus"));
+    await daemon.start();
+    await daemon.queue.processNow("voicenotes");
+    await waitFor(() => daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0001.opus")?.status === STATUS.REVIEW);
+    const folder = daemon.store.getFolder("voicenotes");
+    const entry = (await listReview(daemon.ctx))[0];
+    await fsp.appendFile(path.join(root, "review", "voicenotes", entry.destName), "extra bytes");
+    const refused = await placeReview(daemon.ctx, folder, entry.destName);
+    assert.equal(refused.ok, false);
+    assert.match(refused.reason, /changed since it was prepared/);
+    assert.equal(daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0001.opus").status, STATUS.REVIEW);
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});

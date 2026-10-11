@@ -239,7 +239,7 @@ export class ApiServer {
         results.push({
           id: String(id),
           ...(place
-            ? await placeReview(this.daemon.ctx, folder, String(id))
+            ? await placeReview(this.daemon.ctx, folder, String(id), { replace: body.replace === true })
             : await discardReview(this.daemon.ctx, folder, String(id))),
         });
       }

@@ -151,7 +151,8 @@ test("e2e: pause stops automatic processing but manual actions still work", { sk
     makeJpeg(file);
     await fsp.writeFile(undated, "");
     setTags(file, ["-DateTimeOriginal=2019:04:02 10:20:30", "-CreateDate=2019:04:02 10:20:30"]);
-    await sleep(2500);
+    const registered = await waitFor(() => daemon.store.fileFor("camera", "dated.jpg") != null);
+    assert.equal(registered, true, "the watcher must register the new file");
     assert.equal(daemon.store.fileFor("camera", "dated.jpg").status, STATUS.PENDING, "must stay pending while paused");
 
     const result = await daemon.queue.processNow("camera");

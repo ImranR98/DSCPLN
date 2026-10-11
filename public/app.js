@@ -893,15 +893,31 @@
                         return
                     }
                 }
-                const result = await requestJson(`/api/review/${place ? 'place' : 'discard'}`, {
+                let result = await requestJson(`/api/review/${place ? 'place' : 'discard'}`, {
                     method: 'POST',
                     body: JSON.stringify({ folder, id }),
                 })
-                const first = result.results?.[0]
+                let first = result.results?.[0]
+                if (place && first && !first.ok && first.canReplace) {
+                    const replace = await askConfirm({
+                        title: 'Replace earlier merge',
+                        text: `${first.reason}. The new merge contains every clip from the existing file plus the new ones.`,
+                        confirmLabel: 'Replace',
+                    })
+                    if (replace) {
+                        result = await requestJson('/api/review/place', {
+                            method: 'POST',
+                            body: JSON.stringify({ folder, id, replace: true }),
+                        })
+                        first = result.results?.[0]
+                    }
+                }
                 if (first?.ok) {
                     showToast(toastContainer, `${place ? 'Placed' : 'Discarded'} ${id}.`)
+                } else if (first?.reason) {
+                    showToast(toastContainer, first.reason, 'error')
                 } else {
-                    showToast(toastContainer, first?.reason ?? 'Review action failed', 'error')
+                    showToast(toastContainer, 'Review action failed', 'error')
                 }
                 await refresh()
                 await refreshReview()

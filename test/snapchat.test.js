@@ -50,7 +50,7 @@ async function waitFor(fn, timeoutMs = 90_000, intervalMs = 250) {
   return false;
 }
 
-async function makeSetup({ paused = false } = {}) {
+async function makeSetup({ paused = false, folder = {} } = {}) {
   const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-snap-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
@@ -83,6 +83,7 @@ async function makeSetup({ paused = false } = {}) {
         filePattern: "Snapchat-*.mp4",
         groupWindowSeconds: 15,
         settleSeconds: 0,
+        ...folder,
       },
     ],
   };
@@ -160,6 +161,36 @@ test("e2e snapchat: failed clips can be re-attempted manually while paused and r
     const recovered = await waitFor(() => daemon.store.fileFor("snapchat", "Snapchat-bad.mp4")?.status === STATUS.DONE, 120_000);
     assert.equal(recovered, true, "changed file must be re-processed and succeed");
     assert.equal((await fsp.readdir(dest)).length, 1);
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("e2e snapchat: manual placement parks the concatenated group until approved", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, daemon } = await makeSetup({ folder: { placement: "manual" } });
+  try {
+    const { listReview, placeReview } = await import("../src/review.js");
+    makeClip(path.join(src, "Snapchat-1.mp4"), 1);
+    makeClip(path.join(src, "Snapchat-2.mp4"), 1);
+    setTags(path.join(src, "Snapchat-1.mp4"), ["-CreateDate=2021:01:02 03:04:05", "-MediaCreateDate=2021:01:02 03:04:05"]);
+    setTags(path.join(src, "Snapchat-2.mp4"), ["-CreateDate=2021:01:02 03:04:15", "-MediaCreateDate=2021:01:02 03:04:15"]);
+    const registered = await waitFor(() =>
+      daemon.store.fileFor("snapchat", "Snapchat-1.mp4") != null && daemon.store.fileFor("snapchat", "Snapchat-2.mp4") != null);
+    assert.equal(registered, true, "the watcher must register the new clips");
+    assert.equal(daemon.store.fileFor("snapchat", "Snapchat-1.mp4").status, STATUS.PENDING, "manual snapchat folders must not auto-process");
+
+    await daemon.queue.processNow("snapchat");
+    const reviewed = await waitFor(() => daemon.store.fileFor("snapchat", "Snapchat-1.mp4")?.status === STATUS.REVIEW);
+    assert.equal(reviewed, true);
+    const entries = await listReview(daemon.ctx);
+    assert.equal(entries.length, 1);
+    assert.match(entries[0].destName, /^2021-01-02-03-04-05-\(Snap_2021-01-02-030405_group1\)\.mp4$/);
+    assert.deepEqual(await fsp.readdir(dest), [], "nothing may be placed before approval");
+
+    const folder = daemon.store.getFolder("snapchat");
+    assert.equal((await placeReview(daemon.ctx, folder, entries[0].destName)).ok, true);
+    assert.deepEqual((await fsp.readdir(dest)).sort(), [entries[0].destName]);
   } finally {
     await daemon.stop();
     await fsp.rm(root, { recursive: true, force: true });

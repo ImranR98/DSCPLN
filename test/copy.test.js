@@ -257,3 +257,28 @@ test("config: manual placement is rejected for copy folders", () => {
     );
   }, /manual placement/);
 });
+
+test("copy e2e: the live watcher picks up new nested files and keeps deleted ones", async () => {
+  const { root, src, dest, configPath } = await makeSetup();
+  const daemon = new Daemon(configPath, {});
+  try {
+    await daemon.start();
+    const live = path.join(src, "live", "chat1");
+    await writeFile(path.join(live, "new.txt"), "appeared later");
+    const copied = await waitFor(() => daemon.store.fileFor("mirror", "live/chat1/new.txt")?.status === STATUS.DONE, 40_000);
+    assert.equal(copied, true, "a directory created after startup must be mirrored live");
+    assert.equal(await fsp.readFile(path.join(dest, "live", "chat1", "new.txt"), "utf8"), "appeared later");
+
+    await fsp.rm(live, { recursive: true, force: true });
+    const forgotten = await waitFor(() => daemon.store.fileFor("mirror", "live/chat1/new.txt") === null, 40_000);
+    assert.equal(forgotten, true);
+    assert.equal(
+      await fsp.stat(path.join(dest, "live", "chat1", "new.txt")).then(() => true).catch(() => false),
+      true,
+      "removing the source must never remove the archive copy",
+    );
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});

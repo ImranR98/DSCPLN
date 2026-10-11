@@ -2,7 +2,8 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { listParked, parkPathFor, readParkManifest, removeParked, writeParkManifest } from "./park.js";
 import { STATUS } from "./store.js";
-import { DestExistsError, moveIntoPlace } from "./processors/place.js";
+import { DestExistsError, moveIntoPlace, replaceIntoPlace } from "./processors/place.js";
+import { parseSnapInputs } from "./verify.js";
 import { sha256File } from "./util.js";
 
 // "Manual placement" flow: the daemon processes files into the review park
@@ -89,7 +90,22 @@ async function markInputs(ctx, folder, manifest, status, message) {
   }
 }
 
-export async function placeReview(ctx, folder, id) {
+// A late clip causes a group to be re-merged under the same destination name.
+// Replacing the earlier destination merge is only allowed when the existing
+// file is provably an earlier merge of the same group: it must carry the
+// media-sync XMP input list and every listed input must be in the new manifest.
+// Any other same-name destination file is never a replace candidate.
+async function supersedesExisting(ctx, folder, destPath, manifest) {
+  if (folder.def.method !== "voicenotes" && folder.def.method !== "snapchat") return false;
+  const tags = await ctx.exiftool.readRaw(destPath, ["-m", "-api", "LargeFileSupport=1"]).catch(() => null);
+  const inputs = parseSnapInputs(tags?.Inputs);
+  if (!inputs || inputs.length === 0) return false;
+  if ((manifest.inputs ?? []).length === 0) return false;
+  const newInputs = new Set(manifest.inputs);
+  return inputs.every((input) => newInputs.has(input));
+}
+
+export async function placeReview(ctx, folder, id, { replace = false } = {}) {
   const { config, store } = ctx;
   const manifest = await readParkManifest(config, folder.def.name, id);
   if (!manifest) return { ok: false, reason: "review entry not found" };
@@ -107,7 +123,22 @@ export async function placeReview(ctx, folder, id) {
       await markInputs(ctx, folder, manifest, STATUS.DONE, "placed (destination already had an identical file)");
       return { ok: true, alreadyPlaced: true, destName: manifest.destName };
     }
-    return { ok: false, reason: `destination already has a different file named ${manifest.destName}` };
+    const canReplace = await supersedesExisting(ctx, folder, destPath, manifest);
+    if (canReplace && replace) {
+      await replaceIntoPlace(parkPath, destPath);
+      await removeParked(config, folder.def.name, id);
+      await markInputs(ctx, folder, manifest, STATUS.DONE, "placed after review (earlier merge replaced)");
+      store.invalidateDest(folder.def.name);
+      ctx.log(`replaced reviewed ${manifest.destName} in ${folder.def.name} with the fuller merge`);
+      return { ok: true, destName: manifest.destName, replaced: true };
+    }
+    return {
+      ok: false,
+      canReplace,
+      reason: canReplace
+        ? `destination has an earlier merge of this group; replace it with the new merge (${manifest.destName})`
+        : `destination already has a different file named ${manifest.destName}`,
+    };
   }
 
   try {

@@ -1,0 +1,20 @@
+{
+  "port": 3300,
+  "dataProvider": "excelDataProvider",
+  "providers": {
+    "excelDataProvider": {
+      "workbookFile": "./mock-data.xlsx",
+      "transactionsSheet": "Transactions",
+      "constantsSheet": "Constants"
+    }
+  },
+  "notifications": {
+    "monthlyLimitUrl": null,
+    "ntfyToken": null,
+    "checkIntervalMinutes": 30,
+    "onlyWarnOnce": false
+  },
+  "api": {
+    "stateFile": "./api-state.json"
+  }
+}

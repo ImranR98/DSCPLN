@@ -8,3 +8,6 @@ api-state.json
 logs/
 data/
 .env
+
+# Generated UI output (Vite builds apps/<app>/ui into apps/<app>/static)
+apps/portal/static/

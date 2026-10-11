@@ -42,16 +42,16 @@ test('portal renders every function link and loads the ui kit', async (t) => {
   })
 
   await page.goto(`${base}/`)
-  await page.waitForSelector('.portal-card')
-  const links = await page.$$eval('.portal-card', (cards) => cards.map((card) => card.getAttribute('href')))
+  await page.waitForSelector('[data-testid="card-balance"]')
+  const links = await page.$$eval('[data-testid^="card-"]', (cards) => cards.map((card) => card.getAttribute('href')))
   assert.deepEqual(links, EXPECTED_LINKS)
   assert.equal(await page.title(), 'D$CPLN')
 
   const header = await page.textContent('h1')
   assert.match(header, /D\$CPLN/)
 
-  // The ui kit must actually load (theme button gets its icon from core.js).
-  await page.waitForFunction(() => document.querySelector('#themeButton')?.innerHTML?.includes('<svg'))
+  // The theme toggle is the canary that the Svelte kit mounted.
+  await page.waitForFunction(() => document.querySelector('[data-testid="theme-toggle"]')?.innerHTML?.includes('<svg'))
   assert.deepEqual(errors, [])
 })
 
@@ -72,7 +72,7 @@ test('portal health pill turns unreachable when an app is down', async (t) => {
   const page = await browser.newPage()
   await page.goto(`${base}/`)
   await page.waitForFunction(
-    () => document.querySelectorAll('.portal-card__status.is-fail').length > 0,
+    () => document.querySelectorAll('[data-testid^="status-"].status-over').length > 0,
     null,
     { timeout: 15_000 },
   )
@@ -101,10 +101,10 @@ test('portal shows the next scheduled run for scheduled apps', async (t) => {
 
   await page.goto(`${base}/`)
   await page.waitForFunction(() => {
-    const next = document.querySelector('a.portal-card[href="/contacts"] .portal-card__next')
+    const next = document.querySelector('[data-testid="next-contacts"]')
     return next?.textContent?.startsWith('next ')
   })
-  const text = await page.$eval('a.portal-card[href="/contacts"] .portal-card__next', (node) => node.textContent)
+  const text = await page.$eval('[data-testid="next-contacts"]', (node) => node.textContent)
   assert.match(text, /^next /)
 })
 
@@ -145,19 +145,19 @@ test('portal tiles show per-app detail lines and an attention count', async (t) 
 
   await page.goto(`${base}/`)
   await page.waitForFunction(() =>
-    document.querySelector('a.portal-card[href="/contacts"] .portal-card__detail')?.textContent?.startsWith('last '))
+    document.querySelector('[data-testid="detail-contacts"]')?.textContent?.startsWith('last '))
 
-  const detailOf = (path) => page.$eval(`a.portal-card[href="/${path}"] .portal-card__detail`, (node) => node.textContent)
+  const detailOf = (path) => page.$eval(`[data-testid="detail-${path}"]`, (node) => node.textContent)
   assert.match(await detailOf('contacts'), /^last .* · OK$/)
   assert.match(await detailOf('balance'), /USD over budget/)
   assert.match(await detailOf('media'), /2 active · 1 errors/)
   assert.match(await detailOf('watxt'), /3 conversations · 42 messages/)
   assert.match(await detailOf('tasks'), /2 tasks · 1 failing/)
 
-  const next = await page.$eval('a.portal-card[href="/contacts"] .portal-card__next', (node) => node.textContent)
+  const next = await page.$eval('[data-testid="next-contacts"]', (node) => node.textContent)
   assert.match(next, /1 missed/)
 
-  const attention = await page.$eval('#attentionLabel', (node) => node.textContent)
+  const attention = await page.$eval('[data-testid="attention"]', (node) => node.textContent)
   assert.match(attention, /need|needs/)
 })
 

@@ -2,11 +2,14 @@ FROM node:24-slim
 
 WORKDIR /app
 
-# Monorepo install (build context = repo root). The portal only needs the kit.
+# Monorepo install + UI build (build context = repo root). The portal only
+# needs the kit at runtime; Vite/Svelte are pruned after building static/.
 COPY package.json package-lock.json ./
 COPY packages ./packages
 COPY apps ./apps
-RUN npm install --omit=dev --no-audit --no-fund
+RUN npm install --no-audit --no-fund \
+    && npm run build:ui --workspace dscpln-portal \
+    && npm prune --omit=dev
 
 ENV NODE_ENV=production
 ENV PORT=8080

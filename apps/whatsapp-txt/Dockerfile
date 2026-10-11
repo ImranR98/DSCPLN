@@ -13,7 +13,15 @@ COPY apps ./apps
 RUN npm install --omit=dev --no-audit --no-fund
 
 ENV NODE_ENV=production
+# The conversation directory is expected to be mounted at /data. Browsing and
+# search only read it; the import API writes merged conversations back into it.
+ENV DATA_DIR=/data
+ENV HOST=0.0.0.0
+ENV PORT=8787
+
 EXPOSE 8787
+
+USER node
 
 ENTRYPOINT ["sh", "-c", "exec node apps/whatsapp-txt/server.mjs --dir \"$DATA_DIR\" --host \"$HOST\" --port \"$PORT\""]
 

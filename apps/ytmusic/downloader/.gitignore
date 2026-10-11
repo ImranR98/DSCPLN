@@ -1,0 +1,6 @@
+music/
+venv/
+oauth.json
+browser.json
+.env
+__pycache__/

@@ -83,6 +83,7 @@ def download_track(video_id, track_info, download_dir):
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': output_template,
+        'js_runtimes': {'node': {}},
         'postprocessors': [
             {
                 'key': 'FFmpegExtractAudio',

@@ -58,7 +58,9 @@ export function mergeCollections(discovered, saved = []) {
       href: entry.href,
       type: entry.type,
       displayName: entry.displayName || existing.displayName || entry.href,
-      enabled: existing.enabled ?? false,
+      // Discovered collections export by default (the old manual task exported
+      // all of them); unchecking one in the UI sticks across rediscoveries.
+      enabled: existing.enabled ?? true,
       filename: existing.filename || `${entry.displayName || 'export'}.${extension}`,
     }
   })

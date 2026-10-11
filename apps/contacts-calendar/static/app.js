@@ -43,7 +43,7 @@
             { path: 'git.enabled', label: 'Git commit after export', type: 'checkbox' },
             { path: 'git.message', label: 'Custom commit message', type: 'text' },
         ],
-        settingsNotice: 'Discover lists your Nextcloud collections; enable the ones to export and pick their file names. Save to apply.',
+        settingsNotice: 'Discover lists your Nextcloud collections (enabled by default; uncheck the ones to skip) and lets you pick their file names. Save to apply.',
         settingsExtra(container, config) {
             const section = el('section', { class: 'settings-section' },
                 el('h3', { text: 'Collections' }))
@@ -74,7 +74,7 @@
                     })
                     config.collections = collections
                     render()
-                    status.textContent = `${collections.length} collection${collections.length === 1 ? '' : 's'} found. Enable the ones to export, then Save.`
+                    status.textContent = `${collections.length} collection${collections.length === 1 ? '' : 's'} found — all enabled. Uncheck any to skip, then Save.`
                 } catch (err) {
                     status.className = 'form-error'
                     status.textContent = err.message

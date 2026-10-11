@@ -97,6 +97,8 @@ test('discover merges saved choices and run records state + log', async (t) => {
     const personal = body.collections.find((c) => c.displayName === 'Personal')
     assert.equal(personal.filename, 'Events.ics', 'saved filename survives rediscovery')
     assert.equal(personal.enabled, true)
+    const fresh = body.collections.find((c) => c.displayName === 'TODO')
+    assert.equal(fresh.enabled, true, 'newly discovered collections are enabled by default')
 
     const run = await fetch(`${base}/api/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     assert.equal(run.status, 200)

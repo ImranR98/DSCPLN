@@ -75,6 +75,13 @@ export async function generateSshKey() {
   }
 }
 
+export function summarizeTargets(targets = []) {
+  const names = targets.map((t) => t?.name).filter(Boolean)
+  const count = names.length || targets.length
+  const label = `target${count === 1 ? '' : 's'}`
+  return names.length ? `Backed up ${count} ${label}: ${names.join(', ')}` : `Backed up ${count} ${label}`
+}
+
 export function createComposeApp(options = {}) {
   const dataDir = options.dataDir ?? process.env.DSCPLN_DATA_DIR ?? '/data'
   const basePath = options.basePath ?? process.env.BASE_PATH ?? ''
@@ -92,7 +99,7 @@ export function createComposeApp(options = {}) {
     validate: validateConfig,
     secrets: ['sshPrivateKey'],
     commands: (cfg) => commands(cfg),
-    summarize: (result, cfg) => `Backed up ${cfg.targets.length} target(s)`,
+    summarize: (result, cfg) => summarizeTargets(cfg.targets),
     routes: (router, ctx) => {
       // Shows/regenerates the app's SSH public key (authorize it on vps0).
       router.post('/api/key/regenerate', async (req, res, next) => {

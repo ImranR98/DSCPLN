@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { once } from 'node:events'
-import { createComposeApp } from '../server.mjs'
+import { createComposeApp, summarizeTargets } from '../server.mjs'
 
 const stubCommands = () => [[process.execPath, '-e', 'console.log("stub: backed up")']]
 
@@ -129,3 +129,10 @@ async function waitFor(fn, timeoutMs = 10_000) {
   }
   throw new Error('timeout waiting for condition')
 }
+
+test('summarizeTargets names the backed-up targets', () => {
+  assert.equal(summarizeTargets([{ name: 'srv0' }, { name: 'vps0' }]), 'Backed up 2 targets: srv0, vps0')
+  assert.equal(summarizeTargets([{ name: 'srv0' }]), 'Backed up 1 target: srv0')
+  assert.equal(summarizeTargets([]), 'Backed up 0 targets')
+  assert.equal(summarizeTargets([{ mode: 'local' }]), 'Backed up 1 target')
+})

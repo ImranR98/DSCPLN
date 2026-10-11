@@ -9,7 +9,7 @@ import { Notifier } from "./notify.js";
 import { parkPathFor } from "./park.js";
 import { discardAllReview, discardReview, listReview, placeAllReview, placeReview } from "./review.js";
 
-const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "public");
+const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "static");
 
 function json(res, code, body) {
   const data = JSON.stringify(body);

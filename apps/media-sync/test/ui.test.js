@@ -108,16 +108,16 @@ test("ui: review a parked voice note from the browser and place it", { skip: !CA
     const page = await browser.newPage();
     await page.goto(base);
 
-    const reviewButton = page.locator('sl-button[data-action="review"]').first();
+    const card = page.locator("article", { hasText: "voicenotes" }).first();
+    const reviewButton = card.getByRole("button", { name: /^Review/ });
     await reviewButton.waitFor({ state: "visible" });
-    assert.match(await reviewButton.textContent(), /Review/);
-
     await reviewButton.click();
-    await page.locator("#reviewDialog[open]").waitFor({ state: "visible" });
-    await page.locator('#reviewBody sl-checkbox[data-review-group]').first().waitFor({ state: "visible" });
 
-    await page.locator('sl-button[data-action="review-process"]').click();
-    const entry = page.locator('#reviewBody .review-row').first();
+    const dialog = page.locator('[data-testid="review-dialog"]');
+    await dialog.locator(".review-groups input[type=checkbox]").first().waitFor({ state: "visible", timeout: 30_000 });
+    await dialog.getByRole("button", { name: "Process selected" }).click();
+
+    const entry = dialog.locator(".review-row").first();
     await entry.waitFor({ state: "visible", timeout: 60_000 });
     assert.match(await entry.textContent(), /2019-05-29-00-00-00-\(20190529-merged-201301\)\.mp4/);
 
@@ -126,12 +126,10 @@ test("ui: review a parked voice note from the browser and place it", { skip: !CA
     const preview = await page.request.get(new URL(audioSrc, base).toString());
     assert.equal(preview.status(), 200);
 
-    await page.locator('sl-button[data-action="review-place"]').first().click();
+    await entry.getByRole("button", { name: "Place" }).click();
     const destName = "2019-05-29-00-00-00-(20190529-merged-201301).mp4";
     const placed = await waitFor(() => fsp.stat(path.join(dest, destName)).then(() => true).catch(() => false));
     assert.equal(placed, true, "the placed file must land in the destination");
-    await page.locator('sl-button[data-action="review-close"], #reviewClose').first().click();
-    await page.locator("#reviewDialog[open]").waitFor({ state: "detached" }).catch(() => {});
   } finally {
     await browser.close();
     await daemon.stop();
@@ -145,27 +143,22 @@ test("ui: settings editor round-trips the new folder options", { skip: !CAN_RUN 
   try {
     const page = await browser.newPage();
     await page.goto(base);
-    await page.locator('sl-button[data-action="settings"]').click();
-    await page.locator("#settingsDialog[open]").waitFor({ state: "visible" });
+    await page.locator('[title="Settings"]').click();
+    const dialog = page.locator('[data-testid="settings-dialog"]');
+    await dialog.waitFor({ state: "visible" });
 
-    await page.locator('sl-button[data-action="add-folder"]').click();
-    const editor = page.locator("#folderEditors .folder-edit").last();
+    await dialog.getByRole("button", { name: "Add folder" }).click();
+    const editor = dialog.locator("fieldset").last();
     await editor.waitFor({ state: "visible" });
-    for (const [field, value] of [
-      ["name", "archive"],
-      ["source", path.join(root, "archive-src")],
-      ["destination", path.join(root, "archive-dest")],
-      ["datePattern", ""],
-      ["filePattern", ""],
-    ]) {
-      await editor.locator(`[data-field="${field}"]`).evaluate((node, v) => { node.value = v; }, value);
-    }
-    await editor.locator('[data-field="method"]').evaluate((node) => { node.value = "copy"; });
-    for (const [field, checked] of [["recursive", true], ["includeHidden", true], ["cleanup", false]]) {
-      await editor.locator(`[data-field="${field}"]`).evaluate((node, v) => { node.checked = v; }, checked);
-    }
-    await page.locator("#settingsSave").click();
-    await page.locator("#settingsDialog[open]").waitFor({ state: "detached" }).catch(() => {});
+    await editor.getByLabel("Name").fill("archive");
+    await editor.getByLabel("Source").fill(path.join(root, "archive-src"));
+    await editor.getByLabel("Destination").fill(path.join(root, "archive-dest"));
+    await editor.getByLabel("Method").selectOption("copy");
+    await editor.getByLabel("Recursive").check();
+    await editor.getByLabel("Include hidden").check();
+    await editor.getByLabel("Allow cleanup").uncheck();
+    await dialog.getByRole("button", { name: "Save" }).click();
+    await dialog.waitFor({ state: "detached" }).catch(() => {});
 
     const saved = await (await fetch(`${base}/api/config`)).json();
     const archive = saved.folders.find((folder) => folder.name === "archive");
@@ -188,15 +181,18 @@ test("ui: discard requires confirmation and leaves the destination untouched", {
   try {
     const page = await browser.newPage();
     await page.goto(base);
-    await page.locator('sl-button[data-action="review"]').first().click();
-    await page.locator("#reviewDialog[open]").waitFor({ state: "visible" });
-    await page.locator("#reviewBody sl-checkbox[data-review-group]").first().waitFor({ state: "visible" });
-    await page.locator('sl-button[data-action="review-process"]').click();
-    await page.locator("#reviewBody .review-row").first().waitFor({ state: "visible", timeout: 60_000 });
+    const card = page.locator("article", { hasText: "voicenotes" }).first();
+    await card.getByRole("button", { name: /^Review/ }).click();
+    const dialog = page.locator('[data-testid="review-dialog"]');
+    await dialog.locator(".review-groups input[type=checkbox]").first().waitFor({ state: "visible", timeout: 30_000 });
+    await dialog.getByRole("button", { name: "Process selected" }).click();
+    const entry = dialog.locator(".review-row").first();
+    await entry.waitFor({ state: "visible", timeout: 60_000 });
 
-    await page.locator('sl-button[data-action="review-discard"]').first().click();
-    await page.locator("#confirmDialog[open]").waitFor({ state: "visible" });
-    await page.locator("#confirmButton").click();
+    await entry.getByRole("button", { name: "Discard" }).click();
+    const confirm = page.locator('[data-testid="confirm-dialog"]');
+    await confirm.waitFor({ state: "visible" });
+    await confirm.getByRole("button", { name: "Discard" }).click();
 
     const discarded = await waitFor(async () => {
       const state = await (await fetch(`${base}/api/state`)).json();
@@ -238,11 +234,11 @@ test("ui: archive folders (cleanup disabled) expose no Cleanup button", { skip: 
 
     const page = await browser.newPage();
     await page.goto(base);
-    const archiveCard = page.locator(".folder-card", { hasText: "archive" }).first();
+    const archiveCard = page.locator("article", { hasText: "archive" }).first();
     await archiveCard.waitFor({ state: "visible" });
-    assert.equal(await archiveCard.locator('sl-button[data-action="cleanup"]').count(), 0, "cleanup must be hidden for cleanup:false folders");
-    const voicenotesCard = page.locator(".folder-card", { hasText: "voicenotes" }).first();
-    assert.equal(await voicenotesCard.locator('sl-button[data-action="review"]').count(), 1, "manual folders expose Review");
+    assert.equal(await archiveCard.getByRole("button", { name: /Cleanup/ }).count(), 0, "cleanup must be hidden for cleanup:false folders");
+    const voicenotesCard = page.locator("article", { hasText: "voicenotes" }).first();
+    assert.equal(await voicenotesCard.getByRole("button", { name: /^Review/ }).count(), 1, "manual folders expose Review");
   } finally {
     await browser.close();
     await daemon.stop();

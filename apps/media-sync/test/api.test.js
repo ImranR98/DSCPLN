@@ -102,19 +102,11 @@ test("api: health, state, pause, process-now, config validation", async () => {
     const page = await fetch(`${base}/`);
     assert.equal(page.status, 200);
     assert.match(page.headers.get("content-type"), /text\/html/);
-    assert.match(await page.text(), /D\$CPLN . Media Sync/);
-    // The UI is styled entirely by the shared kit (no per-app stylesheet).
-    const css = await fetch(`${base}/ui/style.css`);
-    assert.equal(css.status, 200);
-    assert.match(css.headers.get("content-type"), /text\/css/);
-    const font = await fetch(`${base}/ui/fonts/inter-latin-wght-normal.woff2`);
-    assert.equal(font.status, 200);
-    assert.match(font.headers.get("content-type"), /font\/woff2/);
-    const shoelace = await fetch(`${base}/ui/vendor/shoelace/shoelace.js`);
-    assert.equal(shoelace.status, 200);
-    assert.match(shoelace.headers.get("content-type"), /javascript/);
-    const shoelaceTheme = await fetch(`${base}/ui/vendor/shoelace/theme-light.css`);
-    assert.equal(shoelaceTheme.status, 200);
+    const html = await page.text();
+    assert.match(html, /<title>D\$CPLN &middot; Media Sync<\/title>/);
+    const asset = /src="\.\/(assets\/[^"]+\.js)"/.exec(html)?.[1];
+    assert.ok(asset, "the built UI bundle must be referenced");
+    assert.equal((await fetch(`${base}/${asset}`)).status, 200);
     const traversal = await fetch(`${base}/../src/api.js`);
     assert.equal(traversal.status, 404);
   } finally {
@@ -449,7 +441,7 @@ test("api: the app mounts under BASE_PATH with the shared kit", async () => {
     assert.equal(page.status, 200);
     const html = await page.text();
     assert.match(html, /<base href="\/media\/">/);
-    assert.match(html, /<title>D\$CPLN . Media Sync<\/title>/);
+    assert.match(html, /<title>D\$CPLN &middot; Media Sync<\/title>/);
 
     const state = await (await fetch(`${base}/media/api/state`)).json();
     assert.equal(state.folders.length, 1);
@@ -457,8 +449,12 @@ test("api: the app mounts under BASE_PATH with the shared kit", async () => {
     const health = await fetch(`${base}/media/api/health`);
     assert.equal(health.status, 200);
 
-    const ui = await fetch(`${base}/media/ui/core.js`);
-    assert.equal(ui.status, 200);
+    const index = await fetch(`${base}/media/`);
+    const indexHtml = await index.text();
+    const asset = /src="\.\/(assets\/[^"]+\.js)"/.exec(indexHtml)?.[1];
+    assert.ok(asset, "the built UI bundle must be referenced");
+    const bundle = await fetch(`${base}/media/${asset}`);
+    assert.equal(bundle.status, 200);
 
     const crossOrigin = await fetch(`${base}/media/api/pause`, {
       method: "POST",

@@ -1,6 +1,9 @@
 {
-  "type": "commonjs",
+  "name": "dscpln-watxt",
+  "version": "1.0.0",
   "private": true,
+  "description": "WhatsApp TXT: browse, search, import and merge WhatsApp chat exports",
+  "type": "commonjs",
   "scripts": {
     "start": "node server.mjs",
     "check": "node checkFormat.js",
@@ -9,9 +12,7 @@
     "test": "node checkFormat.js --check-examples && node --test tests/*.test.mjs"
   },
   "dependencies": {
+    "@dscpln/server-kit": "*",
     "express": "^4.21.2"
-  },
-  "devDependencies": {
-    "playwright-core": "^1.63.0"
   }
 }

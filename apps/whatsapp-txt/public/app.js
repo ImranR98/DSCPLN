@@ -2,7 +2,7 @@ const $ = (selector) => document.querySelector(selector)
 const $$ = (selector) => [...document.querySelectorAll(selector)]
 
 const api = async (route, params) => {
-    const url = new URL(route, location.origin)
+    const url = new URL(window.DSCPLN.apiUrl(route))
     for (const [key, value] of Object.entries(params ?? {})) {
         if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value)
     }
@@ -759,7 +759,7 @@ const reload = async () => {
     button.disabled = true
     button.querySelector('svg')?.classList.add('spin')
     try {
-        state.meta = await fetch('/api/reload', { method: 'POST' }).then(response => response.json())
+        state.meta = await fetch(window.DSCPLN.apiUrl('/api/reload'), { method: 'POST' }).then(response => response.json())
         await refreshConversations()
         renderStatus()
         await handleRoute()
@@ -847,7 +847,7 @@ const chooseImportFiles = async (fileList) => {
         importState.files.push(entry)
         renderImportList()
         try {
-            const response = await fetch(`/api/import/upload?batch=${encodeURIComponent(importState.batch)}&name=${encodeURIComponent(file.name)}`, {
+            const response = await fetch(window.DSCPLN.apiUrl(`/api/import/upload?batch=${encodeURIComponent(importState.batch)}&name=${encodeURIComponent(file.name)}`), {
                 method: 'POST',
                 body: file
             })
@@ -885,7 +885,7 @@ const runImport = async (dryRun) => {
     renderImportList()
     setImportStatus(dryRun ? 'Building preview…' : 'Merging…')
     try {
-        const response = await fetch('/api/import/merge', {
+        const response = await fetch(window.DSCPLN.apiUrl('/api/import/merge'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ batch: importState.batch, dryRun })
@@ -915,7 +915,7 @@ const runImport = async (dryRun) => {
 
 const discardImport = async () => {
     if (!importState.batch) return
-    await fetch('/api/import/cancel', {
+    await fetch(window.DSCPLN.apiUrl('/api/import/cancel'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ batch: importState.batch })

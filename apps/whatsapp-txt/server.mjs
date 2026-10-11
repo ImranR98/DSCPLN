@@ -17,6 +17,7 @@ import { createRequire } from 'node:module'
 import { execFile as execFileCallback } from 'node:child_process'
 import { parseArgs, promisify } from 'node:util'
 import express from 'express'
+import { createApp as createKitApp } from '@dscpln/server-kit'
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public')
 const MESSAGE_TYPES = new Set(['text', 'media', 'attachment', 'deleted', 'system'])
@@ -248,21 +249,29 @@ const checkSameOrigin = (req, res, next) => {
     next()
 }
 
-export const createApp = (state) => {
-    const app = express()
-    app.disable('x-powered-by')
-    app.use(express.static(PUBLIC_DIR))
-    app.use('/api/import', express.json({ limit: '1mb' }))
+export const createApp = (state, options = {}) => {
+    // Served through the shared server kit: base-path mounting (BASE_PATH),
+    // HTML injection, CSRF origin check, /ui kit assets and /api/health.
+    const basePath = options.basePath ?? process.env.BASE_PATH ?? ''
+    const app = createKitApp({
+        title: 'WhatsApp TXT',
+        pageTitle: null,
+        basePath,
+        staticDir: PUBLIC_DIR,
+        jsonBody: false, // /api/import/upload streams raw bytes
+        healthExtra: () => ({ conversations: state.index.conversations.length }),
+        routes: (router) => {
+            router.use('/api/import', express.json({ limit: '1mb' }))
 
-    app.get('/api/state', (req, res) => {
+            router.get('/api/state', (req, res) => {
         res.json(stateSummary(state.index, state.watching))
     })
 
-    app.get('/api/conversations', (req, res) => {
+            router.get('/api/conversations', (req, res) => {
         res.json(state.index.conversations.map(publicConversation))
     })
 
-    app.get('/api/conversations/:id/messages', (req, res) => {
+            router.get('/api/conversations/:id/messages', (req, res) => {
         const conversation = state.index.byId.get(req.params.id)
         if (!conversation) return res.status(404).json({ error: 'conversation not found' })
         const limit = clamp(Number.parseInt(req.query.limit, 10) || 200, 1, 500)
@@ -283,13 +292,13 @@ export const createApp = (state) => {
         })
     })
 
-    app.get('/api/search', (req, res) => {
+            router.get('/api/search', (req, res) => {
         const result = searchIndex(state.index, req.query)
         if (result === null) return res.status(404).json({ error: 'conversation not found' })
         res.json(result)
     })
 
-    app.post('/api/reload', async (req, res) => {
+            router.post('/api/reload', async (req, res) => {
         try {
             await state.reload()
             res.json(stateSummary(state.index, state.watching))
@@ -301,7 +310,7 @@ export const createApp = (state) => {
     // --- importing exports --------------------------------------------------
 
     // Streams one uploaded file (raw body) into the batch's incoming directory.
-    app.post('/api/import/upload', checkSameOrigin, async (req, res) => {
+            router.post('/api/import/upload', checkSameOrigin, async (req, res) => {
         const batch = req.query.batch
         const name = uploadFileName(req.query.name)
         if (!safeBatchName(batch)) return res.status(400).json({ error: 'batch must match [A-Za-z0-9_-]{1,64}' })
@@ -343,7 +352,7 @@ export const createApp = (state) => {
 
     // Merges a batch's uploads into the data directory. `dryRun` previews
     // without touching anything (and keeps the batch for a real merge).
-    app.post('/api/import/merge', checkSameOrigin, async (req, res) => {
+            router.post('/api/import/merge', checkSameOrigin, async (req, res) => {
         const { batch } = req.body ?? {}
         const dryRun = req.body?.dryRun === true
         const dateOrder = req.body?.dateOrder ?? 'auto'
@@ -413,19 +422,20 @@ export const createApp = (state) => {
         }
     })
 
-    app.post('/api/import/cancel', checkSameOrigin, async (req, res) => {
+            router.post('/api/import/cancel', checkSameOrigin, async (req, res) => {
         const { batch } = req.body ?? {}
         if (!safeBatchName(batch)) return res.status(400).json({ error: 'batch must match [A-Za-z0-9_-]{1,64}' })
         await fsp.rm(path.join(state.incomingRoot, batch), { recursive: true, force: true })
         res.json({ ok: true })
     })
 
-    app.get('/api/import/last', (req, res) => {
+            router.get('/api/import/last', (req, res) => {
         res.json(state.lastImport ?? null)
     })
 
-    app.use('/api', (req, res) => res.status(404).json({ error: 'not found' }))
-    app.get('*', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')))
+            router.use('/api', (req, res) => res.status(404).json({ error: 'not found' }))
+        },
+    })
     return app
 }
 

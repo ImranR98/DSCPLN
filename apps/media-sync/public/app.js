@@ -4,7 +4,7 @@
 // the JSON API, and keeps itself fresh via Server-Sent Events. Interactive
 // components come from Shoelace (dialogs, buttons, inputs, badges, details).
 ;(function () {
-    const { el, requestJson, initTheme, showToast, formatBytes, formatTime, formatDateTime, formatDuration, icons } = window.IMM
+    const { el, apiUrl, requestJson, initTheme, showToast, formatBytes, formatTime, formatDateTime, formatDuration, icons } = window.DSCPLN
     const toastContainer = document.querySelector('#toasts')
     const $ = (selector) => document.querySelector(selector)
 
@@ -652,7 +652,7 @@
                 el('div', { class: 'review-row__main' },
                     el('span', { class: 'checklist__main', text: entry.destName }),
                     el('span', { class: 'checklist__meta', text: `${entry.chat || '(root)'} · ${entry.inputs.length} input${entry.inputs.length === 1 ? '' : 's'} · ${formatBytes(entry.size)}${entry.missingInputs?.length ? ` · ${entry.missingInputs.length} source(s) gone` : ''}` })),
-                el('audio', { controls: true, preload: 'none', src: `/api/review/file/${encodeURIComponent(folder.name)}/${encodeURIComponent(entry.id)}` }),
+                el('audio', { controls: true, preload: 'none', src: apiUrl(`api/review/file/${encodeURIComponent(folder.name)}/${encodeURIComponent(entry.id)}`) }),
                 el('div', { class: 'review-row__actions' },
                     button({ variant: 'primary', dataset: { action: 'review-place', folder: folder.name, id: entry.id } }, 'Place'),
                     button({ variant: 'danger', dataset: { action: 'review-discard', folder: folder.name, id: entry.id } }, 'Discard')))
@@ -1073,7 +1073,7 @@
     }
 
     let refreshTimer = null
-    new EventSource('/api/events').onmessage = () => {
+    new EventSource(apiUrl('api/events')).onmessage = () => {
         clearTimeout(refreshTimer)
         refreshTimer = setTimeout(() => {
             refresh()

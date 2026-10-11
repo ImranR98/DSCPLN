@@ -876,3 +876,6 @@ select:focus-visible,
     .skeleton, .spin { animation: none; }
     .sidebar { transition: none; }
 }
+
+.brand-accent { color: var(--accent, #2563eb); }
+.brand-suffix { font-weight: 500; opacity: 0.75; }

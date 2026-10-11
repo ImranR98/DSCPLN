@@ -241,10 +241,14 @@ export function createApp(options = {}) {
 
   router.use('/api', api)
 
-  // Root-level health for probes that do not know the base path.
-  app.get('/api/health', (req, res) => {
-    res.json({ ok: true, app: title, basePath: normalizedBase })
-  })
+  // Root-level health alias for probes that do not know the base path. Only
+  // registered when the app is mounted at a prefix; at the root the router's
+  // /api/health (which apps may override) answers instead.
+  if (normalizedBase) {
+    app.get('/api/health', (req, res) => {
+      res.json({ ok: true, app: title, basePath: normalizedBase })
+    })
+  }
 
   app.use(normalizedBase || '/', router)
 

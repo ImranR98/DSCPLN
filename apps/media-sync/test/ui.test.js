@@ -123,7 +123,7 @@ test("ui: review a parked voice note from the browser and place it", { skip: !CA
 
     // Preview stream is reachable and range-capable.
     const audioSrc = await entry.locator("audio").getAttribute("src");
-    const preview = await page.request.get(`${base}${audioSrc}`);
+    const preview = await page.request.get(new URL(audioSrc, base).toString());
     assert.equal(preview.status(), 200);
 
     await page.locator('sl-button[data-action="review-place"]').first().click();

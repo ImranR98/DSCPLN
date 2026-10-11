@@ -54,6 +54,12 @@ bctl_first_glob() {  # PATTERN — print first match (e.g. MTP mounts)
 bctl_ensure_media_sync() {  # CLI — install the CLI's dependencies once
   local cli="$1" dir
   dir="$(cd "$(dirname "$cli")/.." && pwd)"
+  if [[ ! -f "$dir/package-lock.json" ]]; then
+    # Monorepo checkout or baked image: the workspace install already provides
+    # the CLI's dependencies (no per-app node_modules).
+    log "Media Sync runs from the monorepo install in $dir; skipping npm ci."
+    return 0
+  fi
   if [[ ! -d "$dir/node_modules" ]]; then
     log "Installing Media Sync CLI dependencies in $dir..."
     (cd "$dir" && npm ci --omit=dev)

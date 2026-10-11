@@ -19,7 +19,7 @@ function have(cmd) {
 
 const CAN_RUN = have("ffmpeg") && have("exiftool") && have("ffprobe");
 
-async function makeDaemon() {
+async function makeDaemon(options = {}) {
   const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-api-"));
   const configPath = path.join(root, "config.json");
   await fsp.mkdir(path.join(root, "src"), { recursive: true });
@@ -52,7 +52,7 @@ async function makeDaemon() {
     ],
   };
   await fsp.writeFile(configPath, JSON.stringify(config, null, 2));
-  const daemon = new Daemon(configPath, {});
+  const daemon = new Daemon(configPath, options);
   await daemon.start();
   const port = daemon.api.server.address().port;
   return { root, daemon, base: `http://127.0.0.1:${port}` };
@@ -102,17 +102,17 @@ test("api: health, state, pause, process-now, config validation", async () => {
     const page = await fetch(`${base}/`);
     assert.equal(page.status, 200);
     assert.match(page.headers.get("content-type"), /text\/html/);
-    assert.match(await page.text(), /Media Sync/);
+    assert.match(await page.text(), /D\$CPLN . Media Sync/);
     const css = await fetch(`${base}/style.css`);
     assert.equal(css.status, 200);
     assert.match(css.headers.get("content-type"), /text\/css/);
-    const font = await fetch(`${base}/fonts/inter-latin-wght-normal.woff2`);
+    const font = await fetch(`${base}/ui/fonts/inter-latin-wght-normal.woff2`);
     assert.equal(font.status, 200);
     assert.match(font.headers.get("content-type"), /font\/woff2/);
-    const shoelace = await fetch(`${base}/vendor/shoelace/shoelace.js`);
+    const shoelace = await fetch(`${base}/ui/vendor/shoelace/shoelace.js`);
     assert.equal(shoelace.status, 200);
     assert.match(shoelace.headers.get("content-type"), /javascript/);
-    const shoelaceTheme = await fetch(`${base}/vendor/shoelace/theme-light.css`);
+    const shoelaceTheme = await fetch(`${base}/ui/vendor/shoelace/theme-light.css`);
     assert.equal(shoelaceTheme.status, 200);
     const traversal = await fetch(`${base}/../src/api.js`);
     assert.equal(traversal.status, 404);
@@ -193,7 +193,7 @@ test("api: ntfy test endpoint posts to the supplied URL", async () => {
   }
 });
 
-async function makeReviewDaemon() {
+async function makeReviewDaemon(options = {}) {
   const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-api-review-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
@@ -242,7 +242,7 @@ async function makeReviewDaemon() {
     ],
   };
   await fsp.writeFile(configPath, JSON.stringify(config, null, 2));
-  const daemon = new Daemon(configPath, {});
+  const daemon = new Daemon(configPath, options);
   await daemon.start();
   const port = daemon.api.server.address().port;
   return { root, daemon, base: `http://127.0.0.1:${port}`, src, dest };
@@ -435,6 +435,36 @@ test("api: discard-all clears every parked entry without touching the destinatio
     assert.deepEqual(await fsp.readdir(dest), []);
     assert.equal(daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0001.opus").status, STATUS.DISCARDED);
     assert.equal(daemon.store.fileFor("voicenotes", "201301/PTT-20190530-WA0001.opus").status, STATUS.DISCARDED);
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("api: the app mounts under BASE_PATH with the shared kit", async () => {
+  const { root, daemon, base } = await makeDaemon({ basePath: "/media" });
+  try {
+    const page = await fetch(`${base}/media`);
+    assert.equal(page.status, 200);
+    const html = await page.text();
+    assert.match(html, /<base href="\/media\/">/);
+    assert.match(html, /<title>D\$CPLN . Media Sync<\/title>/);
+
+    const state = await (await fetch(`${base}/media/api/state`)).json();
+    assert.equal(state.folders.length, 1);
+
+    const health = await fetch(`${base}/media/api/health`);
+    assert.equal(health.status, 200);
+
+    const ui = await fetch(`${base}/media/ui/core.js`);
+    assert.equal(ui.status, 200);
+
+    const crossOrigin = await fetch(`${base}/media/api/pause`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: "http://evil.example" },
+      body: JSON.stringify({ paused: true }),
+    });
+    assert.equal(crossOrigin.status, 403);
   } finally {
     await daemon.stop();
     await fsp.rm(root, { recursive: true, force: true });

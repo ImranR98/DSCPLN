@@ -347,3 +347,35 @@ test('api: import extracts zipped exports (including nested zips) and strips vcf
         assert.equal(fs.existsSync(path.join(dir, '20240115 - Zipped.json')), true)
     })
 })
+
+test('base path: the app mounts under BASE_PATH with the shared kit', async () => {
+    const dir = makeDataDir()
+    const state = { index: buildIndex(dir), watching: false, reload: async () => {} }
+    const app = createApp(state, { basePath: '/watxt' })
+    const server = await new Promise(resolve => {
+        const s = app.listen(0, '127.0.0.1', () => resolve(s))
+    })
+    try {
+        const base = `http://127.0.0.1:${server.address().port}`
+        const page = await fetch(`${base}/watxt`)
+        assert.equal(page.status, 200)
+        const html = await page.text()
+        assert.match(html, /<base href="\/watxt\/">/)
+        assert.match(html, /<title>D\$CPLN . WhatsApp TXT<\/title>/)
+
+        const meta = await getJson(base, '/watxt/api/state')
+        assert.equal(meta.status, 200)
+        assert.equal(meta.body.conversations, 2)
+
+        const ui = await fetch(`${base}/watxt/ui/core.js`)
+        assert.equal(ui.status, 200)
+
+        const crossOrigin = await fetch(`${base}/watxt/api/reload`, {
+            method: 'POST',
+            headers: { Origin: 'http://evil.example' }
+        })
+        assert.equal(crossOrigin.status, 403)
+    } finally {
+        server.close()
+    }
+})

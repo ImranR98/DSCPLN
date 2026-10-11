@@ -6,13 +6,11 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# Monorepo install (build context = repo root).
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
-
-COPY ExifTool.config ./
-COPY src ./src
-COPY bin ./bin
-COPY public ./public
+COPY packages ./packages
+COPY apps ./apps
+RUN npm install --omit=dev --no-audit --no-fund
 
 ENV NODE_ENV=production
 # Writable home so the app's "~" defaults resolve inside the mounted config
@@ -20,4 +18,7 @@ ENV NODE_ENV=production
 ENV HOME=/config
 EXPOSE 8791
 
-ENTRYPOINT ["node", "src/index.js", "--config", "/config/config.json", "--bind", "0.0.0.0"]
+ENTRYPOINT ["node", "apps/media-sync/src/index.js", "--config", "/config/config.json", "--bind", "0.0.0.0"]
+
+# Build from the monorepo root:
+#   podman build --platform linux/amd64 -f apps/media-sync/Dockerfile -t docker.io/imranrdev/dscpln-media-sync:latest .

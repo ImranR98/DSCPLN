@@ -70,6 +70,7 @@ export default {
         // Aegis 2FA vault export -> aegis-export.json.
         {
           name: 'Aegis 2FA',
+          host: 'srv0',
           serial_key: 'manual',
           uploads: true,
           glob: 'aegis-*.json',
@@ -86,6 +87,7 @@ export default {
         // DNS zone file (example.com.txt), kept under its own name.
         {
           name: 'example.com DNS Records',
+          host: 'srv0',
           serial_key: 'manual',
           uploads: true,
           summary_last_line: true,
@@ -100,6 +102,7 @@ export default {
         // (dconf dump first, cleanup after).
         {
           name: 'PC Files',
+          host: 'pc',
           state_dir: '{{maindir}}/Backups/PC Files',
           summary_last_line: true,
           note: 'Backs up config files, SSH keys, and shell history from this PC into git.',
@@ -111,6 +114,7 @@ export default {
         // (fed to sudo -S over SSH, since the tar stream leaves no tty).
         {
           name: 'Infra Compose State',
+          host: 'pc',
           state_dir: '{{maindir}}/Infra',
           require: ['srv0_password'],
           note: "Pulls compose state from the infra hosts via infra.sh. You will be asked for srv0's sudo password.",
@@ -126,6 +130,7 @@ export default {
         // Obtainium app list export -> Obtainium.json.
         {
           name: 'Obtainium Apps',
+          host: 'srv0',
           serial_key: 'manual',
           uploads: true,
           summary_last_line: true,
@@ -138,6 +143,7 @@ export default {
         // ntfy subscriptions export -> ntfy-subscriptions.json.
         {
           name: 'Ntfy Subscriptions',
+          host: 'srv0',
           serial_key: 'manual',
           uploads: true,
           summary_last_line: true,
@@ -155,6 +161,7 @@ export default {
         // Cheogram (XMPP) backup.
         {
           name: 'Cheogram (CEB)',
+          host: 'srv0',
           serial_key: 'manual',
           uploads: true,
           summary_last_line: true,
@@ -168,6 +175,7 @@ export default {
         // metadata) from the backup folder; stored under those names.
         {
           name: 'Molly (Signal)',
+          host: 'srv0',
           serial_key: 'manual',
           uploads: true,
           summary_last_line: true,
@@ -230,6 +238,7 @@ export default {
         // Pull recent Wealthsimple transactions; paste into D$CPLN.
         {
           name: 'Wealthsimple Recents to D$CPLN',
+          host: 'pc',
           state_dir: '{{maindir}}/Documents/Balance',
           cwd: '{{scriptroot}}/Wealthsimpleton',
           serial_key: 'selenium-browser',
@@ -246,6 +255,7 @@ export default {
         // Scrape recent Instacart order history and delivery images.
         {
           name: 'Instacart Orders',
+          host: 'pc',
           state_dir: '{{maindir}}/Backups/Instacart',
           serial_key: 'selenium-browser',
           note: 'Scrapes recent Instacart order history and delivery images.',
@@ -264,6 +274,7 @@ export default {
         // Run the backup script on bigpc over SSH and pull the results down.
         {
           name: 'Wine Game Save Files',
+          host: 'pc',
           state_dir: '{{maindir}}/Backups/Game Save Files',
           note: 'Runs the backup script on bigpc over SSH and pulls the results down.',
           commands: [
@@ -279,6 +290,7 @@ export default {
         // Download YouTube Music playlists into the music folder.
         {
           name: 'Music (YouTube Music Download)',
+          host: 'pc',
           state_dir: '{{maindir}}/Media/Music',
           cwd: '{{scriptroot}}/YTMusicDL',
           note: 'Downloads YouTube Music playlists into the music folder.',
@@ -288,6 +300,7 @@ export default {
         // Import Quest screenshots and video clips (requires the Quest connected).
         {
           name: 'Quest Media',
+          host: 'pc',
           summary_last_line: true,
           state_dir: '{{maindir}}/Media/Camera',
           root: '{{quest_root}}',
@@ -304,6 +317,7 @@ log "Media import completed"
         // Copy ModData, ModsBeforeFriday, and Android from the connected Quest.
         {
           name: 'Quest Files',
+          host: 'pc',
           summary_last_line: true,
           state_dir: '{{maindir}}/Backups/Meta_Quest',
           root: '{{quest_root}}',
@@ -320,6 +334,7 @@ log "Media import completed"
         // Drop the contacts (VCF) and calendar (ICS) exports; rename each by pattern.
         {
           name: 'Contacts + Calendar (VCF+ICS)',
+          host: 'srv0',
           serial_key: 'manual',
           glob: ['*.vcf', '*.ics'],
           state_dir: '{{manual_dir}}',
@@ -345,6 +360,7 @@ log "Files → $DEST"
         // Browser bookmarks export -> bookmarks.html.
         {
           name: 'Bookmarks',
+          host: 'srv0',
           serial_key: 'manual',
           glob: 'bookmarks_*.html',
           state_dir: '{{manual_dir}}',
@@ -355,6 +371,7 @@ log "Files → $DEST"
         // AntennaPod feeds (OPML) and/or DB backup, renamed per pattern.
         {
           name: 'AntennaPod (Feeds + DB)',
+          host: 'srv0',
           serial_key: 'manual',
           glob: ['antennapod-feeds-*.opml', 'AntennaPodBackup-*.db'],
           state_dir: '{{manual_dir}}',
@@ -376,6 +393,7 @@ log "Files → $DEST"
         // Read You RSS feeds export -> RSS.opml.
         {
           name: 'RSS (Read You)',
+          host: 'srv0',
           serial_key: 'manual',
           glob: 'Read-You-*.opml',
           state_dir: '{{manual_dir}}',

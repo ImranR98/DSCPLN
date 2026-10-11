@@ -12,6 +12,34 @@ npm start      # = node server.mjs — config.mjs is committed; edit it to match
 
 This starts a local server (http://127.0.0.1:8080) and opens your browser. To run without opening a browser: `node server.mjs --no-browser`. Different port: `node server.mjs --port 8081`. Unknown flags are an error (`--help` shows the options).
 
+### The same app on the server (bridge instance)
+
+backupctl also runs as a container on the always-on server (`srv0`) against the
+synced `~/Main` tree, so every upload/ingest task is usable from any browser
+(behind the SSO proxy) while PC-bound tasks keep running on the PC. The same
+`config.mjs` is used by both; the `host:` field pins tasks to a machine:
+
+- `host: 'any'` (default) — runs on any instance.
+- `host: 'pc'` — e.g. local files (`PC Files`), device mounts (Quest), personal
+  browser profiles (Selenium scrapers); shown as `Pinned to pc` on the server.
+- `host: 'srv0'` — e.g. the manual-export tasks that git-commit to
+  `Backups/Manual`, so all such commits happen from one machine.
+
+The instance identity comes from `BACKUPCTL_HOST` (default `pc`). The container
+(see `Dockerfile`/`build.sh`) mounts `~/Main` at the same path and uses a
+mounted config:
+
+```sh
+BACKUPCTL_HOST=srv0 \
+BACKUPCTL_CONFIG_FILE=/config-src/config.mjs \
+BACKUPCTL_STATE_DIR=$HOME/.backupctl \
+BACKUPCTL_TMP_DIR=$HOME/tmp \
+node server.mjs --host 0.0.0.0 --port 8085 --no-browser
+```
+
+Deployment for the home k3s stack lives in the Infra repo
+(`targets/srv0/k3s-apps/templates/backupctl.yaml`).
+
 ## What you see
 
 A **drop zone at the top** detects what kind of export you're uploading from the filename and asks for confirmation before running the matching task (e.g. `medium-export-*.zip` → Medium). If the file matches no task, or is ambiguous, you're told / asked. Cancelling just leaves the files on their cards. Task cards are grouped into categories (Apps & Accounts, Social Media, Chats, Finance, Devices, System Backups, Tools); each card has:
@@ -34,7 +62,7 @@ Placeholders like `{{maindir}}` or `{{hosts.bigpc.host}}` inside command strings
 
 ### Task fields
 
-Common: `name`, `note` (help text, shown inside the drop zone for upload tasks), `state_dir` (where the run state `.backup-state-<task>.json` lives; boot fails loudly if missing), `serial_key` (optional; tasks sharing a key run one at a time), `prompts`, `export_url` (optional; shows a "Generate Export" button on the card that opens the service's export page). The task's category is its group's `name`.
+Common: `name`, `note` (help text, shown inside the drop zone for upload tasks), `state_dir` (where the run state `.backup-state-<task>.json` lives; boot fails loudly if missing), `serial_key` (optional; tasks sharing a key run one at a time), `host` (optional machine pin: `pc`, `srv0`, or `any` — the default), `prompts`, `export_url` (optional; shows a "Generate Export" button on the card that opens the service's export page). The task's category is its group's `name`.
 
 Runner: every task is defined by exactly one of `commands` (bash string or list), `script:`, `move:`, or `ingest:` — the shorthands are normalized into a command at config load. `cwd`, `uploads: true` + `glob` (drop zone; glob may be a list of patterns), `require: [key...]` (fail unless each prompt key has a value), `capture: true` + `commit_dir` (output becomes the summary, shown in a copy/paste dialog whose Done button git-commits `commit_dir`), `root:` (source directory the card requires; glob-aware, drives the availability badge), `summary_last_line: true` (card summary = last non-command log line).
 

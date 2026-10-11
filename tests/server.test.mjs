@@ -933,3 +933,56 @@ test('API: /api/log returns the last run output', async () => {
   assert.equal(res.status, 404);
   await close();
 });
+
+test('availability: host pins gate tasks to the matching instance', () => {
+  const previous = process.env.BACKUPCTL_HOST;
+  try {
+    process.env.BACKUPCTL_HOST = 'srv0';
+    assert.equal(bctl.instanceHost(), 'srv0');
+    assert.deepEqual(bctl.availability({ host: 'any' }, { host: 'srv0' }), [true, '']);
+    assert.deepEqual(bctl.availability({}, { host: 'srv0' }), [true, '']);
+    assert.deepEqual(bctl.availability({ host: 'srv0' }, { host: 'srv0' }), [true, '']);
+    assert.deepEqual(bctl.availability({ host: 'pc' }, { host: 'srv0' }), [false, 'Pinned to pc']);
+    assert.deepEqual(bctl.availability({ host: 'pc' }, { host: 'pc' }), [true, '']);
+    // falls back to the instance identity when no local host is given
+    assert.deepEqual(bctl.availability({ host: 'srv0' }, {}), [true, '']);
+    delete process.env.BACKUPCTL_HOST;
+    assert.equal(bctl.instanceHost(), 'pc');
+  } finally {
+    if (previous === undefined) delete process.env.BACKUPCTL_HOST;
+    else process.env.BACKUPCTL_HOST = previous;
+  }
+});
+
+test('API: host-pinned tasks are unavailable with a reason on the wrong instance', async () => {
+  const previous = process.env.BACKUPCTL_HOST;
+  try {
+    process.env.BACKUPCTL_HOST = 'srv0';
+    await bootWith(makeConfig([
+      task('Anywhere', { commands: 'true' }),
+      task('Pc Only', { host: 'pc', commands: 'true' }),
+      task('Server Only', { host: 'srv0', commands: 'true' }),
+    ]));
+    const { req, close } = await api();
+    const res = await req('GET', '/api/tasks');
+    const byName = Object.fromEntries(res.json.groups[0].tasks.map((t) => [t.name, t]));
+    assert.equal(byName['Anywhere'].avail, true);
+    assert.equal(byName['Pc Only'].avail, false);
+    assert.equal(byName['Pc Only'].avail_reason, 'Pinned to pc');
+    assert.equal(byName['Server Only'].avail, true);
+    await close();
+  } finally {
+    if (previous === undefined) delete process.env.BACKUPCTL_HOST;
+    else process.env.BACKUPCTL_HOST = previous;
+  }
+});
+
+test('config: host must be a machine name string', async () => {
+  await assert.rejects(
+    () => bctl.loadConfig(makeConfig([task('Bad Host', { host: 42, commands: 'true' })])),
+    /host must be a machine name/,
+  );
+  const [local, tasks] = await bctl.loadConfig(makeConfig([task('Ok Host', { commands: 'true' })]));
+  assert.equal(tasks[0].host, 'any');
+  assert.equal(typeof local.host, 'undefined', 'local.host is set at boot, not by loadConfig');
+});

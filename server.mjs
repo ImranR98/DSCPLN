@@ -98,6 +98,10 @@ export async function loadConfig(configPath = CONFIG_FILE) {
       }
       if (taskSeen.has(merged.name)) throw new ConfigError(`Duplicate task name: '${merged.name}'`);
       taskSeen.add(merged.name);
+      if (merged.host !== undefined && (typeof merged.host !== 'string' || !merged.host.trim())) {
+        throw new ConfigError(`Task '${merged.name}': host must be a machine name`);
+      }
+      merged.host ??= 'any';
       tasks.push(merged);
     }
   }
@@ -377,8 +381,7 @@ export function humanAgo(ts) {
   return `${Math.floor(delta / (365 * DAY_SECONDS))} years ago`;
 }
 
-/* Does a path pattern exist? Glob-aware, drives the availability badge. */
-export function pathFound(pattern) {
+/* Does a path pattern exist? Glob-aware, drives the availability badge. */export function pathFound(pattern) {
   if (/[*?\[]/.test(pattern)) {
     try {
       return fs.globSync(pattern).length > 0;
@@ -457,7 +460,16 @@ export async function runCommands(ctx) {
 
 // task metadata + dispatcher -------------------------------------------------
 
+/* The machine this instance represents (`pc`, `srv0`, ...). Tasks pinned with
+ * `host:` only run on their machine; tasks without a pin run anywhere. */
+export function instanceHost() {
+  return process.env.BACKUPCTL_HOST || 'pc';
+}
+
 export function availability(task, local) {
+  const host = task.host ?? 'any';
+  const here = local?.host ?? instanceHost();
+  if (host !== 'any' && host !== here) return [false, `Pinned to ${host}`];
   // tasks with a `root` (e.g. device mounts) are unavailable when missing
   const rootRaw = task.root;
   if (rootRaw) {
@@ -534,6 +546,7 @@ export let TASK_MAP = new Map();
 export async function boot(configPath = undefined) {
   try {
     [LOCAL, TASK_LIST] = await loadConfig(configPath);
+    LOCAL.host = instanceHost();
   } catch (e) {
     if (e instanceof ConfigMissingError) {
       console.warn(`WARNING: ${e.message}`);
@@ -649,6 +662,7 @@ export function taskJson(t) {
     name: t.name,
     group: t.group,
     note: t.note,
+    host: t.host,
     prompts: t.prompts ?? [],
     uploads: supportsUploads(t),
     export_url: t.export_url,

@@ -103,7 +103,7 @@ test("api: health, state, pause, process-now, config validation", async () => {
     assert.equal(page.status, 200);
     assert.match(page.headers.get("content-type"), /text\/html/);
     const html = await page.text();
-    assert.match(html, /<title>D\$CPLN &middot; Media Sync<\/title>/);
+    assert.match(html, /<title>D\$CPLN ⋅ Media Sync<\/title>/);
     const asset = /src="\.\/(assets\/[^"]+\.js)"/.exec(html)?.[1];
     assert.ok(asset, "the built UI bundle must be referenced");
     assert.equal((await fetch(`${base}/${asset}`)).status, 200);
@@ -441,7 +441,7 @@ test("api: the app mounts under BASE_PATH with the shared kit", async () => {
     assert.equal(page.status, 200);
     const html = await page.text();
     assert.match(html, /<base href="\/media\/">/);
-    assert.match(html, /<title>D\$CPLN &middot; Media Sync<\/title>/);
+    assert.match(html, /<title>D\$CPLN ⋅ Media Sync<\/title>/);
 
     const state = await (await fetch(`${base}/media/api/state`)).json();
     assert.equal(state.folders.length, 1);

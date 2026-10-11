@@ -50,10 +50,11 @@ test("moveIntoPlace places a file when the destination is free", async () => {
   }
 });
 
-test("default config uses the PC screenrecs path", () => {
+test("default config ships no personal paths or folders", () => {
   const cfg = defaultConfig();
-  const screenrecs = cfg.folders.find((f) => f.name === "Screen Recs");
-  assert.ok(screenrecs.source.endsWith("deviceSync/ScreenRecs"), `unexpected: ${screenrecs.source}`);
+  assert.deepEqual(cfg.folders, []);
+  assert.ok(cfg.stagingDir.startsWith("~/.media-sync/"));
+  assert.ok(cfg.syncLockFile.startsWith("~/.media-sync/"));
 });
 
 test("replaceIntoPlace replaces atomically and leaves no temp files", async () => {

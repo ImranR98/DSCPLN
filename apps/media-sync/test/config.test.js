@@ -15,7 +15,7 @@ test("fresh boot writes an empty config (no folders)", async () => {
     assert.deepEqual(written.folders, []);
     assert.ok(written.stagingDir);
     assert.ok(written.trashDir);
-    assert.ok(written.syncLockFile.endsWith("deviceSync/.media-sync.lock"));
+    assert.ok(written.syncLockFile.endsWith(".media-sync/lock.json"));
   } finally {
     await fsp.rm(dir, { recursive: true, force: true });
   }

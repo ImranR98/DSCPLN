@@ -61,10 +61,23 @@ export function isHiddenName(name) {
 }
 
 export function isTempName(name) {
-  if (isHiddenName(name)) return true;
   if (name.endsWith(".tmp") || name.endsWith(".part") || name.endsWith("!sync")) return true;
-  if (name.includes(".sync-conflict-")) return false;
   return false;
+}
+
+// Files/folders that are never ingested regardless of includeHidden: Syncthing
+// internals/partials, media-sync scratch files and similar sync/temp artifacts.
+export function isSyncOrTempName(name) {
+  if (isTempName(name)) return true;
+  if (name === ".stfolder" || name === ".stversions" || name === ".stignore" || name.startsWith(".stignore.")) return true;
+  if (name.startsWith(".syncthing")) return true;
+  if (name.startsWith(".media-sync")) return true;
+  return false;
+}
+
+export function shouldSkipName(name, includeHidden = false) {
+  if (isSyncOrTempName(name)) return true;
+  return !includeHidden && isHiddenName(name);
 }
 
 export function isSyncConflictName(name) {

@@ -20,23 +20,27 @@
         queued: 2,
         processing: 3,
         pending: 4,
-        done: 5,
-        duplicate: 6,
-        cleaned: 7,
-        ignored: 8,
+        review: 5,
+        done: 6,
+        duplicate: 7,
+        discarded: 8,
+        cleaned: 9,
+        ignored: 10,
     }
     const STATUS_VARIANT = {
         pending: 'neutral',
         queued: 'brand',
         processing: 'brand',
+        review: 'brand',
         done: 'success',
         duplicate: 'neutral',
         error: 'danger',
         conflict: 'warning',
+        discarded: 'neutral',
         ignored: 'neutral',
         cleaned: 'neutral',
     }
-    const METHOD_VARIANT = { standardize: 'brand', snapchat: 'neutral', copy: 'warning' }
+    const METHOD_VARIANT = { standardize: 'brand', snapchat: 'neutral', copy: 'warning', voicenotes: 'brand' }
     const FILE_LIMIT = 300
 
     /* ---------- small builders ---------- */
@@ -65,6 +69,22 @@
 
     const input = (fieldName, value, type = 'text') =>
         el('sl-input', { size: 'small', type, dataset: { field: fieldName }, value: value ?? '' })
+
+    const select = (fieldName, value, options) => {
+        const node = el('sl-select', { size: 'small', dataset: { field: fieldName } },
+            ...options.map((option) => el('sl-option', { value: option, text: option })))
+        node.setAttribute('value', value)
+        return node
+    }
+
+    const checkboxField = (fieldName, checked, label) => {
+        const node = el('sl-checkbox', { size: 'small', dataset: { field: fieldName } }, label)
+        if (checked) {
+            node.setAttribute('checked', '')
+        }
+        node.checked = checked
+        return node
+    }
 
     const fieldValue = (name) => {
         const node = document.querySelector(`#settingsBody [data-field="${name}"]`)
@@ -124,6 +144,13 @@
         const parts = [`settle ${formatDuration(folder.settleSeconds)}`]
         if (folder.method === 'snapchat') {
             parts.push(`window ${formatDuration(folder.groupWindowSeconds)}`)
+        }
+        if (folder.method === 'copy') {
+            parts.push(folder.recursive ? 'recursive mirror' : 'flat copy')
+            parts.push(`on change: ${folder.onChanged}`)
+        }
+        if (folder.placement === 'manual') {
+            parts.push('review before placing')
         }
         if (folder.filePattern) {
             parts.push(folder.filePattern)
@@ -199,6 +226,7 @@
         const processed = (counts.done || 0) + (counts.duplicate || 0)
         const issues = (counts.error || 0) + (counts.conflict || 0)
         const ignored = counts.ignored || 0
+        const reviewCount = counts.review || 0
         const considered = Math.max(1, total - ignored)
         const percent = Math.min(100, Math.round((processed / considered) * 100))
 
@@ -248,7 +276,11 @@
             el('code', { text: folder.destination })))
 
         const actions = [button({ dataset: { action: 'process', folder: folder.name } }, 'Process now')]
-        if (processed > 0) {
+        if (folder.placement === 'manual' || reviewCount > 0) {
+            actions.push(button({ variant: reviewCount > 0 ? 'primary' : undefined, dataset: { action: 'review', folder: folder.name } },
+                reviewCount > 0 ? `Review (${reviewCount})` : 'Review'))
+        }
+        if (processed > 0 && folder.cleanup !== false) {
             actions.push(button({ variant: 'primary', dataset: { action: 'cleanup', folder: folder.name } }, `Cleanup ${processed}`))
         }
         card.append(el('div', { class: 'folder-card__actions' }, actions))
@@ -545,6 +577,135 @@
         await restoreItems(items, dir)
     })
 
+    /* ---------- review (manual placement) ---------- */
+
+    const reviewDialog = $('#reviewDialog')
+    let reviewEntries = []
+    let pendingGroupIndex = new Map()
+
+    const datePatternRegex = new Map()
+
+    const groupDateOf = (base, pattern) => {
+        if (!pattern) {
+            return null
+        }
+        let regex = datePatternRegex.get(pattern)
+        if (!regex) {
+            try {
+                regex = new RegExp(pattern)
+            } catch (err) {
+                return null
+            }
+            datePatternRegex.set(pattern, regex)
+        }
+        const match = regex.exec(base)
+        if (!match) {
+            return null
+        }
+        const groups = match.slice(1).filter((part) => part !== undefined && part !== null && part !== '')
+        const raw = String(groups.length > 0 ? groups.join('') : match[0]).replace(/\D+/g, '')
+        return /^\d{8}$/.test(raw) ? raw : null
+    }
+
+    function pendingGroups(folder) {
+        const groups = new Map()
+        for (const file of folder.files) {
+            if (file.status !== 'pending' && file.status !== 'error') {
+                continue
+            }
+            const parts = file.name.split('/')
+            const base = parts.pop()
+            const chat = parts.join('/')
+            const date = groupDateOf(base, folder.datePattern)
+            if (!date) {
+                continue
+            }
+            const key = `${folder.name}\u0000${chat}\u0000${date}`
+            if (!groups.has(key)) {
+                groups.set(key, { key, chat, date, files: [], bytes: 0 })
+            }
+            const group = groups.get(key)
+            group.files.push(file.name)
+            group.bytes += file.size || 0
+        }
+        return [...groups.values()].sort((a, b) => `${a.chat}${a.date}`.localeCompare(`${b.chat}${b.date}`))
+    }
+
+    function reviewSection(folder, parked, groups) {
+        const section = el('section', { class: 'review-section' })
+        section.append(el('h3', { text: folder.name }))
+        if (groups.length > 0) {
+            const list = el('div', { class: 'review-groups' })
+            for (const group of groups) {
+                pendingGroupIndex.set(group.key, group)
+                list.append(el('div', { class: 'checklist__row' },
+                    el('sl-checkbox', { size: 'small', checked: true, dataset: { reviewGroup: group.key } }),
+                    el('span', { class: 'checklist__main', text: `${group.chat || '(root)'} · ${group.date} · ${group.files.length} clip${group.files.length === 1 ? '' : 's'}` }),
+                    el('span', { class: 'checklist__meta', text: formatBytes(group.bytes) })))
+            }
+            section.append(list)
+            section.append(el('div', { class: 'folder-card__actions' },
+                button({ dataset: { action: 'review-process', folder: folder.name } }, 'Process selected')))
+        }
+        for (const entry of parked) {
+            const row = el('div', { class: 'review-row' },
+                el('div', { class: 'review-row__main' },
+                    el('span', { class: 'checklist__main', text: entry.destName }),
+                    el('span', { class: 'checklist__meta', text: `${entry.chat || '(root)'} · ${entry.inputs.length} input${entry.inputs.length === 1 ? '' : 's'} · ${formatBytes(entry.size)}${entry.missingInputs?.length ? ` · ${entry.missingInputs.length} source(s) gone` : ''}` })),
+                el('audio', { controls: true, preload: 'none', src: `/api/review/file/${encodeURIComponent(folder.name)}/${encodeURIComponent(entry.id)}` }),
+                el('div', { class: 'review-row__actions' },
+                    button({ variant: 'primary', dataset: { action: 'review-place', folder: folder.name, id: entry.id } }, 'Place'),
+                    button({ variant: 'danger', dataset: { action: 'review-discard', folder: folder.name, id: entry.id } }, 'Discard')))
+            section.append(row)
+        }
+        if (parked.length > 1) {
+            section.append(el('div', { class: 'folder-card__actions' },
+                button({ variant: 'primary', dataset: { action: 'review-place-all', folder: folder.name } }, `Place all (${parked.length})`),
+                button({ variant: 'danger', dataset: { action: 'review-discard-all', folder: folder.name } }, 'Discard all')))
+        }
+        return section
+    }
+
+    function renderReview() {
+        const body = $('#reviewBody')
+        body.textContent = ''
+        pendingGroupIndex = new Map()
+        const folders = state.data.folders.filter((folder) => folder.placement === 'manual' || (folder.counts.review || 0) > 0)
+        let sections = 0
+        for (const folder of folders) {
+            const parked = reviewEntries.filter((entry) => entry.folder === folder.name)
+            const groups = folder.method === 'voicenotes' ? pendingGroups(folder) : []
+            if (parked.length === 0 && groups.length === 0) {
+                continue
+            }
+            body.append(reviewSection(folder, parked, groups))
+            sections += 1
+        }
+        if (sections === 0) {
+            body.append(el('p', { class: 'muted', text: 'Nothing awaiting review.' }))
+        }
+    }
+
+    async function openReview(reviewFolder = null) {
+        const { entries } = await requestJson('/api/review')
+        reviewEntries = entries
+        renderReview()
+        if (reviewFolder) {
+            reviewDialog.setAttribute('label', `Review — ${reviewFolder}`)
+        } else {
+            reviewDialog.setAttribute('label', 'Review')
+        }
+        reviewDialog.show()
+    }
+
+    async function refreshReview() {
+        const { entries } = await requestJson('/api/review')
+        reviewEntries = entries
+        renderReview()
+    }
+
+    $('#reviewClose').addEventListener('click', () => reviewDialog.hide())
+
     /* ---------- settings ---------- */
 
     const settingsDialog = $('#settingsDialog')
@@ -560,13 +721,19 @@
             field('Name', input('name', folder.name)),
             field('Source', input('source', folder.source)),
             field('Destination', input('destination', folder.destination)),
+            field('Method', select('method', folder.method || 'standardize', ['standardize', 'snapchat', 'copy', 'voicenotes'])),
             field('Settle (s)', input('settleSeconds', folder.settleSeconds ?? 60, 'number')),
             field('Group window (s)', input('groupWindowSeconds', folder.groupWindowSeconds ?? 15, 'number')),
             field('File pattern', input('filePattern', folder.filePattern ?? ''))))
-        const methodSelect = el('sl-select', { size: 'small', dataset: { field: 'method' } },
-            ...['standardize', 'snapchat', 'copy'].map((method) => el('sl-option', { value: method, text: method })))
-        methodSelect.setAttribute('value', folder.method || 'standardize')
-        editor.append(el('div', { class: 'form-grid' }, field('Method', methodSelect)))
+        editor.append(el('div', { class: 'form-grid field-grid--checks' },
+            checkboxField('recursive', folder.recursive === true, 'Recursive (mirror subdirectories)'),
+            checkboxField('includeHidden', folder.includeHidden === true, 'Include hidden files'),
+            checkboxField('cleanup', folder.cleanup !== false, 'Allow cleanup of processed originals'),
+            checkboxField('autoProcess', folder.autoProcess === true, 'Prepare new files automatically (manual review)')))
+        editor.append(el('div', { class: 'form-grid' },
+            field('Placement', select('placement', folder.placement || 'auto', ['auto', 'manual'])),
+            field('On change', select('onChanged', folder.onChanged || 'overwrite', ['overwrite', 'conflict'])),
+            field('Date pattern (voicenotes)', input('datePattern', folder.datePattern ?? ''))))
         return editor
     }
 
@@ -590,6 +757,7 @@
 
         body.append(el('div', { class: 'form-grid' },
             el('div', { class: 'field field--wide' }, el('span', { class: 'field__label', text: 'Staging directory' }), input('stagingDir', config.stagingDir)),
+            el('div', { class: 'field field--wide' }, el('span', { class: 'field__label', text: 'Review directory' }), input('reviewDir', config.reviewDir)),
             el('div', { class: 'field field--wide' }, el('span', { class: 'field__label', text: 'Trash directory' }), input('trashDir', config.trashDir))))
 
         body.append(el('div', { class: 'ntfy-test' },
@@ -610,6 +778,7 @@
         config.trashRetentionDays = Number(fieldValue('retention'))
         config.settleSeconds = Number(fieldValue('settle'))
         config.stagingDir = fieldValue('stagingDir').trim()
+        config.reviewDir = fieldValue('reviewDir').trim()
         config.trashDir = fieldValue('trashDir').trim()
         config.ntfy = {
             ...state.data.config.ntfy,
@@ -619,15 +788,28 @@
         }
         config.folders = [...document.querySelectorAll('#folderEditors .folder-edit')].map((editor) => {
             const get = (name) => editor.querySelector(`[data-field="${name}"]`).value
-            return {
+            const checked = (name) => editor.querySelector(`[data-field="${name}"]`).checked
+            const method = get('method')
+            const folder = {
                 name: get('name').trim(),
                 source: get('source').trim(),
                 destination: get('destination').trim(),
-                method: get('method'),
+                method,
                 settleSeconds: Number(get('settleSeconds')),
                 groupWindowSeconds: Number(get('groupWindowSeconds')),
                 filePattern: get('filePattern').trim() || null,
+                recursive: checked('recursive'),
+                includeHidden: checked('includeHidden'),
+                cleanup: checked('cleanup'),
+                onChanged: get('onChanged'),
+                placement: method === 'copy' ? 'auto' : get('placement'),
+                autoProcess: checked('autoProcess'),
             }
+            if (method === 'voicenotes') {
+                folder.recursive = true
+                folder.datePattern = get('datePattern').trim() || null
+            }
+            return folder
         })
         event.target.disabled = true
         try {
@@ -676,6 +858,73 @@
                 await refresh()
             } else if (action === 'cleanup') {
                 await openCleanup(folder)
+            } else if (action === 'review') {
+                await openReview(folder)
+            } else if (action === 'review-process') {
+                const files = [...document.querySelectorAll('#reviewBody sl-checkbox[data-review-group]')]
+                    .filter((box) => box.checked)
+                    .map((box) => pendingGroupIndex.get(box.dataset.reviewGroup))
+                    .filter(Boolean)
+                    .flatMap((group) => group.files)
+                const unique = [...new Set(files)]
+                if (unique.length === 0) {
+                    showToast(toastContainer, 'No groups selected.', 'error')
+                    return
+                }
+                target.disabled = true
+                try {
+                    const result = await requestJson(`/api/process/${encodeURIComponent(folder)}`, { method: 'POST', body: JSON.stringify({ files: unique }) })
+                    showToast(toastContainer, result.processed > 0 ? `Queued ${result.processed} clip(s).` : 'Nothing to process.')
+                    await refresh()
+                    await refreshReview()
+                } finally {
+                    target.disabled = false
+                }
+            } else if (action === 'review-place' || action === 'review-discard') {
+                const id = target.dataset.id
+                const place = action === 'review-place'
+                if (!place) {
+                    const ok = await askConfirm({
+                        title: 'Discard review item',
+                        text: `Discard ${id}? The source clips are untouched and can be processed again later.`,
+                        confirmLabel: 'Discard',
+                    })
+                    if (!ok) {
+                        return
+                    }
+                }
+                const result = await requestJson(`/api/review/${place ? 'place' : 'discard'}`, {
+                    method: 'POST',
+                    body: JSON.stringify({ folder, id }),
+                })
+                const first = result.results?.[0]
+                if (first?.ok) {
+                    showToast(toastContainer, `${place ? 'Placed' : 'Discarded'} ${id}.`)
+                } else {
+                    showToast(toastContainer, first?.reason ?? 'Review action failed', 'error')
+                }
+                await refresh()
+                await refreshReview()
+            } else if (action === 'review-place-all' || action === 'review-discard-all') {
+                const place = action === 'review-place-all'
+                if (!place) {
+                    const ok = await askConfirm({
+                        title: 'Discard all review items',
+                        text: 'Discard every parked item for this folder? Source clips are untouched and can be processed again later.',
+                        confirmLabel: 'Discard all',
+                    })
+                    if (!ok) {
+                        return
+                    }
+                }
+                const result = await requestJson(`/api/review/${place ? 'place-all' : 'discard-all'}`, {
+                    method: 'POST',
+                    body: JSON.stringify({ folder }),
+                })
+                const okCount = (result.results ?? []).filter((entry) => entry.ok).length
+                showToast(toastContainer, `${place ? 'Placed' : 'Discarded'} ${okCount} item(s).`, okCount > 0 ? 'success' : 'error')
+                await refresh()
+                await refreshReview()
             } else if (action === 'cleanup-all') {
                 const ok = await askConfirm({
                     title: 'Cleanup all folders',
@@ -811,6 +1060,9 @@
         refreshTimer = setTimeout(() => {
             refresh()
             refreshLog()
+            if (reviewDialog.open) {
+                refreshReview()
+            }
         }, 400)
     }
 

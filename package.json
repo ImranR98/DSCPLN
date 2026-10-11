@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@shoelace-style/shoelace": "^2.20.1",
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "playwright-core": "^1.63.0"
   }
 }

@@ -170,6 +170,15 @@
         </div>
     </sl-dialog>
 
+    <sl-dialog id="reviewDialog" label="Review" class="wide-dialog">
+        <p class="hint">Manual folders prepare files here without writing to the destination. Place the ones you want
+            to keep, or discard the rest — nothing is written until you place it.</p>
+        <div id="reviewBody"></div>
+        <div slot="footer" class="dialog-actions">
+            <sl-button id="reviewClose">Close</sl-button>
+        </div>
+    </sl-dialog>
+
     <sl-dialog id="confirmDialog" label="Confirm" class="narrow-dialog">
         <p id="confirmText" class="muted"></p>
         <div slot="footer" class="dialog-actions">

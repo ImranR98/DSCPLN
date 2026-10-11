@@ -10,6 +10,8 @@ import {
   WRITE_ARGS,
 } from "../exif.js";
 import { concatenateFiles, durationInfo, groupByTimeWindow, probeDuration, reencodeFile } from "../ffmpeg.js";
+import { parkOutput } from "../review.js";
+import { STATUS } from "../store.js";
 import { statSize } from "../verify.js";
 import { uniqueSuffix } from "../util.js";
 import { DestExistsError, moveIntoPlace } from "./place.js";
@@ -134,6 +136,18 @@ export async function processSnapBatch(ctx, folder, files) {
 
       const dto = (await readBackDateTimeOriginal(exiftool, output)) ?? firstDate;
       const destName = standardNameFor(snapBase, dto);
+
+      if (folder.def.placement === "manual") {
+        await parkOutput(ctx, folder, { destName, inputs: inputNames, expectedDuration: expected }, output);
+        for (const entry of group) {
+          results.push({
+            name: entry.name,
+            result: { status: STATUS.REVIEW, destName, message: "awaiting review" },
+          });
+        }
+        continue;
+      }
+
       const destPath = path.join(folder.def.destination, destName);
       const existingSize = await statSize(destPath);
       if (existingSize !== null) {

@@ -2,7 +2,8 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { atomicWriteFile, expandPath, pathExists } from "./util.js";
 
-export const METHODS = ["standardize", "snapchat", "copy"];
+export const METHODS = ["standardize", "snapchat", "copy", "voicenotes"];
+export const MANUAL_PLACEMENT_METHODS = new Set(["standardize", "snapchat", "voicenotes"]);
 
 export function defaultConfig() {
   return {
@@ -16,6 +17,7 @@ export function defaultConfig() {
     settleSeconds: 60,
     maxAutoRetries: 3,
     stagingDir: "~/Main/.media-sync-staging",
+    reviewDir: "~/Main/.media-sync-review",
     trashDir: "~/.media-sync/trash",
     logDir: "~/.media-sync/logs",
     syncLockFile: "~/deviceSync/.media-sync.lock",
@@ -87,18 +89,30 @@ export function normalizeConfig(raw) {
   cfg.paused = Boolean(cfg.paused);
   cfg.dryRun = Boolean(cfg.dryRun);
   cfg.stagingDir = expandPath(cfg.stagingDir);
+  cfg.reviewDir = expandPath(cfg.reviewDir);
   cfg.trashDir = expandPath(cfg.trashDir);
   cfg.logDir = expandPath(cfg.logDir);
   cfg.syncLockFile = expandPath(cfg.syncLockFile);
-  cfg.folders = cfg.folders.map((folder) => ({
-    name: String(folder.name ?? "").trim(),
-    source: expandPath(folder.source),
-    destination: expandPath(folder.destination),
-    method: folder.method,
-    filePattern: folder.filePattern || null,
-    settleSeconds: folder.settleSeconds === undefined ? cfg.settleSeconds : Math.max(0, asNumber(folder.settleSeconds, cfg.settleSeconds)),
-    groupWindowSeconds: Math.max(1, asNumber(folder.groupWindowSeconds, 15)),
-  }));
+  cfg.folders = cfg.folders.map((folder) => {
+    const method = folder.method;
+    return {
+      name: String(folder.name ?? "").trim(),
+      source: expandPath(folder.source),
+      destination: expandPath(folder.destination),
+      method,
+      filePattern: folder.filePattern || null,
+      datePattern: method === "voicenotes" ? String(folder.datePattern ?? "").trim() || null : null,
+      settleSeconds: folder.settleSeconds === undefined ? cfg.settleSeconds : Math.max(0, asNumber(folder.settleSeconds, cfg.settleSeconds)),
+      groupWindowSeconds: Math.max(1, asNumber(folder.groupWindowSeconds, 15)),
+      // Copy folders can mirror whole trees; voice notes always need subdirs.
+      recursive: Boolean(folder.recursive) || method === "voicenotes",
+      includeHidden: Boolean(folder.includeHidden),
+      onChanged: folder.onChanged === "conflict" ? "conflict" : "overwrite",
+      cleanup: folder.cleanup !== false,
+      placement: folder.placement === "manual" ? "manual" : "auto",
+      autoProcess: Boolean(folder.autoProcess),
+    };
+  });
   return cfg;
 }
 
@@ -112,6 +126,20 @@ export function validateConfig(cfg) {
     if (!folder.source) errors.push(`folder ${folder.name}: missing source`);
     if (!folder.destination) errors.push(`folder ${folder.name}: missing destination`);
     if (!METHODS.includes(folder.method)) errors.push(`folder ${folder.name}: unknown method ${folder.method}`);
+    if (folder.method === "voicenotes") {
+      if (!folder.datePattern) {
+        errors.push(`folder ${folder.name}: voicenotes requires datePattern (a regex matching the clip date)`);
+      } else {
+        try {
+          new RegExp(folder.datePattern);
+        } catch (err) {
+          errors.push(`folder ${folder.name}: invalid datePattern: ${err.message}`);
+        }
+      }
+    }
+    if (folder.placement === "manual" && !MANUAL_PLACEMENT_METHODS.has(folder.method)) {
+      errors.push(`folder ${folder.name}: manual placement is only supported for ${[...MANUAL_PLACEMENT_METHODS].join(", ")}`);
+    }
     if (folder.source && folder.destination) {
       const src = path.resolve(folder.source);
       const dst = path.resolve(folder.destination);
@@ -121,6 +149,7 @@ export function validateConfig(cfg) {
     }
   }
   if (!cfg.stagingDir) errors.push("stagingDir is required");
+  if (!cfg.reviewDir) errors.push("reviewDir is required");
   if (!cfg.trashDir) errors.push("trashDir is required");
   if (errors.length > 0) {
     const err = new Error(`invalid config: ${errors.join("; ")}`);
@@ -151,6 +180,7 @@ export async function saveConfig(file, cfg) {
 export async function ensureRuntimeDirs(cfg, warn = () => {}) {
   const dirs = [
     ["staging", cfg.stagingDir],
+    ["review", cfg.reviewDir],
     ["trash", cfg.trashDir],
     ["log", cfg.logDir],
   ];

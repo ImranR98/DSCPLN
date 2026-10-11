@@ -9,6 +9,7 @@ import { Store } from "./store.js";
 import { SyncLock } from "./lock.js";
 import { Watchers } from "./watchers.js";
 import { sweepTrash } from "./cleanup.js";
+import { rehydrateReview } from "./review.js";
 import { ApiServer } from "./api.js";
 
 export class Daemon {
@@ -61,6 +62,7 @@ export class Daemon {
     for (const folder of this.store.listFolders()) {
       await this.store.scanFolder(folder.def.name);
     }
+    await rehydrateReview(this.ctx);
     this.watchers.rebuild(this.config);
 
     this.queue.start();
@@ -131,6 +133,7 @@ export class Daemon {
     for (const folder of this.store.listFolders()) {
       await this.store.scanFolder(folder.def.name);
     }
+    await rehydrateReview(this.ctx);
     this.log.log("config updated");
     this.queue.tick();
     return next;

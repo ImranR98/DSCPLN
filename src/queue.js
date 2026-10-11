@@ -1,8 +1,10 @@
 import { processCopy } from "./processors/copy.js";
 import { processSnapBatch } from "./processors/snapchat.js";
 import { processStandardize } from "./processors/standardize.js";
+import { processVoiceNoteGroup } from "./processors/voicenotes.js";
 import { STATUS } from "./store.js";
 import { matchesPattern } from "./util.js";
+import { voiceNoteGroupOf } from "./voicenotes.js";
 
 const RETRYABLE = new Set(["changed", "verify", "concat", "tool"]);
 
@@ -42,15 +44,17 @@ export class Queue {
     return false;
   }
 
-  #snapCandidates(folder, now = Date.now()) {
+  #fileConsidered(file, now) {
+    if (file.status === STATUS.PENDING) return true;
+    if (file.status === STATUS.ERROR) return Boolean(file.forceNow) || this.#retryEligible(file, now);
+    return false;
+  }
+
+  #batchCandidates(folder, now = Date.now()) {
     const files = [];
     for (const file of folder.files.values()) {
-      if (folder.def.filePattern && !matchesPattern(file.name, folder.def.filePattern)) continue;
-      if (file.status === STATUS.PENDING) {
-        if (file.forceNow || now >= (file.nextRetryAt ?? 0)) files.push(file);
-      } else if (file.status === STATUS.ERROR) {
-        if (file.forceNow || this.#retryEligible(file, now)) files.push(file);
-      }
+      if (folder.def.filePattern && !matchesPattern(file.name.split("/").pop(), folder.def.filePattern)) continue;
+      if (this.#fileConsidered(file, now)) files.push(file);
     }
     return files;
   }
@@ -74,18 +78,43 @@ export class Queue {
         if (this.active.has(folder.def.name)) continue;
         if (!folder.exists) continue;
         const now = Date.now();
+        const auto = folder.def.placement !== "manual" || folder.def.autoProcess;
+
         if (folder.def.method === "snapchat") {
-          let candidates = this.#snapCandidates(folder, now);
+          let candidates = this.#batchCandidates(folder, now);
           if (paused) candidates = candidates.filter((f) => f.forceNow);
+          if (!candidates.some((f) => f.forceNow) && !auto) continue;
           if (this.#snapReady(folder, candidates, now)) this.#runSnap(folder, candidates);
           continue;
         }
+
+        if (folder.def.method === "voicenotes") {
+          let candidates = this.#batchCandidates(folder, now);
+          if (paused) candidates = candidates.filter((f) => f.forceNow);
+          const groups = new Map();
+          for (const file of candidates) {
+            const group = voiceNoteGroupOf(file.name, folder.def.datePattern);
+            if (!group) continue;
+            const key = `${group.chat}\u0000${group.date}`;
+            if (!groups.has(key)) groups.set(key, { group, files: [] });
+            groups.get(key).files.push(file);
+          }
+          for (const { group, files } of groups.values()) {
+            if (this.running >= config.concurrency || this.active.has(folder.def.name)) break;
+            const forced = files.some((f) => f.forceNow);
+            const ready = forced || (auto && files.every((f) => store.isSettled(folder, f, now)));
+            if (ready) this.#runVoiceNotes(folder, group, files);
+          }
+          continue;
+        }
+
         for (const candidate of [...folder.files.values()]) {
           if (this.running >= config.concurrency) break;
           const file = store.fileFor(folder.def.name, candidate.name);
           if (!file) continue;
           const forced = Boolean(file.forceNow);
           if (paused && !forced) continue;
+          if (!auto && !forced) continue;
           if (!this.#fileDispatchable(file, now)) continue;
           if (!forced && file.status === STATUS.PENDING && !store.isSettled(folder, file, now)) continue;
           this.#runFile(folder, file.name);
@@ -96,19 +125,25 @@ export class Queue {
     }
   }
 
-  async processNow(folderName) {
+  async processNow(folderName, options = {}) {
     const { store } = this.ctx;
     const folder = store.getFolder(folderName);
     if (!folder) return { ok: false, error: "unknown folder" };
     if (folder.exists === false) return { ok: false, error: "source directory is not available" };
     if (this.active.has(folderName)) return { ok: false, busy: true, error: "another job is already running for this folder" };
+    const only = options.files ? new Set(options.files) : null;
     let count = 0;
     for (const file of folder.files.values()) {
-      if (folder.def.filePattern && !matchesPattern(file.name, folder.def.filePattern)) continue;
-      if (file.status === STATUS.PENDING || file.status === STATUS.ERROR) {
-        store.updateFile(folderName, file.name, { forceNow: true, nextRetryAt: 0 });
-        count++;
-      }
+      if (only && !only.has(file.name)) continue;
+      const explicit = Boolean(only);
+      const forceable = file.status === STATUS.PENDING || file.status === STATUS.ERROR || (explicit && file.status === STATUS.DISCARDED);
+      if (!forceable) continue;
+      store.updateFile(folderName, file.name, {
+        status: file.status === STATUS.DISCARDED ? STATUS.PENDING : file.status,
+        forceNow: true,
+        nextRetryAt: 0,
+      });
+      count++;
     }
     await this.tick();
     return { ok: true, processed: count };
@@ -150,10 +185,36 @@ export class Queue {
         const outputs = new Set();
         for (const { name, result } of results) {
           this.#applyResults(folder, [name], result, { notifySuccess: false });
-          if (result.status === STATUS.DONE && result.destName && !outputs.has(result.destName)) {
+          if ((result.status === STATUS.DONE || result.status === STATUS.REVIEW) && result.destName && !outputs.has(result.destName)) {
             outputs.add(result.destName);
             this.ctx.notify.notify("info", `${folder.def.name}: concatenated ${result.destName}`);
           }
+        }
+      })
+      .catch((err) => {
+        for (const file of files) {
+          this.#applyResults(folder, [file.name], { status: STATUS.ERROR, kind: "tool", message: err.message });
+        }
+      })
+      .finally(() => this.#release(folder.def.name));
+  }
+
+  #runVoiceNotes(folder, group, files) {
+    const { store } = this.ctx;
+    if (files.length === 0) return;
+    this.#reserve(folder.def.name);
+    for (const file of files) {
+      store.updateFile(folder.def.name, file.name, { status: STATUS.QUEUED });
+    }
+    processVoiceNoteGroup(this.ctx, folder, group, files)
+      .then((results) => {
+        for (const { name, result } of results) {
+          this.#applyResults(folder, [name], result, { notifySuccess: false });
+        }
+        const output = results.find(({ result }) => result.status === STATUS.DONE || result.status === STATUS.REVIEW);
+        if (output) {
+          const verb = output.result.status === STATUS.REVIEW ? "ready for review" : "merged";
+          this.ctx.notify.notify("info", `${folder.def.name}: ${verb} → ${output.result.destName}`);
         }
       })
       .catch((err) => {
@@ -187,6 +248,15 @@ export class Queue {
             : `${name} already in destination`;
           notify.notify("info", `${folder.def.name}: ${summary}`);
         }
+      } else if (result.status === STATUS.REVIEW) {
+        store.updateFile(folder.def.name, name, {
+          status: STATUS.REVIEW,
+          destName: result.destName ?? file.destName ?? null,
+          message: result.message ?? "awaiting review",
+          attempts: 0,
+          errorKind: null,
+          nextRetryAt: 0,
+        });
       } else if (result.status === STATUS.CONFLICT) {
         store.updateFile(folder.def.name, name, {
           status: STATUS.CONFLICT,

@@ -9,6 +9,8 @@ import {
 } from "../exif.js";
 import { classifyDestMatch, statSize } from "../verify.js";
 import { sha256File, uniqueSuffix } from "../util.js";
+import { parkOutput } from "../review.js";
+import { STATUS } from "../store.js";
 import { DestExistsError, moveIntoPlace } from "./place.js";
 import { classifyExistingDest } from "./existingDest.js";
 
@@ -37,7 +39,11 @@ export async function standardizePath(ctx, folder, file, stagedPath, { forcedDat
   }
   if (!dto) return { status: "error", kind: "nodate", message: "failed to write date metadata" };
 
-  const destName = standardNameFor(file.name, dto);
+  const destName = standardNameFor(file.name.split("/").pop(), dto);
+  if (folder.def.placement === "manual") {
+    await parkOutput(ctx, folder, { destName, inputs: [file.name], expectedDuration: null }, stagedPath);
+    return { status: STATUS.REVIEW, destName, message: "awaiting review" };
+  }
   const destPath = path.join(folder.def.destination, destName);
   const existingSize = await statSize(destPath);
   if (existingSize !== null) {
@@ -97,7 +103,7 @@ export async function processStandardize(ctx, folder, file, { forcedDate = null 
 
 export async function processImportAsIs(ctx, folder, file) {
   const { config, store, log } = ctx;
-  const sourcePath = path.join(folder.def.source, file.name);
+  const sourcePath = path.join(folder.def.source, ...file.name.split("/"));
   const before = await fsp.stat(sourcePath).catch(() => null);
   if (!before) return { status: "error", kind: "gone", message: "source file disappeared" };
 
@@ -105,14 +111,19 @@ export async function processImportAsIs(ctx, folder, file) {
     return { status: "pending", message: `dry run: would copy as-is to ${file.name}` };
   }
 
-  const destName = file.name;
+  const destName = file.name.split("/").pop();
   const jobDir = path.join(config.stagingDir, "jobs", `${folder.def.name}-${uniqueSuffix()}`);
   let staged = null;
   try {
-    staged = await stageCopy(sourcePath, jobDir, file.name);
+    staged = await stageCopy(sourcePath, jobDir, destName);
     const [srcHash, stagedHash] = await Promise.all([sha256File(sourcePath), sha256File(staged)]);
     if (srcHash !== stagedHash) {
       return { status: "error", kind: "changed", message: "source changed while copying; will retry" };
+    }
+    if (folder.def.placement === "manual") {
+      await parkOutput(ctx, folder, { destName, inputs: [file.name], expectedDuration: null }, staged);
+      staged = null;
+      return { status: STATUS.REVIEW, destName, message: "awaiting review" };
     }
     const destPath = path.join(folder.def.destination, destName);
     const existingSize = await statSize(destPath);

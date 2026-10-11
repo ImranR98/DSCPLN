@@ -1,10 +1,13 @@
 import http from "node:http";
+import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { cleanupFiles, cleanupPreview, emptyTrash, listTrash, restoreTrashFiles } from "./cleanup.js";
 import { runAction } from "./actions.js";
 import { Notifier } from "./notify.js";
+import { parkPathFor } from "./park.js";
+import { discardAllReview, discardReview, listReview, placeAllReview, placeReview } from "./review.js";
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "public");
 
@@ -181,8 +184,77 @@ export class ApiServer {
 
     if (method === "POST" && pathname.startsWith("/api/process/")) {
       const folderName = decodeURIComponent(pathname.slice("/api/process/".length));
-      const result = await this.daemon.queue.processNow(folderName);
+      const body = await readBody(req).catch(() => ({}));
+      const result = await this.daemon.queue.processNow(folderName, { files: body.files });
       return json(res, result.ok ? 200 : 409, result);
+    }
+
+    if (method === "GET" && pathname === "/api/review") {
+      const entries = await listReview(this.daemon.ctx);
+      return json(res, 200, { entries });
+    }
+
+    if (method === "GET" && pathname.startsWith("/api/review/file/")) {
+      const rest = pathname.slice("/api/review/file/".length).split("/");
+      const folderName = decodeURIComponent(rest[0] ?? "");
+      const id = decodeURIComponent(rest.slice(1).join("/"));
+      const folder = this.daemon.store.getFolder(folderName);
+      if (!folder) return json(res, 404, { error: "unknown folder" });
+      const filePath = parkPathFor(this.daemon.config, folderName, id);
+      const stat = await fsp.stat(filePath).catch(() => null);
+      if (!stat || !stat.isFile()) return json(res, 404, { error: "not found" });
+      const ext = path.extname(filePath).toLowerCase();
+      const type = ext === ".mp4" || ext === ".m4a" ? "video/mp4" : ext === ".opus" ? "audio/ogg" : "application/octet-stream";
+      const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "");
+      let start = 0;
+      let end = stat.size - 1;
+      if (range) {
+        start = range[1] === "" ? Math.max(0, stat.size - Number(range[2])) : Number(range[1]);
+        end = range[2] === "" ? stat.size - 1 : Math.min(Number(range[2]), stat.size - 1);
+        if (Number.isNaN(start) || Number.isNaN(end) || start > end) {
+          res.writeHead(416, { "Content-Range": `bytes */${stat.size}` });
+          return res.end();
+        }
+      }
+      res.writeHead(range ? 206 : 200, {
+        "Content-Type": type,
+        "Content-Length": end - start + 1,
+        "Accept-Ranges": "bytes",
+        ...(range ? { "Content-Range": `bytes ${start}-${end}/${stat.size}` } : {}),
+        "Cache-Control": "no-store",
+      });
+      fs.createReadStream(filePath, { start, end }).on("error", () => res.end()).pipe(res);
+      return;
+    }
+
+    if (method === "POST" && (pathname === "/api/review/place" || pathname === "/api/review/discard")) {
+      const body = await readBody(req);
+      const folder = this.daemon.store.getFolder(String(body.folder ?? ""));
+      if (!folder) return json(res, 404, { error: "unknown folder" });
+      const place = pathname.endsWith("/place");
+      const ids = body.ids ?? (body.id ? [body.id] : []);
+      if (!Array.isArray(ids) || ids.length === 0) return json(res, 400, { error: "id or ids required" });
+      const results = [];
+      for (const id of ids) {
+        results.push({
+          id: String(id),
+          ...(place
+            ? await placeReview(this.daemon.ctx, folder, String(id))
+            : await discardReview(this.daemon.ctx, folder, String(id))),
+        });
+      }
+      return json(res, 200, { results });
+    }
+
+    if (method === "POST" && (pathname === "/api/review/place-all" || pathname === "/api/review/discard-all")) {
+      const body = await readBody(req);
+      const folder = this.daemon.store.getFolder(String(body.folder ?? ""));
+      if (!folder) return json(res, 404, { error: "unknown folder" });
+      const place = pathname.endsWith("/place-all");
+      const results = place
+        ? await placeAllReview(this.daemon.ctx, folder)
+        : await discardAllReview(this.daemon.ctx, folder);
+      return json(res, 200, { results });
     }
 
     if (method === "POST" && pathname.startsWith("/api/actions/")) {
@@ -200,8 +272,13 @@ export class ApiServer {
         const folderName = decodeURIComponent(pathname.slice("/api/cleanup/".length));
         const folder = this.daemon.store.getFolder(folderName);
         if (!folder) return json(res, 404, { error: "unknown folder" });
-        const files = cleanupPreview(folder);
-        return json(res, 200, { folder: folderName, files, totalBytes: files.reduce((s, f) => s + (f.size ?? 0), 0) });
+        const files = folder.def.cleanup === false ? [] : cleanupPreview(folder);
+        return json(res, 200, {
+          folder: folderName,
+          disabled: folder.def.cleanup === false,
+          files,
+          totalBytes: files.reduce((s, f) => s + (f.size ?? 0), 0),
+        });
       }
       if (method === "POST" && pathname === "/api/cleanup-all") {
         const results = {};

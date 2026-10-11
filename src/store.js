@@ -2,8 +2,10 @@ import { EventEmitter } from "node:events";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { findRealExifDate, standardNameFor } from "./exif.js";
+import { listParked } from "./park.js";
+import { voiceNoteGroupOf, voiceNoteDestName } from "./voicenotes.js";
 import { DirCache, classifyDestMatch, findExpectedDestName, mapSnapInputs, readSnapOutputs, statSize } from "./verify.js";
-import { isHiddenName, isSyncConflictName, isTempName, matchesPattern, statOrNull } from "./util.js";
+import { shouldSkipName, isSyncConflictName, matchesPattern, statOrNull } from "./util.js";
 
 export const STATUS = {
   PENDING: "pending",
@@ -14,10 +16,13 @@ export const STATUS = {
   ERROR: "error",
   CONFLICT: "conflict",
   IGNORED: "ignored",
+  REVIEW: "review",
+  DISCARDED: "discarded",
   CLEANED: "cleaned",
 };
 
-const AUTO_RESETTABLE = new Set([STATUS.ERROR, STATUS.CONFLICT]);
+const AUTO_RESETTABLE = new Set([STATUS.ERROR, STATUS.CONFLICT, STATUS.DISCARDED]);
+const RESETTABLE_WHEN_CHANGED = new Set([STATUS.DONE, STATUS.DUPLICATE, STATUS.REVIEW]);
 
 export class Store extends EventEmitter {
   constructor(config, exiftool) {
@@ -83,7 +88,7 @@ export class Store extends EventEmitter {
     const folder = this.folders.get(folderName);
     if (!folder) return;
     const { def } = folder;
-    const names = await fsp.readdir(def.source).catch(() => null);
+    const names = await this.#listFiles(def);
     if (names === null) {
       if (folder.exists) {
         folder.exists = false;
@@ -97,9 +102,8 @@ export class Store extends EventEmitter {
     }
     const seen = new Set();
     for (const name of names) {
-      if (isHiddenName(name) || isTempName(name)) continue;
       seen.add(name);
-      const stat = statOrNull(path.join(def.source, name));
+      const stat = statOrNull(path.join(def.source, ...name.split("/")));
       if (!stat || !stat.isFile()) continue;
       this.addOrUpdate(folderName, name, stat);
     }
@@ -111,24 +115,61 @@ export class Store extends EventEmitter {
     await this.deriveProcessed(folderName);
   }
 
+  // Returns store keys (relative POSIX paths for recursive folders) or null
+  // when the source directory is unavailable.
+  async #listFiles(def) {
+    let entries;
+    try {
+      entries = await fsp.readdir(def.source, { withFileTypes: true });
+    } catch {
+      return null;
+    }
+    const out = [];
+    const collect = async (dir, rel) => {
+      const items = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+      for (const item of items) {
+        if (item.isSymbolicLink()) continue;
+        if (shouldSkipName(item.name, def.includeHidden)) continue;
+        if (item.isDirectory()) {
+          if (def.recursive) await collect(path.join(dir, item.name), rel ? `${rel}/${item.name}` : item.name);
+          continue;
+        }
+        if (item.isFile()) out.push(rel ? `${rel}/${item.name}` : item.name);
+      }
+    };
+    for (const item of entries) {
+      if (item.isSymbolicLink()) continue;
+      if (shouldSkipName(item.name, def.includeHidden)) continue;
+      if (item.isDirectory()) {
+        if (def.recursive) await collect(path.join(def.source, item.name), item.name);
+        continue;
+      }
+      if (item.isFile()) out.push(item.name);
+    }
+    return out;
+  }
+
   addOrUpdate(folderName, name, stat) {
     const folder = this.folders.get(folderName);
     if (!folder) return;
-    const matches = matchesPattern(name, folder.def.filePattern);
+    const base = path.basename(name);
+    const patternOk = matchesPattern(base, folder.def.filePattern);
+    const dateOk = folder.def.method !== "voicenotes" || voiceNoteGroupOf(name, folder.def.datePattern) !== null;
+    const matches = patternOk && dateOk;
+    const mismatchMessage = !patternOk
+      ? `does not match ${folder.def.filePattern}`
+      : "no date matched datePattern";
     const existing = folder.files.get(name);
     if (!existing) {
+      const syncConflict = isSyncConflictName(base);
       const file = {
         name,
         size: stat.size,
         mtimeMs: stat.mtimeMs,
-        status: !matches
-          ? STATUS.IGNORED
-          : isSyncConflictName(name)
-            ? STATUS.CONFLICT
-            : STATUS.PENDING,
+        status: !matches ? STATUS.IGNORED : syncConflict ? STATUS.CONFLICT : STATUS.PENDING,
         message: !matches
-          ? `does not match ${folder.def.filePattern}`
-          : isSyncConflictName(name)
+          ? mismatchMessage
+          : syncConflict
             ? "Syncthing conflict copy — review before processing"
             : null,
         destName: null,
@@ -151,7 +192,7 @@ export class Store extends EventEmitter {
     if (!matches) {
       if (existing.status !== STATUS.IGNORED) {
         existing.status = STATUS.IGNORED;
-        existing.message = `does not match ${folder.def.filePattern}`;
+        existing.message = mismatchMessage;
         existing.destName = null;
         this.emit("update");
       }
@@ -170,9 +211,11 @@ export class Store extends EventEmitter {
         existing.errorKind = null;
         existing.nextRetryAt = 0;
         existing.destName = null;
-      } else if ([STATUS.DONE, STATUS.DUPLICATE].includes(existing.status)) {
+      } else if (RESETTABLE_WHEN_CHANGED.has(existing.status)) {
+        existing.message = existing.status === STATUS.REVIEW
+          ? "source changed while awaiting review; will re-process"
+          : "source changed after processing; will re-process";
         existing.status = STATUS.PENDING;
-        existing.message = "source changed after processing; will re-process";
         existing.destName = null;
       }
       this.emit("update");
@@ -229,6 +272,14 @@ export class Store extends EventEmitter {
       await this.deriveSnapProcessed(folder);
       return;
     }
+    if (def.method === "copy") {
+      await this.deriveCopyProcessed(folder);
+      return;
+    }
+    if (def.method === "voicenotes") {
+      await this.deriveVoiceNotesProcessed(folder);
+      return;
+    }
     const names = await this.cache.list(def.destination).catch(() => []);
     for (const file of folder.files.values()) {
       if (file.status !== STATUS.PENDING) continue;
@@ -253,6 +304,62 @@ export class Store extends EventEmitter {
         file.message = `destination ${match} exists with very different size (${destSize} vs ${file.size}) — review`;
         file.updatedAt = Date.now();
       }
+    }
+    this.emit("update");
+  }
+
+  // Copy folders are adopted without traversing or hashing the destination:
+  // each pending source file is stat'ed at its exact destination path, and a
+  // size+second-precision-mtime match means it is already mirrored. Anything
+  // else is left pending: the queue copies (or the destination is flagged in
+  // `conflict` mode).
+  async deriveCopyProcessed(folder) {
+    const { def } = folder;
+    for (const file of folder.files.values()) {
+      if (file.status !== STATUS.PENDING) continue;
+      const destPath = path.join(def.destination, ...file.name.split("/"));
+      const stat = await fsp.stat(destPath).catch(() => null);
+      if (!stat || !stat.isFile()) continue;
+      const sameSize = stat.size === file.size;
+      const sameMtime = Math.floor(stat.mtimeMs / 1000) === Math.floor(file.mtimeMs / 1000);
+      if (sameSize && sameMtime) {
+        file.status = STATUS.DUPLICATE;
+        file.destName = file.name;
+        file.message = "already mirrored in destination";
+      } else if (def.onChanged === "conflict") {
+        file.status = STATUS.CONFLICT;
+        file.destName = file.name;
+        file.message = "destination exists with a different size or timestamp — review";
+      }
+      file.updatedAt = Date.now();
+    }
+    this.emit("update");
+  }
+
+  async deriveVoiceNotesProcessed(folder) {
+    const { def } = folder;
+    const parked = await listParked(this.config, def.name).catch(() => []);
+    for (const entry of parked) {
+      for (const input of entry.inputs) {
+        const file = folder.files.get(input);
+        if (!file) continue;
+        file.status = STATUS.REVIEW;
+        file.destName = entry.destName;
+        file.message = "awaiting review";
+        file.updatedAt = Date.now();
+      }
+    }
+    for (const file of folder.files.values()) {
+      if (file.status !== STATUS.PENDING) continue;
+      const group = voiceNoteGroupOf(file.name, def.datePattern);
+      if (!group) continue;
+      const destName = voiceNoteDestName(group.chat, group.date);
+      const stat = await fsp.stat(path.join(def.destination, destName)).catch(() => null);
+      if (!stat || !stat.isFile() || stat.size === 0) continue;
+      file.status = STATUS.DUPLICATE;
+      file.destName = destName;
+      file.message = "already merged and placed";
+      file.updatedAt = Date.now();
     }
     this.emit("update");
   }
@@ -321,8 +428,15 @@ export class Store extends EventEmitter {
         destination: folder.def.destination,
         method: folder.def.method,
         filePattern: folder.def.filePattern,
+        datePattern: folder.def.datePattern,
         settleSeconds: folder.def.settleSeconds,
         groupWindowSeconds: folder.def.groupWindowSeconds,
+        recursive: folder.def.recursive,
+        includeHidden: folder.def.includeHidden,
+        onChanged: folder.def.onChanged,
+        cleanup: folder.def.cleanup,
+        placement: folder.def.placement,
+        autoProcess: folder.def.autoProcess,
         exists: folder.exists,
         lastEventAt: folder.lastEventAt,
         counts,

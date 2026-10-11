@@ -1,18 +1,33 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { findExpectedDestName, verificationFor } from "./verify.js";
+import { findExpectedDestName, parseSnapInputs, verificationFor } from "./verify.js";
 import { probeDuration } from "./ffmpeg.js";
 import { DestExistsError, moveIntoPlace } from "./processors/place.js";
 import { atomicWriteFile, pathExists, sha256File, uniqueSuffix } from "./util.js";
 import { STATUS } from "./store.js";
+import { voiceNoteDestName, voiceNoteGroupOf } from "./voicenotes.js";
 
 const MANIFEST_NAME = ".manifest.json";
 
 export async function verifyCleanupTarget(ctx, folder, file) {
   const { store, exiftool } = ctx;
-  const sourcePath = path.join(folder.def.source, file.name);
+  const sourcePath = path.join(folder.def.source, ...file.name.split("/"));
   if (!(await pathExists(sourcePath))) return { ok: false, reason: "source file is missing" };
+
+  if (folder.def.method === "voicenotes") {
+    const group = voiceNoteGroupOf(file.name, folder.def.datePattern);
+    if (!group) return { ok: false, reason: "not a voice note (no date in the file name)" };
+    const destName = voiceNoteDestName(group.chat, group.date);
+    const destPath = path.join(folder.def.destination, destName);
+    if (!(await pathExists(destPath))) return { ok: false, reason: "no verified merged file found in destination" };
+    const tags = await exiftool.readRaw(destPath, ["-m", "-api", "LargeFileSupport=1"]).catch(() => null);
+    const inputs = parseSnapInputs(tags?.Inputs);
+    if (!inputs || !inputs.includes(file.name)) {
+      return { ok: false, reason: "the merged destination file does not list this clip" };
+    }
+    return { ok: true, destPath, how: "xmp" };
+  }
 
   if (folder.def.method === "snapchat") {
     await store.refreshSnapOutputs(folder, { force: true });
@@ -111,6 +126,9 @@ export function cleanupPreview(folder) {
 
 export async function cleanupFiles(ctx, folder, names) {
   const { store, log, notify } = ctx;
+  if (folder.def.cleanup === false) {
+    return names.map((name) => ({ name, ok: false, reason: "cleanup is disabled for this folder" }));
+  }
   const results = [];
   let trashed = 0;
   let bytes = 0;

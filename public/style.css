@@ -952,3 +952,53 @@ sl-button.icon-button--small::part(base) {
     width: 1.9rem;
     height: 1.9rem;
 }
+
+/* Review dialog (manual placement parks) */
+.review-section {
+    margin-bottom: 1.25rem;
+}
+
+.review-section h3 {
+    margin: 0 0 0.5rem;
+}
+
+.review-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.review-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    padding: 0.5rem 0;
+    border-top: 1px solid var(--sl-color-neutral-200);
+}
+
+.review-row__main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 16rem;
+    flex: 1 1 16rem;
+}
+
+.review-row audio {
+    height: 2rem;
+    max-width: 18rem;
+    flex: 1 1 12rem;
+}
+
+.review-row__actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-left: auto;
+}
+
+.field-grid--checks sl-checkbox {
+    align-self: end;
+    padding-bottom: 0.35rem;
+}

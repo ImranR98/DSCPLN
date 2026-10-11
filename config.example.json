@@ -9,6 +9,7 @@
   "settleSeconds": 60,
   "maxAutoRetries": 3,
   "stagingDir": "~/Main/.media-sync-staging",
+  "reviewDir": "~/Main/.media-sync-review",
   "trashDir": "~/.media-sync/trash",
   "logDir": "~/.media-sync/logs",
   "syncLockFile": "~/deviceSync/.media-sync.lock",

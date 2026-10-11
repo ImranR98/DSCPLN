@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { matchesPattern } from "../src/util.js";
-import { DestExistsError, moveIntoPlace } from "../src/processors/place.js";
-import { defaultConfig } from "../src/config.js";
+import { matchesPattern, isSyncOrTempName, shouldSkipName } from "../src/util.js";
+import { DestExistsError, moveIntoPlace, replaceIntoPlace } from "../src/processors/place.js";
+import { defaultConfig, normalizeConfig, validateConfig } from "../src/config.js";
+import { sanitizeChat, voiceNoteDestName, voiceNoteGroupOf } from "../src/voicenotes.js";
 
 test("matchesPattern handles *, ? and literals", () => {
   assert.equal(matchesPattern("Snapchat-20260101.mp4", "Snapchat-*.mp4"), true);
@@ -53,4 +54,133 @@ test("default config uses the PC screenrecs path", () => {
   const cfg = defaultConfig();
   const screenrecs = cfg.folders.find((f) => f.name === "Screen Recs");
   assert.ok(screenrecs.source.endsWith("deviceSync/ScreenRecs"), `unexpected: ${screenrecs.source}`);
+});
+
+test("replaceIntoPlace replaces atomically and leaves no temp files", async () => {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-replace-"));
+  try {
+    const src = path.join(dir, "staged.txt");
+    const dest = path.join(dir, "dest.txt");
+    await fsp.writeFile(src, "version two");
+    await fsp.writeFile(dest, "version one");
+    const how = await replaceIntoPlace(src, dest);
+    assert.equal(how, "replace");
+    assert.equal(await fsp.readFile(dest, "utf8"), "version two");
+    assert.equal(await fsp.stat(src).then(() => true).catch(() => false), false, "staged source must be consumed");
+    assert.deepEqual(await fsp.readdir(dir), ["dest.txt"], "no temp or staged files may be left behind");
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("replaceIntoPlace creates the destination directory", async () => {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-replace2-"));
+  try {
+    const src = path.join(dir, "staged.txt");
+    const dest = path.join(dir, "nested", "deeper", "dest.txt");
+    await fsp.writeFile(src, "content");
+    await replaceIntoPlace(src, dest);
+    assert.equal(await fsp.readFile(dest, "utf8"), "content");
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("replaceIntoPlace cleans up its temp file when the destination is unusable", async () => {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-replace3-"));
+  try {
+    const src = path.join(dir, "staged.txt");
+    const dest = path.join(dir, "dest-dir");
+    await fsp.writeFile(src, "content");
+    await fsp.mkdir(dest);
+    await assert.rejects(() => replaceIntoPlace(src, dest));
+    assert.equal(await fsp.stat(src).then(() => true).catch(() => false), true, "staged file must survive a failed replace");
+    const leftovers = (await fsp.readdir(dir)).filter((name) => name.includes(".media-sync-"));
+    assert.deepEqual(leftovers, [], "failed replaces must not leave temp files");
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("skip-name helpers protect sync artifacts and honor includeHidden", () => {
+  assert.equal(shouldSkipName(".nomedia", false), true);
+  assert.equal(shouldSkipName(".nomedia", true), false);
+  assert.equal(shouldSkipName(".stfolder", true), true);
+  assert.equal(shouldSkipName(".stversions", true), true);
+  assert.equal(shouldSkipName(".stignore", true), true);
+  assert.equal(shouldSkipName(".syncthing.foo", true), true);
+  assert.equal(shouldSkipName(".media-sync-staging", true), true);
+  assert.equal(shouldSkipName("file.tmp", true), true);
+  assert.equal(shouldSkipName("file!sync", true), true);
+  assert.equal(shouldSkipName("normal.jpg", true), false);
+  assert.equal(isSyncOrTempName(".stfolder"), true);
+  assert.equal(isSyncOrTempName("song.mp3"), false);
+});
+
+test("voice note helpers use the folder's datePattern and name deterministically", () => {
+  const whatsapp = "-(\\d{8})-";
+  assert.deepEqual(voiceNoteGroupOf("201301/PTT-20190529-WA0001.opus", whatsapp), { chat: "201301", date: "20190529" });
+  assert.deepEqual(voiceNoteGroupOf("PTT-20190529-WA0001.opus", whatsapp), { chat: "", date: "20190529" });
+  assert.equal(voiceNoteGroupOf("chat/notes.txt", whatsapp), null);
+  assert.equal(voiceNoteGroupOf("chat/PTT-19-WA0001.opus", whatsapp), null);
+
+  // A user-supplied pattern may capture separators; non-digits are stripped.
+  const custom = "(\\d{4})-(\\d{2})-(\\d{2})";
+  assert.deepEqual(voiceNoteGroupOf("voice/rec 2019-05-29 take1.opus", custom), { chat: "voice", date: "20190529" });
+  // Without a capturing group the whole match is normalized.
+  assert.deepEqual(voiceNoteGroupOf("a/2019.05.29.aac", "\\d{4}\\.\\d{2}\\.\\d{2}"), { chat: "a", date: "20190529" });
+
+  assert.equal(sanitizeChat("Family Group!"), "Family Group_");
+  assert.equal(voiceNoteDestName("201301", "20190529"), "2019-05-29-00-00-00-(20190529-merged-201301).mp4");
+  assert.equal(voiceNoteDestName("", "20190529"), "2019-05-29-00-00-00-(20190529-merged).mp4");
+});
+
+test("config normalization applies safe defaults for the new folder options", () => {
+  const cfg = normalizeConfig({
+    stagingDir: "/tmp/s",
+    reviewDir: "/tmp/r",
+    trashDir: "/tmp/t",
+    logDir: "/tmp/l",
+    folders: [
+      { name: "copy", source: "/tmp/a", destination: "/tmp/b", method: "copy" },
+      { name: "vn", source: "/tmp/c", destination: "/tmp/d", method: "voicenotes", datePattern: "-(\\d{8})-" },
+      { name: "std", source: "/tmp/e", destination: "/tmp/f", method: "standardize", placement: "manual" },
+    ],
+  });
+  const [copy, vn, std] = cfg.folders;
+  assert.equal(copy.recursive, false);
+  assert.equal(copy.includeHidden, false);
+  assert.equal(copy.onChanged, "overwrite");
+  assert.equal(copy.cleanup, true);
+  assert.equal(copy.placement, "auto");
+  assert.equal(copy.datePattern, null, "datePattern only applies to voicenotes folders");
+  assert.equal(vn.recursive, true, "voicenotes folders are always recursive");
+  assert.equal(vn.filePattern, null, "no source-format assumptions are baked in");
+  assert.equal(vn.datePattern, "-(\\d{8})-");
+  assert.equal(vn.placement, "auto");
+  assert.equal(std.placement, "manual");
+  const conflict = normalizeConfig({
+    stagingDir: "/tmp/s",
+    reviewDir: "/tmp/r",
+    trashDir: "/tmp/t",
+    logDir: "/tmp/l",
+    folders: [{ name: "copy", source: "/tmp/a", destination: "/tmp/b", method: "copy", onChanged: "conflict", cleanup: false }],
+  });
+  assert.equal(conflict.folders[0].onChanged, "conflict");
+  assert.equal(conflict.folders[0].cleanup, false);
+});
+
+test("config validation requires a usable datePattern for voicenotes folders", () => {
+  const base = { stagingDir: "/tmp/s", reviewDir: "/tmp/r", trashDir: "/tmp/t", logDir: "/tmp/l" };
+  assert.throws(
+    () => validateConfig(normalizeConfig({ ...base, folders: [{ name: "vn", source: "/tmp/c", destination: "/tmp/d", method: "voicenotes" }] })),
+    /datePattern/,
+  );
+  assert.throws(
+    () => validateConfig(normalizeConfig({ ...base, folders: [{ name: "vn", source: "/tmp/c", destination: "/tmp/d", method: "voicenotes", datePattern: "([unclosed" }] })),
+    /invalid datePattern/,
+  );
+  assert.doesNotThrow(() =>
+    validateConfig(normalizeConfig({ ...base, folders: [{ name: "vn", source: "/tmp/c", destination: "/tmp/d", method: "voicenotes", datePattern: "-(\\d{8})-" }] })),
+  );
 });

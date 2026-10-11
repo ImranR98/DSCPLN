@@ -1,0 +1,2 @@
+2024-01-15-090418 - Alice: Valid canonical line
+2024-01-15-250000 - Bob: Hour 25 is not a valid canonical timestamp

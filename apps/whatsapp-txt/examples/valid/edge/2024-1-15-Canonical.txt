@@ -1,0 +1,4 @@
+2024-01-15-090418 - Alice: Canonical app output line
+2024-01-15-090500 - Bob: Already normalized with seconds
+2024-01-15-090501 - Alice: Multi-line continuation
+continues here

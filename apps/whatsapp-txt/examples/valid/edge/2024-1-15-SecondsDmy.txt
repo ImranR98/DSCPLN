@@ -1,0 +1,2 @@
+18/1/2018, 9:01:18 am - Alice: DMY timestamp with seconds
+18/1/2018, 9:02:00 pm - Bob: Lowercase meridiem with seconds

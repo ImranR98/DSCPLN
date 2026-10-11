@@ -1,0 +1,5 @@
+Chat exported on Mon Apr 06 2020 03:37:54 GMT-0400 (Eastern Daylight Time).
+Last chat on Wed Jan 15 2024 11:59:00 GMT-0500 (Eastern Standard Time).
+
+2024-01-15, 9:00 a.m. - Alice: Chat starts after the export header
+2024-01-15, 9:01 a.m. - Bob: The app strips the header before merging

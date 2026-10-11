@@ -1,0 +1,10 @@
+{
+  "bom/WhatsApp Chat with Bom.txt": { "error": "BOM" },
+  "no-date-lines/WhatsApp Chat with NoDates.txt": { "error": "no date lines" },
+  "empty/WhatsApp Chat with Empty.txt": { "error": "file is empty" },
+  "bad-calendar/WhatsApp Chat with BadCalendar.txt": { "error": "parses it to NaN" },
+  "hour24-pm/WhatsApp Chat with Hour24.txt": { "error": "parses it to NaN" },
+  "orphan-continuation/WhatsApp Chat with Orphan.txt": { "error": "before the first date line" },
+  "empty-prefix/WhatsApp Chat with .txt": { "error": "too short" },
+  "bad-canonical/WhatsApp Chat with BadCanonical.txt": { "error": "does not match any supported" }
+}

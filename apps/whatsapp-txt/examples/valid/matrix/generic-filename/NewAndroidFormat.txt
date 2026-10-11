@@ -1,0 +1,16 @@
+1/15/24, 8:58 AM - Messages and calls are end-to-end encrypted. No one outside of this chat, not even WhatsApp, can read or listen to them.
+1/15/24, 9:00 AM - Alice: Hey Bob! How are you?
+1/15/24, 9:01 AM - Bob: I'm good, thanks! 😄
+1/15/24, 9:02 AM - Alice: This is a multi-line message
+that continues on the next line.
+
+And even has a blank line in the middle.
+1/15/24, 9:03 AM - Bob: <Media omitted>
+1/15/24, 9:04 AM - Alice: IMG-20240115-WA0001.jpg (file attached)
+1/15/24, 9:05 AM - Bob: This message was deleted
+1/15/24, 9:06 AM - Alice: You deleted this message
+1/15/24, 9:07 AM - Alice added Carol
+1/15/24, 9:08 AM - Alice: Check this out: https://example.com/path?a=1
+1/15/24, 9:09 AM - Bob: 
+1/15/24, 12:00 PM - Alice: Meeting at noon?
+1/15/24, 11:59 PM - Bob: Good night

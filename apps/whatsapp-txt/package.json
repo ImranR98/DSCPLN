@@ -1,0 +1,17 @@
+{
+  "type": "commonjs",
+  "private": true,
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node checkFormat.js",
+    "check-examples": "node checkFormat.js --check-examples",
+    "test:server": "node --test tests/*.test.mjs",
+    "test": "node checkFormat.js --check-examples && node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}

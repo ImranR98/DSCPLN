@@ -1,0 +1,2 @@
+2024-01-15, 9:00 a.m. - Alice: Content is fine but the filename cannot be stripped
+2024-01-15, 9:01 a.m. - Bob: The app keeps the name unchanged

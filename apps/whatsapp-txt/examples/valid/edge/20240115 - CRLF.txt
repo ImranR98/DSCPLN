@@ -1,0 +1,2 @@
+2024-01-15, 9:00 a.m. - Alice: This file uses CRLF line endings
+2024-01-15, 9:01 a.m. - Bob: The app tolerates the trailing carriage return

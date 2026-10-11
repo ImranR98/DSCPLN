@@ -1,0 +1,2 @@
+5/1/2024, 9:00 am - Alice: File does not end with a newline
+5/1/2024, 9:01 am - Bob: The app still reads the last line

@@ -1,0 +1,6 @@
+2024-01-15, 12:00 a.m. - Alice: Midnight
+2024-01-15, 12:01 a.m. - Bob: Just after midnight
+2024-01-15, 12:00 p.m. - Alice: Noon
+2024-01-15, 12:01 p.m. - Bob: Just after noon
+2024-01-15, 11:59 p.m. - Alice: Almost midnight
+2024-01-16, 12:00 a.m. - Bob: Next midnight

@@ -1,0 +1,8 @@
+2024-01-15, 9:00 a.m. - Alice: First line of a multi-line message
+second line
+third line
+
+after a blank line
+2024-01-15, 9:01 a.m. - Bob: A message containing: colons: everywhere:
+2024-01-15, 9:02 a.m. - Alice: Not a real date here: 2024-01-15, 9:00 a.m. - Fake: nope
+2024-01-15, 9:03 a.m. - Bob: Final message

@@ -1,0 +1,10 @@
+2024-01-15, 9:00 a.m. - Alice: <Media omitted>
+2024-01-15, 9:01 a.m. - Bob: image omitted
+2024-01-15, 9:02 a.m. - Alice: video omitted
+2024-01-15, 9:03 a.m. - Bob: audio omitted
+2024-01-15, 9:04 a.m. - Alice: document omitted
+2024-01-15, 9:05 a.m. - Bob: sticker omitted
+2024-01-15, 9:06 a.m. - Alice: GIF omitted
+2024-01-15, 9:07 a.m. - Bob: Contact card omitted
+2024-01-15, 9:08 a.m. - Alice: IMG-20240115-WA0002.jpg (file attached)
+2024-01-15, 9:09 a.m. - Bob: PTF-20240115-WA0003.pdf (file attached)

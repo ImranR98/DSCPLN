@@ -1,8 +1,8 @@
 'use strict'
 
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const { startServer, jsonRequest } = require('./helpers')
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { startServer, jsonRequest } from './helpers.mjs'
 
 const token = async (baseUrl) => (await (await fetch(`${baseUrl}/token`)).json()).token
 

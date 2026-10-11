@@ -1,8 +1,8 @@
 'use strict'
 
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const { suggestCategories, scoreCategories, normalize } = require('../category-suggester')
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { suggestCategories, scoreCategories, normalize } from '../category-suggester.mjs'
 
 const samples = [
     { details: 'Groceries', category: 'Food Weekly', date: new Date('2026-08-01') },

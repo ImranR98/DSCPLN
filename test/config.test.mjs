@@ -1,11 +1,11 @@
 'use strict'
 
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
-const { loadConfig } = require('../config')
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { loadConfig } from '../config.mjs'
 
 const writeConfig = (value) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dscpln-config-'))

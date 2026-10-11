@@ -1,9 +1,11 @@
 'use strict'
 
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const http = require('http')
-const { requestJson, moneyFor } = require('@dscpln/ui-kit/core')
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import http from 'node:http'
+import uiKit from '@dscpln/ui-kit/core'
+
+const { requestJson, moneyFor } = uiKit
 
 test('moneyFor uses stored symbols and leaves symbol-less currencies bare', () => {
     const symbols = { CAD: '$', GBP: '£', TZS: 'TSh' }

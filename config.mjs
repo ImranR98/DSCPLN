@@ -1,7 +1,7 @@
 'use strict'
 
-const fs = require('fs')
-const path = require('path')
+import fs from 'node:fs'
+import path from 'node:path'
 
 const DEFAULT_CONFIG_PATH = './config.json'
 
@@ -94,4 +94,4 @@ const loadConfig = (configPath) => {
     return config
 }
 
-module.exports = { loadConfig }
+export { loadConfig }

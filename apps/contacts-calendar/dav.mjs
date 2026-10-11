@@ -4,6 +4,12 @@
 
 const XML_HEADER = '<?xml version="1.0" encoding="utf-8" ?>'
 
+const NS = {
+  d: 'DAV:',
+  cal: 'urn:ietf:params:xml:ns:caldav',
+  card: 'urn:ietf:params:xml:ns:carddav',
+}
+
 export function normalizeBaseUrl(url) {
   const trimmed = String(url ?? '').trim().replace(/\/+$/, '')
   if (!/^https?:\/\//i.test(trimmed)) {
@@ -72,10 +78,17 @@ export function parsePropfind(xml) {
   return entries
 }
 
-async function propfind(baseUrl, path, { username, password, depth, properties }) {
+// Properties are given as "prefix:name" (default prefix d). The namespace
+// matters: SabreDAV (Nextcloud) answers 404 for calendar-home-set requested in
+// the DAV: namespace instead of CalDAV/CardDAV.
+export async function propfind(baseUrl, path, { username, password, depth, properties }) {
   const body = `${XML_HEADER}
-<d:propfind xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav" xmlns:card="urn:ietf:params:xml:ns:carddav">
-  <d:prop>${properties.map((p) => `<d:${p}/>`).join('')}</d:prop>
+<d:propfind xmlns:d="${NS.d}" xmlns:cal="${NS.cal}" xmlns:card="${NS.card}">
+  <d:prop>${properties.map((p) => {
+    const [prefix, name] = p.includes(':') ? p.split(':') : ['d', p]
+    if (!NS[prefix]) throw new Error(`unknown namespace prefix ${prefix}`)
+    return `<${prefix}:${name}/>`
+  }).join('')}</d:prop>
 </d:propfind>`
   const response = await davRequest(`${baseUrl}${path}`, { username, password, depth, body })
   return response.text()
@@ -102,7 +115,7 @@ export async function discoverCollections({ nextcloudUrl, username, appPassword 
     username,
     password: appPassword,
     depth: '0',
-    properties: ['calendar-home-set', 'addressbook-home-set'],
+    properties: ['cal:calendar-home-set', 'card:addressbook-home-set'],
   })
   const calendarHome = tagContent(
     /<(?:[\w-]+:)?calendar-home-set\b[\s\S]*?<\/(?:[\w-]+:)?calendar-home-set>/i.exec(homeXml)?.[0] ?? '',

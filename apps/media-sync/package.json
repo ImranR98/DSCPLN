@@ -1,0 +1,27 @@
+{
+  "name": "media-sync",
+  "version": "0.1.0",
+  "description": "Media Sync — watch configured folders, standardize/concat/copy media into destination folders, and clean up originals only when it is safe to do so.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "media-sync": "./bin/media-sync.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test --test-concurrency=1",
+    "vendor": "node scripts/vendor-shoelace.mjs"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "exiftool-vendored": "^35.0.0"
+  },
+  "devDependencies": {
+    "@shoelace-style/shoelace": "^2.20.1",
+    "esbuild": "^0.28.2",
+    "playwright-core": "^1.63.0"
+  }
+}

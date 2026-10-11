@@ -104,27 +104,27 @@ Transaction ids embed the row number and a hash of the row values. If the workbo
 
 ### External API
 
-`/api/*` is a small JSON API meant for scripts and other automations. It is designed to be reachable
-without SSO (the deployment routes it around Authelia), so it is protected by a bearer token instead.
-Open the settings page (`/settings`, linked from the header) to copy or regenerate the single token;
-send it as `Authorization: Bearer <token>`.
+`/balance/api/*` is a small JSON API meant for scripts and other automations. It is designed to be
+reachable without SSO (the consolidated ingress routes it around Authelia), so it is protected by a
+bearer token instead. Open the settings page (`/balance/settings`, linked from the header) to copy or
+regenerate the single token; send it as `Authorization: Bearer <token>`.
 
 | Method | Path | Body |
 | --- | --- | --- |
-| `GET` | `/api/categories?details=<text>&kind=expense\|income` | - |
-| `POST` | `/api/transactions` | `{ "amount", "details", "currency", "category", "date"?, "notes"? }` |
+| `GET` | `/balance/api/categories?details=<text>&kind=expense\|income` | - |
+| `POST` | `/balance/api/transactions` | `{ "amount", "details", "currency", "category", "date"?, "notes"? }` |
 
-- `GET /api/categories` returns every category grouped as in the Constants sheet, each with `score: 0`. Adding `details` and `kind` scores every category of that kind between 0 and 1, best match first (`0` when nothing matches); `details` without `kind`, or an unknown kind, is a `400`.
+- `GET /balance/api/categories` returns every category grouped as in the Constants sheet, each with `score: 0`. Adding `details` and `kind` scores every category of that kind between 0 and 1, best match first (`0` when nothing matches); `details` without `kind`, or an unknown kind, is a `400`.
 - `amount` is signed: negative is an expense (`Expenses`), positive is income (`Money In`); `0` is rejected. `date` defaults to today. `details`, `currency` and `category` are required, and the category must exist in the Constants sheet for the transaction's kind. The response is `201 { "transaction": ... }`.
 
 ```sh
 # See how each expense category scores for a description
-curl -G https://dscpln.example.com/api/categories \
+curl -G https://dscpln.example.com/balance/api/categories \
   -H "Authorization: Bearer $TOKEN" \
   --data-urlencode "details=Coffee beans" --data-urlencode "kind=expense"
 
 # Add the transaction with the chosen category
-curl -X POST https://dscpln.example.com/api/transactions \
+curl -X POST https://dscpln.example.com/balance/api/transactions \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"amount":-12.34,"details":"Coffee beans","currency":"CAD","category":"Snacks"}'
 ```

@@ -9,6 +9,23 @@ const path = require('path')
 
 const randomToken = () => crypto.randomBytes(32).toString('base64url')
 
+// Atomic write (temp + fsync + rename) with mode 0600 enforced on every write:
+// a crash mid-save must not corrupt the token file, and an existing file with
+// looser permissions gets tightened.
+const writeState = (file, state) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    const tmp = `${file}.tmp-${process.pid}-${Date.now()}`
+    const fd = fs.openSync(tmp, 'w', 0o600)
+    try {
+        fs.writeFileSync(fd, `${JSON.stringify(state, null, 2)}\n`)
+        fs.fsyncSync(fd)
+    } finally {
+        fs.closeSync(fd)
+    }
+    fs.renameSync(tmp, file)
+    fs.chmodSync(file, 0o600)
+}
+
 // Constant-time comparison; hashing first hides the length difference.
 const safeEqual = (a, b) => {
     const left = crypto.createHash('sha256').update(String(a)).digest()
@@ -37,8 +54,7 @@ const createApiAuth = (stateFile) => {
         if (!state) {
             state = fs.existsSync(file) ? readState(file) : { token: randomToken(), createdAt: new Date().toISOString() }
             if (!fs.existsSync(file)) {
-                fs.mkdirSync(path.dirname(file), { recursive: true })
-                fs.writeFileSync(file, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 })
+                writeState(file, state)
             }
         }
         return state
@@ -46,8 +62,7 @@ const createApiAuth = (stateFile) => {
 
     const save = (next) => {
         state = next
-        fs.mkdirSync(path.dirname(file), { recursive: true })
-        fs.writeFileSync(file, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 })
+        writeState(file, state)
     }
 
     return {

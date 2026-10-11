@@ -47,6 +47,9 @@ export function validateConfig(cfg) {
   const seen = new Set()
   for (const target of cfg.targets) {
     if (!target?.name) throw new ValidationError('every target needs a name')
+    if (!/^[A-Za-z0-9._-]+$/.test(target.name)) {
+      throw new ValidationError(`target ${target.name}: names may only contain letters, numbers, dot, dash and underscore`)
+    }
     if (seen.has(target.name)) throw new ValidationError(`duplicate target name: ${target.name}`)
     seen.add(target.name)
     if (!target.path) throw new ValidationError(`target ${target.name}: a path is required`)
@@ -87,6 +90,7 @@ export function createComposeApp(options = {}) {
     defaults: DEFAULT_CONFIG,
     normalize: normalizeConfig,
     validate: validateConfig,
+    secrets: ['sshPrivateKey'],
     commands: (cfg) => commands(cfg),
     summarize: (result, cfg) => `Backed up ${cfg.targets.length} target(s)`,
     routes: (router, ctx) => {

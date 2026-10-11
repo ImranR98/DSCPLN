@@ -272,6 +272,10 @@ h1 .accent {
     animation: status-pulse 1.2s ease-in-out infinite;
 }
 
+.status-tag--interrupted::before {
+    background: var(--over);
+}
+
 @keyframes status-pulse {
     50% {
         opacity: 0.35;

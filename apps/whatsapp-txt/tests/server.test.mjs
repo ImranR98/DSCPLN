@@ -388,3 +388,13 @@ test('base path: the app mounts under BASE_PATH with the shared kit', async () =
         server.close()
     }
 })
+
+test('sanitizeStaging removes symlinks and keeps real files', async () => {
+    const { sanitizeStaging } = await import('../server.mjs')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'watxt-stage-'))
+    fs.writeFileSync(path.join(dir, 'chat.txt'), 'hello')
+    fs.symlinkSync('/etc/passwd', path.join(dir, 'escape.txt'))
+    await sanitizeStaging(dir)
+    assert.deepEqual(fs.readdirSync(dir).sort(), ['chat.txt'])
+    fs.rmSync(dir, { recursive: true, force: true })
+})

@@ -9,7 +9,7 @@ import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
-import { expandPath, scheduledApp, specValid, ValidationError } from '@dscpln/server-kit'
+import { expandPath, resolveSecret, scheduledApp, specValid, ValidationError } from '@dscpln/server-kit'
 import { DOWNLOADER_DIR, pythonFor } from './run.mjs'
 
 const APP_DIR = path.dirname(fileURLToPath(import.meta.url))
@@ -84,6 +84,7 @@ export function createYtmusicApp(options = {}) {
     defaults: DEFAULT_CONFIG,
     normalize: normalizeConfig,
     validate: validateConfig,
+    secrets: ['browserJson'],
     commands: (cfg) => commands(cfg),
     summarize: (result, cfg) => `Downloaded into ${cfg.musicDir}`,
     routes: (router, ctx) => {
@@ -91,7 +92,7 @@ export function createYtmusicApp(options = {}) {
         try {
           const cfg = ctx.config.get() ?? {}
           const result = await testAuth({
-            browserJson: req.body?.browserJson ?? cfg.browserJson,
+            browserJson: resolveSecret(req.body?.browserJson, cfg.browserJson),
             downloaderDir: DOWNLOADER_DIR,
           })
           res.json({ ok: true, ...result })

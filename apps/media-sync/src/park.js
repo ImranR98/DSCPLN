@@ -13,8 +13,16 @@ export function parkDirFor(config, folderName) {
   return path.join(config.reviewDir, folderName);
 }
 
+// Parked ids come from the review API (URL/body), so containment is enforced
+// here for every caller: ids may never resolve outside the folder's park dir.
 export function parkPathFor(config, folderName, id) {
-  return path.join(parkDirFor(config, folderName), id);
+  const dir = parkDirFor(config, folderName);
+  const resolved = path.resolve(dir, String(id ?? ""));
+  const root = path.resolve(dir);
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+    throw new Error("invalid park path");
+  }
+  return resolved;
 }
 
 export async function readParkManifest(config, folderName, id) {

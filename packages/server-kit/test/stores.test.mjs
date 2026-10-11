@@ -73,3 +73,30 @@ test('stateStore: records runs, bounds history, tracks schedule', async () => {
   assert.equal(reloaded.snapshot().paused, true)
   assert.equal(reloaded.snapshot().lastRun.summary, 'run 5')
 })
+
+test('stateStore: recovers after a failed write (chain is not poisoned)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-state-'))
+  const file = path.join(dir, 'state.json')
+  const store = stateStore(file)
+  await store.load()
+  await store.recordRun({ ok: true, summary: 'first' })
+
+  fs.chmodSync(dir, 0o555)
+  await assert.rejects(() => store.setPaused(true))
+  fs.chmodSync(dir, 0o755)
+  await store.setPaused(true)
+
+  const reread = stateStore(file)
+  await reread.load()
+  assert.equal(reread.snapshot().paused, true, 'the later write must land after a failed one')
+})
+
+test('stateStore: beginRun sets the marker and recordRun clears it', async () => {
+  const file = tmpFile('state.json')
+  const store = stateStore(file)
+  await store.load()
+  await store.beginRun({ startedAt: 1234, trigger: 'schedule' })
+  assert.deepEqual(store.snapshot().runMarker, { startedAt: 1234, trigger: 'schedule' })
+  await store.recordRun({ ok: true, summary: 'done' })
+  assert.equal(store.snapshot().runMarker, null)
+})

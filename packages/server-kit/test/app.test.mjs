@@ -183,3 +183,54 @@ test('json config errors surface with status 400', async () => {
     assert.deepEqual(await res.json(), { error: 'name is required' })
   })
 })
+
+test('malformed percent-encoding does not crash the app', async () => {
+  const fx = fixture()
+  const { app } = makeApp(fx, { basePath: '/media' })
+  await withServer(app, async (base) => {
+    const bad = await fetch(`${base}/media/%`)
+    assert.equal(bad.status, 400)
+    const bad2 = await fetch(`${base}/media/%zz`)
+    assert.equal(bad2.status, 400)
+    const health = await fetch(`${base}/media/api/health`)
+    assert.equal(health.status, 200, 'the server must still be alive')
+  })
+})
+
+test('secret fields are masked on read and kept when saved as the mask', async () => {
+  const fx = fixture()
+  const config = configStore(fx.configFile, {
+    defaults: { appPassword: '', name: 'x' },
+    secrets: ['appPassword'],
+  })
+  const app = createApp({ title: 'T', basePath: '', config })
+  await withServer(app, async (base) => {
+    await fetch(`${base}/api/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appPassword: 'hunter2', name: 'x' }),
+    })
+    const masked = await (await fetch(`${base}/api/config`)).json()
+    assert.equal(masked.appPassword, '••••••••')
+    assert.equal(config.get().appPassword, 'hunter2')
+
+    // Saving the mask back keeps the stored secret.
+    await fetch(`${base}/api/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appPassword: '••••••••', name: 'x' }),
+    })
+    assert.equal(config.get().appPassword, 'hunter2')
+
+    // An explicit empty string clears it.
+    await fetch(`${base}/api/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appPassword: '', name: 'x' }),
+    })
+    assert.equal(config.get().appPassword, '')
+
+    const state = await (await fetch(`${base}/api/state`)).json()
+    assert.notEqual(state.config.appPassword, 'hunter2')
+  })
+})

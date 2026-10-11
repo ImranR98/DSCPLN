@@ -48,3 +48,14 @@ test('refuses malformed state files instead of silently rotating', () => {
     fs.writeFileSync(file, JSON.stringify({ createdAt: 'x' }))
     assert.throws(() => createApiAuth(file).getToken(), /Delete it to regenerate/)
 })
+
+test('atomic saves tighten permissions and leave no temp files', () => {
+    const file = stateFile()
+    fs.writeFileSync(file, JSON.stringify({ token: 'loose-token' }))
+    fs.chmodSync(file, 0o644)
+    const auth = createApiAuth(file)
+    auth.regenerate()
+    assert.equal(fs.statSync(file).mode & 0o777, 0o600, 'existing loose permissions are tightened')
+    assert.deepEqual(fs.readdirSync(path.dirname(file)), ['api-state.json'], 'no temp files left behind')
+    assert.match(JSON.parse(fs.readFileSync(file, 'utf8')).token, /^[A-Za-z0-9_-]{40,}$/)
+})

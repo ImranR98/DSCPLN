@@ -4,7 +4,7 @@
 
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { expandPath, scheduledApp, specValid, ValidationError } from '@dscpln/server-kit'
+import { expandPath, resolveSecret, scheduledApp, specValid, ValidationError } from '@dscpln/server-kit'
 import { discoverCollections, normalizeBaseUrl } from './dav.mjs'
 
 const APP_DIR = path.dirname(fileURLToPath(import.meta.url))
@@ -79,6 +79,7 @@ export function createContactsApp(options = {}) {
     defaults: DEFAULT_CONFIG,
     normalize: normalizeConfig,
     validate: validateConfig,
+    secrets: ['appPassword'],
     commands: (cfg) => commands(cfg),
     summarize: (result, cfg) => {
       const enabled = (cfg.collections ?? []).filter((c) => c.enabled).length
@@ -94,7 +95,7 @@ export function createContactsApp(options = {}) {
           const discovered = await discoverCollections({
             nextcloudUrl: body.nextcloudUrl || saved.nextcloudUrl,
             username: body.username || saved.username,
-            appPassword: body.appPassword ?? saved.appPassword ?? '',
+            appPassword: resolveSecret(body.appPassword, saved.appPassword),
           })
           res.json({ collections: mergeCollections(discovered, body.collections ?? saved.collections ?? []) })
         } catch (err) {

@@ -71,7 +71,11 @@ export class Runner {
       this.lines.splice(0, this.lines.length - this.maxLines)
     }
     if (this.logStream) {
-      this.logStream.write(line + '\n')
+      try {
+        this.logStream.write(line + '\n')
+      } catch {
+        this.logStream = null
+      }
     }
     for (const fn of this.lineListeners) {
       try {
@@ -116,7 +120,13 @@ export class Runner {
 
     if (this.logDir) {
       fs.mkdirSync(this.logDir, { recursive: true })
-      this.logStream = fs.createWriteStream(path.join(this.logDir, 'last.log'), { flags: 'w' })
+      const stream = fs.createWriteStream(path.join(this.logDir, 'last.log'), { flags: 'w' })
+      // A full/read-only disk must never crash the app: keep streaming to
+      // memory and stop writing the file.
+      stream.on('error', () => {
+        if (this.logStream === stream) this.logStream = null
+      })
+      this.logStream = stream
       if (label) this.logStream.write(`# ${label}\n`)
     }
 

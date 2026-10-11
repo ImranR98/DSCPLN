@@ -332,10 +332,22 @@
             getConfig: () => currentConfig,
         })
 
+        let interruptedAt = null
+
         const setRunning = (running) => {
             if (runButton) runButton.disabled = running
             if (stopButton) stopButton.hidden = !running
-            statusTag.className = `status-tag status-tag--${running ? 'running' : currentConfig.paused ? 'paused' : 'live'}`
+            const state = running
+                ? 'running'
+                : interruptedAt
+                    ? 'interrupted'
+                    : currentConfig.paused
+                        ? 'paused'
+                        : 'live'
+            statusTag.className = `status-tag status-tag--${state}`
+            statusTag.title = state === 'interrupted'
+                ? `interrupted run started ${formatDateTime(interruptedAt)}`
+                : ''
         }
 
         if (runButton) {
@@ -396,7 +408,12 @@
             }
             context.textContent = state.nextRun ? `next ${formatDateTime(state.nextRun)}` : ''
             renderTiles(state)
-            setRunning(Boolean(state.run?.running ?? state.running))
+            const running = Boolean(state.run?.running ?? state.running)
+            // A run marker with no live run means the process died mid-run.
+            interruptedAt = !running && state.runMarker && (state.lastRun?.endedAt ?? 0) < state.runMarker.startedAt
+                ? state.runMarker.startedAt
+                : null
+            setRunning(running)
             const history = state.history ?? []
             historyHost.hidden = history.length === 0
             if (history.length) {

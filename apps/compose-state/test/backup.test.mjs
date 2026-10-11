@@ -5,7 +5,7 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { backupShellCommand, runBackup, selectExpired } from '../backup.mjs'
+import { backupShellCommand, runBackup, safeTargetName, selectExpired } from '../backup.mjs'
 
 test('selectExpired keeps the newest N and never deletes the just-written file', () => {
   const files = [
@@ -73,7 +73,7 @@ test('ssh targets build a batch-mode ssh command with the key and known_hosts', 
     { name: 'vps0', mode: 'ssh', host: 'vps0.example.com', user: 'root', path: '/root/Infra/current_target/compose_live_state' },
     { keyFile: '/data/key', knownHostsFile: '/data/known_hosts', destFile: '/dest/.vps0.tar.part' },
   )
-  assert.match(command, /ssh -i '\/data\/key' -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=\/data\/known_hosts 'root@vps0\.example.com'/)
+  assert.match(command, /ssh -i '\/data\/key' -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=\/data\/known_hosts 'root@vps0\.example.com'/)
   assert.match(command, /compose_live_state/)
   assert.match(command, /find \. \\\( -type f -o -type d -o -type l \\\)/)
   assert.match(command, /> '\/dest\/\.vps0\.tar\.part'/)
@@ -90,4 +90,11 @@ test('an ssh target without a key refuses to run', async () => {
   }
   await assert.rejects(() => runBackup({ config, dataDir: root, log: () => {} }), /SSH key is required/)
   fs.rmSync(root, { recursive: true, force: true })
+})
+
+test('target names are sanitized for archive file names', () => {
+  assert.equal(safeTargetName('srv0'), 'srv0')
+  assert.equal(safeTargetName('../evil'), 'evil')
+  assert.equal(safeTargetName('a/b c'), 'a_b_c')
+  assert.equal(safeTargetName('...'), 'target')
 })

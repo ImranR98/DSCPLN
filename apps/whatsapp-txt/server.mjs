@@ -237,6 +237,32 @@ const uploadFileName = (value) => {
     return value
 }
 
+// Extracted archives must stay inside the staging dir: symlinks are removed
+// (unzip can create them and a later read would follow them) and every real
+// path is re-checked against the staging root (zip-slip defense in depth).
+export const sanitizeStaging = async (staging) => {
+    const root = await fsp.realpath(staging)
+    const walk = async (dir) => {
+        const entries = await fsp.readdir(dir, { withFileTypes: true })
+        for (const entry of entries) {
+            const full = path.join(dir, entry.name)
+            if (entry.isSymbolicLink()) {
+                await fsp.rm(full, { force: true })
+                continue
+            }
+            if (entry.isDirectory()) {
+                await walk(full)
+                continue
+            }
+            const real = await fsp.realpath(full).catch(() => null)
+            if (!real || (real !== root && !real.startsWith(root + path.sep))) {
+                throw new Error('the archive contains an entry outside the staging directory')
+            }
+        }
+    }
+    await walk(root)
+}
+
 // Same-origin guard for mutations (the app sits behind a forward-auth proxy; this
 // rejects cross-site POSTs from an authenticated browser).
 const checkSameOrigin = (req, res, next) => {
@@ -386,6 +412,7 @@ export const createApp = (state, options = {}) => {
                 await execFile('unzip', ['-oq', path.join(staging, name), '-d', staging])
                 await fsp.rm(path.join(staging, name), { force: true })
             }
+            await sanitizeStaging(staging)
             for (const name of await fsp.readdir(staging)) {
                 if (name.toLowerCase().endsWith('.vcf')) await fsp.rm(path.join(staging, name), { force: true })
             }

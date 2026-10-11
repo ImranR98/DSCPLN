@@ -12,7 +12,13 @@ export const ARCHIVE_STAMP = (date = new Date()) => {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
 }
 
-export const archiveNameFor = (target, stamp) => `${target.name}-backup-${stamp}.tar`
+// Target names only ever produce file names (validation enforces the same
+// charset); sanitizing here keeps a hand-edited config from escaping the
+// destination directory.
+export const safeTargetName = (name) =>
+  String(name ?? '').replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[^A-Za-z0-9]+/, '') || 'target'
+
+export const archiveNameFor = (target, stamp) => `${safeTargetName(target.name)}-backup-${stamp}.tar`
 
 const quote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`
 
@@ -36,6 +42,7 @@ export function backupShellCommand(target, { keyFile = null, knownHostsFile = nu
     const options = [
       '-i', quote(keyFile),
       '-o', 'BatchMode=yes',
+      '-o', 'ConnectTimeout=15',
       '-o', 'StrictHostKeyChecking=accept-new',
       ...(knownHostsFile ? ['-o', `UserKnownHostsFile=${knownHostsFile}`] : []),
     ].join(' ')
@@ -105,7 +112,7 @@ export async function runBackup({ config, dataDir, log = console.log, stamp = AR
     for (const target of config.targets) {
       const files = await fsp.readdir(destination)
       const keep = archiveNameFor(target, stamp)
-      for (const name of selectExpired(files, Number(config.retention ?? 1), keep, `${target.name}-backup-`)) {
+      for (const name of selectExpired(files, Number(config.retention ?? 1), keep, `${safeTargetName(target.name)}-backup-`)) {
         await fsp.rm(path.join(destination, name), { force: true })
         log(`Removed old archive ${name} (retention ${config.retention})`)
       }

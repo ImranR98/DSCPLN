@@ -28,7 +28,8 @@ test('first boot generates an SSH key and serves the standard API', async () => 
   await withApp(async ({ base, app, dataDir }) => {
     const state = await (await fetch(`${base}/api/state`)).json()
     assert.ok(state.config.sshPublicKey.startsWith('ssh-ed25519 '), 'public key generated')
-    assert.equal(state.config.sshPrivateKey.startsWith('-----BEGIN OPENSSH PRIVATE KEY-----'), true)
+    assert.equal(state.config.sshPrivateKey, '••••••••', 'the private key is masked on read')
+    assert.equal(app.config.get().sshPrivateKey.startsWith('-----BEGIN OPENSSH PRIVATE KEY-----'), true)
     assert.equal(state.run.running, false)
     assert.ok(state.nextRun)
 
@@ -85,6 +86,14 @@ test('config validation enforces targets and retention', async () => {
     })
     assert.equal(badSsh.status, 400)
     assert.match((await badSsh.json()).error, /need a host/)
+
+    const badName = await fetch(`${base}/api/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targets: [{ name: '../escape', mode: 'local', path: '/x' }] }),
+    })
+    assert.equal(badName.status, 400)
+    assert.match((await badName.json()).error, /names may only contain/)
 
     const dupes = await fetch(`${base}/api/config`, {
       method: 'PUT',

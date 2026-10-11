@@ -1,5 +1,5 @@
 export { atomicWriteFile, atomicWriteJson, deepMerge, expandPath, isPlainObject, pathExists, readJsonFile, statOrNull, ValidationError } from './atomic.mjs'
-export { configStore, oneOf } from './config-store.mjs'
+export { configStore, oneOf, resolveSecret, SECRET_MASK } from './config-store.mjs'
 export { stateStore } from './state-store.mjs'
 export { normalizeSpec, occurrenceAfter, occurrenceBefore, parseAt, Scheduler, specValid } from './scheduler.mjs'
 export { Runner } from './runner.mjs'

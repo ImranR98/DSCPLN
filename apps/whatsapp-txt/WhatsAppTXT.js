@@ -1,5 +1,24 @@
 const fs = require('fs')
 
+// Atomic file replacement (temp + fsync + rename in the same directory), so a
+// crash or a full disk can never leave a truncated conversation file.
+const writeFileAtomic = (file, data) => {
+    const tmp = `${file}.tmp-${process.pid}-${Date.now()}`
+    let fd = null
+    try {
+        fd = fs.openSync(tmp, 'w')
+        fs.writeFileSync(fd, data)
+        fs.fsyncSync(fd)
+        fs.closeSync(fd)
+        fd = null
+        fs.renameSync(tmp, file)
+    } catch (err) {
+        if (fd !== null) fs.closeSync(fd)
+        fs.rmSync(tmp, { force: true })
+        throw err
+    }
+}
+
 // Lists chat files in a dir (.txt exports and .json outputs; dotfiles such as backup state files are ignored)
 const getChatFiles = (dir, includeJson = true) => fs.readdirSync(dir).filter(fil => {
     if (fil.startsWith('.')) return false
@@ -730,22 +749,30 @@ const main = (dirs, options = {}) => {
         summary.push({ name: member.key, outName: `${ts2ds(last)} - ${member.key}.json`, sources: member.sources.length, first: messages[0].date, last, messages, cleanupKeys: [member.key] })
     })
 
-    // Phase 4: apply renames, delete old outputs and write merged files
+    // Phase 4: apply renames, write merged files, then remove old outputs.
+    // Ordering matters for safety: every merged file is written atomically
+    // BEFORE any old output is deleted, so an interrupted merge can lose at
+    // most nothing (the old files are still there on the next run).
     if (!dryRun) {
         plans.forEach(({ dir, files }) => {
             files.forEach(({ original, final }) => {
                 if (final !== original) fs.renameSync(`${dir}/${original}`, `${dir}/${final}`)
             })
         })
-        summary.forEach(conversation => {
+        const writtenPaths = new Set(summary.map(conversation => `${dirs[0]}/${conversation.outName}`))
+        for (const conversation of summary) {
+            writeFileAtomic(`${dirs[0]}/${conversation.outName}`, chatToJson(conversation.messages))
+        }
+        for (const conversation of summary) {
             for (const key of conversation.cleanupKeys) {
                 for (const extension of ['.txt', '.json']) {
                     const existing = `${dirs[0]}/${key}${extension}`
-                    if (fs.existsSync(existing)) fs.unlinkSync(existing)
+                    // Never delete a path written by this run (an output can
+                    // also be an input that the merge just replaced).
+                    if (fs.existsSync(existing) && !writtenPaths.has(existing)) fs.unlinkSync(existing)
                 }
             }
-            fs.writeFileSync(`${dirs[0]}/${conversation.outName}`, chatToJson(conversation.messages))
-        })
+        }
     }
 
     console.log('')
@@ -852,6 +879,6 @@ if (require.main === module) {
     }
 }
 
-module.exports = { getChatFiles, conversationKey, matchFilenamePrefix, planFileRenames, exportHeaderLabels, normalizeLineForDate, matchExportHeader, stripExportHeader, dateFormats, genericDateRegex, classifyGenericLine, filenameDateFromName, analyzeOrder, chooseOrder, buildDateContext, classifyDateLine, returnDateLineIfValid, returnFirstLastDates, classifyMessageType, messageTypes, parseChat, MATCH_WINDOW_MS, matchByBody, buildOffsetPicker, alignAndMerge, mergeMessages, cleanDisplayName, normalizeName, detectRenamedGroups, mergeConversationGroup, groupSharedCount, chatToJson, parseJsonChat, ts2ds, ts2display, main }
+module.exports = { writeFileAtomic, getChatFiles, conversationKey, matchFilenamePrefix, planFileRenames, exportHeaderLabels, normalizeLineForDate, matchExportHeader, stripExportHeader, dateFormats, genericDateRegex, classifyGenericLine, filenameDateFromName, analyzeOrder, chooseOrder, buildDateContext, classifyDateLine, returnDateLineIfValid, returnFirstLastDates, classifyMessageType, messageTypes, parseChat, MATCH_WINDOW_MS, matchByBody, buildOffsetPicker, alignAndMerge, mergeMessages, cleanDisplayName, normalizeName, detectRenamedGroups, mergeConversationGroup, groupSharedCount, chatToJson, parseJsonChat, ts2ds, ts2display, main }
 
 

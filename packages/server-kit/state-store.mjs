@@ -16,6 +16,9 @@ const DEFAULT_STATE = {
   paused: false,
   missed: 0,
   lastScheduledRun: null,
+  // Set while a run is in flight so a killed process leaves a visible
+  // "interrupted" marker instead of silently stale state.
+  runMarker: null,
   updatedAt: null,
 }
 
@@ -36,15 +39,18 @@ export function stateStore(file, options = {}) {
     }
   }
 
+  let writeChain = Promise.resolve()
+
   const persist = async () => {
     current.updatedAt = Date.now()
     // Serialize writes: a rapid run+state change must not interleave renames.
-    writeChain = writeChain.then(() => atomicWriteJson(file, current))
+    // The catch keeps a failed write from poisoning the chain forever (which
+    // would silently drop every later state update until a restart).
+    writeChain = writeChain.catch(() => {}).then(() => atomicWriteJson(file, current))
     await writeChain
     emit()
     return current
   }
-  let writeChain = Promise.resolve()
 
   const load = async () => {
     const raw = await readJsonFile(file, null)
@@ -58,6 +64,15 @@ export function stateStore(file, options = {}) {
     load,
     snapshot: () => ({ ...current, history: current.history.slice() }),
 
+    // Called when a run starts; recordRun clears the marker when it finishes.
+    async beginRun(entry = {}) {
+      current.runMarker = {
+        startedAt: entry.startedAt ?? Date.now(),
+        trigger: entry.trigger ?? 'manual',
+      }
+      return persist()
+    },
+
     async recordRun(entry) {
       const run = {
         startedAt: entry.startedAt ?? null,
@@ -67,6 +82,7 @@ export function stateStore(file, options = {}) {
         summary: String(entry.summary ?? ''),
         trigger: entry.trigger ?? 'manual',
       }
+      current.runMarker = null
       current.lastRun = run
       current.history = [run, ...current.history].slice(0, historyLimit)
       return persist()

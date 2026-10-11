@@ -1022,3 +1022,16 @@ test('base path: the app mounts under BASE_PATH with the shared kit', async () =
     await new Promise((r) => srv.close(r));
   }
 });
+
+test('API: empty uploads are rejected and leave no .part file', async () => {
+  const t = task('Empty Upload', { uploads: true, glob: '*.zip', commands: 'true' });
+  await bootWith(makeConfig([t]));
+  const { req, close } = await api();
+
+  const res = await req('POST', '/api/upload/Empty%20Upload?name=empty.zip', '', true);
+  assert.equal(res.status, 400);
+  assert.match(res.json.detail, /empty/);
+  const staging = bctl.stagingDir('Empty Upload');
+  assert.deepEqual(fs.readdirSync(staging), [], 'no .part file is left behind');
+  await close();
+});

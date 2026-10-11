@@ -29,6 +29,7 @@ export const REPO_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const CONFIG_FILE = process.env.BACKUPCTL_CONFIG_FILE ?? path.join(REPO_DIR, 'config.mjs');
 export const LIB_PATH = path.join(REPO_DIR, 'lib.sh');
 const DAY_SECONDS = 86400;
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024 * 1024;
 
 /* The monorepo root: walk up from this app to the nearest package.json with a
  * `workspaces` field. Used when BACKUPCTL_REPO_DIR is not set, so
@@ -736,7 +737,9 @@ export function createApp(options = {}) {
 
       // The body is streamed into a .part file and renamed on completion, so a
       // half-written upload is never picked up by a run (runs skip .part files).
-      router.post('/api/upload/:taskName', (req, res) => {
+      // A very generous cap (50 GB — GitHub/Google archives are huge) keeps a
+      // runaway upload from filling the home volume.
+      router.post('/api/upload/:taskName', async (req, res) => {
         const task = TASK_MAP.get(req.params.taskName)
         if (!task || !supportsUploads(task)) return res.status(404).json({ detail: 'Unknown task' })
         const filename = path.basename(String(req.query.name ?? ''))
@@ -749,14 +752,40 @@ export function createApp(options = {}) {
         const partPath = path.join(stagingDir(task.name), filename + '.part')
         const finalPath = partPath.slice(0, -'.part'.length)
         const ws = fs.createWriteStream(partPath)
-        ws.on('error', () => {
+        let size = 0
+        let tooLarge = false
+        req.on('data', (chunk) => {
+          size += chunk.length
+          if (size > MAX_UPLOAD_BYTES && !tooLarge) {
+            tooLarge = true
+            req.unpipe(ws)
+            ws.destroy()
+            req.resume()
+          }
+        })
+        try {
+          await new Promise((resolve, reject) => {
+            ws.on('finish', resolve)
+            ws.on('close', resolve)
+            ws.on('error', reject)
+            req.on('error', reject)
+            req.pipe(ws)
+          })
+        } catch {
+          fs.rmSync(partPath, { force: true })
           if (!res.headersSent) res.status(500).json({ detail: 'Upload failed' })
-        })
-        req.pipe(ws)
-        ws.on('finish', () => {
-          fs.renameSync(partPath, finalPath)
-          res.json({ queued: filename })
-        })
+          return
+        }
+        if (tooLarge) {
+          fs.rmSync(partPath, { force: true })
+          return res.status(413).json({ detail: `upload exceeds the ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024 / 1024)} GB limit` })
+        }
+        if (size === 0) {
+          fs.rmSync(partPath, { force: true })
+          return res.status(400).json({ detail: 'upload is empty' })
+        }
+        fs.renameSync(partPath, finalPath)
+        res.json({ queued: filename })
       })
 
       router.post('/api/run/:taskName', (req, res) => {

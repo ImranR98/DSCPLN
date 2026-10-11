@@ -36,6 +36,7 @@ export function scheduledApp(options) {
     defaults = {},
     normalize = (cfg) => cfg,
     validate = () => {},
+    secrets = [],
     commands,
     summarize = () => 'Completed',
     stateExtra = null,
@@ -52,7 +53,7 @@ export function scheduledApp(options) {
   const configFile = path.join(dataDir, 'config.json')
   const stateFile = path.join(dataDir, 'state.json')
 
-  const config = configStore(configFile, { defaults, normalize, validate })
+  const config = configStore(configFile, { defaults, normalize, validate, secrets })
   const state = stateStore(stateFile)
   const runner = new Runner({ logDir, title: name })
   const notifier = new Notifier(defaults.ntfy ?? {}, (line) => console.log(line))
@@ -80,6 +81,8 @@ export function scheduledApp(options) {
   async function execute(trigger) {
     const cfg = config.get()
     let result = null
+    const startedAt = Date.now()
+    await state.beginRun({ startedAt, trigger })
     try {
       const cmds = commands(cfg)
       result = await runner.run(cmds, { label: `${name} · ${trigger}` })
@@ -96,7 +99,7 @@ export function scheduledApp(options) {
       return result
     } catch (err) {
       await state.recordRun({
-        startedAt: Date.now(),
+        startedAt,
         endedAt: Date.now(),
         durationSec: 0,
         ok: false,

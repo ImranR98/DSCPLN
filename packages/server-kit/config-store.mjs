@@ -14,11 +14,22 @@ import { atomicWriteJson, deepMerge, readJsonFile, ValidationError } from './ato
 //   await store.save(next)
 //   store.onChange((cfg) => {})
 
+// Sentinels for write-only secret fields: GET responses replace a set secret
+// with SECRET_MASK, and saving the mask back (unchanged field) keeps the
+// stored value. An explicit empty string clears it.
+export const SECRET_MASK = '••••••••'
+
+export function resolveSecret(value, stored) {
+  if (value == null || value === '' || value === SECRET_MASK) return stored ?? ''
+  return value
+}
+
 export function configStore(file, options = {}) {
   const {
     defaults = {},
     normalize = (raw) => raw,
     validate = () => {},
+    secrets = [],
   } = options
   let current = null
   const listeners = new Set()
@@ -41,7 +52,13 @@ export function configStore(file, options = {}) {
   }
 
   const save = async (raw) => {
-    const next = normalizeAndValidate(raw)
+    const prepared = { ...(raw ?? {}) }
+    for (const field of secrets) {
+      if (prepared[field] === SECRET_MASK) {
+        prepared[field] = current?.[field] ?? ''
+      }
+    }
+    const next = normalizeAndValidate(prepared)
     await atomicWriteJson(file, next)
     current = next
     emit(next)
@@ -74,6 +91,15 @@ export function configStore(file, options = {}) {
     save,
     update,
     get: () => current,
+    // Config for API responses: secret fields are masked when set.
+    public: () => {
+      const out = { ...(current ?? {}) }
+      for (const field of secrets) {
+        if (out[field]) out[field] = SECRET_MASK
+      }
+      return out
+    },
+    secrets,
     onChange,
   }
 }

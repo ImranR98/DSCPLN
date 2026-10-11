@@ -70,7 +70,14 @@ export function htmlPages(dir, { basePath = '', title = '', extraHead = '' } = {
   const root = path.resolve(dir)
   return async (req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next()
-    let rel = decodeURIComponent(req.path)
+    // Malformed percent-encoding (`/%`) must not throw: Express 4 does not
+    // catch async middleware rejections, so this would crash the process.
+    let rel
+    try {
+      rel = decodeURIComponent(req.path)
+    } catch {
+      return res.status(400).send('Bad request')
+    }
     if (rel === '/' || rel === '') rel = '/index.html'
     else if (rel.endsWith('/')) rel = `${rel}index.html`
     else if (!path.extname(rel)) rel = `${rel}.html`
@@ -141,7 +148,7 @@ export function createApp(options = {}) {
     api.get('/state', async (req, res) => {
       const body = {
         ...(state ? state.snapshot() : {}),
-        ...(config ? { config: config.get() } : {}),
+        ...(config ? { config: config.public?.() ?? config.get() } : {}),
         run: runner ? runner.status() : null,
       }
       if (stateExtra) Object.assign(body, await stateExtra())
@@ -151,12 +158,12 @@ export function createApp(options = {}) {
 
   if (config) {
     api.get('/config', (req, res) => {
-      res.json(config.get())
+      res.json(config.public?.() ?? config.get())
     })
     api.put('/config', async (req, res, next) => {
       try {
         const saved = await config.save(req.body ?? {})
-        res.json(saved)
+        res.json(config.public?.() ?? saved)
       } catch (err) {
         next(err)
       }
@@ -234,7 +241,7 @@ export function createApp(options = {}) {
       state.onChange(() => broadcast({ type: 'state', state: state.snapshot() }))
     }
     if (config) {
-      config.onChange(() => broadcast({ type: 'config', config: config.get() }))
+      config.onChange(() => broadcast({ type: 'config', config: config.public?.() ?? config.get() }))
     }
     app.locals.broadcast = broadcast
   }

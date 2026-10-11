@@ -183,7 +183,12 @@ export class ApiServer {
       const id = decodeURIComponent(rest.slice(1).join("/"));
       const folder = this.daemon.store.getFolder(folderName);
       if (!folder) return json(res, 404, { error: "unknown folder" });
-      const filePath = parkPathFor(this.daemon.config, folderName, id);
+      let filePath;
+      try {
+        filePath = parkPathFor(this.daemon.config, folderName, id);
+      } catch {
+        return json(res, 404, { error: "not found" });
+      }
       const stat = await fsp.stat(filePath).catch(() => null);
       if (!stat || !stat.isFile()) return json(res, 404, { error: "not found" });
       const ext = path.extname(filePath).toLowerCase();

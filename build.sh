@@ -13,9 +13,11 @@ echo "==> Building $IMAGE (linux/amd64)"
 "$ENGINE" build --platform linux/amd64 -t "$IMAGE" "$SCRIPT_DIR"
 
 echo "==> Pushing $IMAGE"
-"$ENGINE" push "$IMAGE"
+digestfile="$(mktemp)"
+trap 'rm -f "$digestfile"' EXIT
+"$ENGINE" push --digestfile "$digestfile" "$IMAGE"
 
-digest="$("$ENGINE" image inspect --format '{{index .RepoDigests 0}}' "$IMAGE" | sed 's/^[^@]*@//')"
+digest="$(cat "$digestfile")"
 [ -n "$digest" ] || { echo "Error: no pushed digest found for $IMAGE" >&2; exit 1; }
 
 echo

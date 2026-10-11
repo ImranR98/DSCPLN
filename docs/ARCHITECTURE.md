@@ -75,6 +75,28 @@ Every app mounts everything under `BASE_PATH` (`""` for local dev):
   variants, cards, pills, progress, dialogs, toasts, forms, code blocks)
 - `theme-boot.js`, `fonts/`, `vendor/shoelace/`
 
+## Hardening & safety conventions (review pass)
+
+- **Secrets are write-only over the API**: `configStore({ secrets })` masks set
+  secret fields (`••••••••`) in `GET /api/config` and `/api/state`; saving the
+  mask keeps the stored value, an explicit empty string clears it. Apps resolve
+  a masked value back to the stored one for actions (discover/test-auth).
+- **Interrupted runs are visible**: `stateStore.beginRun()` writes a marker that
+  `recordRun()` clears; the shell shows an `interrupted` status pill when a
+  marker has no live run (crash/OOM detection).
+- **Files that replace user data are atomic**: kit atomic writes for
+  config/state; watxt merges write temp+fsync+rename and only delete old
+  outputs after every write; balance's API token file is atomic + 0600;
+  media-sync review ids are containment-checked (no escape from the park dir).
+- **Pods are hardened**: every app drops ALL capabilities, runs with
+  `seccompProfile: RuntimeDefault` and `readOnlyRootFilesystem: true` plus a
+  memory-backed `/tmp`; Task Runner is the exception (its tasks provision tools
+  into the image tree at runtime, so its root stays writable).
+- **UI consistency**: every app loads `ui/theme-boot.js`, the vendored Shoelace
+  themes, `ui/style.css`, `ui/core.js` (+ `ui/shell.js` for scheduled apps) and
+  uses the `D$CPLN ⋅ <Function>` header; app stylesheets only contain
+  app-specific rules (kit tokens/components come from the shared file).
+
 ## New-app recipe
 
 1. `apps/<name>/package.json` depending on `@dscpln/server-kit`;

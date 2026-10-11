@@ -155,7 +155,7 @@ The UI is a thin loop: `loadTasks()` fetches `/api/tasks` and rebuilds the card 
 ## Structure
 
 - `server.mjs` — the whole engine in one module: config loading/tokens, run state, staging, the safe subprocess layer, the generic bash runner, the Express server, and the CLI entry
-- `index.html` — the whole frontend in one file: inline CSS design system + vanilla JS (no build step)
+- `index.html` / `app.js` / `style.css` — the frontend on the shared ui-kit (Shoelace components, kit design tokens, DSCPLN core helpers; no build step)
 - `pty_runner.py` — stdlib-only Python pty helper for tools like `age` that refuse non-TTY stdin (invoked directly by `lib.sh`)
 - `lib.sh` — generic, committed bash helpers that tasks call (subcommands + sourceable functions)
 - `tools/` (monorepo) — the personal automation scripts referenced by the config

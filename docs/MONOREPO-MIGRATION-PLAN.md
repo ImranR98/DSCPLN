@@ -3,9 +3,9 @@
 > **Status: complete (P0–P5).** Single host `dscpln.home.example.com` with all
 > functions at subpaths + portal; deployments renamed (`balance-xlsx`,
 > `media-sync`, `whatsapp-txt`, `task-runner`); absorbed repos archived; old
-> local checkouts removed; stale image repos deleted. Remaining: the Contacts +
-> Calendar Task Runner task retires after the user enters a Nextcloud app
-> password and verifies an export.
+> local checkouts removed; stale image repos deleted. All Task Runner tasks
+> that the apps replaced are retired (Contacts + Calendar verified live; only
+> PC-local/manual drop tasks remain).
 >
 > **Fresh session: read this entire file before touching anything, then execute
 > phases P0 → P5 in order. The user has approved the whole plan ("GO"). Work

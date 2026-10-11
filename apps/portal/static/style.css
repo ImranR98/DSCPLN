@@ -58,6 +58,38 @@
     font-size: var(--fs-xs);
 }
 
+.portal-card__detail:not(:empty) {
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+}
+
+.portal-card__detail.is-ok,
+.portal-card__next.is-ok {
+    color: var(--ok);
+}
+
+.portal-card__detail.is-warn,
+.portal-card__next.is-warn {
+    color: var(--warn);
+}
+
+.portal-card__detail.is-over,
+.portal-card__next.is-over {
+    color: var(--over);
+}
+
+.portal-attention {
+    font-size: var(--fs-sm);
+}
+
+.portal-attention.is-ok {
+    color: var(--ok);
+}
+
+.portal-attention.is-over {
+    color: var(--over);
+}
+
 .portal-card__status {
     font-size: var(--fs-xs);
     white-space: nowrap;

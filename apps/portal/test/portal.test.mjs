@@ -108,3 +108,56 @@ test('portal shows the next scheduled run for scheduled apps', async (t) => {
   assert.match(text, /^next /)
 })
 
+test('portal tiles show per-app detail lines and an attention count', async (t) => {
+  const browser = await launchBrowser()
+  if (!browser) {
+    t.skip('chromium not available (playwright browsers missing)')
+    return
+  }
+  t.after(() => browser.close())
+
+  const app = createApp({ title: 'Portal', pageTitle: 'D$CPLN', basePath: '', staticDir: STATIC_DIR })
+  const server = app.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  t.after(() => new Promise((resolve) => server.close(resolve)))
+  const base = `http://127.0.0.1:${server.address().port}`
+
+  const page = await browser.newPage()
+  const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+  for (const path of ['balance', 'media', 'watxt', 'tasks', 'contacts', 'compose', 'ytmusic']) {
+    await page.route(`**/${path}/api/health`, (route) => route.fulfill(json({ ok: true })))
+    await page.route(`**/${path}/api/state`, (route) => route.fulfill(json({ paused: false })))
+  }
+  await page.route('**/balance/status', (route) => route.fulfill(json({ overBudget: ['USD'] })))
+  await page.route('**/media/api/state', (route) =>
+    route.fulfill(json({ paused: false, folders: [{ counts: { queued: 2, error: 1 } }] })))
+  await page.route('**/watxt/api/state', (route) =>
+    route.fulfill(json({ conversations: 3, messages: 42 })))
+  await page.route('**/tasks/api/tasks', (route) =>
+    route.fulfill(json({ groups: [{ tasks: [{ name: 'a', state: { ok: false } }, { name: 'b', state: { ok: true } }] }] })))
+  await page.route('**/contacts/api/state', (route) =>
+    route.fulfill(json({
+      paused: false,
+      lastRun: { endedAt: Date.now() - 3600_000, ok: true, summary: 'Exported 4 collections' },
+      nextRun: Date.now() + 3600_000,
+      missed: 1,
+    })))
+
+  await page.goto(`${base}/`)
+  await page.waitForFunction(() =>
+    document.querySelector('a.portal-card[href="/contacts"] .portal-card__detail')?.textContent?.startsWith('last '))
+
+  const detailOf = (path) => page.$eval(`a.portal-card[href="/${path}"] .portal-card__detail`, (node) => node.textContent)
+  assert.match(await detailOf('contacts'), /^last .* · OK$/)
+  assert.match(await detailOf('balance'), /USD over budget/)
+  assert.match(await detailOf('media'), /2 active · 1 errors/)
+  assert.match(await detailOf('watxt'), /3 conversations · 42 messages/)
+  assert.match(await detailOf('tasks'), /2 tasks · 1 failing/)
+
+  const next = await page.$eval('a.portal-card[href="/contacts"] .portal-card__next', (node) => node.textContent)
+  assert.match(next, /1 missed/)
+
+  const attention = await page.$eval('#attentionLabel', (node) => node.textContent)
+  assert.match(attention, /need|needs/)
+})
+

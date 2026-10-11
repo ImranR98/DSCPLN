@@ -21,7 +21,9 @@ const startNotifications = (config, dataProvider) => {
     if (!monthlyLimitUrl) {
         return
     }
-    const authHeader = ntfyToken ? `Basic ${Buffer.from(`:${ntfyToken}`).toString('base64')}` : null
+    const authHeader = ntfyToken ? `Bearer ${ntfyToken}` : null
+    const origin = String(process.env.DSCPLN_ORIGIN ?? '').trim().replace(/\/+$/, '')
+    const clickUrl = /^https?:\/\//i.test(origin) ? `${origin}/balance` : null
     const intervalMs = Math.max(1, checkIntervalMinutes || 30) * 60 * 1000
     const warnedCurrencies = new Set()
     const previousSpend = new Map()
@@ -29,7 +31,13 @@ const startNotifications = (config, dataProvider) => {
     const send = async (message, title) => {
         try {
             await axios.post(monthlyLimitUrl, message, {
-                headers: { Title: title, Authorization: authHeader },
+                headers: {
+                    Title: title,
+                    Priority: 'default',
+                    Tags: 'warning',
+                    ...(authHeader ? { Authorization: authHeader } : {}),
+                    ...(clickUrl ? { Click: clickUrl } : {}),
+                },
                 timeout: 10000,
             })
             return true
@@ -54,7 +62,7 @@ const startNotifications = (config, dataProvider) => {
                     const symbol = entry.symbol || ''
                     settled = await send(
                         `${entry.code} ${symbol}${plainAmount(entry.monthsSpend)} of ${symbol}${plainAmount(entry.monthlyBudget)}`,
-                        `Monthly Budget Limit Reached (${entry.code})`)
+                        `D$CPLN · Balance XLSX: ${entry.code} over budget`)
                     if (settled) {
                         warnedCurrencies.add(entry.code)
                     }

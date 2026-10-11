@@ -76,7 +76,8 @@ def get_playlist_data(ytmusic):
 
 def download_track(video_id, track_info, download_dir):
     """Download a single track with metadata and lyrics if available."""
-    base_filename = f"[{video_id}] {sanitize_filename(f"{track_info['artist']} - {track_info['title']}")}"
+    label = f"{track_info['artist']} - {track_info['title']}"
+    base_filename = f"[{video_id}] {sanitize_filename(label)}"
     output_template = str(download_dir / f"{base_filename}.%(ext)s")
     
     ydl_opts = {

@@ -69,7 +69,7 @@ Tasks have **no automatic timeouts** — a run goes until it finishes or you sto
 
 Placeholders like `{{maindir}}` or `{{hosts.bigpc.host}}` inside command strings are resolved from the same file's exported values at run time; values may reference other tokens (resolution loops until stable). Built-in tokens: `{{repo_dir}}` (this repository's root, env-overridable via `BACKUPCTL_REPO_DIR`) and `{{lib}}` (the packaged `lib.sh`). `~` and env vars are expanded on resolved *paths*. Every task needs `state_dir:` — run state is stored there as `.backup-state-<task>.json`.
 
-**Personal scripts live as git submodules** under `scripts/` in this repo. Tasks that need one (e.g. a statement parser) reference it via the `{{scriptroot}}` token — see `config.mjs` for real examples.
+**Personal scripts live under `tools/` in this monorepo** (absorbed with git history). Tasks that need one (e.g. a statement parser) reference it via the `{{scriptroot}}` token (`{{repo_dir}}/tools`) — see `config.mjs` for real examples.
 
 ### Task fields
 
@@ -146,7 +146,7 @@ The UI is a thin loop: `loadTasks()` fetches `/api/tasks` and rebuilds the card 
 - Node.js 22+ (npm dependency: `express` only)
 - System tools used by tasks: `bash`, `rsync`, `ssh`, `unzip`/`tar`, `git`, `age`, `jq`, `wget`, ImageMagick, plus whatever each external script needs (some personal scripts are Python and need `python3`)
 - **`python3`** (stdlib only) — `lib.sh`'s `encrypt` subcommand drives tools that refuse non-TTY stdin (like `age`) through the committed helper `pty_runner.py`, which uses Python's stdlib `pty` module; python3 is already required by several personal scripts
-- Personal automation scripts live as **git submodules** under `scripts/` (referenced from the personal config via the `{{scriptroot}}` token); init them with `git submodule update --init --recursive`
+- Personal automation scripts live under **`tools/`** in the monorepo (referenced from the personal config via the `{{scriptroot}}` token)
 
 ## Testing
 
@@ -158,7 +158,7 @@ The UI is a thin loop: `loadTasks()` fetches `/api/tasks` and rebuilds the card 
 - `index.html` — the whole frontend in one file: inline CSS design system + vanilla JS (no build step)
 - `pty_runner.py` — stdlib-only Python pty helper for tools like `age` that refuse non-TTY stdin (invoked directly by `lib.sh`)
 - `lib.sh` — generic, committed bash helpers that tasks call (subcommands + sourceable functions)
-- `scripts/` — git submodules with the personal automation scripts referenced by the config
+- `tools/` (monorepo) — the personal automation scripts referenced by the config
 - `config.mjs` — the committed personal config (values + groups of tasks)
 - `tests/` — `node:test` sandbox suites (`npm test`)
-- `docs/` — the server-app replacement plan (`REPLACEMENT-PLAN.md`) and the record of completed replacements (`media-sync-whatsapp.md`)
+- the monorepo `docs/` — the replacement plan (`REPLACEMENT-PLAN.md`) and architecture (`ARCHITECTURE.md`)

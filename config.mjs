@@ -177,15 +177,8 @@ export default {
           move: {},
         },
 
-        // Drop WhatsApp chat zips; they are merged into the cumulative TXT backup.
-        {
-          name: 'WhatsApp TXT',
-          uploads: true,
-          glob: '*.zip',
-          state_dir: '{{maindir}}/Backups/WhatsApp TXT',
-          note: 'Drop archive.zip or WhatsApp chat zips here; they will be merged into the cumulative backup.',
-          commands: 'mkdir -p "{{maindir}}/Backups/WhatsApp TXT" && unzip -oq {{uploads}} -d "$TMPDIR" && for z in "$TMPDIR"/*.zip; do [ -f "$z" ] || continue; unzip -oq "$z" -d "$TMPDIR"; rm -f "$z"; done && rm -f "$TMPDIR"/*.vcf && node \'{{scriptroot}}/WhatsAppTXT/WhatsAppTXT.js\' "{{maindir}}/Backups/WhatsApp TXT" "$TMPDIR"',
-        },
+        // WhatsApp TXT exports are now merged by the WATXT app's import panel
+        // (watxt.<domain>); see docs/REPLACEMENT-PLAN.md.
 
         // The WhatsApp media archive and voice-note processing moved to the
         // Media Sync app (WhatsApp AllMedia mirror + WhatsApp Voice Notes review).

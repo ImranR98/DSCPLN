@@ -1,6 +1,3 @@
-[submodule "scripts/WhatsAppTXT"]
-	path = scripts/WhatsAppTXT
-	url = git@github.com:ImranR98/WhatsAppTXT.git
 [submodule "scripts/WineGameSaveBackup"]
 	path = scripts/WineGameSaveBackup
 	url = git@github.com:ImranR98/WineGameSaveBackup.git

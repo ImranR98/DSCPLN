@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { once } from 'node:events'
-import { createYtmusicApp } from '../server.mjs'
+import { createYtmusicApp, summarizeDownload } from '../server.mjs'
 
 const stubCommands = () => [[process.execPath, '-e', 'console.log("stub: downloaded")']]
 const stubAuth = async ({ browserJson }) => {
@@ -104,3 +104,14 @@ async function waitFor(fn, timeoutMs = 10_000) {
   }
   throw new Error('timeout waiting for condition')
 }
+
+test('summarizeDownload reports counts from the run log', () => {
+  assert.equal(summarizeDownload('Downloaded 3 new tracks\n'), 'Downloaded 3 new tracks')
+  assert.equal(summarizeDownload('Downloaded 0 new tracks\n'), 'No new tracks')
+  assert.equal(
+    summarizeDownload('Downloaded 2 new tracks\nNumber of unsorted songs was 468, is now 470.'),
+    'Downloaded 2 new tracks · 470 unsorted',
+  )
+  assert.equal(summarizeDownload('no counters here', { musicDir: '/m' }), 'Downloaded into /m')
+  assert.equal(summarizeDownload('', {}), 'Downloaded into the music directory')
+})

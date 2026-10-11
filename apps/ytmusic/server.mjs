@@ -4,6 +4,7 @@
 // ytmusicapi browser.json stored on the app's PVC.
 
 import fsp from 'node:fs/promises'
+import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
@@ -68,6 +69,36 @@ export async function defaultTestAuth({ browserJson, downloaderDir = DOWNLOADER_
   }
 }
 
+// Last run summary for the notification body: parse the tail of the runner log
+// for the downloader's own counters, falling back to the destination.
+export function summarizeDownload(text, cfg = {}) {
+  const downloaded = /Downloaded (\d+) new tracks?/.exec(text ?? '')
+  if (!downloaded) return `Downloaded into ${cfg.musicDir ?? 'the music directory'}`
+  const count = Number(downloaded[1])
+  const parts = [count === 0 ? 'No new tracks' : `Downloaded ${count} new track${count === 1 ? '' : 's'}`]
+  const unsorted = /Number of unsorted songs was \d+, is now (\d+)/.exec(text ?? '')
+  if (unsorted) parts.push(`${Number(unsorted[1])} unsorted`)
+  return parts.join(' · ')
+}
+
+function readLogTail(file, maxBytes = 131072) {
+  try {
+    const { size } = fs.statSync(file)
+    const start = Math.max(0, size - maxBytes)
+    const length = size - start
+    const fd = fs.openSync(file, 'r')
+    try {
+      const buffer = Buffer.alloc(length)
+      fs.readSync(fd, buffer, 0, length, start)
+      return buffer.toString('utf8')
+    } finally {
+      fs.closeSync(fd)
+    }
+  } catch {
+    return ''
+  }
+}
+
 export function createYtmusicApp(options = {}) {
   const dataDir = options.dataDir ?? process.env.DSCPLN_DATA_DIR ?? '/data'
   const basePath = options.basePath ?? process.env.BASE_PATH ?? ''
@@ -86,7 +117,7 @@ export function createYtmusicApp(options = {}) {
     validate: validateConfig,
     secrets: ['browserJson'],
     commands: (cfg) => commands(cfg),
-    summarize: (result, cfg) => `Downloaded into ${cfg.musicDir}`,
+    summarize: (result, cfg) => summarizeDownload(readLogTail(path.join(dataDir, 'logs', 'last.log')), cfg),
     routes: (router, ctx) => {
       router.post('/api/test-auth', async (req, res, next) => {
         try {

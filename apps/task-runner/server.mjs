@@ -1,431 +1,52 @@
 #!/usr/bin/env node
-/* Task Runner (formerly backupctl) — Express server, generic bash runner, and
- * CLI entry, in one module.
+/* Task Runner (formerly backupctl) — HTTP server and run orchestration.
  *
- * Tasks are bash: each task has a `commands` list (or a single string) —
- * or a `script:`/`move:`/`ingest:` shorthand that is normalized into a
- * command at config load — executed by the runner with process groups,
- * secret redaction, and per-task state recording. Multiple tasks can run
- * in parallel; tasks with the same `serial_key:` run one at a time. There
- * are no automatic timeouts — a run goes until it finishes or the user
- * cancels it. Runner options: `uploads:` (dropped files, available as
- * {{uploads}}), `glob:` (drop pattern, or list of patterns), `prompts:`
- * (confirm/secret, redacted), `require:`, `capture:` + `commit_dir:`
- * (output shown in a paste dialog), `root:` (availability badge),
- * `summary_last_line:` (summary = last log line). Everything
- * service-specific (tool installs, export validation, pruning) lives in
- * the task's own bash or in lib.sh. */
+ * Tasks are bash: each task's `commands` (or shorthand) are executed by the
+ * runner with process groups, redaction, serial queues and per-task state.
+ * The CLI/config shapes are documented in README.md; config loading lives in
+ * config-loader.mjs, templating in template.mjs, run state in state.mjs and
+ * the subprocess layer in runner.mjs. Everything service-specific (tool
+ * installs, export validation, pruning) lives in the task's own bash or in
+ * lib.sh. */
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import express from 'express';
 import { createApp as createKitApp } from '@dscpln/server-kit';
+import {
+  CONFIG_FILE,
+  ConfigError,
+  ConfigMissingError,
+  LIB_PATH,
+  REPO_DIR,
+  loadConfig,
+} from './config-loader.mjs';
+import { expand, resolve } from './template.mjs';
+import {
+  clearRunning,
+  loadTaskState,
+  markRunning,
+  runningMarker,
+  saveTaskState,
+  slugify,
+  stagingDir,
+  tmpRoot,
+} from './state.mjs';
+import { DAY_SECONDS, humanAgo, pathFound, shellQuote, splitLines } from './util.mjs';
+import { killpg, makeLogger, sh, shCapture } from './runner.mjs';
 
-export const REPO_DIR = path.dirname(fileURLToPath(import.meta.url));
-export const CONFIG_FILE = process.env.BACKUPCTL_CONFIG_FILE ?? path.join(REPO_DIR, 'config.mjs');
-export const LIB_PATH = path.join(REPO_DIR, 'lib.sh');
-const DAY_SECONDS = 86400;
+// The modules above also implement the documented test surface; re-export them
+// so `import * as bctl from '../server.mjs'` keeps working.
+export * from './config-loader.mjs';
+export * from './template.mjs';
+export * from './state.mjs';
+export * from './util.mjs';
+export * from './runner.mjs';
+
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024 * 1024;
-
-/* The monorepo root: walk up from this app to the nearest package.json with a
- * `workspaces` field. Used when BACKUPCTL_REPO_DIR is not set, so
- * `node apps/task-runner/server.mjs` resolves {{repo_dir}} correctly. */
-export function findRepoRoot(startDir = REPO_DIR) {
-  let dir = startDir;
-  for (let i = 0; i < 8; i++) {
-    const pkgFile = path.join(dir, 'package.json');
-    if (fs.existsSync(pkgFile)) {
-      try {
-        if (JSON.parse(fs.readFileSync(pkgFile, 'utf8')).workspaces) return dir;
-      } catch { /* unreadable package.json: keep walking */ }
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return startDir;
-}
-
-// config ---------------------------------------------------------------------
-
-export class ConfigMissingError extends Error {}
-export class ConfigError extends Error {}
-
-const HEREDOC_WRAP = `bash -c 'TMP=$(mktemp); cat > "$TMP"; bash "$TMP"; RC=$?; rm -f "$TMP"; exit $RC' <<'BASH_SCRIPT'`;
-
-/* Task shorthands, normalized into `commands` at load: `script:` is a bash
- * body wrapped in a temp-file heredoc (children can't eat the script from
- * stdin); `move:`/`ingest:` are the common "file this drop into a
- * destination dir and git-commit it" flows, with `dest` defaulting to the
- * task's state_dir. */
-function shorthandCommands(t) {
-  if (t.script) {
-    const body = String(t.script).replace(/\n+$/, '');
-    return `${HEREDOC_WRAP}\n${body}\nBASH_SCRIPT`;
-  }
-  if (t.move) {
-    const { rename, dest = t.state_dir } = t.move;
-    const flags = rename ? ` --rename ${shellQuote(rename)}` : '';
-    return `bash '{{lib}}' move --git${flags} ${shellQuote(dest)} {{uploads}}`;
-  }
-  if (t.ingest) {
-    const { suffix, dest = t.state_dir } = t.ingest;
-    return `bash '{{lib}}' ingest ${shellQuote(dest)} ${shellQuote(suffix)} {{uploads}}`;
-  }
-  return null;
-}
-
-export async function loadConfig(configPath = CONFIG_FILE) {
-  const p = configPath instanceof URL ? configPath : path.resolve(configPath);
-  if (!fs.existsSync(p)) {
-    throw new ConfigMissingError(
-      `Missing config file ${p} — create it (see README.md for the schema)`
-    );
-  }
-  let mod;
-  try {
-    mod = await import(pathToFileURL(p).href);
-  } catch (e) {
-    throw new ConfigError(`Failed to load ${p}: ${e.message}`);
-  }
-  const data = mod.default ?? {};
-  const groups = data.groups ?? [];
-  const local = { ...data };
-  delete local.groups;
-  local.repo_dir ??= process.env.BACKUPCTL_REPO_DIR ?? findRepoRoot(REPO_DIR);
-  local.lib ??= LIB_PATH;
-  if (!Array.isArray(groups)) throw new ConfigError("Config needs a 'groups' array");
-  const tasks = [];
-  const groupSeen = new Set();
-  const taskSeen = new Set();
-  for (const g of groups) {
-    if (!g.name) throw new ConfigError("Every group needs a 'name'");
-    if (groupSeen.has(g.name)) throw new ConfigError(`Duplicate group name: '${g.name}'`);
-    groupSeen.add(g.name);
-    for (const t of g.tasks ?? []) {
-      const merged = { ...g.defaults, ...t, group: g.name };
-      if (!merged.name) throw new ConfigError("Every task needs a 'name'");
-      if (!merged.state_dir) throw new ConfigError(`Task '${merged.name}' needs a 'state_dir' for its run state`);
-      merged.commands ??= shorthandCommands(merged);
-      delete merged.script;
-      delete merged.move;
-      delete merged.ingest;
-      if (!merged.commands) {
-        throw new ConfigError(`Task '${merged.name}' needs 'commands' (or 'script'/'move'/'ingest')`);
-      }
-      if (taskSeen.has(merged.name)) throw new ConfigError(`Duplicate task name: '${merged.name}'`);
-      taskSeen.add(merged.name);
-      if (merged.host !== undefined && (typeof merged.host !== 'string' || !merged.host.trim())) {
-        throw new ConfigError(`Task '${merged.name}': host must be a machine name`);
-      }
-      merged.host ??= 'any';
-      tasks.push(merged);
-    }
-  }
-  return [local, tasks];
-}
-
-const TILDE_RE = /^~(?=[/]|$)/;
-
-function tilde(value) {
-  return String(value).replace(TILDE_RE, os.homedir());
-}
-
-export function expand(p) {
-  return tilde(p).replace(/\$(\w+)|\$\{([^}]+)\}/g, (m, a, b) => process.env[a || b] ?? '');
-}
-
-const TOKEN_RE = /\{\{([a-zA-Z0-9_.]+)\}\}/g;
-
-function lookup(key, local, extra) {
-  if (extra && key in extra) return extra[key];
-  let node = local;
-  for (const part of key.split('.')) {
-    if (node && typeof node === 'object' && part in node) node = node[part];
-    else return undefined;
-  }
-  return node;
-}
-
-/* Replace {{a.b.c}} tokens from local (and per-run extra). Values may
- * reference other tokens, so resolution loops until stable. A template that
- * is exactly one token resolves to its typed value (dict/list/int);
- * embedded tokens are stringified. */
-export function resolve(template, local, extra = {}) {
-  if (typeof template !== 'string') return template;
-  let result = template;
-  for (let i = 0; i < 10; i++) {
-    const next = result.replace(TOKEN_RE, (m, key) => {
-      const value = lookup(key, local, extra);
-      if (value === undefined) return m;
-      const s = typeof value === 'string' ? tilde(value) : String(value);
-      return s;
-    });
-    if (next === result) break;
-    result = next;
-  }
-  const full = /^\{\{([a-zA-Z0-9_.]+)\}\}$/.exec(template);
-  if (full) {
-    const value = lookup(full[1], local, extra);
-    if (value === undefined) return result; // unresolved token: leave the literal template
-    if (typeof value !== 'string') return value;
-    return result;
-  }
-  return result;
-}
-
-/* ~ values must expand here: inside command strings they are usually
- * quoted, so the shell's tilde expansion never sees them */
-
-// run state + staging --------------------------------------------------------
-
-export const STATE_DIR = process.env.BACKUPCTL_STATE_DIR ?? path.join(os.homedir(), '.backupctl');
-const RUNNING_FILE = path.join(STATE_DIR, 'running.json');
-
-export function slugify(name) {
-  return String(name).replace(/[^a-zA-Z0-9_-]/g, '_');
-}
-
-export function stateFileFor(task, local) {
-  const base = expand(resolve(task.state_dir, local));
-  return path.join(base, `.backup-state-${slugify(task.name)}.json`);
-}
-
-export function saveTaskState(task, local, ok, summary, output = '') {
-  const file = stateFileFor(task, local);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const data = {
-    task: task.name,
-    ts: Date.now() / 1000,
-    ok,
-    summary,
-    output,
-  };
-  const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 1));
-  fs.renameSync(tmp, file);
-}
-
-export function loadTaskState(task, local) {
-  const file = stateFileFor(task, local);
-  if (!fs.existsSync(file)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-function writeRunning(list) {
-  if (list.length) fs.writeFileSync(RUNNING_FILE, JSON.stringify(list));
-  else fs.rmSync(RUNNING_FILE, { force: true });
-}
-
-export function markRunning(taskName) {
-  const list = (runningMarker() ?? []).filter((m) => m.task !== taskName);
-  list.push({ task: taskName, ts: Date.now() / 1000 });
-  fs.mkdirSync(STATE_DIR, { recursive: true });
-  writeRunning(list);
-}
-
-export function clearRunning(taskName) {
-  writeRunning((runningMarker() ?? []).filter((m) => m.task !== taskName));
-}
-
-export function runningMarker() {
-  if (!fs.existsSync(RUNNING_FILE)) return null;
-  try {
-    const data = JSON.parse(fs.readFileSync(RUNNING_FILE, 'utf8'));
-    return Array.isArray(data) ? data : null;
-  } catch {
-    return null;
-  }
-}
-
-export function stagingDir(taskName) {
-  const d = path.join(STATE_DIR, 'staging', slugify(taskName));
-  fs.mkdirSync(d, { recursive: true });
-  return d;
-}
-
-/* Run commands get TMPDIR here (a per-run subdir): the real filesystem,
- * not a small/quota'd /tmp tmpfs. Each run's subdir is wiped when it ends. */
-export function tmpRoot() {
-  return process.env.BACKUPCTL_TMP_DIR ?? path.join(os.homedir(), 'Downloads', 'backupctl-tmp');
-}
-
-// subprocess layer -----------------------------------------------------------
-
-const ASKPASS_PATH = path.join(STATE_DIR, 'askpass.sh');
-
-function ensureAskpass() {
-  if (!fs.existsSync(ASKPASS_PATH)) {
-    fs.mkdirSync(path.dirname(ASKPASS_PATH), { recursive: true });
-    fs.writeFileSync(ASKPASS_PATH, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
-  }
-  return ASKPASS_PATH;
-}
-
-// Commands run with stdin closed (interactive prompts fail fast instead of
-// hanging) and SSH forced to use a failing askpass (no password prompts on a
-// hidden terminal).
-export const SAFE_ENV = {
-  ...process.env,
-  SSH_ASKPASS_REQUIRE: 'force',
-  SSH_ASKPASS: ensureAskpass(),
-};
-
-export function shellQuote(arg) {
-  const s = String(arg);
-  if (/^[\w@%+=:,./-]+$/.test(s)) return s;
-  return `'${s.replace(/'/g, `'\\''`)}'`;
-}
-
-function redactText(text, secrets) {
-  for (const secret of secrets) text = text.replaceAll(secret, '***');
-  return text;
-}
-
-function splitLines(text) {
-  const lines = text.split(/\r?\n/);
-  if (lines.at(-1) === '') lines.pop();
-  return lines;
-}
-
-export function killpg(pid, log = () => {}) {
-  try {
-    process.kill(-pid, 'SIGTERM');
-  } catch { /* already gone or not permitted */ }
-  setTimeout(() => {
-    try {
-      process.kill(-pid, 'SIGKILL');
-    } catch { /* already gone */ }
-  }, 1000);
-  log('(killed)');
-}
-
-function spawnSafe(cmd, opts = {}) {
-  const { cwd, shell = false, env = {} } = opts;
-  const [file, args] = Array.isArray(cmd) ? [cmd[0], cmd.slice(1)] : [cmd, []];
-  return spawn(file, args, {
-    cwd,
-    shell,
-    detached: true,
-    env: { ...SAFE_ENV, ...env },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-}
-
-/* Run a command (argv list or shell string). By default output lines are
- * streamed into log() and the exit code is returned; with `capture: true`
- * all output is buffered and {rc, out, err} is returned instead. Spawned
- * pids are registered in `groups` (default: a throwaway set) so a
- * per-run cancel can kill exactly this run's process groups; redact masks
- * secrets in the logged command and output. No automatic timeout — runs
- * end when the command exits or is cancelled. */
-export function run(cmd, opts = {}) {
-  const { shell = false, cwd, log = () => {}, redact = [], capture = false, env = {}, groups = new Set() } = opts;
-  log(`$ ${redactText(shell ? cmd : cmd.map(shellQuote).join(' '), redact)}`);
-  let proc;
-  const outBuf = [];
-  const errBuf = [];
-  const done = (rc) => (capture ? { rc, out: redactText(outBuf.join(''), redact), err: redactText(errBuf.join(''), redact) } : rc);
-  try {
-    proc = spawnSafe(cmd, { cwd, shell, env });
-  } catch (e) {
-    log(`ERROR: could not start: ${e.message}`);
-    return Promise.resolve(capture ? { rc: 127, out: '', err: String(e) } : 127);
-  }
-  proc.stdout.on('error', () => {});
-  proc.stderr.on('error', () => {});
-  proc.stdout.on('data', (d) => {
-    if (capture) {
-      outBuf.push(d);
-      return;
-    }
-    // terminal-faithful line splitting: '\r' (progress updates) and '\n'
-    // both end a line; the trailing partial line is flushed on close
-    outTail += d;
-    let idx;
-    while ((idx = outTail.search(/[\r\n]/)) !== -1) {
-      log(redactText(outTail.slice(0, idx), redact));
-      const skip = outTail[idx] === '\r' && outTail[idx + 1] === '\n' ? 2 : 1;
-      outTail = outTail.slice(idx + skip);
-    }
-  });
-  proc.stderr.on('data', (d) => { errBuf.push(d); });
-  groups.add(proc.pid);
-  let outTail = '';
-  return new Promise((resolvePromise) => {
-    let settled = false;
-    proc.on('error', (e) => {
-      if (settled) return;
-      settled = true;
-      log(`ERROR: could not start: ${e.message}`);
-      groups.delete(proc.pid);
-      resolvePromise(capture ? { rc: 127, out: redactText(outBuf.join(''), redact), err: redactText(errBuf.join(''), redact) } : 127);
-    });
-    proc.on('close', (code, signal) => {
-      if (settled) return;
-      settled = true;
-      groups.delete(proc.pid);
-      const rc = code ?? (signal ? 128 + (os.constants.signals[signal] ?? 0) : 1);
-      if (!capture) {
-        if (outTail) log(redactText(outTail, redact));
-        // stderr is buffered and flushed here (nothing is lost to the pipe race)
-        for (const line of splitLines(redactText(errBuf.join(''), redact))) log(line);
-      }
-      resolvePromise(done(rc));
-    });
-  });
-}
-
-export function sh(cmd, opts = {}) {
-  return run(cmd, { ...opts, shell: true });
-}
-
-/* Run a shell command capturing all output. Returns {rc, out, err}. */
-export function shCapture(cmd, opts = {}) {
-  return run(cmd, { ...opts, shell: true, capture: true });
-}
-
-export function humanAgo(ts) {
-  const delta = Date.now() / 1000 - ts;
-  if (delta < 3600) return `${Math.floor(delta / 60)} min ago`;
-  if (delta < DAY_SECONDS) return `${Math.floor(delta / 3600)} hr ago`;
-  if (delta < 30 * DAY_SECONDS) return `${Math.floor(delta / DAY_SECONDS)} days ago`;
-  if (delta < 365 * DAY_SECONDS) return `${Math.floor(delta / (30 * DAY_SECONDS))} months ago`;
-  return `${Math.floor(delta / (365 * DAY_SECONDS))} years ago`;
-}
-
-/* Does a path pattern exist? Glob-aware, drives the availability badge. */export function pathFound(pattern) {
-  if (/[*?\[]/.test(pattern)) {
-    try {
-      return fs.globSync(pattern).length > 0;
-    } catch {
-      return false;
-    }
-  }
-  try {
-    return fs.statSync(pattern).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-// runner ---------------------------------------------------------------------
-
-function makeLogger() {
-  const lines = [];
-  const log = (line) => lines.push(line);
-  log.lines = lines;
-  log.text = () => lines.join('\n');
-  return log;
-}
 
 function clearStaging(ctx) {
   const d = stagingDir(ctx.task.name);

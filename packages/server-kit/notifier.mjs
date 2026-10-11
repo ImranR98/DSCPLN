@@ -1,10 +1,12 @@
 // ntfy.sh-compatible push notifications. Apps call notifyResult() after a run:
 // failures always notify, successes only when notifySuccess is on.
 
-// HTTP header values are ByteString (latin-1); a stray emoji in a title makes
-// fetch throw and silently loses the notification. Replace what cannot encode.
+// HTTP header values are ByteString (latin-1) and clients decode them loosely:
+// even latin-1 high bytes (e.g. "·") can arrive as replacement characters. Keep
+// header values printable ASCII; anything else is replaced so the notification
+// itself is never lost.
 function headerSafe(value) {
-  return String(value).replace(/[^\u0000-\u00ff]/g, '?')
+  return String(value).replace(/[^\u0020-\u007e]/g, '?')
 }
 
 export class Notifier {
@@ -61,7 +63,7 @@ export class Notifier {
     const send = !ok || this.notifySuccess
     if (!send) return { ok: true, skipped: true }
     const result = await this.notify(summary || (ok ? 'Completed' : 'Failed'), {
-      title: `D$CPLN · ${app} ${ok ? 'OK' : 'FAILED'}`,
+      title: `D$CPLN - ${app} ${ok ? 'OK' : 'FAILED'}`,
       priority: ok ? 'default' : 'high',
       tags: ok ? ['white_check_mark'] : ['warning'],
     })

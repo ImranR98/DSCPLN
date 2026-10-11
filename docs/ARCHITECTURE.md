@@ -137,8 +137,9 @@ Everything is served from `https://dscpln.home.example.com/<function>` (portal a
   its config Secret), `Bearer` auth.
 - Titles are latin-1 (`HTTP` headers are ByteString): the kit's Notifier
   sanitizes non-ASCII automatically and follows one convention —
-  run results `D$CPLN · <Function> OK|FAILED`, event notifications
-  `D$CPLN · <Function>: <event>`.
+  run results `D$CPLN - <Function> OK|FAILED`, event notifications
+  `D$CPLN - <Function>: <event>` (ASCII `-`; the ntfy apps mangle non-ASCII
+  header characters).
 - Priority/tags: success `default` + `white_check_mark`; failure `high` +
   `warning`; warnings (balance over budget) `default` + `warning`; Media Sync
   info `low` + `white_check_mark`.

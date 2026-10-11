@@ -62,7 +62,7 @@ const startNotifications = (config, dataProvider) => {
                     const symbol = entry.symbol || ''
                     settled = await send(
                         `${entry.code} ${symbol}${plainAmount(entry.monthsSpend)} of ${symbol}${plainAmount(entry.monthlyBudget)}`,
-                        `D$CPLN · Balance XLSX: ${entry.code} over budget`)
+                        `D$CPLN - Balance XLSX: ${entry.code} over budget`)
                     if (settled) {
                         warnedCurrencies.add(entry.code)
                     }

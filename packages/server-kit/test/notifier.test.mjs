@@ -21,7 +21,7 @@ test('failure notifications are forced and carry a latin-1 safe title', async (t
   assert.equal(result.ok, true)
   assert.equal(calls.length, 1)
   const { headers, body } = calls[0].init
-  assert.equal(headers.Title, 'D$CPLN · Contacts + Calendar FAILED')
+  assert.equal(headers.Title, 'D$CPLN - Contacts + Calendar FAILED')
   assert.ok(latin1Safe(headers.Title))
   assert.equal(headers.Priority, 'high')
   assert.equal(headers.Tags, 'warning')
@@ -37,17 +37,17 @@ test('success notifications are skipped unless notifySuccess is on', async (t) =
   const loud = new Notifier({ ntfy: { url: 'http://ntfy.test/topic', notifySuccess: true } })
   await loud.notifyResult({ ok: true, app: 'YTMusic', summary: 'Downloaded' })
   assert.equal(calls.length, 1)
-  assert.equal(calls[0].init.headers.Title, 'D$CPLN · YTMusic OK')
+  assert.equal(calls[0].init.headers.Title, 'D$CPLN - YTMusic OK')
   assert.equal(calls[0].init.headers.Tags, 'white_check_mark')
 })
 
-test('non-latin-1 characters in a custom title are sanitized instead of losing the notification', async (t) => {
+test('non-ASCII characters in a custom title are sanitized instead of losing the notification', async (t) => {
   const calls = mockFetch(t)
   const notifier = new Notifier({ ntfy: { url: 'http://ntfy.test/topic' } })
-  const result = await notifier.notify('hello', { title: 'status ✓ done \u22c5' })
+  const result = await notifier.notify('hello', { title: 'status ✓ done \u22c5 \u00b7 é' })
   assert.equal(result.ok, true)
   assert.equal(calls.length, 1)
-  assert.equal(calls[0].init.headers.Title, 'status ? done ?')
+  assert.equal(calls[0].init.headers.Title, 'status ? done ? ? ?')
   assert.ok(latin1Safe(calls[0].init.headers.Title))
 })
 

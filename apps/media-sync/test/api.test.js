@@ -181,7 +181,7 @@ test("api: ntfy test endpoint posts to the supplied URL", async () => {
     assert.equal(ok.status, 200);
     assert.equal(received.length, 1);
     assert.equal(received[0].method, "POST");
-    assert.equal(received[0].headers.title, "D$CPLN · Media Sync");
+    assert.equal(received[0].headers.title, "D$CPLN - Media Sync");
     assert.match(received[0].body, /test notification/);
     assert.equal(received[0].headers.authorization, "Bearer sekret");
 

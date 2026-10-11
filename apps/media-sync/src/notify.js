@@ -29,7 +29,7 @@ export class Notifier {
     if (level === "info" && !this.notifySuccess) return { ok: true, skipped: true };
     const { priority, tags } = LEVELS[level] ?? LEVELS.info;
     const result = await this.inner.notify(message, {
-      title: "D$CPLN · Media Sync",
+      title: "D$CPLN - Media Sync",
       priority,
       tags,
     });

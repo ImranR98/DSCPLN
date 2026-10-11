@@ -45,7 +45,8 @@ DIGEST="$(cat "$DIGEST_FILE")"
 [ -n "$DIGEST" ] || { echo "Error: push produced no digest" >&2; exit 1; }
 
 if command -v skopeo >/dev/null 2>&1; then
-    skopeo inspect "docker://${IMAGE}@${DIGEST}" >/dev/null && echo "==> Registry digest verified"
+    # Tag + digest references are invalid; verify against the digest alone.
+    skopeo inspect "docker://${IMAGE%:*}@${DIGEST}" >/dev/null && echo "==> Registry digest verified"
 fi
 
 echo

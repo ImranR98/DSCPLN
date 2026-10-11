@@ -1,11 +1,11 @@
-# WhatsAppTXT
+# WhatsApp TXT
 
 Merges WhatsApp `.txt` chat exports of the same conversation across multiple backup directories into a single JSON file per conversation.
 
 ## Usage
 
 ```
-node WhatsAppTXT.js [--dry-run] [--no-merge-renamed] [--date-order=auto|dmy|mdy|ymd]
+node WhatsAppTXT.mjs [--dry-run] [--no-merge-renamed] [--date-order=auto|dmy|mdy|ymd]
                    [--rename-min-shared=5] [--rename-min-coverage=0.6] [--help]
                    <output-directory> [additional-source-directory] [...]
 ```
@@ -122,8 +122,8 @@ Notes:
 ## Format checker
 
 ```
-node checkFormat.js [--no-content] [--summary] [--date-order=auto|dmy|mdy|ymd] <file-or-directory> [...]
-node checkFormat.js --check-examples
+node checkFormat.mjs [--no-content] [--summary] [--date-order=auto|dmy|mdy|ymd] <file-or-directory> [...]
+node checkFormat.mjs --check-examples
 ```
 
 Validates `.txt` exports and app-produced `.json` conversations, without modifying anything. Exit codes: `0` all pass, `1` any fail, `2` usage/IO error.
@@ -191,7 +191,7 @@ bundled for archive imports.
 ```
 npm test                    # checker self-test + server API and browser tests
 npm run test:server         # server tests only (browser tests skip without Chromium)
-node examples/generate.js   # regenerate the committed example fixtures
+node examples/generate.mjs   # regenerate the committed example fixtures
 ```
 
 Layout:

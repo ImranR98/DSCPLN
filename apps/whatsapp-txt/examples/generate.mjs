@@ -1,8 +1,8 @@
-const fs = require('fs')
-const path = require('path')
+import fs from 'node:fs'
+import path from 'node:path'
 
-// Regenerates every committed example fixture. Run with: node examples/generate.js
-// The fixtures are validated by: node checkFormat.js --check-examples
+// Regenerates every committed example fixture. Run with: node examples/generate.mjs
+// The fixtures are validated by: node checkFormat.mjs --check-examples
 const root = __dirname
 
 const write = (rel, content) => {

@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "description": "WhatsApp TXT: browse, search, import and merge WhatsApp chat exports",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node checkFormat.js",
-    "check-examples": "node checkFormat.js --check-examples",
+    "check": "node checkFormat.mjs",
+    "check-examples": "node checkFormat.mjs --check-examples",
     "test:server": "node --test tests/*.test.mjs",
-    "test": "node checkFormat.js --check-examples && node --test tests/*.test.mjs"
+    "test": "node checkFormat.mjs --check-examples && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@dscpln/server-kit": "*",

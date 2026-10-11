@@ -1,7 +1,11 @@
 #!/usr/bin/env node
-const fs = require('fs')
-const path = require('path')
-const app = require(path.join(__dirname, 'WhatsAppTXT.js'))
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import * as app from './src/index.mjs'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Broad shapes that "look like" a timestamp. Used to catch lines the app silently treats as message text.
 const DATE_LIKE_REGEXES = [
@@ -295,10 +299,10 @@ const summarize = (result) => {
     return out.join('\n')
 }
 
-const usage = 'Usage: node checkFormat.js [--no-content] [--summary] [--date-order=auto|dmy|mdy|ymd] <file-or-directory> [...]\n' +
-    '       node checkFormat.js --check-examples\n\n' +
+const usage = 'Usage: node checkFormat.mjs [--no-content] [--summary] [--date-order=auto|dmy|mdy|ymd] <file-or-directory> [...]\n' +
+    '       node checkFormat.mjs --check-examples\n\n' +
     'Validates WhatsApp .txt exports and app-produced .json conversations against the\n' +
-    'formats understood by WhatsAppTXT.js. Files are never modified.\n\n' +
+    'formats understood by WhatsAppTXT.mjs. Files are never modified.\n\n' +
     '--no-content omits chat excerpts and sender names from the report.\n' +
     '--summary collapses per-line diagnostics into per-file counts.\n' +
     '--date-order forces the component order for ambiguous slash/dot dates (default auto).'
@@ -487,7 +491,7 @@ const runRenameChecks = (expect) => {
     const equivalent = app.mergeConversationGroup([makeChat('Papa_s Contact'), makeChat("Papa's Contact", 'extra')])
     expect(equivalent.messages.every(message => message.type !== 'system'), 'renames: equivalent names should not produce a marker')
 
-    const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'whatsapptxt-renames-'))
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'whatsapptxt-renames-'))
     const silent = (fn) => {
         const original = console.log
         console.log = () => {}
@@ -511,7 +515,7 @@ const runRenameChecks = (expect) => {
 }
 
 const runEndToEndChecks = (expect) => {
-    const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'whatsapptxt-test-'))
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'whatsapptxt-test-'))
     const silent = (fn) => {
         const original = console.log
         console.log = () => {}

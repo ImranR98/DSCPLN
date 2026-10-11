@@ -13,7 +13,6 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createRequire } from 'node:module'
 import { execFile as execFileCallback } from 'node:child_process'
 import { parseArgs, promisify } from 'node:util'
 import express from 'express'
@@ -22,8 +21,7 @@ import { createApp as createKitApp } from '@dscpln/server-kit'
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public')
 const MESSAGE_TYPES = new Set(['text', 'media', 'attachment', 'deleted', 'system'])
 const execFile = promisify(execFileCallback)
-const require = createRequire(import.meta.url)
-const { main: mergeExports } = require('./WhatsAppTXT.js')
+import { main as mergeExports } from './src/index.mjs'
 
 const IMPORT_DIR = '.watxt-incoming'
 const IMPORT_EXTENSIONS = new Set(['.zip', '.txt'])

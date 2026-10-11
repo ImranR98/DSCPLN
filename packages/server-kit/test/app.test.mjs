@@ -82,10 +82,6 @@ test('base path: pages, health, ui kit and injected base tag', async () => {
     const rootHealth = await fetch(`${base}/api/health`)
     assert.equal(rootHealth.status, 200)
 
-    const ui = await fetch(`${base}/media/ui/core.js`)
-    assert.equal(ui.status, 200)
-    assert.match(ui.headers.get('content-type'), /javascript/)
-
     const appJs = await fetch(`${base}/media/app.js`)
     assert.equal(appJs.status, 200)
 

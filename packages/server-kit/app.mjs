@@ -9,15 +9,12 @@ import { sameOrigin } from './http.mjs'
 // Responsibilities:
 //   - mount app routes + static files under BASE_PATH ('' locally, '/media' in
 //     k8s) so one host can serve every function as a subpath;
-//   - serve the ui-kit at `<basePath>/ui/*`;
 //   - inject `<base href>` + `window.DSCPLN_BASE` into served HTML;
 //   - CSRF origin check for mutating requests;
 //   - standard /api routes (state, config, run, cancel, pause, log, events,
 //     health) for apps that provide the matching kit components;
 //   - JSON errors for API paths, text errors otherwise.
 
-const KIT_DIR = path.dirname(fileURLToPath(import.meta.url))
-const DEFAULT_UI_DIR = path.resolve(KIT_DIR, '..', 'ui-kit')
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
@@ -90,7 +87,6 @@ export function createApp(options = {}) {
     pageTitle,
     basePath = '',
     staticDir = null,
-    uiDir = DEFAULT_UI_DIR,
     routes = null,
     config = null,
     state = null,
@@ -123,10 +119,6 @@ export function createApp(options = {}) {
     router.use(htmlPages(staticDir, { basePath: normalizedBase, title: resolvedPageTitle }))
     router.use(express.static(staticDir, { index: false, dotfiles: 'ignore' }))
   }
-  if (uiDir) {
-    router.use('/ui', express.static(uiDir, { maxAge: '1d', fallthrough: true }))
-  }
-
   // App-specific routes first: they can override any standard route.
   if (routes) {
     routes(router)

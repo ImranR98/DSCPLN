@@ -23,8 +23,10 @@ Requires Node 22+ (24 recommended).
 
 ```sh
 npm install            # installs every workspace
-npm test               # runs every workspace's test suite
-npm run balance        # start Balance XLSX locally (http://localhost:3300)
+npm test               # builds every UI and runs every test suite
+npm run ui             # build all UIs only
+npm run balance-xlsx   # start Balance XLSX locally (http://localhost:3300)
+npm run ytmusic        # ...or any app by name
 ```
 
 Each app runs standalone from its directory with `BASE_PATH` empty; apps on

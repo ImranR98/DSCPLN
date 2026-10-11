@@ -1,3 +1,4 @@
+import { waitFor } from '@dscpln/test-kit'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
@@ -123,17 +124,6 @@ test('base path: mounts under BASE_PATH with injected base tag', async () => {
     assert.match(await page.text(), /<base href="\/contacts\/">/)
     const health = await (await fetch(`${base}/contacts/api/health`)).json()
     assert.equal(health.basePath, '/contacts')
-    const ui = await fetch(`${base}/contacts/ui/shell.js`)
-    assert.equal(ui.status, 200)
   }, { basePath: '/contacts' })
 })
 
-async function waitFor(fn, timeoutMs = 10_000) {
-  const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
-    const value = await fn()
-    if (value) return value
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-  throw new Error('timeout waiting for condition')
-}

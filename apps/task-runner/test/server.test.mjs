@@ -1009,8 +1009,9 @@ test('base path: the app mounts under BASE_PATH with the shared kit', async () =
     assert.equal(health.ok, true);
     assert.equal(health.basePath, '/tasks');
 
-    const ui = await fetch(`${base}/tasks/ui/core.js`);
-    assert.equal(ui.status, 200);
+    const asset = /src="\.\/(assets\/[^"]+\.js)"/.exec(html)?.[1];
+    assert.ok(asset, 'the built UI bundle must be referenced');
+    assert.equal((await fetch(`${base}/tasks/${asset}`)).status, 200);
 
     const crossOrigin = await fetch(`${base}/tasks/api/run/Prefixed`, {
       method: 'POST',

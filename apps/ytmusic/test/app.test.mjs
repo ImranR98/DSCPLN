@@ -1,3 +1,4 @@
+import { waitFor } from '@dscpln/test-kit'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
@@ -95,15 +96,6 @@ test('run records state and logs under BASE_PATH', async () => {
   }, { basePath: '/ytmusic' })
 })
 
-async function waitFor(fn, timeoutMs = 10_000) {
-  const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
-    const value = await fn()
-    if (value) return value
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-  throw new Error('timeout waiting for condition')
-}
 
 test('summarizeDownload reports counts from the run log', () => {
   assert.equal(summarizeDownload('Downloaded 3 new tracks\n'), 'Downloaded 3 new tracks')

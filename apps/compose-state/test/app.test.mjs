@@ -1,3 +1,4 @@
+import { waitFor } from '@dscpln/test-kit'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
@@ -120,15 +121,6 @@ test('run records state and streams the log under BASE_PATH', async () => {
   }, { basePath: '/compose' })
 })
 
-async function waitFor(fn, timeoutMs = 10_000) {
-  const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
-    const value = await fn()
-    if (value) return value
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-  throw new Error('timeout waiting for condition')
-}
 
 test('summarizeTargets names the backed-up targets', () => {
   assert.equal(summarizeTargets([{ name: 'srv0' }, { name: 'vps0' }]), 'Backed up 2 targets: srv0, vps0')

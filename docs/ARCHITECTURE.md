@@ -58,30 +58,35 @@ Every app mounts everything under `BASE_PATH` (`""` for local dev):
   streaming to ring buffer + `logs/last.log`, `cancel()`, `onLine/onState`
 - `Notifier({ url, token, notifySuccess })` — ntfy; failures always notify
 - `createApp({ title, basePath, routes, staticDir, config, state, runner, run })`
-  — base path, CSRF origin check, `/ui/*` from ui-kit, HTML injection,
-  standard routes: `GET /api/state`, `GET/PUT /api/config`, `POST /api/run`,
-  `POST /api/cancel`, `POST /api/pause`, `GET /api/log`, `GET /api/events`
-  (SSE), `GET /api/health`
+  — base path, CSRF origin check, HTML injection, standard routes:
+  `GET /api/state`, `GET/PUT /api/config`, `POST /api/run`, `POST /api/cancel`,
+  `POST /api/pause`, `GET /api/log`, `GET /api/events` (SSE), `GET /api/health`
+- `http.mjs` — `sendJson`, `readBody` (size-capped), `sameOrigin`,
+  `asyncRoute`
 
-`packages/ui-kit` (two generations, converging):
+`packages/ui-kit` (Svelte 5 + Pico CSS):
 
-- **Svelte kit** (`src/lib`, consumed by migrated apps): `api.js`
-  (`apiUrl`/`getJson`/`postJson`/`putJson`/SSE `subscribe`), `format.js`
-  (`formatTime/DateTime/Date/Duration/Bytes/Number`, `humanAgo`), `theme.js`
-  (Pico `data-theme`), components `Shell` (header, status pill, overview tiles,
-  run/pause, log + settings dialogs), `LogDialog`, `SettingsDialog`,
-  `ThemeToggle`; `src/app.css` imports Pico CSS and holds the few custom rules.
-- **Legacy vanilla kit** (`core.js`, `shell.js`, `style.css`, vendored Shoelace,
-  fonts) — still used by the not-yet-migrated apps (Media Sync, WhatsApp TXT,
-  Balance); delete it once the last one moves.
+- `api.js` — base-path-aware `apiUrl`, `getJson`/`postJson`/`putJson`, SSE
+  `subscribe`
+- `format.js` / `dates.js` — display formatters and local-date calendar helpers
+- `theme.js` — Pico `data-theme` handling (auto/light/dark, localStorage)
+- `paths.js` — dotted-path get/set for config forms
+- components — `Shell` (header, status pill, overview tiles, run/pause, log +
+  settings dialogs), `LogDialog`, `SettingsDialog`, `ThemeToggle`
+- `app.css` — imports Pico and holds the few shared custom rules
 
-## App UI pipeline (Svelte apps)
+`packages/test-kit` — shared test helpers: `tempDir`, `listen`, `withApp`,
+`waitFor`.
 
-Each migrated app has `apps/<app>/ui/` (Vite + Svelte + Pico) that builds into
-`apps/<app>/static/` (gitignored). The server keeps serving `static/` and
-injects `<base href>` for `BASE_PATH`; Vite uses `base: './'` so the build works
-under any prefix. `npm run build:ui --workspace <pkg>` builds; `npm test` builds
-first; the Dockerfile installs dev deps, builds, then prunes them.
+## App UI pipeline
+
+Every app has `apps/<app>/ui/` (Vite + Svelte + Pico) that builds into
+`apps/<app>/static/` (gitignored). The server serves `static/` and injects
+`<base href>` for `BASE_PATH`; Vite uses `base: './'` so the build works under
+any prefix. `npm run build:ui --workspace <pkg>` builds (or `npm run ui` for
+all); `npm test` builds first; the Dockerfile installs dev deps, builds, then
+prunes them. Balance builds three pages from one Vite config
+(`index`/`insights`/`settings`).
 
 ## Hardening & safety conventions (review pass)
 

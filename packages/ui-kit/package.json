@@ -7,12 +7,7 @@
   "svelte": "./src/lib/index.js",
   "exports": {
     ".": "./src/lib/index.js",
-    "./app.css": "./src/app.css",
-    "./core": "./core.js",
-    "./shell": "./shell.js"
-  },
-  "scripts": {
-    "vendor": "node scripts/vendor-shoelace.mjs"
+    "./app.css": "./src/app.css"
   },
   "dependencies": {
     "@picocss/pico": "^2.1.1",
@@ -20,10 +15,5 @@
   },
   "peerDependencies": {
     "svelte": "^5.46.0"
-  },
-  "devDependencies": {
-    "@shoelace-style/shoelace": "^2.20.1",
-    "esbuild": "^0.28.2",
-    "svelte": "^5.57.2"
   }
 }

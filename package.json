@@ -14,10 +14,16 @@
   },
   "scripts": {
     "test": "npm run test --workspaces --if-present",
-    "balance": "npm run start --workspace dscpln-balance-xlsx",
     "mock": "npm run mock --workspace dscpln-balance-xlsx",
-    "task-runner": "BACKUPCTL_REPO_DIR=\"$PWD\" node apps/task-runner/server.mjs --no-browser",
-    "vendor:shoelace": "npm run vendor --workspace @dscpln/ui-kit"
+    "ui": "npm run build:ui --workspaces --if-present",
+    "balance-xlsx": "npm start --workspace dscpln-balance-xlsx",
+    "compose-state": "npm start --workspace dscpln-compose",
+    "contacts-calendar": "npm start --workspace dscpln-contacts",
+    "media-sync": "npm start --workspace dscpln-media-sync",
+    "portal": "npm start --workspace dscpln-portal",
+    "task-runner": "npm start --workspace dscpln-task-runner",
+    "whatsapp-txt": "npm start --workspace dscpln-watxt",
+    "ytmusic": "npm start --workspace dscpln-ytmusic"
   },
   "devDependencies": {
     "playwright-core": "1.63.0"

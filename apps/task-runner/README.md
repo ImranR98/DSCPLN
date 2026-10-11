@@ -1,4 +1,4 @@
-# Task Runner (backupctl)
+# Task Runner
 
 A local web app that runs config-driven backup workflows. It lives in the
 D$CPLN monorepo (`apps/task-runner`); personal automation scripts are absorbed

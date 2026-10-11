@@ -77,3 +77,34 @@ test('portal health pill turns unreachable when an app is down', async (t) => {
     { timeout: 15_000 },
   )
 })
+
+test('portal shows the next scheduled run for scheduled apps', async (t) => {
+  const browser = await launchBrowser()
+  if (!browser) {
+    t.skip('chromium not available (playwright browsers missing)')
+    return
+  }
+  t.after(() => browser.close())
+
+  const app = createApp({ title: 'Portal', pageTitle: 'D$CPLN', basePath: '', staticDir: STATIC_DIR })
+  const server = app.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  t.after(() => new Promise((resolve) => server.close(resolve)))
+  const base = `http://127.0.0.1:${server.address().port}`
+
+  const page = await browser.newPage()
+  const nextRun = Date.now() + 3 * 3600_000
+  await page.route('**/contacts/api/health', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }))
+  await page.route('**/contacts/api/state', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ paused: false, nextRun, missed: 0 }) }))
+
+  await page.goto(`${base}/`)
+  await page.waitForFunction(() => {
+    const next = document.querySelector('a.portal-card[href="/contacts"] .portal-card__next')
+    return next?.textContent?.startsWith('next ')
+  })
+  const text = await page.$eval('a.portal-card[href="/contacts"] .portal-card__next', (node) => node.textContent)
+  assert.match(text, /^next /)
+})
+

@@ -29,6 +29,7 @@ const debounce = (fn, ms) => {
 const ICONS = {
     menu: ['M4 6h16', 'M4 12h16', 'M4 18h16'],
     reload: ['M20 11a8 8 0 1 0-2.3 5.7', 'M20 5v6h-6'],
+    import: ['M12 16V4', 'M7 9l5-5 5 5', 'M5 20h14'],
     clear: ['M6 6l12 12', 'M18 6L6 18'],
     up: ['M12 19V5', 'M5 12l7-7 7 7'],
     down: ['M12 5v14', 'M19 12l-7 7-7-7'],
@@ -784,12 +785,188 @@ const onSearchInput = debounce(() => {
     }
 }, 250)
 
+// ---- import ----------------------------------------------------------------
+
+const importState = {
+    batch: null,
+    files: [],
+    imported: false,
+    busy: false
+}
+
+const formatSize = (bytes) => {
+    if (!Number.isFinite(bytes)) return ''
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+const newBatch = () => `imp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+
+const setImportStatus = (text, isError = false) => {
+    const node = $('#import-status')
+    node.textContent = text ?? ''
+    node.hidden = !text
+    node.classList.toggle('import-status--error', isError)
+}
+
+const renderImportList = () => {
+    const list = $('#import-list')
+    list.replaceChildren()
+    for (const entry of importState.files) {
+        const item = el('li', `import-item import-item--${entry.state}`)
+        item.append(el('span', 'import-item__name', entry.name))
+        const meta = entry.state === 'done' ? `${formatSize(entry.size)} uploaded`
+            : entry.state === 'error' ? entry.error ?? 'failed'
+                : entry.state
+        item.append(el('span', 'import-item__meta', meta))
+        list.append(item)
+    }
+    const hasFiles = importState.files.length > 0
+    const uploaded = importState.files.some(entry => entry.state === 'done')
+    $('#import-discard').hidden = !hasFiles || importState.busy
+    $('#import-preview').disabled = !uploaded || importState.busy || importState.imported
+    $('#import-run').disabled = !uploaded || importState.busy || importState.imported
+    $('#import-done').hidden = !importState.imported
+}
+
+const chooseImportFiles = async (fileList) => {
+    if (importState.busy || importState.imported) return
+    const all = [...fileList]
+    const accepted = all.filter(file => /\.(zip|txt)$/i.test(file.name))
+    if (accepted.length < all.length) {
+        setImportStatus(`${all.length - accepted.length} file(s) skipped (only .zip and .txt are accepted)`, true)
+    } else {
+        setImportStatus('')
+    }
+    if (accepted.length === 0) return
+    if (!importState.batch) importState.batch = newBatch()
+    for (const file of accepted) {
+        if (importState.files.some(entry => entry.name === file.name)) continue
+        const entry = { name: file.name, size: file.size, state: 'uploading' }
+        importState.files.push(entry)
+        renderImportList()
+        try {
+            const response = await fetch(`/api/import/upload?batch=${encodeURIComponent(importState.batch)}&name=${encodeURIComponent(file.name)}`, {
+                method: 'POST',
+                body: file
+            })
+            const body = await response.json().catch(() => ({}))
+            if (!response.ok) throw new Error(body.error ?? `${response.status} ${response.statusText}`)
+            entry.state = 'done'
+            entry.size = body.size
+        } catch (error) {
+            entry.state = 'error'
+            entry.error = error.message
+        }
+        renderImportList()
+    }
+}
+
+const showImportResult = (summary) => {
+    const lines = [summary.dryRun
+        ? '=== Preview: no files were renamed, deleted or written ==='
+        : '=== Import complete ===']
+    lines.push(`${summary.conversations} conversation(s) · ${summary.multiSource} merged from multiple sources · ${summary.renamedGroups} renamed group(s)`)
+    for (const name of summary.names.slice(0, 30)) lines.push(`  ${name}`)
+    if (summary.names.length > 30) lines.push(`  … and ${summary.names.length - 30} more`)
+    for (const item of summary.ambiguous ?? []) {
+        lines.push(`ambiguous dates: ${item.file} · ${item.count} line(s) resolved as ${item.order.toUpperCase()} (${item.orderSource})`)
+    }
+    const node = $('#import-result')
+    node.textContent = lines.join('\n')
+    node.hidden = false
+}
+
+const runImport = async (dryRun) => {
+    if (importState.busy) return
+    importState.busy = true
+    $('#import-result').hidden = true
+    renderImportList()
+    setImportStatus(dryRun ? 'Building preview…' : 'Merging…')
+    try {
+        const response = await fetch('/api/import/merge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ batch: importState.batch, dryRun })
+        })
+        const body = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(body.error ?? `${response.status} ${response.statusText}`)
+        showImportResult(body)
+        if (dryRun) {
+            setImportStatus('Preview only — nothing was written.')
+        } else {
+            importState.imported = true
+            importState.batch = null
+            importState.files = []
+            state.meta = await api('/api/state')
+            renderStatus()
+            await refreshConversations()
+            await handleRoute()
+            setImportStatus('Import complete.')
+        }
+    } catch (error) {
+        setImportStatus(error.message, true)
+    } finally {
+        importState.busy = false
+        renderImportList()
+    }
+}
+
+const discardImport = async () => {
+    if (!importState.batch) return
+    await fetch('/api/import/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch: importState.batch })
+    }).catch(() => {})
+    importState.batch = null
+    importState.files = []
+    $('#import-result').hidden = true
+    setImportStatus('Uploads discarded.')
+    renderImportList()
+}
+
+const openImport = () => {
+    importState.imported = false
+    setImportStatus('')
+    $('#import-result').hidden = true
+    renderImportList()
+    $('#import-dialog').showModal()
+}
+
+const setupImport = () => {
+    $('#import').addEventListener('click', openImport)
+    $('#import-browse').addEventListener('click', () => $('#import-files').click())
+    $('#import-files').addEventListener('change', () => {
+        chooseImportFiles($('#import-files').files)
+        $('#import-files').value = ''
+    })
+    const drop = $('#import-drop')
+    drop.addEventListener('dragover', event => {
+        event.preventDefault()
+        drop.classList.add('import-drop--over')
+    })
+    drop.addEventListener('dragleave', () => drop.classList.remove('import-drop--over'))
+    drop.addEventListener('drop', event => {
+        event.preventDefault()
+        drop.classList.remove('import-drop--over')
+        chooseImportFiles(event.dataTransfer.files)
+    })
+    $('#import-preview').addEventListener('click', () => runImport(true))
+    $('#import-run').addEventListener('click', () => runImport(false))
+    $('#import-discard').addEventListener('click', discardImport)
+    $('#import-done').addEventListener('click', () => $('#import-dialog').close())
+}
+
 const setup = async () => {
     $('#sidebar-toggle').append(svgIcon('menu'))
+    $('#import').append(svgIcon('import'))
     $('#reload').append(svgIcon('reload'))
     $('#search-clear').append(svgIcon('clear', 15))
     $('#banner-close').append(svgIcon('clear', 15))
 
+    setupImport()
     $('#reload').addEventListener('click', reload)
     $('#sidebar-toggle').addEventListener('click', () => $('#sidebar').classList.toggle('open'))
     $('#conversation-filter').addEventListener('input', debounce(renderSidebar, 150))

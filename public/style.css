@@ -696,6 +696,160 @@ select:focus-visible,
     cursor: pointer;
 }
 
+/* import dialog ----------------------------------------------------------- */
+
+.import-dialog {
+    width: min(640px, calc(100vw - 32px));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--panel);
+    color: var(--text);
+    padding: 20px 22px;
+    box-shadow: var(--shadow);
+}
+
+.import-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.import-dialog h2 {
+    margin: 0 0 6px;
+    font-size: 1.15rem;
+}
+
+.import-hint {
+    margin: 0 0 14px;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.import-hint code {
+    background: var(--panel-alt);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0 4px;
+}
+
+.import-drop {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--panel-alt);
+    padding: 18px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.import-drop--over {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.import-drop__hint {
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.import-drop button,
+.import-actions button {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 14px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.import-drop button:hover,
+.import-actions button:hover { background: var(--panel-alt); }
+
+.import-actions button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.import-actions button.primary:disabled,
+.import-actions button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.import-actions button.ghost {
+    border-color: transparent;
+    color: var(--danger);
+}
+
+.import-list {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 0;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.import-item {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 6px 2px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+}
+
+.import-item:last-child { border-bottom: none; }
+
+.import-item__name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.import-item__meta {
+    color: var(--muted);
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+.import-item--done .import-item__meta { color: var(--accent); }
+.import-item--error .import-item__meta { color: var(--danger); }
+
+.import-status {
+    margin: 12px 0 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.import-status--error { color: var(--danger); }
+
+.import-result {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    background: var(--panel-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    max-height: 220px;
+    overflow: auto;
+    white-space: pre-wrap;
+}
+
+.import-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.import-actions__spacer { flex: 1; }
+
 /* responsive -------------------------------------------------------------- */
 
 @media (max-width: 800px) {

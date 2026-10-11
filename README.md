@@ -140,8 +140,9 @@ npm install
 npm start -- --dir "/path/to/WhatsApp TXT" [--port 8787] [--host 127.0.0.1] [--no-watch]
 ```
 
-A read-only Express server (the data directory is never written) that indexes every `.json`
-conversation into memory and serves a single-page UI:
+An Express server that indexes every `.json` conversation into memory and serves a
+single-page UI. Browsing and search only read the data directory; the import
+panel (and its API) merges uploaded exports into it:
 
 - conversation sidebar with name filter, message counts and last activity;
 - message view with date separators, sender colors and type styling (`media`, `attachment`, `deleted`, `system`); dates and times render as `YYYY-MM-DD` and `hh:mm AM/PM` in the browser's timezone;
@@ -153,28 +154,43 @@ conversation into memory and serves a single-page UI:
 - keyboard-friendly conversation list, loading skeletons and error banners, and an automatic light/dark theme that follows the device;
 - `fs.watch` reindexing plus a manual reload button; `/` focuses search.
 
+**Importing exports.** The Import button opens a panel where you drop WhatsApp
+exports (`.zip` or `.txt`); each upload is streamed to a hidden incoming
+directory, then **Import** extracts any archives (including a nested zip level),
+strips `.vcf` files and merges everything with the existing conversations.
+**Preview** runs the same merge as a dry run and writes nothing. Uploads are
+consumed only after a successful merge, so a failed or previewed batch can be
+retried or discarded. The merge aborts before renaming, deleting or writing
+anything when a file cannot be parsed or a name collision would occur; a merge
+runs one at a time and rejects cross-origin posts. Uploads are capped at 200MB
+each.
+
 Performance at the current scale (455 conversations, 539k messages, ~80MB): ~0.5s startup,
 ~300MB RSS, searches in <100ms. Invalid or hidden files are skipped and reported in
 `/api/state`. The JSON API is `/api/state`, `/api/conversations`,
 `/api/conversations/:id/messages?offset=&limit=&around=`, `/api/search` (add `whole=1` for whole-word matching) and `POST /api/reload`.
+Import API: `POST /api/import/upload?batch=&name=` (raw body), `POST /api/import/merge`
+(`{batch, dryRun?, dateOrder?}`), `POST /api/import/cancel` and `GET /api/import/last`.
 
 ### Docker
 
 ```
 docker build -t whatsapptxt-browser .
-docker run --rm -p 8787:8787 -v "/path/to/WhatsApp TXT:/data:ro" whatsapptxt-browser
+docker run --rm -p 8787:8787 -v "/path/to/WhatsApp TXT:/data" whatsapptxt-browser
 ```
 
-The container reads `/data` by default, so mount the conversation directory there (read-only is enough).
+The container uses `/data` by default, so mount the conversation directory there
+(writable when you want to import; a read-only mount still supports browsing).
 `DATA_DIR`, `HOST` and `PORT` environment variables override the defaults
 (e.g. `-e PORT=9000 -p 9000:9000`). The image runs as uid 1000; if your files are owned by a different
-uid, add `--user "$(id -u):$(id -g)"` to the `docker run` command.
+uid, add `--user "$(id -u):$(id -g)"` to the `docker run` command. `unzip` is
+bundled for archive imports.
 
 ## Development
 
 ```
-npm test                    # checker self-test + server API tests
-npm run test:server         # server API tests only
+npm test                    # checker self-test + server API and browser tests
+npm run test:server         # server tests only (browser tests skip without Chromium)
 node examples/generate.js   # regenerate the committed example fixtures
 ```
 

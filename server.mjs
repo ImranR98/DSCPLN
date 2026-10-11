@@ -1,19 +1,33 @@
 #!/usr/bin/env node
-// WhatsApp TXT browser — Express server over a directory of JSON conversations.
+// WhatsApp TXT browser + import — Express server over a directory of JSON
+// conversations. Browsing and search are read-only; the import API accepts
+// chat exports, merges them with the existing conversations and writes the
+// results back into the data directory.
 //
 //   node server.mjs --dir "/path/to/WhatsApp TXT" [--port 8787] [--host 127.0.0.1] [--no-watch]
 //
-// The directory is only ever read. All conversations are indexed into memory at
-// startup (~0.5s / ~300MB for 539k messages) and searched with a linear scan.
+// All conversations are indexed into memory at startup (~0.5s / ~300MB for
+// 539k messages) and searched with a linear scan.
 
 import fs from 'node:fs'
+import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseArgs } from 'node:util'
+import { createRequire } from 'node:module'
+import { execFile as execFileCallback } from 'node:child_process'
+import { parseArgs, promisify } from 'node:util'
 import express from 'express'
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public')
 const MESSAGE_TYPES = new Set(['text', 'media', 'attachment', 'deleted', 'system'])
+const execFile = promisify(execFileCallback)
+const require = createRequire(import.meta.url)
+const { main: mergeExports } = require('./WhatsAppTXT.js')
+
+const IMPORT_DIR = '.watxt-incoming'
+const IMPORT_EXTENSIONS = new Set(['.zip', '.txt'])
+const MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+const DATE_ORDERS = ['auto', 'dmy', 'mdy', 'ymd']
 
 const displayName = (filename) => filename.replace(/\.json$/i, '').replace(/^\d{8} - /, '')
 
@@ -214,10 +228,31 @@ export const searchIndex = (index, params) => {
     return { total, offset, limit, order, whole, results }
 }
 
+const safeBatchName = (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value)
+
+const uploadFileName = (value) => {
+    if (typeof value !== 'string' || value === '' || value !== path.basename(value) || value.startsWith('.')) return null
+    if (!IMPORT_EXTENSIONS.has(path.extname(value).toLowerCase())) return null
+    return value
+}
+
+// Same-origin guard for mutations (the app sits behind a forward-auth proxy; this
+// rejects cross-site POSTs from an authenticated browser).
+const checkSameOrigin = (req, res, next) => {
+    const origin = req.headers.origin || req.headers.referer
+    if (origin) {
+        try {
+            if (new URL(origin).host !== req.headers.host) return res.status(403).json({ error: 'cross-origin request rejected' })
+        } catch { /* malformed origin: ignore */ }
+    }
+    next()
+}
+
 export const createApp = (state) => {
     const app = express()
     app.disable('x-powered-by')
     app.use(express.static(PUBLIC_DIR))
+    app.use('/api/import', express.json({ limit: '1mb' }))
 
     app.get('/api/state', (req, res) => {
         res.json(stateSummary(state.index, state.watching))
@@ -263,6 +298,132 @@ export const createApp = (state) => {
         }
     })
 
+    // --- importing exports --------------------------------------------------
+
+    // Streams one uploaded file (raw body) into the batch's incoming directory.
+    app.post('/api/import/upload', checkSameOrigin, async (req, res) => {
+        const batch = req.query.batch
+        const name = uploadFileName(req.query.name)
+        if (!safeBatchName(batch)) return res.status(400).json({ error: 'batch must match [A-Za-z0-9_-]{1,64}' })
+        if (!name) return res.status(400).json({ error: 'name must be a .zip or .txt file name without a path' })
+        const batchDir = path.join(state.incomingRoot, batch)
+        await fsp.mkdir(batchDir, { recursive: true })
+        const target = path.join(batchDir, name)
+        const part = `${target}.part`
+        let size = 0
+        let tooLarge = false
+        const stream = fs.createWriteStream(part)
+        req.on('data', (chunk) => {
+            size += chunk.length
+            if (size > MAX_UPLOAD_BYTES && !tooLarge) {
+                tooLarge = true
+                req.unpipe(stream)
+                stream.destroy()
+                req.resume()
+            }
+        })
+        await new Promise((resolve, reject) => {
+            stream.on('finish', resolve)
+            stream.on('close', resolve)
+            stream.on('error', reject)
+            req.on('error', reject)
+            req.pipe(stream)
+        })
+        if (tooLarge) {
+            await fsp.rm(part, { force: true })
+            return res.status(413).json({ error: `upload exceeds the ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB limit` })
+        }
+        if (size === 0) {
+            await fsp.rm(part, { force: true })
+            return res.status(400).json({ error: 'upload is empty' })
+        }
+        await fsp.rename(part, target)
+        res.json({ ok: true, batch, name, size })
+    })
+
+    // Merges a batch's uploads into the data directory. `dryRun` previews
+    // without touching anything (and keeps the batch for a real merge).
+    app.post('/api/import/merge', checkSameOrigin, async (req, res) => {
+        const { batch } = req.body ?? {}
+        const dryRun = req.body?.dryRun === true
+        const dateOrder = req.body?.dateOrder ?? 'auto'
+        if (!safeBatchName(batch)) return res.status(400).json({ error: 'batch must match [A-Za-z0-9_-]{1,64}' })
+        if (!DATE_ORDERS.includes(dateOrder)) return res.status(400).json({ error: `dateOrder must be one of ${DATE_ORDERS.join(', ')}` })
+        if (state.mergeInFlight) return res.status(409).json({ error: 'a merge is already running' })
+        const batchDir = path.join(state.incomingRoot, batch)
+        const incoming = await fsp.readdir(batchDir).catch(() => null)
+        if (!incoming) return res.status(404).json({ error: 'no uploads for this batch' })
+        const inputs = incoming.filter((name) => name !== 'staging' && !name.startsWith('.'))
+        if (inputs.length === 0) return res.status(400).json({ error: 'no uploads for this batch' })
+
+        state.mergeInFlight = true
+        const staging = path.join(batchDir, 'staging')
+        try {
+            await fsp.rm(staging, { recursive: true, force: true })
+            await fsp.mkdir(staging, { recursive: true })
+            for (const name of inputs) {
+                const full = path.join(batchDir, name)
+                const stat = await fsp.stat(full)
+                if (!stat.isFile()) continue
+                if (name.toLowerCase().endsWith('.zip')) {
+                    await execFile('unzip', ['-oq', full, '-d', staging])
+                } else {
+                    await fsp.copyFile(full, path.join(staging, name))
+                }
+            }
+            // Archives can contain another zip level (matches the old backupctl task).
+            for (const name of await fsp.readdir(staging)) {
+                if (!name.toLowerCase().endsWith('.zip')) continue
+                await execFile('unzip', ['-oq', path.join(staging, name), '-d', staging])
+                await fsp.rm(path.join(staging, name), { force: true })
+            }
+            for (const name of await fsp.readdir(staging)) {
+                if (name.toLowerCase().endsWith('.vcf')) await fsp.rm(path.join(staging, name), { force: true })
+            }
+
+            let result
+            try {
+                result = mergeExports([state.dataDir, staging], { dryRun, dateOrder })
+            } catch (e) {
+                return res.status(400).json({ error: String(e?.message ?? e) })
+            }
+            await fsp.rm(staging, { recursive: true, force: true })
+            if (!dryRun) {
+                await fsp.rm(batchDir, { recursive: true, force: true })
+                await state.reload()
+            }
+            state.lastImport = { at: new Date().toISOString(), dryRun, ...result }
+            const topLevel = {
+                ok: true,
+                dryRun,
+                at: state.lastImport.at,
+                conversations: result.conversations.length,
+                multiSource: result.conversations.filter((conversation) => conversation.sources > 1).length,
+                renamedGroups: result.conversations.filter((conversation) => conversation.group).length,
+                ambiguous: result.ambiguous,
+                names: result.conversations.map((conversation) => conversation.outName),
+                skipped: state.index.skipped
+            }
+            res.json(topLevel)
+        } catch (e) {
+            await fsp.rm(staging, { recursive: true, force: true }).catch(() => {})
+            res.status(400).json({ error: String(e?.message ?? e) })
+        } finally {
+            state.mergeInFlight = false
+        }
+    })
+
+    app.post('/api/import/cancel', checkSameOrigin, async (req, res) => {
+        const { batch } = req.body ?? {}
+        if (!safeBatchName(batch)) return res.status(400).json({ error: 'batch must match [A-Za-z0-9_-]{1,64}' })
+        await fsp.rm(path.join(state.incomingRoot, batch), { recursive: true, force: true })
+        res.json({ ok: true })
+    })
+
+    app.get('/api/import/last', (req, res) => {
+        res.json(state.lastImport ?? null)
+    })
+
     app.use('/api', (req, res) => res.status(404).json({ error: 'not found' }))
     app.get('*', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')))
     return app
@@ -284,7 +445,10 @@ export const createState = (dataDir, { watch = true } = {}) => {
         index: buildIndex(dataDir),
         watching: false,
         reload: null,
-        close: null
+        close: null,
+        incomingRoot: path.join(dataDir, IMPORT_DIR),
+        mergeInFlight: false,
+        lastImport: null
     }
     let pending = Promise.resolve()
     state.reload = () => {

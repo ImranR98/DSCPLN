@@ -4,7 +4,6 @@ node_modules
 examples
 tests
 checkFormat.js
-WhatsAppTXT.js
 README.md
 Dockerfile
 .dockerignore

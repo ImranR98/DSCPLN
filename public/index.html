@@ -17,12 +17,34 @@
             </span>
         </form>
         <span id="status" class="status" role="status"></span>
+        <button id="import" class="icon-btn" aria-label="Import chat exports" title="Import exports"></button>
         <button id="reload" class="icon-btn" aria-label="Reindex the data directory" title="Reindex"></button>
     </header>
     <div id="banner" class="banner" hidden role="alert">
         <span id="banner-text"></span>
         <button id="banner-close" class="icon-btn" aria-label="Dismiss notification"></button>
     </div>
+    <dialog id="import-dialog" class="import-dialog" aria-labelledby="import-title">
+        <h2 id="import-title">Import chat exports</h2>
+        <p class="import-hint">Upload WhatsApp exports (<code>.zip</code> or <code>.txt</code>). They are merged with the
+            conversations stored here; nothing changes until you press Import. Preview shows the plan without writing
+            anything.</p>
+        <div id="import-drop" class="import-drop">
+            <input type="file" id="import-files" multiple accept=".zip,.txt,application/zip,text/plain" hidden>
+            <button type="button" id="import-browse">Choose files</button>
+            <span class="import-drop__hint">or drop them here</span>
+        </div>
+        <ul id="import-list" class="import-list"></ul>
+        <p id="import-status" class="import-status" hidden></p>
+        <pre id="import-result" class="import-result" hidden></pre>
+        <div class="import-actions">
+            <button type="button" id="import-discard" class="ghost" hidden>Discard uploads</button>
+            <span class="import-actions__spacer"></span>
+            <button type="button" id="import-preview">Preview</button>
+            <button type="button" id="import-run" class="primary">Import</button>
+            <button type="button" id="import-done" hidden>Done</button>
+        </div>
+    </dialog>
     <main class="layout">
         <aside id="sidebar" class="sidebar" aria-label="Conversations">
             <div class="sidebar-head">

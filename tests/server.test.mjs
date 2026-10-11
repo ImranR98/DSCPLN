@@ -1,9 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { buildIndex, createApp, searchIndex } from '../server.mjs'
+import { buildIndex, createApp, createState, searchIndex } from '../server.mjs'
 
 const makeMessages = (count, startMs) => Array.from({ length: count }, (_, index) => ({
     date: new Date(startMs + index * 60000).toISOString(),
@@ -174,7 +175,7 @@ test('api: whole-word search excludes substring matches', async () => {
     })
 })
 
-test('api: reload picks up new files and the data dir stays read-only', async () => {
+test('api: reload picks up new files without touching existing ones', async () => {
     const dir = makeDataDir()
     const watchFile = path.join(dir, '20240101 - Chat One.json')
     const before = fs.statSync(watchFile)
@@ -199,4 +200,150 @@ test('searchIndex: returns null for unknown conversation filter', () => {
     const dir = makeDataDir()
     const index = buildIndex(dir)
     assert.equal(searchIndex(index, { conversation: 'missing.json' }), null)
+})
+
+// --- import --------------------------------------------------------------
+
+const TXT_EXPORT = [
+    '2024-01-15, 9:00 a.m. - Alice: Hello from the phone',
+    '2024-01-15, 9:01 a.m. - Bob: It merges now',
+    ''
+].join('\n')
+
+const makeImportState = () => {
+    const dir = makeDataDir()
+    // makeDataDir seeds non-export files for the browse tests (notes.txt,
+    // broken.json); a merge would (correctly) try to parse them and abort, so
+    // remove them for import tests.
+    fs.rmSync(path.join(dir, 'notes.txt'), { force: true })
+    fs.rmSync(path.join(dir, 'broken.json'), { force: true })
+    return { dir, state: createState(dir, { watch: false }) }
+}
+
+const upload = (base, batch, name, body) =>
+    fetch(`${base}/api/import/upload?batch=${encodeURIComponent(batch)}&name=${encodeURIComponent(name)}`, {
+        method: 'POST',
+        body
+    })
+
+const merge = (base, payload) =>
+    fetch(`${base}/api/import/merge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+
+test('api: import upload and merge writes merged conversations and reloads the index', async () => {
+    const { dir, state } = makeImportState()
+    await withServer(state, async base => {
+        const before = state.index.conversations.length
+        const uploaded = await upload(base, 'batch1', 'WhatsApp Chat with Phone.txt', TXT_EXPORT)
+        assert.equal(uploaded.status, 200)
+        const uploadedBody = await uploaded.json()
+        assert.equal(uploadedBody.ok, true)
+        assert.equal(uploadedBody.size, Buffer.byteLength(TXT_EXPORT))
+        assert.equal(fs.existsSync(path.join(dir, '.watxt-incoming', 'batch1', 'WhatsApp Chat with Phone.txt')), true)
+
+        const merged = await merge(base, { batch: 'batch1' })
+        assert.equal(merged.status, 200)
+        const body = await merged.json()
+        assert.equal(body.ok, true)
+        assert.equal(body.dryRun, false)
+        assert.equal(body.conversations, before + 1)
+        assert.equal(body.names.includes('20240115 - Phone.json'), true, JSON.stringify(body.names))
+        assert.equal(fs.existsSync(path.join(dir, '20240115 - Phone.json')), true)
+        assert.equal(fs.existsSync(path.join(dir, '.watxt-incoming', 'batch1')), false, 'batch is consumed on success')
+        assert.equal(state.index.conversations.length, before + 1)
+
+        const list = await getJson(base, '/api/conversations')
+        assert.equal(list.body.some(conversation => conversation.id === '20240115 - Phone.json'), true)
+    })
+})
+
+test('api: import merge dry run previews without writing and keeps the batch', async () => {
+    const { dir, state } = makeImportState()
+    await withServer(state, async base => {
+        await upload(base, 'preview1', 'WhatsApp Chat with Preview.txt', TXT_EXPORT)
+        const preview = await merge(base, { batch: 'preview1', dryRun: true })
+        assert.equal(preview.status, 200)
+        const body = await preview.json()
+        assert.equal(body.dryRun, true)
+        assert.equal(body.names.includes('20240115 - Preview.json'), true)
+        assert.equal(fs.existsSync(path.join(dir, '20240115 - Preview.json')), false, 'dry run must not write')
+        assert.equal(fs.existsSync(path.join(dir, '.watxt-incoming', 'preview1')), true, 'dry run keeps the uploads')
+
+        const real = await merge(base, { batch: 'preview1' })
+        assert.equal(real.status, 200)
+        assert.equal(fs.existsSync(path.join(dir, '20240115 - Preview.json')), true)
+    })
+})
+
+test('api: import aborts safely on an unparseable export and cancel clears the batch', async () => {
+    const { dir, state } = makeImportState()
+    await withServer(state, async base => {
+        await upload(base, 'bad1', 'notes.txt', 'this is not a whatsapp export\n')
+        const merged = await merge(base, { batch: 'bad1' })
+        assert.equal(merged.status, 400)
+        const body = await merged.json()
+        assert.match(body.error, /Aborting|no date lines/i)
+        assert.equal(fs.existsSync(path.join(dir, 'notes.json')), false, 'nothing may be written on abort')
+        assert.equal(fs.existsSync(path.join(dir, '.watxt-incoming', 'bad1')), true, 'uploads survive for retry or cancel')
+
+        const cancelled = await fetch(base + '/api/import/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ batch: 'bad1' })
+        })
+        assert.equal(cancelled.status, 200)
+        assert.equal(fs.existsSync(path.join(dir, '.watxt-incoming', 'bad1')), false)
+    })
+})
+
+test('api: import validates batch names, upload names, and rejects cross-origin posts', async () => {
+    const { state } = makeImportState()
+    await withServer(state, async base => {
+        assert.equal((await upload(base, '../evil', 'x.txt', TXT_EXPORT)).status, 400)
+        assert.equal((await upload(base, 'ok', 'notes.md', TXT_EXPORT)).status, 400)
+        assert.equal((await upload(base, 'ok', '../secret.txt', TXT_EXPORT)).status, 400)
+        assert.equal((await upload(base, 'ok', '', TXT_EXPORT)).status, 400)
+        assert.equal((await merge(base, { batch: 'nope' })).status, 404)
+        assert.equal((await merge(base, { batch: 'ok', dateOrder: 'sideways' })).status, 400)
+
+        const crossOrigin = await fetch(`${base}/api/import/upload?batch=ok&name=x.txt`, {
+            method: 'POST',
+            headers: { Origin: 'http://evil.example' },
+            body: TXT_EXPORT
+        })
+        assert.equal(crossOrigin.status, 403)
+    })
+})
+
+const haveZip = (() => {
+    try {
+        execFileSync('which', ['zip'], { stdio: 'ignore' })
+        return true
+    } catch {
+        return false
+    }
+})()
+
+test('api: import extracts zipped exports (including nested zips) and strips vcf files', { skip: !haveZip }, async () => {
+    const { dir, state } = makeImportState()
+    await withServer(state, async base => {
+        const work = fs.mkdtempSync(path.join(os.tmpdir(), 'whatsapptxt-zip-'))
+        const inner = path.join(work, 'inner')
+        fs.mkdirSync(inner)
+        fs.writeFileSync(path.join(inner, 'WhatsApp Chat with Zipped.txt'), TXT_EXPORT)
+        fs.writeFileSync(path.join(inner, 'contacts.vcf'), 'BEGIN:VCARD\nEND:VCARD\n')
+        execFileSync('zip', ['-q', path.join(work, 'inner.zip'), 'WhatsApp Chat with Zipped.txt', 'contacts.vcf'], { cwd: inner })
+        execFileSync('zip', ['-q', path.join(work, 'outer.zip'), 'inner.zip'], { cwd: work })
+
+        const uploaded = await upload(base, 'zip1', 'outer.zip', fs.readFileSync(path.join(work, 'outer.zip')))
+        assert.equal(uploaded.status, 200)
+        const merged = await merge(base, { batch: 'zip1' })
+        assert.equal(merged.status, 200)
+        const body = await merged.json()
+        assert.equal(body.names.includes('20240115 - Zipped.json'), true)
+        assert.equal(fs.existsSync(path.join(dir, '20240115 - Zipped.json')), true)
+    })
 })

@@ -777,6 +777,19 @@ const main = (dirs, options = {}) => {
         })
         console.log('  Override with --date-order=dmy|mdy|ymd if the interpretation is wrong')
     }
+
+    // Machine-readable result (used by the web app's import API; the CLI ignores it)
+    return {
+        dryRun,
+        conversations: summary.map(conversation => ({
+            outName: conversation.outName,
+            sources: conversation.sources,
+            first: conversation.first ?? null,
+            last: conversation.last ?? null,
+            group: conversation.group ? { names: conversation.group.names, shared: conversation.group.shared } : null
+        })),
+        ambiguous
+    }
 }
 
 // Actual run

@@ -1,15 +1,19 @@
 FROM node:24-alpine
 
+RUN apk add --no-cache unzip
+
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY server.mjs ./
+COPY WhatsAppTXT.js ./
 COPY public ./public
 
-# The conversation directory is expected to be mounted at /data:
-#   docker run --rm -p 8787:8787 -v "/path/to/WhatsApp TXT:/data:ro" whatsapptxt-browser
+# The conversation directory is expected to be mounted at /data. Browsing and
+# search only read it; the import API writes merged conversations back into it:
+#   docker run --rm -p 8787:8787 -v "/path/to/WhatsApp TXT:/data" whatsapptxt-browser
 ENV DATA_DIR=/data
 ENV HOST=0.0.0.0
 ENV PORT=8787

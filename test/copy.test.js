@@ -282,3 +282,26 @@ test("copy e2e: the live watcher picks up new nested files and keeps deleted one
     await fsp.rm(root, { recursive: true, force: true });
   }
 });
+
+test("copy e2e: notify=errors suppresses per-file success notifications", async () => {
+  const { root, src, dest, configPath } = await makeSetup({ notify: "errors" });
+  const daemon = new Daemon(configPath, {});
+  try {
+    await daemon.start();
+    const notifications = [];
+    daemon.ctx.notify.notify = async (level, message) => {
+      notifications.push({ level, message });
+    };
+    await writeFile(path.join(src, "one.txt"), "1");
+    await writeFile(path.join(src, "two.txt"), "2");
+    const copied = await waitFor(() =>
+      daemon.store.fileFor("mirror", "one.txt")?.status === STATUS.DONE
+      && daemon.store.fileFor("mirror", "two.txt")?.status === STATUS.DONE);
+    assert.equal(copied, true);
+    assert.deepEqual(await fsp.readdir(dest).then((names) => names.sort()), ["one.txt", "two.txt"]);
+    assert.deepEqual(notifications, [], "a successful archive run must not notify per file");
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});

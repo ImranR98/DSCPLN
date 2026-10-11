@@ -111,6 +111,7 @@ export function normalizeConfig(raw) {
       cleanup: folder.cleanup !== false,
       placement: folder.placement === "manual" ? "manual" : "auto",
       autoProcess: Boolean(folder.autoProcess),
+      notify: folder.notify === "errors" ? "errors" : "all",
     };
   });
   return cfg;

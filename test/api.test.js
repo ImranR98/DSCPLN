@@ -227,6 +227,7 @@ async function makeReviewDaemon() {
         method: "copy",
         recursive: true,
         cleanup: false,
+        notify: "errors",
         settleSeconds: 0,
       },
       {
@@ -265,6 +266,7 @@ test("api: state exposes the new folder options and disabled cleanup preview", a
     assert.equal(archive.recursive, true);
     assert.equal(archive.onChanged, "overwrite");
     assert.equal(archive.cleanup, false);
+    assert.equal(archive.notify, "errors");
     assert.equal(voicenotes.method, "voicenotes");
     assert.equal(voicenotes.placement, "manual");
     assert.equal(voicenotes.recursive, true);

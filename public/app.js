@@ -733,6 +733,7 @@
         editor.append(el('div', { class: 'form-grid' },
             field('Placement', select('placement', folder.placement || 'auto', ['auto', 'manual'])),
             field('On change', select('onChanged', folder.onChanged || 'overwrite', ['overwrite', 'conflict'])),
+            field('Notify on success', select('notify', folder.notify || 'all', ['all', 'errors'])),
             field('Date pattern (voicenotes)', input('datePattern', folder.datePattern ?? ''))))
         return editor
     }
@@ -804,6 +805,7 @@
                 onChanged: get('onChanged'),
                 placement: method === 'copy' ? 'auto' : get('placement'),
                 autoProcess: checked('autoProcess'),
+                notify: get('notify'),
             }
             if (method === 'voicenotes') {
                 folder.recursive = true

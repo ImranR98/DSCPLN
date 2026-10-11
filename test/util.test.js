@@ -111,6 +111,7 @@ test("skip-name helpers protect sync artifacts and honor includeHidden", () => {
   assert.equal(shouldSkipName(".syncthing.foo", true), true);
   assert.equal(shouldSkipName(".media-sync-staging", true), true);
   assert.equal(shouldSkipName("file.tmp", true), true);
+  assert.equal(shouldSkipName("file.tmp.chck", true), true);
   assert.equal(shouldSkipName("file!sync", true), true);
   assert.equal(shouldSkipName("normal.jpg", true), false);
   assert.equal(isSyncOrTempName(".stfolder"), true);
@@ -153,6 +154,7 @@ test("config normalization applies safe defaults for the new folder options", ()
   assert.equal(copy.onChanged, "overwrite");
   assert.equal(copy.cleanup, true);
   assert.equal(copy.placement, "auto");
+  assert.equal(copy.notify, "all");
   assert.equal(copy.datePattern, null, "datePattern only applies to voicenotes folders");
   assert.equal(vn.recursive, true, "voicenotes folders are always recursive");
   assert.equal(vn.filePattern, null, "no source-format assumptions are baked in");
@@ -164,10 +166,11 @@ test("config normalization applies safe defaults for the new folder options", ()
     reviewDir: "/tmp/r",
     trashDir: "/tmp/t",
     logDir: "/tmp/l",
-    folders: [{ name: "copy", source: "/tmp/a", destination: "/tmp/b", method: "copy", onChanged: "conflict", cleanup: false }],
+    folders: [{ name: "copy", source: "/tmp/a", destination: "/tmp/b", method: "copy", onChanged: "conflict", cleanup: false, notify: "errors" }],
   });
   assert.equal(conflict.folders[0].onChanged, "conflict");
   assert.equal(conflict.folders[0].cleanup, false);
+  assert.equal(conflict.folders[0].notify, "errors");
 });
 
 test("config validation requires a usable datePattern for voicenotes folders", () => {

@@ -185,7 +185,12 @@ export class Queue {
         const outputs = new Set();
         for (const { name, result } of results) {
           this.#applyResults(folder, [name], result, { notifySuccess: false });
-          if ((result.status === STATUS.DONE || result.status === STATUS.REVIEW) && result.destName && !outputs.has(result.destName)) {
+          if (
+            folder.def.notify !== "errors"
+            && (result.status === STATUS.DONE || result.status === STATUS.REVIEW)
+            && result.destName
+            && !outputs.has(result.destName)
+          ) {
             outputs.add(result.destName);
             this.ctx.notify.notify("info", `${folder.def.name}: concatenated ${result.destName}`);
           }
@@ -212,7 +217,7 @@ export class Queue {
           this.#applyResults(folder, [name], result, { notifySuccess: false });
         }
         const output = results.find(({ result }) => result.status === STATUS.DONE || result.status === STATUS.REVIEW);
-        if (output) {
+        if (output && folder.def.notify !== "errors") {
           const verb = output.result.status === STATUS.REVIEW ? "ready for review" : "merged";
           this.ctx.notify.notify("info", `${folder.def.name}: ${verb} → ${output.result.destName}`);
         }
@@ -225,7 +230,7 @@ export class Queue {
       .finally(() => this.#release(folder.def.name));
   }
 
-  #applyResults(folder, names, result, { notifySuccess = true } = {}) {
+  #applyResults(folder, names, result, { notifySuccess = folder.def.notify !== "errors" } = {}) {
     const { store, config, notify, log } = this.ctx;
     for (const name of names) {
       const file = store.fileFor(folder.def.name, name);

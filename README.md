@@ -88,6 +88,7 @@ Paths accept `~` and environment variables. Key fields:
 | `folders[].includeHidden` | also ingest dot-files (`copy` archives); sync internals (`.stfolder`, `!sync`, `*.tmp`, `.media-sync*`) are always skipped |
 | `folders[].onChanged` | `copy` only: `overwrite` (default) replaces a changed destination copy atomically; `conflict` flags it |
 | `folders[].cleanup` | `false` hides and refuses cleanup (forever archives) |
+| `folders[].notify` | `all` (default) notifies on every success; `errors` only notifies failures (use for bulk archives) |
 | `folders[].placement` | `auto` (default) or `manual` — park processed files for review (not valid for `copy`) |
 | `folders[].autoProcess` | `placement: manual` only: process new items automatically instead of on demand |
 | `folders[].datePattern` | `voicenotes` only (required): regex extracting the clip date; capture groups are joined, non-digits stripped, result must be `YYYYMMDD` |

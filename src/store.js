@@ -437,6 +437,7 @@ export class Store extends EventEmitter {
         cleanup: folder.def.cleanup,
         placement: folder.def.placement,
         autoProcess: folder.def.autoProcess,
+        notify: folder.def.notify,
         exists: folder.exists,
         lastEventAt: folder.lastEventAt,
         counts,

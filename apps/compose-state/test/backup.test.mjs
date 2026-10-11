@@ -77,6 +77,7 @@ test('ssh targets build a batch-mode ssh command with the key and known_hosts', 
   assert.match(command, /compose_live_state/)
   assert.match(command, /find \. \\\( -type f -o -type d -o -type l \\\)/)
   assert.match(command, /> '\/dest\/\.vps0\.tar\.part'/)
+  assert.match(command, /rc=\$\?; if \[ "\$rc" -gt 1 \]/)
 })
 
 test('an ssh target without a key refuses to run', async () => {

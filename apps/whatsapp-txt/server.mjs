@@ -432,8 +432,6 @@ export const createApp = (state, options = {}) => {
             router.get('/api/import/last', (req, res) => {
         res.json(state.lastImport ?? null)
     })
-
-            router.use('/api', (req, res) => res.status(404).json({ error: 'not found' }))
         },
     })
     return app

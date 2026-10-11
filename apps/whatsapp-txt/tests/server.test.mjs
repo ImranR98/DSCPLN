@@ -370,6 +370,15 @@ test('base path: the app mounts under BASE_PATH with the shared kit', async () =
         const ui = await fetch(`${base}/watxt/ui/core.js`)
         assert.equal(ui.status, 200)
 
+        // The kit's standard health route must not be shadowed by an app-level
+        // /api catch-all: the portal and k8s probe rely on it.
+        const health = await (await fetch(`${base}/watxt/api/health`)).json()
+        assert.equal(health.ok, true)
+        assert.equal(health.basePath, '/watxt')
+
+        const unknown = await fetch(`${base}/watxt/api/nope`)
+        assert.equal(unknown.status, 404)
+
         const crossOrigin = await fetch(`${base}/watxt/api/reload`, {
             method: 'POST',
             headers: { Origin: 'http://evil.example' }

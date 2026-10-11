@@ -17,13 +17,19 @@ export const archiveNameFor = (target, stamp) => `${target.name}-backup-${stamp}
 const quote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`
 
 // The existing compose-backup.sh semantics: include files, dirs and symlinks;
-// tolerate files that change or vanish mid-stream.
-export const findTarPipeline = (dir) =>
-  `cd ${quote(dir)} && find . \\( -type f -o -type d -o -type l \\) -print0 | ` +
+// tolerate files that change or vanish mid-stream (live app state).
+export const findTarPipeline = () =>
+  'find . \\( -type f -o -type d -o -type l \\) -print0 | ' +
   'tar cf - --null -T - --sparse --ignore-failed-read --warning=no-file-changed --warning=no-file-removed'
 
+// tar exits 1 when a live file changed mid-stream (the archive is still
+// valid); exit codes above 1 are real failures.
+export const TOLERATE_TAR_RC =
+  'rc=$?; if [ "$rc" -gt 1 ]; then exit "$rc"; fi; ' +
+  '[ "$rc" -eq 1 ] && echo "Note: some live files changed during the backup; the archive was still written" >&2; exit 0'
+
 export function backupShellCommand(target, { keyFile = null, knownHostsFile = null, destFile }) {
-  const pipeline = findTarPipeline(expandPath(target.path))
+  const body = `cd ${quote(expandPath(target.path))} && { ${findTarPipeline()}; ${TOLERATE_TAR_RC}; }`
   if (target.mode === 'ssh') {
     if (!keyFile) throw new Error(`target ${target.name}: ssh targets need an ssh key`)
     const host = `${target.user ? `${target.user}@` : ''}${target.host}`
@@ -33,9 +39,9 @@ export function backupShellCommand(target, { keyFile = null, knownHostsFile = nu
       '-o', 'StrictHostKeyChecking=accept-new',
       ...(knownHostsFile ? ['-o', `UserKnownHostsFile=${knownHostsFile}`] : []),
     ].join(' ')
-    return `set -o pipefail; ssh ${options} ${quote(host)} ${quote(pipeline)} > ${quote(destFile)}`
+    return `ssh ${options} ${quote(host)} ${quote(body)} > ${quote(destFile)}`
   }
-  return `set -o pipefail; ${pipeline} > ${quote(destFile)}`
+  return `${body} > ${quote(destFile)}`
 }
 
 // Deletes every archive for one target except the newest `retention` ones.

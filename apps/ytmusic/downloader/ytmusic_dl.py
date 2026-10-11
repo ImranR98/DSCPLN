@@ -84,6 +84,7 @@ def download_track(video_id, track_info, download_dir):
         'format': 'bestaudio/best',
         'outtmpl': output_template,
         'js_runtimes': {'node': {}},
+        'remote_components': ['ejs:github'],
         'postprocessors': [
             {
                 'key': 'FFmpegExtractAudio',

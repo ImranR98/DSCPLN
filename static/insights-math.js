@@ -4,7 +4,7 @@
 // `DSCPLN.math` in the browser and exported for Node tests (core supplies the
 // date helpers).
 ;(function (global) {
-    const core = global.DSCPLN || require('./core')
+    const core = global.DSCPLN || require('@dscpln/ui-kit/core')
     const { clean } = core
     const {
         parseIso: parseIsoDate,

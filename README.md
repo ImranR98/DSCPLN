@@ -198,7 +198,7 @@ No build step and no framework: the browser loads plain scripts, and the server 
 
 | File | Purpose |
 | --- | --- |
-| `static/core.js` | Shared primitives exposed as one `DSCPLN.*` global: dates, Intl formatters, money formatting, currency colors, the `el()` DOM builder, `requestJson()`, theme cycling and toasts. |
+| `packages/ui-kit/core.js` | Shared primitives (served at `/ui/core.js`) exposed as one `DSCPLN.*` global: dates, Intl formatters, money formatting, currency colors, the `el()` DOM builder, `apiUrl()`, `requestJson()`, theme cycling and toasts. |
 | `static/insights-math.js` | Pure aggregation and comparison math (`DSCPLN.math`); also required by the Node tests. |
 | `static/transaction-list.js` | Transaction rows shared by both pages (editable on the dashboard, read-only on insights). |
 | `static/chart.js` | SVG charts: the multi-currency monthly chart and the cumulative spent/earned line chart. |

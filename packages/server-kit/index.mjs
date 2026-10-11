@@ -5,4 +5,5 @@ export { normalizeSpec, occurrenceAfter, occurrenceBefore, parseAt, Scheduler, s
 export { Runner } from './runner.mjs'
 export { Notifier } from './notifier.mjs'
 export { createApp, csrfGuard, htmlPages } from './app.mjs'
+export { asyncRoute, readBody, sameOrigin, sendJson } from './http.mjs'
 export { scheduledApp, clickFor } from './scheduled-app.mjs'

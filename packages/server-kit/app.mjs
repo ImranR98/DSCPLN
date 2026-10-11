@@ -2,6 +2,7 @@ import express from 'express'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { sameOrigin } from './http.mjs'
 
 // Express app factory shared by every D$CPLN app.
 //
@@ -21,19 +22,8 @@ const DEFAULT_UI_DIR = path.resolve(KIT_DIR, '..', 'ui-kit')
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 export function csrfGuard(req, res, next) {
-  if (MUTATING.has(req.method)) {
-    const origin = req.headers.origin
-    if (origin) {
-      let host = null
-      try {
-        host = new URL(origin).host
-      } catch {
-        return res.status(403).json({ error: 'cross-origin request rejected' })
-      }
-      if (host !== req.headers.host) {
-        return res.status(403).json({ error: 'cross-origin request rejected' })
-      }
-    }
+  if (MUTATING.has(req.method) && !sameOrigin(req)) {
+    return res.status(403).json({ error: 'cross-origin request rejected' })
   }
   next()
 }

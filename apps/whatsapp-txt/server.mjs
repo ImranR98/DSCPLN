@@ -18,7 +18,7 @@ import { parseArgs, promisify } from 'node:util'
 import express from 'express'
 import { createApp as createKitApp } from '@dscpln/server-kit'
 
-const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public')
+const STATIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'static')
 const MESSAGE_TYPES = new Set(['text', 'media', 'attachment', 'deleted', 'system'])
 const execFile = promisify(execFileCallback)
 import { main as mergeExports } from './src/index.mjs'
@@ -281,7 +281,7 @@ export const createApp = (state, options = {}) => {
         title: 'WhatsApp TXT',
         pageTitle: null,
         basePath,
-        staticDir: PUBLIC_DIR,
+        staticDir: STATIC_DIR,
         jsonBody: false, // /api/import/upload streams raw bytes
         healthExtra: () => ({ conversations: state.index.conversations.length }),
         routes: (router) => {

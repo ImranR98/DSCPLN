@@ -5,14 +5,21 @@
   "description": "WhatsApp TXT: browse, search, import and merge WhatsApp chat exports",
   "type": "module",
   "scripts": {
+    "build:ui": "vite build",
+    "watch:ui": "vite build --watch",
     "start": "node server.mjs",
     "check": "node checkFormat.mjs",
     "check-examples": "node checkFormat.mjs --check-examples",
-    "test:server": "node --test tests/*.test.mjs",
-    "test": "node checkFormat.mjs --check-examples && node --test tests/*.test.mjs"
+    "test": "npm run build:ui && node checkFormat.mjs --check-examples && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@dscpln/server-kit": "*",
     "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@dscpln/ui-kit": "*",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "svelte": "^5.57.2",
+    "vite": "^8.3.4"
   }
 }

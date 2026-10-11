@@ -10,7 +10,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages ./packages
 COPY apps ./apps
-RUN npm install --omit=dev --no-audit --no-fund
+RUN npm install --no-audit --no-fund \
+    && npm run build:ui --workspace dscpln-watxt \
+    && npm prune --omit=dev
 
 ENV NODE_ENV=production
 # The conversation directory is expected to be mounted at /data. Browsing and

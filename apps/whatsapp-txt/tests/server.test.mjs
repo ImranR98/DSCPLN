@@ -361,14 +361,15 @@ test('base path: the app mounts under BASE_PATH with the shared kit', async () =
         assert.equal(page.status, 200)
         const html = await page.text()
         assert.match(html, /<base href="\/watxt\/">/)
-        assert.match(html, /<title>D\$CPLN . WhatsApp TXT<\/title>/)
+        assert.match(html, /<title>D\$CPLN &middot; WhatsApp TXT<\/title>/)
 
         const meta = await getJson(base, '/watxt/api/state')
         assert.equal(meta.status, 200)
         assert.equal(meta.body.conversations, 2)
 
-        const ui = await fetch(`${base}/watxt/ui/core.js`)
-        assert.equal(ui.status, 200)
+        const asset = /src="\.\/(assets\/[^"]+\.js)"/.exec(html)?.[1]
+        assert.ok(asset, 'the built UI bundle must be referenced')
+        assert.equal((await fetch(`${base}/watxt/${asset}`)).status, 200)
 
         // The kit's standard health route must not be shadowed by an app-level
         // /api catch-all: the portal and k8s probe rely on it.

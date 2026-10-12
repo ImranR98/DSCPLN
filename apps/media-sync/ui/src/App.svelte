@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte'
   import { CalendarDays, Import, Pause, Play, RefreshCw, Settings, FlaskConical, Wrench, X } from 'lucide-svelte'
-  import { apiUrl, formatBytes, formatDateTime, formatDuration, formatTime, getJson, postJson, putJson, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
+  import { apiUrl, formatBytes, formatDateTime, formatDuration, formatTime, getJson, modal, postJson, putJson, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
 
   const STATUS_RANK = { error: 0, conflict: 1, queued: 2, processing: 3, pending: 4, review: 5, done: 6, duplicate: 7, discarded: 8, cleaned: 9, ignored: 10 }
   const METHOD_LABEL = { standardize: 'standardize', snapchat: 'snapchat', copy: 'copy', voicenotes: 'voicenotes' }
@@ -390,7 +390,7 @@
 
 <header class="app-header">
   <div class="app-header__top">
-    <h1>D<span class="accent">$</span>CPLN <span class="app-header__app">⋅ Media Sync</span></h1>
+    <h1><a class="app-header__brand" href="/">D<span class="accent">$</span>CPLN</a> <span class="app-header__app">⋅ Media Sync</span></h1>
     <div class="app-header__actions">
       <button class="outline secondary icon-button" title={state?.paused ? 'Resume processing' : 'Pause processing'} aria-label="Pause/Resume" onclick={togglePaused}>
         {#if state?.paused}<Play size={16} strokeWidth={1.8} />{:else}<Pause size={16} strokeWidth={1.8} />{/if}
@@ -455,7 +455,7 @@
   <div class="folder-grid">
     {#each state?.folders ?? [] as folder (folder.name)}
       {@const stats = folderStats(folder)}
-      <section class="card folder-card" class:card--over={folder.counts.conflict} class:card--warn={!folder.counts.conflict && stats.issues}>
+      <section class={`card folder-card folder-card--${folder.method}`} class:card--over={folder.counts.conflict} class:card--warn={!folder.counts.conflict && stats.issues}>
         <div class="card__header">
           <div class="folder-title">
             <h2>{folder.name}</h2>
@@ -506,7 +506,7 @@
           {/if}
         </div>
 
-        <details open={expanded.has(folder.name)} ontoggle={(event) => toggleExpanded(folder.name, event.target.open)}>
+        <details class="folder-details" open={expanded.has(folder.name)} ontoggle={(event) => toggleExpanded(folder.name, event.target.open)}>
           <summary>Files · {folder.files.length}</summary>
           {#if !folder.files.length}
             <p class="muted files-empty">No files in this folder right now.</p>
@@ -623,7 +623,7 @@
 
 <!-- cleanup -->
 {#if cleanupDialog}
-  <dialog open class="wide-dialog">
+  <dialog use:modal={() => (cleanupDialog = null)} class="wide-dialog">
     <article>
       <header class="card__header">
         <h2>Cleanup {cleanupDialog.folder}</h2>
@@ -661,7 +661,7 @@
 
 <!-- set date -->
 {#if setDateDialog}
-  <dialog open class="narrow-dialog">
+  <dialog use:modal={() => (setDateDialog = null)} class="narrow-dialog">
     <article>
       <header class="card__header">
         <h2>Set date</h2>
@@ -697,7 +697,7 @@
 
 <!-- restore -->
 {#if restoreDialog}
-  <dialog open class="narrow-dialog">
+  <dialog use:modal={() => (restoreDialog = null)} class="narrow-dialog">
     <article>
       <header class="card__header">
         <h2>Restore files</h2>
@@ -728,7 +728,7 @@
 
 <!-- review -->
 {#if reviewDialog}
-  <dialog open data-testid="review-dialog" class="wide-dialog">
+  <dialog use:modal={() => (reviewDialog = null)} data-testid="review-dialog" class="wide-dialog">
     <article>
       <header class="card__header">
         <h2>Review</h2>
@@ -793,7 +793,7 @@
 
 <!-- settings -->
 {#if settingsDraft}
-  <dialog open data-testid="settings-dialog" class="wide-dialog">
+  <dialog use:modal={() => (settingsDraft = null)} data-testid="settings-dialog" class="wide-dialog">
     <article>
       <header class="card__header">
         <h2>Settings</h2>
@@ -887,7 +887,7 @@
 
 <!-- confirm -->
 {#if confirmDialog}
-  <dialog open data-testid="confirm-dialog" class="narrow-dialog">
+  <dialog use:modal={() => { confirmDialog?.resolve(false); confirmDialog = null }} data-testid="confirm-dialog" class="narrow-dialog">
     <article>
       <header class="card__header"><h2>{confirmDialog.title}</h2></header>
       <p class="muted">{confirmDialog.text}</p>
@@ -901,7 +901,7 @@
 
 <!-- report -->
 {#if reportDialog}
-  <dialog open class="wide-dialog">
+  <dialog use:modal={() => (reportDialog = null)} class="wide-dialog">
     <article>
       <header class="card__header"><h2>Report</h2></header>
       <div class="checklist">

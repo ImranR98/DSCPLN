@@ -135,12 +135,22 @@
     await Promise.all(
       FUNCTIONS.map(async (fn) => {
         const online = await ping(fn)
+        const previous = cards[fn.path]
         let card = { ...EMPTY, loaded: true, online }
         if (online) {
           try {
             card = { ...card, ...(await DETAILS[fn.kind](fn)) }
           } catch {
             // detail is best-effort; the card still links to the app
+          }
+        } else {
+          // Keep the last known detail so an offline tile can explain itself.
+          card = {
+            ...card,
+            detail: previous?.detail ?? '',
+            tone: previous?.tone ?? '',
+            next: previous?.next ?? '',
+            nextTone: previous?.nextTone ?? '',
           }
         }
         next[fn.path] = card
@@ -151,16 +161,6 @@
     busy = false
   }
 
-  const attention = $derived.by(() => {
-    if (!checkedAt) return { text: '', tone: '' }
-    let issues = 0
-    for (const card of Object.values(cards)) {
-      if (!card.online || card.issue) issues += 1
-    }
-    if (!issues) return { text: 'all good', tone: 'ok' }
-    return { text: issues === 1 ? '1 needs attention' : `${issues} need attention`, tone: 'over' }
-  })
-
   onMount(() => {
     refresh()
     const timer = setInterval(refresh, 60_000)
@@ -170,7 +170,7 @@
 
 <header class="app-header">
   <div class="app-header__top">
-    <h1>D<span class="accent">$</span>CPLN</h1>
+    <h1><a class="app-header__brand" href="/">D<span class="accent">$</span>CPLN</a></h1>
     <div class="app-header__actions">
       <button class="outline secondary icon-button" type="button" aria-label="Refresh status" title="Refresh status"
         disabled={busy} onclick={refresh}>
@@ -182,9 +182,6 @@
   <div class="app-header__meta">
     <span class="muted">Every backup and sync workflow, one place.</span>
     <span class="app-header__meta-tools">
-      {#if attention.text}
-        <span class={`portal-attention${attention.tone === 'ok' ? ' is-ok' : ' is-over'}`} data-testid="attention">{attention.text}</span>
-      {/if}
       {#if checkedAt}<span class="muted" data-testid="checked">checked {formatTime(checkedAt)}</span>{/if}
     </span>
   </div>

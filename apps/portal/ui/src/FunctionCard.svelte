@@ -1,9 +1,17 @@
 <script>
   let { fn, card } = $props()
   let Icon = $derived(fn.icon)
+  const offline = $derived(Boolean(card?.loaded) && !card.online)
 </script>
 
-<a class="portal-card" href={`/${fn.path}`} data-testid={`card-${fn.path}`}>
+<a
+  class="portal-card"
+  class:is-offline={offline}
+  href={`/${fn.path}`}
+  data-testid={`card-${fn.path}`}
+  aria-disabled={offline}
+  onclick={(event) => { if (offline) event.preventDefault() }}
+>
   <span class="portal-card__icon"><Icon size={20} strokeWidth={1.8} /></span>
   <span class="portal-card__body">
     <span class="portal-card__name">{fn.name}</span>
@@ -16,7 +24,8 @@
     {/if}
   </span>
   <span
-    class={`portal-card__status ${!card?.loaded ? 'muted' : card.online ? 'is-ok' : 'is-fail'}`}
+    class={`portal-card__status ${offline ? 'is-fail' : 'is-ok'}`}
     data-testid={`status-${fn.path}`}
-  >{card?.loaded ? (card.online ? 'online' : 'unreachable') : '…'}</span>
+    hidden={!offline}
+  >unreachable</span>
 </a>

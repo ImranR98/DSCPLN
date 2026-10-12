@@ -357,21 +357,23 @@
   }
 
   let searchTimer = null
+  const searchValue = () => (searchInput ? searchInput.value : '').trim()
+
   function onSearchInput() {
     clearTimeout(searchTimer)
     searchTimer = setTimeout(() => {
-      const query = searchQuery.trim()
+      searchQuery = searchValue()
       if (searchActive) {
-        searchQuery = query
         syncSearchHash()
         runSearch(false)
-      } else if (query) {
-        location.hash = `#/search?q=${encodeURIComponent(query)}`
+      } else if (searchQuery) {
+        location.hash = `#/search?q=${encodeURIComponent(searchQuery)}`
       }
     }, 250)
   }
 
   function clearSearch() {
+    if (searchInput) searchInput.value = ''
     searchQuery = ''
     if (searchActive) {
       syncSearchHash()
@@ -382,8 +384,8 @@
 
   function submitSearch(event) {
     event.preventDefault()
-    const query = searchQuery.trim()
-    if (query) location.hash = `#/search?q=${encodeURIComponent(query)}`
+    searchQuery = searchValue()
+    if (searchQuery) location.hash = `#/search?q=${encodeURIComponent(searchQuery)}`
     else if (searchActive) {
       syncSearchHash()
       runSearch(false)
@@ -659,7 +661,7 @@
     <button id="sidebar-toggle" class="outline secondary icon-button" aria-label="Toggle conversation list" onclick={() => (sidebarOpen = !sidebarOpen)}>
       <Menu size={16} strokeWidth={1.8} />
     </button>
-    <h1>D<span class="accent">$</span>CPLN <span class="app-header__app">⋅ WhatsApp TXT</span></h1>
+    <h1><a class="app-header__brand" href="/">D<span class="accent">$</span>CPLN</a> <span class="app-header__app">⋅ WhatsApp TXT</span></h1>
     <form id="search-form" class="search-form" role="search" onsubmit={submitSearch}>
       <span class="search-box">
         <input id="search-input" bind:this={searchInput} type="search" placeholder="Search messages…  /" autocomplete="off" spellcheck="false"

@@ -127,7 +127,10 @@
 
 <header class="app-header" data-app={name}>
   <div class="app-header__top">
-    <h1>D<span class="accent">$</span>CPLN <span class="app-header__app">· {name}</span></h1>
+    <h1>
+      <a class="app-header__brand" href="/">D<span class="accent">$</span>CPLN</a>
+      <span class="app-header__app">· {name}</span>
+    </h1>
     <div class="app-header__actions">
       <button class="outline secondary icon-button" type="button" title={paused ? 'Resume' : 'Pause'} aria-label="Pause/Resume" onclick={togglePause}>
         {#if paused}<Play size={16} strokeWidth={1.8} />{:else}<Pause size={16} strokeWidth={1.8} />{/if}

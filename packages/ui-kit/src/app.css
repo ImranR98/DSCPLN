@@ -252,6 +252,16 @@ h1 .accent {
     font-weight: 600;
 }
 
+/* The brand links back to the portal; it inherits the heading's look. */
+.app-header__brand {
+    color: inherit;
+    text-decoration: none;
+}
+
+.app-header__brand:hover {
+    color: inherit;
+}
+
 /* Standard overview/history pieces used by the shell. */
 .overview__actions {
     display: flex;
@@ -491,18 +501,47 @@ main > * {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(25rem, 1fr));
     gap: var(--space-4);
-    align-items: start;
+    align-items: stretch;
 }
 
 .folder-card {
     --method-color: var(--accent);
     position: relative;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .folder-card--standardize { --method-color: var(--accent); }
 .folder-card--snapchat { --method-color: #7c5cff; }
 .folder-card--copy { --method-color: var(--warn); }
+.folder-card--voicenotes { --method-color: #db2777; }
+
+/* The accent bar and badge say which method the folder uses; problems take
+   the colour over. */
+.folder-card.card--warn { --method-color: var(--warn); }
+.folder-card.card--over { --method-color: var(--over); }
+
+.folder-card .folder-card__actions {
+    margin-bottom: var(--space-3);
+}
+
+.folder-card .folder-details {
+    margin-top: auto;
+}
+
+.method-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.1rem 0.5rem;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--method-color) 14%, transparent);
+    color: var(--method-color);
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
 
 .folder-card::before {
     content: "";
@@ -628,6 +667,8 @@ main > * {
     list-style: none;
     margin: 0;
     padding: 0;
+    max-height: 24rem;
+    overflow-y: auto;
 }
 
 .file {
@@ -1253,6 +1294,9 @@ dialog {
     background: transparent;
     max-width: none;
     max-height: none;
+    /* Pico blurs behind the dialog box itself; the ::backdrop below owns the
+       full-viewport dim + blur instead. */
+    backdrop-filter: none;
 }
 
 dialog::backdrop {
@@ -1331,6 +1375,19 @@ dialog article {
 .portal-card:hover {
     box-shadow: var(--shadow-md);
     transform: translateY(-1px);
+}
+
+/* An unreachable app greys out and stops navigating. */
+.portal-card.is-offline {
+    opacity: 0.55;
+    filter: grayscale(1);
+    box-shadow: none;
+    cursor: default;
+}
+
+.portal-card.is-offline:hover {
+    box-shadow: none;
+    transform: none;
 }
 
 .portal-card__icon {

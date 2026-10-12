@@ -40,3 +40,25 @@ export function breakable(element, text) {
     },
   }
 }
+
+// Opens a declaratively rendered <dialog> as a true modal so it gets the
+// full-viewport ::backdrop; `onClose` runs when the dialog is dismissed.
+// <dialog use:modal={() => (state = null)}>
+export function modal(element, onClose = null) {
+  let closing = false
+  const handleClose = () => {
+    if (!closing) onClose?.()
+  }
+  element.addEventListener('close', handleClose)
+  element.showModal()
+  return {
+    update(next) {
+      onClose = next
+    },
+    destroy() {
+      closing = true
+      element.removeEventListener('close', handleClose)
+      if (element.open) element.close()
+    },
+  }
+}

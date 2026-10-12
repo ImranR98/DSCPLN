@@ -108,7 +108,7 @@ test('portal shows the next scheduled run for scheduled apps', async (t) => {
   assert.match(text, /^next /)
 })
 
-test('portal tiles show per-app detail lines and an attention count', async (t) => {
+test('portal tiles show per-app detail lines', async (t) => {
   const browser = await launchBrowser()
   if (!browser) {
     t.skip('chromium not available (playwright browsers missing)')
@@ -157,7 +157,5 @@ test('portal tiles show per-app detail lines and an attention count', async (t) 
   const next = await page.$eval('[data-testid="next-contacts"]', (node) => node.textContent)
   assert.match(next, /1 missed/)
 
-  const attention = await page.$eval('[data-testid="attention"]', (node) => node.textContent)
-  assert.match(attention, /need|needs/)
 })
 

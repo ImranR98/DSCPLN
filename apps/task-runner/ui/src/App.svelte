@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte'
   import { RefreshCw, X } from 'lucide-svelte'
-  import { apiUrl, getJson, postJson, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
+  import { apiUrl, getJson, modal, postJson, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
 
   let groups = $state([])
   let tasks = $state([])
@@ -326,7 +326,7 @@
 
 <header class="app-header">
   <div class="app-header__top">
-    <h1>D<span class="accent">$</span>CPLN <span class="app-header__app">⋅ Task Runner</span></h1>
+    <h1><a class="app-header__brand" href="/">D<span class="accent">$</span>CPLN</a> <span class="app-header__app">⋅ Task Runner</span></h1>
     <div class="app-header__actions">
       {#if missingConfig}
         <span class="alert-badge">Missing config.mjs — create it (see README.md for the schema)</span>
@@ -433,65 +433,65 @@
   <p class="footer-note">Run state is stored per task in its destination folder (.backup-state-*.json); dropped files are held in the browser until you click Run.</p>
 </main>
 
-{#each modals as modal (modal.id)}
-  {#if modal.kind === 'confirm'}
-    <dialog open class="narrow-dialog">
+{#each modals as entry (entry.id)}
+  {#if entry.kind === 'confirm'}
+    <dialog use:modal={() => { entry.props.resolve(false); closeModal(entry.id) }} class="narrow-dialog">
       <article>
-        <header class="card__header"><h2>{modal.props.title}</h2></header>
-        {#if modal.props.lines}
+        <header class="card__header"><h2>{entry.props.title}</h2></header>
+        {#if entry.props.lines}
           <div class="modal-fields">
-            {#each modal.props.lines as line (line)}<span>{line}</span>{/each}
+            {#each entry.props.lines as line (line)}<span>{line}</span>{/each}
           </div>
         {/if}
         <div class="dialog-actions">
-          <button class="outline secondary" onclick={() => { modal.props.resolve(false); closeModal(modal.id) }}>Cancel</button>
-          <button onclick={() => { modal.props.resolve(true); closeModal(modal.id) }}>{modal.props.submitLabel}</button>
+          <button class="outline secondary" onclick={() => { entry.props.resolve(false); closeModal(entry.id) }}>Cancel</button>
+          <button onclick={() => { entry.props.resolve(true); closeModal(entry.id) }}>{entry.props.submitLabel}</button>
         </div>
       </article>
     </dialog>
-  {:else if modal.kind === 'fields'}
-    <dialog open>
+  {:else if entry.kind === 'fields'}
+    <dialog use:modal={() => { entry.props.resolve(null); closeModal(entry.id) }}>
       <article>
-        <header class="card__header"><h2>{modal.props.title}</h2></header>
+        <header class="card__header"><h2>{entry.props.title}</h2></header>
         <div class="modal-fields">
-          {#each modal.props.fields as field, index (field.label)}
+          {#each entry.props.fields as field, index (field.label)}
             <div class="field">
               <span class="field__label">{field.label}</span>
-              <input type="password" autocomplete="off" bind:value={modal.props.fields[index].value} />
+              <input type="password" autocomplete="off" bind:value={entry.props.fields[index].value} />
             </div>
           {/each}
         </div>
         <div class="dialog-actions">
-          <button class="outline secondary" onclick={() => { modal.props.resolve(null); closeModal(modal.id) }}>Cancel</button>
-          <button onclick={() => { modal.props.resolve(modal.props.fields.map((field) => field.value ?? '')); closeModal(modal.id) }}>{modal.props.submitLabel}</button>
+          <button class="outline secondary" onclick={() => { entry.props.resolve(null); closeModal(entry.id) }}>Cancel</button>
+          <button onclick={() => { entry.props.resolve(entry.props.fields.map((field) => field.value ?? '')); closeModal(entry.id) }}>{entry.props.submitLabel}</button>
         </div>
       </article>
     </dialog>
-  {:else if modal.kind === 'picker'}
-    <dialog open>
+  {:else if entry.kind === 'picker'}
+    <dialog use:modal={() => { entry.props.resolve(null); closeModal(entry.id) }}>
       <article>
-        <header class="card__header"><h2>{modal.props.title}</h2></header>
+        <header class="card__header"><h2>{entry.props.title}</h2></header>
         <div class="modal-fields">
-          {#each modal.props.options as option (option.name)}
-            <button class="outline secondary picker-option" onclick={() => { modal.props.resolve(option); closeModal(modal.id) }}>{option.name}</button>
+          {#each entry.props.options as option (option.name)}
+            <button class="outline secondary picker-option" onclick={() => { entry.props.resolve(option); closeModal(entry.id) }}>{option.name}</button>
           {/each}
         </div>
         <div class="dialog-actions">
-          <button class="outline secondary" onclick={() => { modal.props.resolve(null); closeModal(modal.id) }}>Cancel</button>
+          <button class="outline secondary" onclick={() => { entry.props.resolve(null); closeModal(entry.id) }}>Cancel</button>
         </div>
       </article>
     </dialog>
   {:else}
-    <dialog open class="wide-dialog">
+    <dialog use:modal={() => closeModal(entry.id)} class="wide-dialog">
       <article>
-        <header class="card__header"><h2>{modal.props.title}</h2></header>
-        <pre class="log-box">{modal.props.live ? (liveLogs[modal.props.task] ?? []).join('\n') : modal.props.text}</pre>
+        <header class="card__header"><h2>{entry.props.title}</h2></header>
+        <pre class="log-box">{entry.props.live ? (liveLogs[entry.props.task] ?? []).join('\n') : entry.props.text}</pre>
         <div class="dialog-actions">
-          {#if modal.props.paste}
-            <button class="outline secondary" onclick={() => copyText(modal.props.text)}>Copy</button>
-            <button onclick={() => finishPaste(modal.props.task, () => closeModal(modal.id))}>Done</button>
+          {#if entry.props.paste}
+            <button class="outline secondary" onclick={() => copyText(entry.props.text)}>Copy</button>
+            <button onclick={() => finishPaste(entry.props.task, () => closeModal(entry.id))}>Done</button>
           {:else}
-            <button class="outline secondary" onclick={() => closeModal(modal.id)}>Close</button>
+            <button class="outline secondary" onclick={() => closeModal(entry.id)}>Close</button>
           {/if}
         </div>
       </article>

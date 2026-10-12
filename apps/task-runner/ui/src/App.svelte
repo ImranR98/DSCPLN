@@ -355,7 +355,7 @@
   {#each groups as group (group.name)}
     <div class="category-header">
       <span class="category-title">{group.name}</span>
-      <span class="category-count">{group.tasks.length} task(s)</span>
+      <span class="category-count">{group.tasks.length} task{group.tasks.length === 1 ? '' : 's'}</span>
     </div>
     <div class="task-grid">
       {#each group.tasks as task (task.name)}

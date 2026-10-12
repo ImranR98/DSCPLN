@@ -54,6 +54,11 @@ main.page-wrap {
     transition: border-color 0.15s ease, background 0.15s ease;
 }
 
+.dropzone-note {
+    font-size: var(--fs-sm);
+    text-wrap: balance;
+}
+
 .dropzone-box:hover,
 .dropzone-box.dragover {
     border-color: var(--accent);
@@ -72,6 +77,7 @@ main.page-wrap {
 }
 
 .category-title {
+    font-size: var(--fs-lg);
     font-weight: 800;
     letter-spacing: -0.01em;
 }
@@ -95,7 +101,7 @@ main.page-wrap {
 }
 
 .task-card .card-title {
-    font-size: var(--fs-lg);
+    font-size: var(--fs-md);
     margin: 0;
     overflow-wrap: anywhere;
 }

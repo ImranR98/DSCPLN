@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { CalendarDays, Import, Pause, Play, RefreshCw, Settings, FlaskConical, Wrench, X } from 'lucide-react'
-import { apiUrl, formatBytes, formatDateTime, formatDuration, formatTime, getJson, postJson, putJson, showToast, ThemeToggle, Toasts, useModal } from '@dscpln/ui-kit'
+import { apiUrl, formatBytes, formatDateTime, formatDuration, formatTime, getJson, postJson, putJson, showToast, ThemeToggle, Toasts, useModal, usePolling } from '@dscpln/ui-kit'
 
 const STATUS_RANK = { error: 0, conflict: 1, queued: 2, processing: 3, pending: 4, review: 5, done: 6, duplicate: 7, discarded: 8, cleaned: 9, ignored: 10 }
 const METHOD_LABEL = { standardize: 'standardize', snapchat: 'snapchat', copy: 'copy', voicenotes: 'voicenotes' }
@@ -419,14 +419,15 @@ export default function App() {
     refresh()
     refreshTrash()
     refreshLog()
-    const timer = setInterval(() => {
-      setNow(Date.now())
-      refresh()
-      refreshLog()
-    }, 5000)
-    return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Live stats: refresh the state and activity log every five seconds.
+  usePolling(() => {
+    setNow(Date.now())
+    refresh()
+    refreshLog()
+  }, 5000, { runImmediately: false })
 
   // Parked items appear asynchronously after processing; keep the review dialog fresh.
   useEffect(() => {

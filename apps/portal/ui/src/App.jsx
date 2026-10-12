@@ -9,7 +9,7 @@ import {
   Workflow,
   Wrench,
 } from 'lucide-react'
-import { apiUrl, formatDateTime, formatTime, getJson, humanAgo, ThemeToggle } from '@dscpln/ui-kit'
+import { formatDateTime, formatTime, getJson, humanAgo, ping, ThemeToggle } from '@dscpln/ui-kit'
 import FunctionCard from './FunctionCard.jsx'
 
 const FUNCTIONS = [
@@ -23,17 +23,6 @@ const FUNCTIONS = [
 ]
 
 const EMPTY = { loaded: false, online: true, detail: '', tone: '', next: '', nextTone: '', issue: false }
-
-async function ping(fn) {
-  try {
-    const response = await fetch(apiUrl(`${fn.path}/api/health`), {
-      signal: AbortSignal.timeout(5000),
-    })
-    return response.ok
-  } catch {
-    return false
-  }
-}
 
 async function scheduledDetail(fn) {
   const state = await getJson(`${fn.path}/api/state`)
@@ -136,7 +125,7 @@ export default function App() {
     const next = {}
     await Promise.all(
       FUNCTIONS.map(async (fn) => {
-        const online = await ping(fn)
+        const online = await ping(`${fn.path}/api/health`)
         const previous = cards[fn.path]
         let card = { ...EMPTY, loaded: true, online }
         if (online) {

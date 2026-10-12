@@ -14,12 +14,40 @@ export function apiUrl(path) {
   return `/${clean}`
 }
 
+// Thrown by every request helper; carries the HTTP status so callers can
+// special-case conflicts (409) and auth failures (401).
+export class ApiError extends Error {
+  constructor(message, status = 0) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
+async function toError(response) {
+  const text = await response.text().catch(() => '')
+  let message = text.trim()
+  if (message) {
+    try {
+      const parsed = JSON.parse(message)
+      message = parsed?.error || parsed?.detail || message
+    } catch {
+      // plain-text body: keep it as the message
+    }
+  }
+  if (!message) message = `${response.status} ${response.statusText}`
+  return new ApiError(message, response.status)
+}
+
+async function parseBody(response) {
+  const text = await response.text()
+  return text ? JSON.parse(text) : null
+}
+
 export async function getJson(path, { timeout = 5000, ...options } = {}) {
   const response = await fetch(apiUrl(path), { ...options, signal: AbortSignal.timeout(timeout) })
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`)
-  }
-  return response.json()
+  if (!response.ok) throw await toError(response)
+  return parseBody(response)
 }
 
 export async function postJson(path, body = {}, { timeout = 30000, ...options } = {}) {
@@ -30,19 +58,61 @@ export async function putJson(path, body = {}, { timeout = 30000, ...options } =
   return sendJson('PUT', path, body, { timeout, ...options })
 }
 
+export async function deleteJson(path, { timeout = 30000, ...options } = {}) {
+  return sendJson('DELETE', path, null, { timeout, ...options })
+}
+
 async function sendJson(method, path, body, { timeout = 30000, ...options } = {}) {
   const response = await fetch(apiUrl(path), {
     method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    headers: body == null ? undefined : { 'Content-Type': 'application/json' },
+    body: body == null ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(timeout),
     ...options,
   })
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(data.error || data.detail || `${response.status} ${response.statusText}`)
+  if (!response.ok) throw await toError(response)
+  return parseBody(response)
+}
+
+// Uploads a file with progress (XHR; fetch cannot report upload progress).
+// The returned promise also carries `.abort()` for cancel buttons.
+export function uploadFile(path, file, { onProgress } = {}) {
+  let xhr
+  const promise = new Promise((resolve, reject) => {
+    xhr = new XMLHttpRequest()
+    xhr.open('POST', apiUrl(path))
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) onProgress?.(event.loaded / event.total)
+    }
+    xhr.onload = () => {
+      let data = null
+      try {
+        data = JSON.parse(xhr.responseText || 'null')
+      } catch {
+        // non-JSON response: keep null
+      }
+      if (xhr.status >= 400) {
+        reject(new ApiError(data?.error || data?.detail || `HTTP ${xhr.status}`, xhr.status))
+      } else {
+        resolve(data)
+      }
+    }
+    xhr.onabort = () => reject(new ApiError('Upload cancelled', 0))
+    xhr.onerror = () => reject(new ApiError(`Upload of ${file.name} failed`, 0))
+    xhr.send(file)
+  })
+  promise.abort = () => xhr?.abort()
+  return promise
+}
+
+// True when the endpoint answers successfully; used for portal status tiles.
+export async function ping(path, { timeout = 5000 } = {}) {
+  try {
+    const response = await fetch(apiUrl(path), { signal: AbortSignal.timeout(timeout) })
+    return response.ok
+  } catch {
+    return false
   }
-  return data
 }
 
 // SSE helper with reconnect: `onEvent(event)` receives each parsed message.

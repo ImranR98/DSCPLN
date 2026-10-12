@@ -1,7 +1,7 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
-import { showToast } from '@dscpln/ui-kit'
+import { postJson, showToast } from '@dscpln/ui-kit'
 import { number } from './lib/money.js'
-import { requestJson } from './lib/request.js'
+
 
 const BudgetDialog = forwardRef(function BudgetDialog({ data, onrefresh }, ref) {
   const rootRef = useRef(null)
@@ -32,13 +32,10 @@ const BudgetDialog = forwardRef(function BudgetDialog({ data, onrefresh }, ref) 
     if (validityError) return
     setSaving(true)
     try {
-      await requestJson('/budget', {
-        method: 'POST',
-        body: JSON.stringify({
-          monthlyBudget: Number.parseFloat(monthlyBudget),
-          firstDayBias: Number.parseFloat(firstDayBias),
-          currency,
-        }),
+      await postJson('/budget', {
+        monthlyBudget: Number.parseFloat(monthlyBudget),
+        firstDayBias: Number.parseFloat(firstDayBias),
+        currency,
       })
       rootRef.current.close()
       showToast('Budget updated')

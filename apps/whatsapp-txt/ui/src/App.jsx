@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Import, Menu, RefreshCw, X } from 'lucide-react'
-import { apiUrl, formatDateTime, getJson, postJson, ThemeToggle } from '@dscpln/ui-kit'
+import { formatDateTime, getJson, postJson, ThemeToggle, uploadFile, usePolling } from '@dscpln/ui-kit'
 
 const PAGE_SIZE = 200
 const GROUP_WINDOW_MS = 5 * 60 * 1000
@@ -486,12 +486,10 @@ export default function App() {
       })
       if (skipped) continue
       try {
-        const response = await fetch(apiUrl(`api/import/upload?batch=${encodeURIComponent(batch)}&name=${encodeURIComponent(file.name)}`), {
-          method: 'POST',
-          body: file,
-        })
-        const body = await response.json().catch(() => ({}))
-        if (!response.ok) throw new Error(body.error ?? `${response.status} ${response.statusText}`)
+        const body = await uploadFile(
+          `api/import/upload?batch=${encodeURIComponent(batch)}&name=${encodeURIComponent(file.name)}`,
+          file,
+        )
         patchItem(file.name, { state: 'done', size: body.size })
       } catch (error) {
         patchItem(file.name, { state: 'error', error: error.message })
@@ -669,16 +667,18 @@ export default function App() {
         banner(`Failed to load: ${error.message}`)
       }
     })()
-    const timer = setInterval(() => {
-      if (!latest.current.conversation) loadConversations().catch(() => {})
-    }, 15_000)
     return () => {
       window.removeEventListener('hashchange', onHash)
       window.removeEventListener('keydown', onKey)
-      clearInterval(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Refresh the conversation list in the background while browsing.
+  usePolling(() => {
+    if (!latest.current.conversation) return loadConversations()
+    return undefined
+  }, 15_000, { runImmediately: false })
 
   useEffect(() => {
     const element = importDialogRef.current

@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { parseIso, toIso, showToast } from '@dscpln/ui-kit'
-import { requestJson } from './lib/request.js'
+import { getJson, parseIso, postJson, putJson, toIso, showToast } from '@dscpln/ui-kit'
+
 
 const INCOME_GROUP = 'Money In'
 const CONVERSION_GROUP = 'Conversions'
@@ -95,7 +95,7 @@ const TransactionDialog = forwardRef(function TransactionDialog({ data, today, o
     const sequence = ++detailsSequence.current
     try {
       const params = new URLSearchParams({ q: query, kind: kindValue })
-      const result = await requestJson(`/details-suggestions?${params}`)
+      const result = await getJson(`/details-suggestions?${params}`)
       if (sequence !== detailsSequence.current || !rootRef.current?.open) {
         return
       }
@@ -143,7 +143,7 @@ const TransactionDialog = forwardRef(function TransactionDialog({ data, today, o
       return
     }
     try {
-      const result = await requestJson(`/category-suggestions?q=${encodeURIComponent(query)}&kind=${kindValue}`)
+      const result = await getJson(`/category-suggestions?q=${encodeURIComponent(query)}&kind=${kindValue}`)
       if (sequence !== categorySequence.current) {
         return
       }
@@ -232,10 +232,11 @@ const TransactionDialog = forwardRef(function TransactionDialog({ data, today, o
     }
     setSaving(true)
     try {
-      await requestJson(editing ? `/transactions/${encodeURIComponent(editing.id)}` : '/transactions', {
-        method: editing ? 'PUT' : 'POST',
-        body: JSON.stringify(payload),
-      })
+      if (editing) {
+        await putJson(`/transactions/${encodeURIComponent(editing.id)}`, payload)
+      } else {
+        await postJson('/transactions', payload)
+      }
       rootRef.current.close()
       showToast(editing ? 'Transaction updated' : 'Transaction added')
       onrefresh?.()

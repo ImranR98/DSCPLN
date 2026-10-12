@@ -2,6 +2,7 @@
   "name": "@dscpln/ui-kit",
   "version": "3.0.0",
   "private": true,
+  "type": "module",
   "description": "Shared React components, helpers and Pico-based styling for D$CPLN apps",
   "main": "./src/lib/index.js",
   "exports": {

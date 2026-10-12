@@ -1,6 +1,6 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
-import { toIso, showToast } from '@dscpln/ui-kit'
-import { requestJson } from './lib/request.js'
+import { postJson, toIso, showToast } from '@dscpln/ui-kit'
+
 
 const IMPORTABLE_COLUMNS = ['Date', 'Details', 'Money In', 'Expenses', 'Currency', 'Type', 'Notes']
 
@@ -71,10 +71,7 @@ const ImportDialog = forwardRef(function ImportDialog({ data, today, onrefresh }
     }
     setSubmitting(true)
     try {
-      const result = await requestJson('/transactions/import', {
-        method: 'POST',
-        body: JSON.stringify({ text }),
-      })
+      const result = await postJson('/transactions/import', { text })
       rootRef.current.close()
       showToast(`Imported ${result.imported} ${result.imported === 1 ? 'transaction' : 'transactions'}`)
       onrefresh?.()

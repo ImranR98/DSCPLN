@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChartNoAxesColumn, RefreshCw, SquarePen, Wrench } from 'lucide-react'
 import {
   formats,
+  getJson,
   startOfDay,
   toIso,
   Breakable,
@@ -12,7 +13,7 @@ import {
 import { moneyFor, number, clean, currencyColor } from './lib/money.js'
 import { renderMonthly } from './lib/chart.js'
 import { sortNewestFirst, formatCount } from './lib/transactions.js'
-import { requestJson } from './lib/request.js'
+
 import TransactionList from './TransactionList.jsx'
 import BudgetDialog from './BudgetDialog.jsx'
 import TransactionDialog from './TransactionDialog.jsx'
@@ -59,7 +60,7 @@ export default function Dashboard() {
     setToday(startOfDay(new Date()))
     try {
       const params = new URLSearchParams({ date: toIso(startOfDay(new Date())) })
-      const result = await requestJson(`/data?${params}`)
+      const result = await getJson(`/data?${params}`)
       if (sequence !== fetchSequence.current) return
       setData(result)
       setLastFetchAt(Date.now())

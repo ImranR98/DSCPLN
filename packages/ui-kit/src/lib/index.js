@@ -1,4 +1,4 @@
-export { apiUrl, getJson, postJson, putJson, subscribe } from './api.js'
+export { ApiError, apiUrl, deleteJson, getJson, ping, postJson, putJson, subscribe, uploadFile } from './api.js'
 export {
   formats,
   colorFrom,
@@ -22,5 +22,6 @@ export { default as LogDialog } from './LogDialog.jsx'
 export { default as SettingsDialog } from './SettingsDialog.jsx'
 export { default as Breakable } from './Breakable.jsx'
 export { useModal } from './useModal.js'
+export { usePolling } from './usePolling.js'
 export { mountApp } from './mountApp.jsx'
 export { default as AppErrorBoundary } from './AppErrorBoundary.jsx'

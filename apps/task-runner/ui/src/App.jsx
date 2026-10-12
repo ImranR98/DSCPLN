@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RefreshCw, X } from 'lucide-react'
-import { apiUrl, getJson, postJson, showToast, ThemeToggle, Toasts, useModal } from '@dscpln/ui-kit'
+import { getJson, postJson, showToast, ThemeToggle, Toasts, uploadFile as uploadFileRequest, useModal, usePolling } from '@dscpln/ui-kit'
 
 /* The noVNC viewer is proxied under <basePath>/browser/; its WebSocket path
  * is relative to the viewer page, so it lands on <basePath>/browser/websockify
@@ -236,35 +236,15 @@ export default function App() {
     }))
   }
 
-  const uploadFile = (task, file, onProgress) =>
-    new Promise((resolve) => {
-      const xhr = new XMLHttpRequest()
-      xhr.open('POST', apiUrl(`api/upload/${encodeURIComponent(task.name)}?name=${encodeURIComponent(file.name)}`))
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable && event.total > 0) onProgress(event.loaded / event.total)
-      }
-      xhr.onload = () => {
-        let data = {}
-        try {
-          data = JSON.parse(xhr.responseText || '{}')
-        } catch {
-          // ignore
-        }
-        if (xhr.status >= 400) {
-          toast(data.detail || `HTTP ${xhr.status}`, 'error')
-          resolve(false)
-        } else {
-          resolve(true)
-        }
-      }
-      xhr.onabort = () => resolve(false)
-      xhr.onerror = () => {
-        toast(`Upload of ${file.name} failed`, 'error')
-        resolve(false)
-      }
-      uploadAborts.current.set(task.name, xhr)
-      xhr.send(file)
-    })
+  const uploadFile = (task, file, onProgress) => {
+    const request = uploadFileRequest(
+      `api/upload/${encodeURIComponent(task.name)}?name=${encodeURIComponent(file.name)}`,
+      file,
+      { onProgress },
+    )
+    uploadAborts.current.set(task.name, request)
+    return request
+  }
 
   const runTask = async (task, options = {}) => {
     const extra = {}
@@ -297,10 +277,14 @@ export default function App() {
       try {
         let done = 0
         for (const file of files) {
-          const ok = await uploadFile(task, file, (fraction) => {
-            setUploading((current) => ({ ...current, [task.name]: ((done + fraction) / files.length) * 100 }))
-          })
-          if (!ok) return
+          try {
+            await uploadFile(task, file, (fraction) => {
+              setUploading((current) => ({ ...current, [task.name]: ((done + fraction) / files.length) * 100 }))
+            })
+          } catch (err) {
+            if (err.message !== 'Upload cancelled') toast(err.message, 'error')
+            return
+          }
           done += 1
           setUploading((current) => ({ ...current, [task.name]: (done / files.length) * 100 }))
         }
@@ -461,10 +445,12 @@ export default function App() {
 
   useEffect(() => {
     loadTasks()
-    const timer = setInterval(poll, 700)
-    return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poll])
+  }, [loadTasks])
+
+  // Poll run status while the page is open (the poll callback is refreshed
+  // internally, so this timer never restarts).
+  usePolling(poll, 700, { runImmediately: false })
 
   const globalDropRef = useDropzone(handleGlobalFiles)
 

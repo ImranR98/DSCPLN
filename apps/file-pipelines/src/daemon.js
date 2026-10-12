@@ -12,7 +12,7 @@ import { SyncLock } from "./lock.js";
 import { Watchers } from "./watchers.js";
 import { sweepTrash } from "./cleanup.js";
 import { rehydrateReview } from "./review.js";
-import { ApiServer } from "./api.js";
+import { ApiServer } from "./api/index.js";
 
 export class Daemon {
   constructor(configPath, options = {}) {

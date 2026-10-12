@@ -31,7 +31,7 @@ reachable from the container.
 
 ## Development
 
-UI is Svelte under `ui/` (built into `static/`):
+UI is React under `ui/` (built into `static/`):
 
 ```sh
 npm run build:ui --workspace dscpln-contacts

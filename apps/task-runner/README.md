@@ -234,7 +234,7 @@ only) gives tools that refuse non-TTY stdin a pseudo-terminal when
 
 ## Frontend
 
-`ui/` is a Svelte + Vite app (built into `static/`, served by the node
+`ui/` is a React + Vite app (built into `static/`, served by the node
 server): group/card grid, global drop zone with server-side detection, staged
 queues, generic prompt dialog, XHR upload progress, live logs via `/api/status`
 polling, paste dialog for `capture:` tasks, and toasts. Built with
@@ -267,6 +267,6 @@ root); `npm test` builds first.
 - `state.mjs` — run state, running markers, staging/tmp dirs
 - `runner.mjs` / `util.mjs` — subprocess layer (groups, streaming, redaction)
 - `lib.sh` / `pty_runner.py` — bash helpers + pty helper
-- `ui/` — Svelte frontend; `static/` — its build output (gitignored)
+- `ui/` — React frontend; `static/` — its build output (gitignored)
 - `config.example.mjs` — documented starting point (`config.mjs` is ignored)
 - `test/` — `node:test` sandbox suites (`npm test`)

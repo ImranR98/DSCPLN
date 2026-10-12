@@ -196,7 +196,7 @@ bundled for archive imports.
 | `src/main.mjs` | The merge pipeline used by both the CLI and the import API. |
 | `WhatsAppTXT.mjs` | CLI entry (merge exports across directories). |
 | `checkFormat.mjs` | Export validator used by the examples and tests. |
-| `ui/` | Svelte front end (built into `static/`). |
+| `ui/` | React front end (built into `static/`). |
 | `examples/` | Generated fixtures for the checker and merge tests. |
 
 ## Development

@@ -43,7 +43,7 @@ test('portal renders every function link and loads the ui kit', async (t) => {
   const header = await page.textContent('h1')
   assert.match(header, /D\$CPLN/)
 
-  // The theme toggle is the canary that the Svelte kit mounted.
+  // The theme toggle is the canary that the shared kit mounted.
   await page.waitForFunction(() => document.querySelector('[data-testid="theme-toggle"]')?.innerHTML?.includes('<svg'))
   assert.deepEqual(errors, [])
 })

@@ -37,20 +37,27 @@ async function newPage() {
   return page
 }
 
+async function documentHeight(page) {
+  return page.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body.scrollHeight))
+}
+
 async function shoot(page, name) {
-  // Capture the full document deterministically: Chromium's captureBeyondViewport
-  // intermittently clips to the viewport when the content is taller than it, so
-  // resize the viewport to the document first and restore it afterwards.
+  // Capture the full document deterministically. Playwright's fullPage uses
+  // Chromium's captureBeyondViewport, which intermittently clips to the
+  // pre-resize viewport; instead grow the viewport to the document height
+  // (waiting for the resize to apply) and take a normal screenshot.
   const viewport = page.viewportSize()
-  const size = await page.evaluate(() => ({
-    width: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
-    height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
-  }))
-  if (size.height > viewport.height) {
-    await page.setViewportSize({ width: viewport.width, height: size.height })
+  let height = await documentHeight(page)
+  for (let i = 0; i < 3 && height > viewport.height; i += 1) {
+    await page.setViewportSize({ width: viewport.width, height })
+    await page.waitForFunction((h) => window.innerHeight >= h, height, { timeout: 2000 }).catch(() => {})
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
+    const next = await documentHeight(page)
+    if (next <= height) break
+    height = next
   }
-  await page.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: true })
-  if (size.height > viewport.height) {
+  await page.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: false })
+  if (page.viewportSize().height !== viewport.height) {
     await page.setViewportSize(viewport)
   }
   console.log('shot', name)

@@ -103,6 +103,26 @@ merge may be the only copy.
   (e.g. a server and a laptop) from processing the same mirrored folders at once.
 - `dryRun` mode reports what would happen without writing anything.
 
+## Source map
+
+| path | what lives there |
+|---|---|
+| `src/index.js` | CLI entry (`serve`/`standardize`/`snapconcat`/`concataudio`/`clean-synced`) |
+| `src/daemon.js` | wires the store, queue, watcher, scheduler, snapshot runner and API |
+| `src/config.js` / `src/schedule.js` | config shape/normalization/validation; run schedules |
+| `src/store.js` | per-folder file state (scan, dedupe/conflict detection, cleanup previews) |
+| `src/queue.js` / `src/processors/` | the work queue and the four processing methods |
+| `src/watchers.js` | chokidar watchers for watched folders (snapshots are skipped) |
+| `src/snapshot.js` | snapshot copies: generated commands + remote Kubernetes Jobs |
+| `src/scheduler.js` | fires snapshot folders on their schedule |
+| `src/cleanup.js` | verified cleanup into trash, restore and empty |
+| `src/review.js` / `src/park.js` | manual-placement parking and the review API |
+| `src/api/index.js` | HTTP server setup, `/events` stream, route dispatch |
+| `src/api/{state,folders,review,cleanup,trash}.js` | the API route modules |
+| `ui/src/App.jsx` | dashboard orchestration (state, actions, layout) |
+| `ui/src/components/` | folder/overview/trash/activity cards and the dialogs |
+| `ui/src/lib/view.js` | pure view helpers (stats, labels, file sorting, review groups) |
+
 ## Running
 
 ```sh
@@ -183,11 +203,11 @@ lives inside a synced tree.
 ## Development
 
 ```sh
-npm run build:ui   # build ui/ (Svelte + Vite) into static/
+npm run build:ui   # build ui/ (React + Vite) into static/
 npm test           # builds the UI, then runs the unit + e2e suites
 ```
 
-The front end is a Svelte app under `ui/` (Vite output in `static/`, served by
+The front end is a React app under `ui/` (Vite output in `static/`, served by
 the node server). Tests generate their own media with ffmpeg/exiftool and never
 touch real data. Optional parity checks compare `standardize` output against an
 existing implementation when `MEDIA_SYNC_BASH_STANDARDIZE` points at one; the

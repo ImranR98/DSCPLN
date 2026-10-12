@@ -39,7 +39,7 @@ body {
     padding: 0;
 }
 
-/* Svelte mounts into #app; let the header and layout be body's flex children
+/* The app mounts into #app; let the header and layout be body's flex children
    so the viewport-height two-pane layout works. */
 #app {
     display: contents;

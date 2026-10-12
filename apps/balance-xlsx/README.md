@@ -198,15 +198,15 @@ npm test
 
 ## Architecture
 
-Svelte 5 + Vite front end under `ui/` (built into `static/`, served by the
+React + Vite front end under `ui/` (built into `static/`, served by the
 node server) and a small Express back end. The UI reads the workbook through
 the API; the workbook stays the source of truth.
 
 | File | Purpose |
 | --- | --- |
-| `ui/src/Dashboard.svelte` | Month dashboard, budget editing, transaction dialogs. |
-| `ui/src/Insights.svelte` | Range analysis, charts and category movers. |
-| `ui/src/Settings.svelte` | Data-source info and the external API token. |
+| `ui/src/Dashboard.jsx` | Month dashboard; hero/currency cards are components in `ui/src/components/`. |
+| `ui/src/Insights.jsx` | Range analysis, charts and category movers (math in `ui/src/lib/insights-model.js`). |
+| `ui/src/Settings.jsx` | Data-source info and the external API token. |
 | `ui/src/lib/insights-math.js` | Pure aggregation/comparison helpers (also imported by the Node tests). |
 | `ui/src/lib/chart.js` | Chart.js setup shared by both pages. |
 | `ui/src/lib/money.js` | Money formatting and stable per-currency colors. |

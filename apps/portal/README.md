@@ -28,7 +28,7 @@ npm start --workspace dscpln-portal        # http://localhost:8080
 
 ## Development
 
-The page is a Svelte app under `ui/` built into `static/`:
+The page is a React app under `ui/` built into `static/`:
 
 ```sh
 npm run build:ui --workspace dscpln-portal

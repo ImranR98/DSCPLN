@@ -66,27 +66,45 @@ Every app mounts everything under `BASE_PATH` (`""` for local dev):
 
 `packages/ui-kit` (React + Pico CSS):
 
-- `api.js` — base-path-aware `apiUrl`, `getJson`/`postJson`/`putJson`, SSE
-  `subscribe`
+- `api.js` — base-path-aware `apiUrl`, `getJson`/`postJson`/`putJson`/
+  `deleteJson` (all throwing `ApiError` with the HTTP status), `uploadFile`
+  (XHR progress + `.abort()`), `ping`, SSE `subscribe`
 - `format.js` / `dates.js` — display formatters and local-date calendar helpers
 - `theme.js` — Pico `data-theme` handling (auto/light/dark, localStorage)
 - `paths.js` — dotted-path get/set for config forms
 - components — `Shell` (header, status pill, overview tiles, run/pause, log +
-  settings dialogs), `LogDialog`, `SettingsDialog`, `ThemeToggle`
+  settings dialogs), `LogDialog`, `SettingsDialog`, `ThemeToggle`, `Toasts`,
+  `Breakable` (money wrapping), `AppErrorBoundary`
+- hooks — `useModal` (show a `<dialog>` as a true modal), `usePolling`
+- `mountApp(App)` — renders an app inside the error boundary (each
+  `main.jsx` is three lines: css imports + `mountApp(App)`)
+- `vite.mjs` — `appViteConfig(import.meta.url)` factory so every app's
+  `vite.config.mjs` is a three-line call (multi-page apps pass `inputs`)
 - `app.css` — imports Pico and holds the few shared custom rules
 
 `packages/test-kit` — shared test helpers: `tempDir`, `listen`, `withApp`,
-`waitFor`.
+`waitFor`, and the optional-Chromium helpers `launchBrowser`,
+`browserAvailable`, `have`.
 
 ## App UI pipeline
 
 Every app has `apps/<app>/ui/` (Vite + React + Pico) that builds into
 `apps/<app>/static/` (gitignored). The server serves `static/` and injects
-`<base href>` for `BASE_PATH`; Vite uses `base: './'` so the build works under
-any prefix. `npm run build:ui --workspace <pkg>` builds (or `npm run ui` for
-all); `npm test` builds first; the Dockerfile installs dev deps, builds, then
-prunes them. Balance builds three pages from one Vite config
-(`index`/`insights`/`settings`).
+`<base href>` for `BASE_PATH`; the shared `appViteConfig` uses `base: './'` so
+the build works under any prefix. `npm run build:ui --workspace <pkg>` builds
+(or `npm run ui` for all); `npm test` builds first; the Dockerfile builds the
+UI in its layer and prunes dev deps. Balance builds three pages from one Vite
+config (`index`/`insights`/`settings`).
+
+The scaffolding is deliberately uniform and mostly generated:
+
+- `scripts/sync-app-html.mjs` writes every `ui/*.html` from one template
+  (head, favicon, pre-paint theme bootstrap, module entry); `--check` reports
+  drift. Add the page to its PAGES map when adding an app/page.
+- `mountApp` + `appViteConfig` keep `main.jsx`/`vite.config.mjs` to a few lines
+  with no per-app drift.
+- React apps are decomposed by convention: `components/` for view components,
+  `lib/` for pure model/format helpers, hooks in the component or `hooks/`.
 
 ## Hardening & safety conventions (review pass)
 
@@ -194,10 +212,14 @@ reverse proxy works — the apps only need `BASE_PATH` set per subpath.
 **Building & deploying an image**
 
 ```bash
-# on the PC, from the monorepo root (context = repo root):
-podman build --platform linux/amd64 -f apps/<app>/Dockerfile -t docker.io/imranrdev/dscpln-<image>:latest .
-podman push --digestfile /tmp/<image>.digest docker.io/imranrdev/dscpln-<image>:latest
-skopeo inspect docker://docker.io/imranrdev/dscpln-<image>:latest --format '{{.Digest}}'
+# on the PC, from the monorepo root (context = repo root). Every app image is
+# FROM the shared base (monorepo + full workspace install), so refresh it
+# first; scripts/build-all.sh does both:
+scripts/build-base.sh
+scripts/build.sh <app>
+
+# or all apps at once (prints the digest table):
+scripts/build-all.sh
 
 # pin the digest in your deployment repo's template for the app, then deploy:
 helm upgrade --install <release> <chart> -n apps
@@ -223,10 +245,12 @@ phone shortcuts or scripts that still point at an older hostname.
 
 1. `apps/<name>/` with `server.mjs` (`scheduledApp` for scheduled apps) and
    `package.json` depending on `@dscpln/server-kit`;
-2. `ui/` with `index.html`, `src/main.jsx` and `src/App.jsx` using
-   `@dscpln/ui-kit` (`Shell` + `app.css`); `vite.config.mjs` (root `ui`, outDir
-   `../static`, `base: './'`); scripts `build:ui` and `test`
-   (`npm run build:ui && node --test`);
+2. `ui/` with `src/main.jsx` (`import '@dscpln/ui-kit/app.css'`, the app css,
+   then `mountApp(App)`) and `src/App.jsx` using `@dscpln/ui-kit`
+   (`Shell` + components); add the page to `scripts/sync-app-html.mjs` and run
+   it; `vite.config.mjs` is `appViteConfig(import.meta.url)`; scripts
+   `build:ui` and `test` (`npm run build:ui && node --test`);
 3. tests under `test/` (unit + a Playwright browser test using `data-testid`
-   selectors), plus the Infra template and Dockerfile (build UI, prune dev
-   deps).
+   selectors and `@dscpln/test-kit` helpers), plus the Infra template and a
+   Dockerfile `FROM imranrdev/dscpln-base:latest` (app packages, build UI,
+   prune dev deps).

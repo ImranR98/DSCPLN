@@ -186,6 +186,19 @@ The container uses `/data` by default, so mount the conversation directory there
 uid, add `--user "$(id -u):$(id -g)"` to the `docker run` command. `unzip` is
 bundled for archive imports.
 
+## Layout
+
+| File | Purpose |
+| --- | --- |
+| `server.mjs` | HTTP server: browsing, search and the import API. |
+| `src/parse.mjs`, `src/dates.mjs` | Chat parsing and date-line classification (DMY/MDY/YMD inference). |
+| `src/merge.mjs`, `src/files.mjs` | Cross-file matching, alignment and rename handling. |
+| `src/main.mjs` | The merge pipeline used by both the CLI and the import API. |
+| `WhatsAppTXT.mjs` | CLI entry (merge exports across directories). |
+| `checkFormat.mjs` | Export validator used by the examples and tests. |
+| `ui/` | Svelte front end (built into `static/`). |
+| `examples/` | Generated fixtures for the checker and merge tests. |
+
 ## Development
 
 ```

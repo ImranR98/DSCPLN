@@ -10,8 +10,7 @@ data/
 .env
 
 # Generated UI output (Vite builds apps/<app>/ui into apps/<app>/static)
-apps/portal/static/
-apps/balance-xlsx/static/
+apps/*/static/
 
 # Personal Task Runner config (see config.example.mjs)
 apps/task-runner/config.mjs

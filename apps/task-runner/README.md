@@ -95,6 +95,61 @@ wiped when the run ends. `prompts: [{key, label, type: confirm|secret}]` are
 rendered generically; secret values are redacted from the command display and
 output.
 
+## Adding your own tools and tasks
+
+1. **Write the tool.** Anything executable works — bash, `python3`, `node`.
+   The image already provides `bash`, `python3`, `node`, `rsync`, `git`,
+   `age`, `jq`, `unzip`/`tar` and `wget`, and the app tree is writable, so a
+   task can `apt-get`/`pip`/`npm` install more at run time. Give it a shebang
+   and the executable bit. A bundled example lives in
+   `apps/task-runner/examples/hello-tool.sh`.
+
+2. **Make it visible to the app.**
+   - Local runs: keep it anywhere on disk and reference it by absolute path.
+   - Container: mount your tool folder read-only (for example
+     `-v ~/my-tools:/tools:ro`) and point `scriptroot` at it, or bake the tool
+     into a custom image.
+   - The bundled example is copied into the image, so
+     `scriptroot: '{{repo_dir}}/apps/task-runner/examples'` works both locally
+     and in the container — that is what `config.example.mjs` uses.
+
+3. **Set `scriptroot`** in your config and call the tool from a task:
+
+   ```js
+   export default {
+     maindir: '~/Backups',
+     scriptroot: '/tools',
+     groups: [{
+       name: 'Everyday',
+       tasks: [{
+         name: 'Manifest dropped files',
+         note: 'Drop files to write a manifest next to them.',
+         state_dir: '{{maindir}}/.tasks',
+         uploads: true,
+         glob: '*',
+         script: `bash '{{scriptroot}}/hello-tool.sh' '{{maindir}}' {{uploads}}`,
+         summary_last_line: true,
+       }],
+     }],
+   }
+   ```
+
+4. **Wire the card.** Copy a task from `config.example.mjs` and change the
+   fields: `state_dir` is required; `uploads: true` + `glob` adds a drop zone
+   (the files are validated and staged, then shell-quoted into `{{uploads}}`);
+   `prompts` adds inputs (secrets are redacted from logs); `serial_key`
+   serializes tasks that touch the same destination; `capture: true` shows the
+   output in a copy/paste dialog instead of the log (add `commit_dir` to
+   git-commit it when you press Done); `root:` gates the card on a directory
+   existing; `host:` pins it to one instance. `commands:` is the general form
+   (a bash string or list of strings); `script:`, `move:` and `ingest:` are
+   shorthands that generate the command for you.
+
+5. **Tokens** resolve inside commands and paths: your config's own values
+   (`{{maindir}}`, `{{hosts.desktop.ssh}}`, ...), the built-ins `{{repo_dir}}`
+   and `{{lib}}` (the packaged `lib.sh`), `{{scriptroot}}` once set, and
+   per-run `{{uploads}}` plus one `{{key}}` per prompt value.
+
 ## How tasks work
 
 Every task is a list of bash commands executed in order by the runner with

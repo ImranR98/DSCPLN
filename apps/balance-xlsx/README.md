@@ -131,42 +131,45 @@ curl -X POST https://dscpln.example.com/balance/api/transactions \
 
 ## Dashboard
 
-The dashboard covers the current month, per currency:
-
-- The **main currency** (the first one in Constants) gets the full Month card: spend against its budget with progress, pace, remaining/day, and a This month / Last month / N-mo avg grid for spend, earnings and conversions. While the month is in progress, the Last month and average columns cover only the same elapsed days as today (e.g. days 1–7), with the full-month figures in each cell's tooltip, so the three columns are directly comparable.
-- **Earnings** for the main currency: `Money In` for the current month to date, the previous month through the same day (full month once it is over), and the running average of the complete months since the currency's first transaction (months before the data begins are not counted as zero; the column is labeled with the number of months used).
-- **Other currencies** appear as compact tiles below, each with spend vs budget, a progress bar, remaining, and income. Currencies with no spending or income this month are hidden; the main currency is always shown.
-- **Last 12 months** charts money in and out per month for every currency with activity in that window, as small multiples (one lane per currency, each with its own scale), a 12-month Total column, and a hover tooltip. The current month is capped at today and marked with an asterisk. Each currency keeps a stable accent color across its tile, chips, and chart lane.
-- **This month** lists all currencies' transactions newest first, with the date on each row; future-dated rows are dimmed.
-- **Currency conversions** (categories in the `Conversions` group) do not count as spending or earning: they are excluded from the Spent/Earned figures, budgets, pace and notifications. The main card shows a net **Converted** row (in − out per period, hover for the out/in split), currency tiles show a compact converted line, and the chart's Total column lists `conv out`/`conv in` rows.
-- Each currency has its own budget, editable from the pencil button on its card.
-
-On wide screens the transactions list sits in a second column on the right, with the chart below the month overview; on narrow screens everything stacks in one column, with the chart below the transactions list.
+- **Month navigation** in the header (`‹`/`›`) moves the whole page between
+  months.
+- The **primary currency** (the first one in Constants) gets the hero card:
+  spend against its budget, a progress bar, remaining budget, per-day
+  allowance and days left, plus a This month / Last month / 12-mo avg table
+  for spend and earnings.
+- **Other currencies** are compact tiles with spend vs budget and a progress
+  bar. Every currency has its own budget, editable from the Edit button on its
+  card.
+- **Last 12 months** charts money in and out per month for the primary
+  currency (Chart.js).
+- **Transactions** lists the selected month's rows newest first — date,
+  details, category, out, in, currency — with Add transaction and per-row
+  Edit/Delete.
 
 ### Transactions
 
-- **Add**: open "This month", click "Add transaction", and fill in Expense/Income, amount, details, date, category, currency, and optional notes. The date defaults to today, and the currency defaults to the main (first) Constants currency.
-- **Details autocomplete**: as you type in Details, previously used descriptions appear in a suggestion menu (ranked by prefix/token match, use count and recency). Picking one also fills the category with the last one used for that description.
-- **Category suggestions**: as you type details, the app scores them against all past transactions of the same kind (fuzzy token/trigram/edit-distance matching, weighted by how often and how recently a category was used). It auto-selects the category when the match is confident, and always shows the top suggestions so you can pick a different one.
-- **Import**: click "Import" and paste one transaction per line, tab-separated, using the Transactions sheet's column order (shown in the dialog). Exactly one of Money In / Expenses must be filled; any other sheet columns must be left empty. Every line is validated first: if any line is invalid the whole paste is rejected with per-line errors and nothing is written. Lines dated before the current month trigger a confirmation step ("Import anyway"). A successful import is one git commit.
-- **Edit / delete**: use the buttons on each row. Deleting shifts the remaining rows up, like deleting a row in Excel.
+- **Add**: open the dialog from the transactions card; it takes date, details,
+  kind (expense or income), amount, currency and notes. Income fills `Money
+  In`, expense fills `Expenses`.
+- **Edit / delete**: per-row buttons; deleting shifts the remaining rows up in
+  the workbook, like deleting a row in Excel.
+- The workbook's remaining columns (`Type`, categories, ...) are preserved;
+  the external API (below) accepts full transaction objects including
+  categories.
 
 ## Insights
 
-`/insights` (linked from the dashboard header) analyzes an arbitrary date range (defaulting to the current month), per currency:
+`/insights` (linked from the dashboard header) analyzes a date range per
+currency:
 
-- **Filters**: start/end date pickers; quick ranges `This month`, `Last month`, a month chip (opens a month picker), `Last 3/6/12 full months` (complete calendar months only), `Year to date` and `All time` (first to latest transaction); and one **Compare with** selector: `Previous period` (default), `Same period last year`, or `Trailing 3/6/12-month average`. The range and comparison are kept in the URL, and a one-line note shows what the figures are compared with (hover it for the exact windows and caveats).
-- **Comparison windows**: each stat uses the window that makes it comparable. KPI, category and mover figures use the elapsed part of the selected range and compare it with the matching elapsed window: the same calendar days of the previous period (e.g. Oct 1–7 with Sep 1–7; whole months with the same whole months; Year to date with the same period last year), or, for trailing averages, the average of the same days of each complete month with data (e.g. the 1st–7th of the last three months). Trailing averages skip months before a currency's first transaction. When a range spans several months, average comparisons scale the trailing months per day to the range length instead. The chart's dashed baselines and the 30-day forecast use the full comparison periods (the full previous month(s) or trailing months), which is why the dashed line can show the rest of a month while the KPI compares only the elapsed days.
-- **Transactions panel** (top, collapsed by default): all transactions in the range across currencies, read-only; future-dated rows are dimmed.
-- **Monthly totals chart** (above the currency sections, when the range spans more than one month): the same chart as the dashboard, with an asterisk marking partial months.
-- **Per-currency sections** (primary first, then by volume), each with:
-  - KPI tiles for spent, earned, net (colored by sign, with intensity based on the smaller of spent/earned), average spend per day, average earned per day and transaction count — all vs the selected comparison, with the exact comparison window in the tooltip. Net deltas are percentages of the previous net's magnitude (green when net improved), or a signed amount when there is no previous net to compare with.
-  - Category breakdowns for spending and earning with include/exclude checkboxes that recompute the totals, percentages, charts and forecast (select all/none included).
-  - A cumulative spent-and-earned chart (over the selected range, starting/ending at its actual dates) with dashed spent/earned baselines for the selected comparison, spanning the full comparison periods.
-  - Forecasts: projected month-end spend/income when the range includes today (a straight-line projection from month-to-date figures), plus a next-30-days estimate from the comparison period's daily rate (labeled with the periods used).
-  - Biggest spending and earning increases/decreases vs the comparison.
-- Budgets are not referenced on this page.
-- Conversion categories are de-selected by default in every section (they remain in the list and can be re-enabled).
+- **Filters**: currency, start/end date pickers and quick ranges (Last
+  12 months, Year to date).
+- **Totals** for the range: spent, earned, net, and the previous period's
+  spend (the same-length window immediately before the range).
+- **Monthly totals** bar chart (out vs in per month) and a **cumulative
+  spend** line chart (Chart.js).
+- **Biggest category moves** vs the previous period, ranked by absolute
+  change.
 
 ## Operations
 
@@ -195,17 +198,22 @@ npm test
 
 ## Architecture
 
-No build step and no framework: the browser loads plain scripts, and the server is a small Express app.
+Svelte 5 + Vite front end under `ui/` (built into `static/`, served by the
+node server) and a small Express back end. The UI reads the workbook through
+the API; the workbook stays the source of truth.
 
 | File | Purpose |
 | --- | --- |
-| `packages/ui-kit/core.js` | Shared primitives (served at `/ui/core.js`) exposed as one `DSCPLN.*` global: dates, Intl formatters, money formatting, currency colors, the `el()` DOM builder, `apiUrl()`, `requestJson()`, theme cycling and toasts. |
-| `static/insights-math.js` | Pure aggregation and comparison math (`DSCPLN.math`); also required by the Node tests. |
-| `static/transaction-list.js` | Transaction rows shared by both pages (editable on the dashboard, read-only on insights). |
-| `static/chart.js` | SVG charts: the multi-currency monthly chart and the cumulative spent/earned line chart. |
-| `static/app.js`, `static/insights.js`, `static/settings.js` | Page controllers (rendering, dialogs, filters, API token). |
-| `server.js` | Routes and error handling; `notifications.js` sends budget-limit pushes. |
-| `api-auth.js` | The external API's bearer token and edit-token signing, persisted in `api.stateFile`. |
-| `dataProviders/excelDataProvider.js` | Workbook reading/writing; `category-suggester.js` and `workbook-git.js` are its helpers. |
+| `ui/src/Dashboard.svelte` | Month dashboard, budget editing, transaction dialogs. |
+| `ui/src/Insights.svelte` | Range analysis, charts and category movers. |
+| `ui/src/Settings.svelte` | Data-source info and the external API token. |
+| `ui/src/lib/insights-math.js` | Pure aggregation/comparison helpers (also imported by the Node tests). |
+| `ui/src/lib/chart.js` | Chart.js setup shared by both pages. |
+| `ui/src/lib/money.js` | Money formatting and stable per-currency colors. |
+| `server.mjs` | Routes and error handling; `notifications.mjs` sends budget-limit pushes. |
+| `api-auth.mjs` | The external API's bearer token and edit-token signing, persisted in `api.stateFile`. |
+| `dataProviders/excel/provider.mjs` | Workbook reading/writing; `parse.mjs` and `model.mjs` are its helpers (`category-suggester.mjs`, `workbook-git.mjs` alongside). |
 
-`theme-boot.js` runs first (synchronously in `<head>`, to set the theme before first paint), then scripts must load in this order: `core.js` → (`insights-math.js` on insights) → `transaction-list.js` → `chart.js` → page script. Conventions: `render*` draws into an existing container, `build*` creates and returns a node, `read*` parses workbook data, `create*` is a factory. Tests use `test/helpers.js` for temporary git-backed workbooks and a test server.
+Build the UI with `npm run build:ui --workspace dscpln-balance-xlsx` (or
+`npm run ui` at the repo root); `npm test` builds it first. Tests use
+`test/helpers.mjs` for temporary git-backed workbooks and a test server.

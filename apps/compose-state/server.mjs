@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Infra Compose State — scheduled backups of the compose runtime state on srv0
-// (locally) and vps0 (over SSH). The app generates its own SSH key on first
-// boot; the public key is shown in the UI to authorize on vps0.
+// (locally) or on a remote host over SSH. The app generates its own SSH key on
+// first boot; the public key is shown in the UI to authorize on the target.
 
 import fsp from 'node:fs/promises'
 import os from 'node:os'
@@ -96,7 +96,7 @@ export function createComposeApp(options = {}) {
     commands: (cfg) => commands(cfg),
     summarize: (result, cfg) => summarizeTargets(cfg.targets),
     routes: (router, ctx) => {
-      // Shows/regenerates the app's SSH public key (authorize it on vps0).
+      // Shows/regenerates the app's SSH public key (authorize it on the target).
       router.post('/api/key/regenerate', async (req, res, next) => {
         try {
           const key = await generateSshKey()
@@ -133,11 +133,11 @@ export function createComposeApp(options = {}) {
       })
     },
     onStart: async ({ config }) => {
-      // Generate the SSH key on first boot so the vps0 target is actionable.
+      // Generate the SSH key on first boot so SSH targets are actionable.
       if (!config.get().sshPrivateKey) {
         const key = await generateSshKey()
         await config.update(key)
-        console.log('Generated a new SSH key (authorize the public key on vps0).')
+        console.log('Generated a new SSH key (authorize the public key on the target host).')
       }
     },
   })

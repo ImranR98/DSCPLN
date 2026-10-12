@@ -258,9 +258,12 @@
 
         {#if task.uploads}
           <div class="dropzone">
-            <input type="file" multiple
-              onchange={(event) => { addFiles(task, [...event.target.files]); event.target.value = '' }} />
-            <small>{task.note || 'Choose files to queue'}</small>
+            <label class="secondary file-button">
+              <input type="file" multiple hidden
+                onchange={(event) => { addFiles(task, [...event.target.files]); event.target.value = '' }} />
+              Choose files…
+            </label>
+            <small>{task.note || 'Files you pick are queued on this card until you press Run.'}</small>
           </div>
           {#if queues[task.name]?.length}
             <ul class="queue">
@@ -361,6 +364,7 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
     gap: 1rem;
+    align-items: start;
   }
   .task-card header {
     display: flex;
@@ -370,10 +374,17 @@
   }
   .pill {
     font-size: 0.75rem;
-    padding: 0.1rem 0.5rem;
+    padding: 0.05rem 0.55rem;
     border-radius: 1rem;
-    background: var(--pico-secondary-background);
+    border: 1px solid currentColor;
+    color: var(--pico-muted-color);
     white-space: nowrap;
+  }
+  .pill.status-ok {
+    color: var(--pico-ins-color);
+  }
+  .pill.status-over {
+    color: var(--pico-del-color);
   }
   .live {
     font-family: monospace;
@@ -402,14 +413,38 @@
     gap: 0.5rem;
     align-items: center;
     flex-wrap: wrap;
+    --pico-form-element-spacing-vertical: 0.3rem;
+    --pico-form-element-spacing-horizontal: 1rem;
   }
   .actions > button,
   .actions > a {
     width: auto;
     margin: 0;
+    padding: 0.25rem 0.9rem;
+  }
+  .file-button {
+    display: inline-block;
+    width: auto;
+    margin: 0;
+    padding: 0.3rem 1rem;
+    background: var(--pico-secondary-background);
+    color: var(--pico-secondary-inverse);
+    border: 1px solid var(--pico-secondary-background);
+    border-radius: var(--pico-border-radius);
+    cursor: pointer;
+  }
+  .dropzone {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+    margin-block: 0.4rem;
   }
   details {
     flex-basis: 100%;
+  }
+  summary {
+    cursor: pointer;
   }
   .log {
     max-height: 16rem;

@@ -59,7 +59,7 @@
 
   <section>
     <h3>SSH key</h3>
-    <p><small>Add this public key to ~/.ssh/authorized_keys on vps0 (the app stores the private half on its PVC).</small></p>
+    <p><small>Add this public key to your SSH target's ~/.ssh/authorized_keys (the app stores the private half on its volume).</small></p>
     <pre class="code-block">{draft.sshPublicKey || '(no key yet)'}</pre>
     <button class="secondary" onclick={() => regenerateKey(update)}>Regenerate key</button>
   </section>
@@ -68,7 +68,7 @@
 <Shell
   name="Infra Compose State"
   fields={FIELDS}
-  settingsNotice="Local targets run on srv0; SSH targets stream the archive from the remote host. Retention keeps the newest N archives per target."
+  settingsNotice="Local targets run in this container; SSH targets stream the archive from a remote host. Retention keeps the newest N archives per target."
   settingsExtra={settingsExtra}
 >
   <article>

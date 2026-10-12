@@ -5,10 +5,6 @@ methods, places the result into a destination folder, and **never deletes an
 original until you explicitly clean up** — and then only after verifying the
 destination copy.
 
-The app replaces the old `mdscl` deployments and the weekly `backupctl`
-`Media Import` task for phone-synced media, and its CLI replaces the old
-`MediaDateStandardize` / `mediaConcat` bash scripts entirely.
-
 ## Methods
 
 | method        | what it does |
@@ -111,12 +107,13 @@ media-sync clean-synced [--delete | --trash DIR] [--force] <src dir> <dest dir>
 media-sync serve [--config FILE] [--port N] [--bind HOST] [--force]
 ```
 
-- `standardize` matches the old `mediaDateStandardize.sh`, including `-n`
-  (dates from file names, with MP4 truncation repair via ffmpeg) and `-p`.
-- `snapconcat` matches `concatSnaps.sh` / `snapsPre.sh` (use `--park`).
-- `concataudio` matches `concatAudio.sh` (same-day voice notes with a tone).
-- `clean-synced` matches `deleteSynced.sh` but verifies before removing; the
-  default action is to trash rather than delete.
+- `standardize`: `-n` takes the date from the file name when possible (with MP4
+  truncation repair via ffmpeg); `-p` keeps the original name.
+- `snapconcat`: concatenates clip groups by time proximity; `--park` moves the
+  raw clips aside afterwards.
+- `concataudio`: concatenates same-day audio with a short tone between clips.
+- `clean-synced`: removes sources that already exist in the destination,
+  verifying before deleting; the default action is to trash, not delete.
 
 ## Container
 
@@ -136,15 +133,13 @@ lives inside a synced tree.
 ## Development
 
 ```sh
-npm test        # unit + parity (vs the old bash scripts) + e2e with generated fixtures
+npm run build:ui   # build ui/ (Svelte + Vite) into static/
+npm test           # builds the UI, then runs the unit + e2e suites
 ```
 
-The web UI uses [Shoelace](https://shoelace.style/) components (dialogs, buttons,
-inputs, badges, details), vendored into `public/vendor/shoelace` with
-`npm run vendor` — re-run that after upgrading the `@shoelace-style/shoelace`
-devDependency. The page is otherwise plain HTML/CSS/JS with no build step.
-
-Tests generate their own media with ffmpeg/exiftool and never touch real data.
-The parity suite is skipped when `ffmpeg`, `exiftool` or the old bash script is
-not available. The UI suite (`test/ui.test.js`) drives the real page through
-`playwright-core` and skips when no Chromium is installed.
+The front end is a Svelte app under `ui/` (Vite output in `static/`, served by
+the node server). Tests generate their own media with ffmpeg/exiftool and never
+touch real data. Optional parity checks compare `standardize` output against an
+existing implementation when `MEDIA_SYNC_BASH_STANDARDIZE` points at one; the
+browser suite (`test/ui.test.js`) drives the real page through `playwright-core`
+and skips when no Chromium is installed.

@@ -14,8 +14,11 @@ export default {
   maindir: '~/Backups',
   manual_dir: '{{maindir}}/Manual',
 
-  // Optional: your own helper scripts, referenced as {{scriptroot}}/name.
-  // scriptroot: '/config-src/tools',
+  // Folder holding your helper scripts, referenced as {{scriptroot}}/name.
+  // This default points at the bundled examples (shipped inside the image, so
+  // it works locally and in a container). Point it at your own folder, e.g.
+  // scriptroot: '/config-src/tools'.
+  scriptroot: '{{repo_dir}}/apps/task-runner/examples',
 
   // Optional remote machines; pin a task with `host: 'desktop'` and run the
   // same config on several instances (BACKUPCTL_HOST names the instance).
@@ -49,6 +52,17 @@ export default {
           uploads: true,
           glob: '*',
           move: { dest: '{{manual_dir}}' },
+        },
+
+        // A drop task that calls a helper script from {{scriptroot}} (the
+        // bundled examples/hello-tool.sh writes a manifest of the files).
+        {
+          name: 'Manifest dropped files',
+          note: 'Drop files to write a manifest next to them.',
+          uploads: true,
+          glob: '*',
+          script: `bash '{{scriptroot}}/hello-tool.sh' '{{manual_dir}}' {{uploads}}`,
+          summary_last_line: true,
         },
 
         // Capture the output into a paste dialog instead of a log line, and

@@ -759,6 +759,14 @@
     gap: 0.5rem;
     flex-wrap: wrap;
     align-items: center;
+    --pico-form-element-spacing-vertical: 0.3rem;
+    --pico-form-element-spacing-horizontal: 1rem;
+  }
+  article > header {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+    justify-content: space-between;
   }
   .actions button {
     width: auto;

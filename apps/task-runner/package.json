@@ -1,11 +1,11 @@
 {
   "name": "dscpln-task-runner",
   "version": "3.0.0",
-  "description": "Task Runner (former backupctl): local web GUI for config-driven backup workflows",
+  "description": "Task Runner: local web GUI for config-driven backup workflows",
   "type": "module",
   "private": true,
   "bin": {
-    "backupctl": "server.mjs"
+    "task-runner": "server.mjs"
   },
   "scripts": {
     "build:ui": "vite build",

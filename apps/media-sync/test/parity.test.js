@@ -8,9 +8,9 @@ import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(HERE, "..", "bin", "media-sync.js");
-const BASH_SCRIPT =
-  process.env.MEDIA_SYNC_BASH_STANDARDIZE ??
-  path.join(os.homedir(), "Main/Code/Archive/mediaDateStandardize/mediaDateStandardize.sh");
+// Optional: point MEDIA_SYNC_BASH_STANDARDIZE at an existing standardize
+// implementation to compare outputs; the suite is skipped without it.
+const BASH_SCRIPT = process.env.MEDIA_SYNC_BASH_STANDARDIZE ?? null;
 
 function have(cmd) {
   try {
@@ -21,10 +21,9 @@ function have(cmd) {
   }
 }
 
-const BASH_AVAILABLE = await fsp
-  .access(BASH_SCRIPT)
-  .then(() => true)
-  .catch(() => false);
+const BASH_AVAILABLE = BASH_SCRIPT
+  ? await fsp.access(BASH_SCRIPT).then(() => true).catch(() => false)
+  : false;
 const CAN_RUN = have("ffmpeg") && have("exiftool") && BASH_AVAILABLE;
 const FIXED_MTIME = new Date("2022-08-09T10:11:12Z");
 

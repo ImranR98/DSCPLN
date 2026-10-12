@@ -404,7 +404,7 @@ export const createApp = (state, options = {}) => {
                     await fsp.copyFile(full, path.join(staging, name))
                 }
             }
-            // Archives can contain another zip level (matches the old backupctl task).
+            // Archives can contain another zip level.
             for (const name of await fsp.readdir(staging)) {
                 if (!name.toLowerCase().endsWith('.zip')) continue
                 await execFile('unzip', ['-oq', path.join(staging, name), '-d', staging])

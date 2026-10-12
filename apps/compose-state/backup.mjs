@@ -1,5 +1,5 @@
 // Compose-state backup logic: tar the runtime state of each configured target
-// (srv0 locally, vps0 over SSH), then apply per-target retention. Runs as a
+// (on this host or on a remote host over SSH), then apply per-target retention.
 // child of the app's Runner so its output streams into the live log.
 
 import fsp from 'node:fs/promises'
@@ -74,7 +74,7 @@ export async function runBackup({ config, dataDir, log = console.log, stamp = AR
   const cleanup = []
   if (config.targets.some((target) => target.mode === 'ssh')) {
     if (!config.sshPrivateKey) {
-      throw new Error('an SSH key is required for the vps0 target — generate one in the app settings and authorize it on vps0')
+      throw new Error('an SSH key is required for SSH targets — generate one in the app settings and authorize it on the target host')
     }
     keyFile = path.join(dataDir, '.ssh-key.tmp')
     await fsp.mkdir(dataDir, { recursive: true })

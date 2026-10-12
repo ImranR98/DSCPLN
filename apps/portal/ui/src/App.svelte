@@ -19,7 +19,7 @@
     { path: 'watxt', icon: MessageSquareText, name: 'WhatsApp TXT', description: 'Browse, import and merge WhatsApp exports', kind: 'watxt' },
     { path: 'tasks', icon: Wrench, name: 'Task Runner', description: 'Config-driven backup and export workflows', kind: 'tasks' },
     { path: 'contacts', icon: Contact, name: 'Contacts + Calendar', description: 'Scheduled Nextcloud exports', kind: 'scheduled' },
-    { path: 'compose', icon: Boxes, name: 'Infra Compose State', description: 'Scheduled srv0/vps0 compose state backups', kind: 'scheduled' },
+    { path: 'compose', icon: Boxes, name: 'Infra Compose State', description: 'Scheduled Compose runtime-state backups', kind: 'scheduled' },
     { path: 'ytmusic', icon: Music, name: 'YTMusic Downloads', description: 'Scheduled YouTube Music library downloads', kind: 'scheduled' },
   ]
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Generic bash helpers for backupctl tasks. Tasks call this either as a
+# Generic bash helpers for Task Runner tasks. Tasks call this either as a
 # subcommand (`lib.sh move --rename X DEST FILE...`) or by sourcing
 # it inside their own script (`source .../lib.sh`).
 # Everything is rc-checked: failures abort with set -e.
@@ -12,6 +12,25 @@ shopt -s nullglob
 LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 log() { echo "$@"; }
+
+usage() {
+  cat <<'USAGE'
+Generic bash helpers for Task Runner tasks.
+
+Subcommands (rc-checked; run with `bash lib.sh <cmd> ...`):
+  move [--rename NAME] [--git] DEST FILE...   move files into dest
+  copy [--git] [--pre CMD] [--post CMD] DEST SRC...
+                                              rsync sources into dest/<basename>
+  ingest DEST SUFFIX_CMD FILE...              extract archives, derive a label, sync into DEST/<label>
+  encrypt DEST OUTNAME FILE                   age-encrypt one file (AGE_PASSPHRASE)
+  git-commit DIR [MSG]                        init/add/commit (state files excluded)
+  validate-fresh DIR [MAX_AGE_SECONDS]        fail unless the newest export is fresh
+  prune-exports DIR [--keep-newer]            delete all but the newest export dir
+
+Or `source lib.sh` and call the bctl_* functions directly (see the task config
+examples in config.example.mjs and the README).
+USAGE
+}
 
 bctl_extract() {  # FILE DEST
   local f="$1" d="$2"
@@ -26,7 +45,7 @@ bctl_rsync() { rsync -aq "$@"; }
 bctl_rsync_delete() { rsync -aq --delete "$@"; }
 
 bctl_git_commit() {  # DIR [MSG] — state files excluded; empty commits tolerated
-  local d="$1" msg="${2:-backupctl · $(date)}" out
+  local d="$1" msg="${2:-D\$CPLN · $(date)}" out
   mkdir -p "$d"
   git -C "$d" init -q
   git -C "$d" add -A . ':(exclude).backup-state-*'
@@ -289,8 +308,13 @@ case "${1:-}" in
     bctl_git_commit "$@"
     ;;
 
+  "" | -h | --help | help)
+    usage
+    ;;
+
   *)
     log "unknown subcommand: ${1:-}" >&2
+    log "run 'bash lib.sh --help' for the list" >&2
     exit 2
     ;;
 esac

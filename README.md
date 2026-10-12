@@ -6,18 +6,35 @@ small always-on Node apps — one per function — served behind a single host
 
 | Function | Path | Description |
 |---|---|---|
-| Portal | `/` | Landing page linking every function with live status |
-| Balance XLSX | `/balance` | Budget dashboard backed by an Excel workbook (external, token-protected API at `/balance/api`) |
-| Media Sync | `/media` | Watches device folders, standardizes media, queues review/trash |
-| WhatsApp TXT | `/watxt` | Browses, imports and merges WhatsApp chat exports |
-| Task Runner | `/tasks` | Config-driven backup/export workflows (bash tasks, drop zones, prompts) |
-| Contacts + Calendar | `/contacts` | Scheduled Nextcloud contacts/calendar exports |
-| Infra Compose State | `/compose` | Scheduled Docker Compose runtime-state backups |
-| YTMusic Downloads | `/ytmusic` | Scheduled YouTube Music library downloads |
+| [Portal](apps/portal/README.md) | `/` | Landing page linking every function with live status |
+| [Balance XLSX](apps/balance-xlsx/README.md) | `/balance` | Budget dashboard backed by an Excel workbook (external, token-protected API at `/balance/api`) |
+| [Media Sync](apps/media-sync/README.md) | `/media` | Watches device folders, standardizes media, queues review/trash |
+| [WhatsApp TXT](apps/whatsapp-txt/README.md) | `/watxt` | Browses, imports and merges WhatsApp chat exports |
+| [Task Runner](apps/task-runner/README.md) | `/tasks` | Config-driven backup/export workflows (bash tasks, drop zones, prompts) |
+| [Contacts + Calendar](apps/contacts-calendar/README.md) | `/contacts` | Scheduled Nextcloud contacts/calendar exports |
+| [Infra Compose State](apps/compose-state/README.md) | `/compose` | Scheduled Docker Compose runtime-state backups |
+| [YTMusic Downloads](apps/ytmusic/README.md) | `/ytmusic` | Scheduled YouTube Music library downloads |
+
+Each app's README covers its configuration fields, defaults and container
+volumes; [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) covers the shared kits
+and the base-path contract.
 
 Every app is configured at runtime — through its own Settings UI or a mounted
 config file — so nothing user-specific is baked into the apps or their images.
 Run one app or all of them; each is an independent container.
+
+## Screenshots
+
+All images use synthetic demo data — regenerate them with
+`node scripts/screenshots.mjs`.
+
+| | |
+|---|---|
+| ![D$CPLN portal](docs/screenshots/portal.png) | ![Balance dashboard](docs/screenshots/balance-dashboard.png) |
+| ![Media Sync](docs/screenshots/media-sync.png) | ![WhatsApp TXT](docs/screenshots/whatsapp.png) |
+| ![Task Runner](docs/screenshots/task-runner.png) | ![Contacts + Calendar settings](docs/screenshots/contacts-settings.png) |
+| ![Infra Compose State](docs/screenshots/compose.png) | ![YTMusic Downloads](docs/screenshots/ytmusic.png) |
+| ![Balance insights](docs/screenshots/balance-insights.png) | ![Contacts + Calendar](docs/screenshots/contacts.png) |
 
 ## Run with Docker
 

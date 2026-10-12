@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Task Runner (formerly backupctl) — HTTP server and run orchestration.
+/* Task Runner — HTTP server and run orchestration.
  *
  * Tasks are bash: each task's `commands` (or shorthand) are executed by the
  * runner with process groups, redaction, serial queues and per-task state.
@@ -493,7 +493,7 @@ export function main() {
     },
   });
   if (values.help) {
-    console.log('usage: backupctl [--port N] [--host H] [--no-browser]');
+    console.log('usage: task-runner [--port N] [--host H] [--no-browser]');
     process.exit(0);
   }
   const port = parseInt(values.port, 10);
@@ -504,7 +504,7 @@ export function main() {
     }, 1000);
   }
   const app = createApp();
-  app.listen(port, values.host, () => console.log(`backupctl listening on ${url}`));
+  app.listen(port, values.host, () => console.log(`Task Runner listening on ${url}`));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

@@ -120,7 +120,7 @@
 
 <header class="app-header">
   <div class="app-header__top">
-    <h1><a class="app-header__brand" href="./">D<span class="accent">$</span>CPLN <span class="app-header__app">⋅ Balance XLSX</span></a></h1>
+    <h1><a class="app-header__brand" href="/">D<span class="accent">$</span>CPLN <span class="app-header__app">⋅ Balance XLSX</span></a></h1>
     <div class="app-header__actions">
       <a role="button" class="outline secondary icon-button" href="./" title="Dashboard" aria-label="Dashboard">
         <LayoutDashboard size={16} strokeWidth={1.8} />

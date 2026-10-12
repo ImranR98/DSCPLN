@@ -28,7 +28,7 @@ declare -A IMAGE_NAMES=(
 # app -> deployment-template name used by --pin (edit for your repo)
 declare -A TEMPLATES=(
     [balance-xlsx]=dscpln.yaml
-    [media-sync]=media-sync.yaml
+    [media-sync]=immrtlize.yaml
     [whatsapp-txt]=whatsapp-txt-browser.yaml
     [task-runner]=backupctl.yaml
     [contacts-calendar]=contacts-calendar.yaml

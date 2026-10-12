@@ -449,6 +449,12 @@ main > * {
     margin-top: var(--space-3);
 }
 
+.overview__actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
 /* ---------- stat tiles ---------- */
 
 .stat-tiles {
@@ -975,6 +981,11 @@ main > * {
 
 .toast--success .toast__icon {
     color: var(--ok);
+}
+
+.toast--error {
+    border-color: var(--over);
+    color: var(--over);
 }
 
 .toast--error .toast__icon {

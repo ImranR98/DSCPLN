@@ -38,7 +38,21 @@ async function newPage() {
 }
 
 async function shoot(page, name) {
+  // Capture the full document deterministically: Chromium's captureBeyondViewport
+  // intermittently clips to the viewport when the content is taller than it, so
+  // resize the viewport to the document first and restore it afterwards.
+  const viewport = page.viewportSize()
+  const size = await page.evaluate(() => ({
+    width: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+    height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
+  }))
+  if (size.height > viewport.height) {
+    await page.setViewportSize({ width: viewport.width, height: size.height })
+  }
   await page.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: true })
+  if (size.height > viewport.height) {
+    await page.setViewportSize(viewport)
+  }
   console.log('shot', name)
 }
 

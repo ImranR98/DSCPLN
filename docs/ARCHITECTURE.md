@@ -6,7 +6,7 @@ One monorepo, one host, one design system.
 DSCPLN/
   packages/
     server-kit/     shared Node/express primitives (no app logic)
-    ui-kit/         shared Svelte components, helpers, Pico-based styling
+    ui-kit/         shared React components, helpers, Pico-based styling
     test-kit/       shared test helpers (servers, temp dirs, polling)
   apps/
     portal/         root landing page (host root)
@@ -64,7 +64,7 @@ Every app mounts everything under `BASE_PATH` (`""` for local dev):
 - `http.mjs` — `sendJson`, `readBody` (size-capped), `sameOrigin`,
   `asyncRoute`
 
-`packages/ui-kit` (Svelte 5 + Pico CSS):
+`packages/ui-kit` (React + Pico CSS):
 
 - `api.js` — base-path-aware `apiUrl`, `getJson`/`postJson`/`putJson`, SSE
   `subscribe`
@@ -80,7 +80,7 @@ Every app mounts everything under `BASE_PATH` (`""` for local dev):
 
 ## App UI pipeline
 
-Every app has `apps/<app>/ui/` (Vite + Svelte + Pico) that builds into
+Every app has `apps/<app>/ui/` (Vite + React + Pico) that builds into
 `apps/<app>/static/` (gitignored). The server serves `static/` and injects
 `<base href>` for `BASE_PATH`; Vite uses `base: './'` so the build works under
 any prefix. `npm run build:ui --workspace <pkg>` builds (or `npm run ui` for
@@ -105,7 +105,7 @@ prunes them. Balance builds three pages from one Vite config
   `seccompProfile: RuntimeDefault` and `readOnlyRootFilesystem: true` plus a
   memory-backed `/tmp`; Task Runner is the exception (its tasks provision tools
   into the image tree at runtime, so its root stays writable).
-- **UI consistency**: every app builds its `ui/` (Svelte + Pico via
+- **UI consistency**: every app builds its `ui/` (React + Pico via
   `@dscpln/ui-kit`), uses the `D$CPLN ⋅ <Function>` header, and keeps custom
   CSS to a few app-specific rules — Pico and the kit supply the rest. Tests use
   `data-testid` selectors so they survive markup changes.
@@ -223,7 +223,7 @@ phone shortcuts or scripts that still point at an older hostname.
 
 1. `apps/<name>/` with `server.mjs` (`scheduledApp` for scheduled apps) and
    `package.json` depending on `@dscpln/server-kit`;
-2. `ui/` with `index.html`, `src/main.js` and `src/App.svelte` using
+2. `ui/` with `index.html`, `src/main.jsx` and `src/App.jsx` using
    `@dscpln/ui-kit` (`Shell` + `app.css`); `vite.config.mjs` (root `ui`, outDir
    `../static`, `base: './'`); scripts `build:ui` and `test`
    (`npm run build:ui && node --test`);

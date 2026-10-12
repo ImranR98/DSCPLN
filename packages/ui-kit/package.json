@@ -1,19 +1,19 @@
 {
   "name": "@dscpln/ui-kit",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
-  "description": "Shared Svelte components, helpers and Pico-based styling for D$CPLN apps",
+  "description": "Shared React components, helpers and Pico-based styling for D$CPLN apps",
   "main": "./src/lib/index.js",
-  "svelte": "./src/lib/index.js",
   "exports": {
     ".": "./src/lib/index.js",
     "./app.css": "./src/app.css"
   },
   "dependencies": {
     "@picocss/pico": "^2.1.1",
-    "lucide-svelte": "^1.0.1"
+    "lucide-react": "^1.55.0"
   },
   "peerDependencies": {
-    "svelte": "^5.46.0"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }
 }

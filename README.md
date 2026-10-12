@@ -63,7 +63,7 @@ npm run balance-xlsx   # start Balance XLSX locally (http://localhost:3300)
 npm run ytmusic        # ...or any app by name
 ```
 
-Each app has an `apps/<app>/ui/` front end (Svelte + Vite, built into the
+Each app has an `apps/<app>/ui/` front end (React + Vite, built into the
 app's `static/`) served by a small express server from `packages/server-kit`.
 See `docs/ARCHITECTURE.md` for the kit APIs, the base-path contract, the
 Operations runbook and the new-app recipe.

@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
+import react from '@vitejs/plugin-react'
 
 // UI source lives in ui/ and builds into static/, which the Node server serves.
 // Relative asset URLs (base './') keep the build valid under any BASE_PATH; the
@@ -8,7 +8,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 export default defineConfig({
   root: fileURLToPath(new URL('./ui', import.meta.url)),
   base: './',
-  plugins: [svelte()],
+  plugins: [react()],
   build: {
     outDir: fileURLToPath(new URL('./static', import.meta.url)),
     emptyOutDir: true,

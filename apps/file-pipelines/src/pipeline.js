@@ -22,6 +22,29 @@ const slugify = (text) =>
 
 const runId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+// Copies a tree over an existing destination, preserving symlinks the way
+// `rsync -a` does. fsp.cp({ recursive, force }) cannot be used here: with an
+// existing destination it stats source symlinks (ENOENT on dangling links),
+// and Wine prefixes in particular are full of absolute home-dir symlinks.
+export async function copyTree(src, dest) {
+  const st = await fsp.lstat(src).catch(() => null);
+  if (!st) return; // entry vanished mid-copy
+  if (st.isSymbolicLink()) {
+    await fsp.rm(dest, { recursive: true, force: true });
+    await fsp.symlink(await fsp.readlink(src), dest);
+    return;
+  }
+  if (st.isDirectory()) {
+    await fsp.mkdir(dest, { recursive: true });
+    for (const entry of await fsp.readdir(src)) {
+      await copyTree(path.join(src, entry), path.join(dest, entry));
+    }
+    return;
+  }
+  await fsp.mkdir(path.dirname(dest), { recursive: true });
+  await fsp.copyFile(src, dest);
+}
+
 export function resolveCommand(command, tokens) {
   return String(command ?? "").replace(/\{\{(source|destination|staging)\}\}/g, (_, key) => tokens[key] ?? "");
 }
@@ -203,7 +226,7 @@ export class PipelineRunner {
     await fsp.mkdir(destination, { recursive: true });
     let moved = 0;
     for (const entry of entries) {
-      await fsp.cp(path.join(sourceDir, entry), path.join(destination, entry), { recursive: true, force: true });
+      await copyTree(path.join(sourceDir, entry), path.join(destination, entry));
       moved += 1;
     }
     return moved;

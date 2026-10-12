@@ -114,3 +114,24 @@ test("buildJobManifest: optional SELinux options land on the Job pod", () => {
   });
   assert.deepEqual(manifest.spec.template.spec.securityContext.seLinuxOptions, { type: "spc_t", level: "s0" });
 });
+
+test("copyTree: merges over an existing tree and preserves symlinks", async () => {
+  const { copyTree } = await import("../src/pipeline.js");
+  const fsp = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "fp-copy-"));
+  const src = path.join(root, "src");
+  const dst = path.join(root, "dst");
+  await fsp.mkdir(path.join(src, "Prefix"), { recursive: true });
+  await fsp.mkdir(path.join(dst, "Prefix"), { recursive: true });
+  await fsp.writeFile(path.join(src, "Prefix", "save.dat"), "new");
+  await fsp.writeFile(path.join(dst, "Prefix", "old.dat"), "keep");
+  await fsp.symlink("/home/imranr/Music", path.join(src, "Prefix", "Music"));
+  await fsp.symlink("/home/imranr/Music", path.join(dst, "Prefix", "Music"));
+  await copyTree(src, dst);
+  assert.equal(await fsp.readFile(path.join(dst, "Prefix", "save.dat"), "utf8"), "new");
+  assert.equal(await fsp.readFile(path.join(dst, "Prefix", "old.dat"), "utf8"), "keep");
+  assert.equal(await fsp.readlink(path.join(dst, "Prefix", "Music")), "/home/imranr/Music");
+  await fsp.rm(root, { recursive: true, force: true });
+});

@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApp } from "@dscpln/server-kit";
 import { cleanupFiles, cleanupPreview, emptyTrash, listTrash, restoreTrashFiles } from "./cleanup.js";
+import { isSnapshotFolder } from "./snapshot.js";
 import { runAction } from "./actions.js";
 import { Notifier } from "./notify.js";
 import { parkPathFor } from "./park.js";
@@ -120,11 +121,11 @@ export class ApiServer {
     if (method !== "GET" && !this.#checkOrigin(req)) return json(res, 403, { error: "cross-origin request rejected" });
 
     if (method === "GET" && pathname === "/state") {
-      const pipelines = {};
-      const status = this.daemon.pipeline?.status() ?? {};
+      const runs = {};
+      const status = this.daemon.snapshot?.status() ?? {};
       for (const folder of this.daemon.store.listFolders()) {
-        if (folder.def.method !== "command") continue;
-        pipelines[folder.def.name] = {
+        if (!isSnapshotFolder(folder.def)) continue;
+        runs[folder.def.name] = {
           ...(status[folder.def.name] ?? { running: false, ok: null, summary: "" }),
           lastRunAt: this.daemon.scheduler?.lastRunAt(folder.def.name) ?? 0,
           nextRun: this.daemon.scheduler?.nextRun(folder.def.name) ?? null,
@@ -134,7 +135,7 @@ export class ApiServer {
         ...this.daemon.store.snapshot(),
         config: this.daemon.config,
         lock: { file: this.daemon.config.syncLockFile },
-        pipelines,
+        runs,
       });
     }
 
@@ -180,17 +181,17 @@ export class ApiServer {
       const folderName = decodeURIComponent(pathname.slice("/process/".length));
       const folder = this.daemon.store.getFolder(folderName);
       if (!folder) return json(res, 404, { error: "unknown folder" });
-      if (folder.def.method === "command") {
-        return json(res, 409, { error: "pipeline folders run via /api/pipeline" });
+      if (isSnapshotFolder(folder.def)) {
+        return json(res, 409, { error: "snapshot copies run via /api/snapshot" });
       }
       const body = await readBody(req).catch(() => ({}));
       const result = await this.daemon.queue.processNow(folderName, { files: body.files });
       return json(res, result.ok ? 200 : 409, result);
     }
 
-    if (method === "POST" && pathname.startsWith("/pipeline/")) {
-      const folderName = decodeURIComponent(pathname.slice("/pipeline/".length));
-      const result = await this.daemon.pipeline.run(folderName, { trigger: "manual" });
+    if (method === "POST" && pathname.startsWith("/snapshot/")) {
+      const folderName = decodeURIComponent(pathname.slice("/snapshot/".length));
+      const result = await this.daemon.snapshot.run(folderName, { trigger: "manual" });
       const status = result.ok ? 200 : result.busy ? 409 : 400;
       return json(res, status, result);
     }
@@ -294,6 +295,7 @@ export class ApiServer {
       if (method === "POST" && pathname === "/cleanup-all") {
         const results = {};
         for (const folder of this.daemon.store.listFolders()) {
+          if (folder.def.cleanup === false) continue; // archives opt out entirely
           const names = cleanupPreview(folder).map((f) => f.name);
           results[folder.def.name] = names.length > 0 ? await cleanupFiles(this.daemon.ctx, folder, names) : [];
         }

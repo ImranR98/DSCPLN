@@ -1,6 +1,7 @@
 import chokidar from "chokidar";
 import path from "node:path";
 import { shouldSkipName, statOrNull } from "./util.js";
+import { isSnapshotFolder } from "./snapshot.js";
 
 export class Watchers {
   constructor(store, log) {
@@ -10,7 +11,7 @@ export class Watchers {
   }
 
   rebuild(config) {
-    const wanted = new Map(config.folders.filter((f) => f.method !== "command").map((f) => [f.name, f]));
+    const wanted = new Map(config.folders.filter((f) => !isSnapshotFolder(f)).map((f) => [f.name, f]));
     for (const [name, entry] of [...this.map.entries()]) {
       const def = wanted.get(name);
       if (!def || entry.source !== def.source || entry.recursive !== def.recursive) {

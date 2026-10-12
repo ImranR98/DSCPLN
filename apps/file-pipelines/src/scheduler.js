@@ -1,11 +1,11 @@
-// Scheduled pipeline runs: ticks every 30s and fires pipeline folders whose
-// schedule has an uncovered occurrence. The last-run times persist next to the
-// config so catch-up works across daemon restarts.
+// Scheduled snapshot runs: ticks every 30s and fires snapshot copy folders
+// whose schedule has an uncovered occurrence. The last-run times persist next
+// to the config so catch-up works across daemon restarts.
 
 import fsp from "node:fs/promises";
 import { atomicWriteFile, pathExists } from "./util.js";
 import { isDue, nextRunAt } from "./schedule.js";
-import { isPipelineFolder } from "./pipeline.js";
+import { isSnapshotFolder } from "./snapshot.js";
 
 const TICK_MS = 30_000;
 
@@ -39,12 +39,12 @@ export class Scheduler {
   }
 
   lastRunAt(folderName) {
-    return Math.max(this.history[folderName] ?? 0, this.ctx.pipeline?.lastRunAt(folderName) ?? 0);
+    return Math.max(this.history[folderName] ?? 0, this.ctx.snapshot?.lastRunAt(folderName) ?? 0);
   }
 
   nextRun(folderName) {
     const folder = this.ctx.store.getFolder(folderName);
-    if (!folder || !isPipelineFolder(folder.def)) return null;
+    if (!folder || !isSnapshotFolder(folder.def)) return null;
     return nextRunAt(folder.def.schedule, new Date())?.getTime() ?? null;
   }
 
@@ -52,7 +52,7 @@ export class Scheduler {
     const now = new Date();
     for (const folder of this.ctx.store.listFolders()) {
       const def = folder.def;
-      if (!isPipelineFolder(def) || !def.schedule.enabled) continue;
+      if (!isSnapshotFolder(def) || !def.schedule.enabled) continue;
       if (this.ctx.config.paused) continue;
       // Seed first sight so a fresh config (or a newly added folder) waits for
       // its next scheduled time instead of catching up from the epoch.
@@ -62,7 +62,7 @@ export class Scheduler {
         continue;
       }
       if (!isDue(def.schedule, this.lastRunAt(def.name), now)) continue;
-      await this.ctx.pipeline.run(def.name, { trigger: "schedule" });
+      await this.ctx.snapshot.run(def.name, { trigger: "schedule" });
       this.history[def.name] = Date.now();
       await this.#save();
     }

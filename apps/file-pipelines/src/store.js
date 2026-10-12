@@ -6,6 +6,7 @@ import { listParked } from "./park.js";
 import { voiceNoteGroupOf, voiceNoteDestName } from "./voicenotes.js";
 import { DirCache, classifyDestMatch, findExpectedDestName, mapSnapInputs, readSnapOutputs, statSize } from "./verify.js";
 import { shouldSkipName, isSyncConflictName, matchesPattern, statOrNull } from "./util.js";
+import { isSnapshotFolder } from "./snapshot.js";
 
 export const STATUS = {
   PENDING: "pending",
@@ -88,8 +89,8 @@ export class Store extends EventEmitter {
     const folder = this.folders.get(folderName);
     if (!folder) return;
     const { def } = folder;
-    if (def.method === "command") {
-      // Pipeline folders run commands instead of scanning a local source.
+    if (isSnapshotFolder(def)) {
+      // Snapshot copies run on demand/schedule instead of scanning a source.
       if (!folder.exists) {
         folder.exists = true;
         this.emit("update");
@@ -433,8 +434,13 @@ export class Store extends EventEmitter {
       return {
         name: folder.def.name,
         source: folder.def.source,
+        sources: folder.def.sources,
         destination: folder.def.destination,
         method: folder.def.method,
+        snapshot: Boolean(folder.def.snapshot),
+        subdir: folder.def.subdir ?? null,
+        nameSuffix: folder.def.nameSuffix ?? "",
+        touch: folder.def.touch ?? null,
         filePattern: folder.def.filePattern,
         datePattern: folder.def.datePattern,
         settleSeconds: folder.def.settleSeconds,

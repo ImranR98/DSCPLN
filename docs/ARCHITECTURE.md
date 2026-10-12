@@ -121,7 +121,7 @@ reverse proxy works — the apps only need `BASE_PATH` set per subpath.
 |---|---|---|---|---|
 | Portal | `/` | `portal` | — | — |
 | Balance XLSX | `/balance` | `balance-xlsx` | config Secret → `/app/config.json`; API state next to the workbook | — (limit checks every 30 min) |
-| File Pipelines | `/pipelines` | `file-pipelines` | config PVC → `/config/config.json` | daemon + pipeline scheduler (Jobs on remote nodes) |
+| File Pipelines | `/pipelines` | `file-pipelines` | config PVC → `/config/config.json` | daemon + snapshot scheduler (Jobs on remote nodes) |
 | WhatsApp TXT | `/watxt` | `whatsapp-txt` | data PVC → `/data` (conversations) | — |
 | Task Runner | `/tasks` | `task-runner` | mounted config file, state in `~/.backupctl` | per-task `serial_key` |
 | Contacts + Calendar | `/contacts` | `contacts-calendar` | config PVC → `/data/{config,state}.json` | Sun 03:00 |

@@ -4,11 +4,11 @@ Watches configured folders for new media, processes each file with one of the
 file methods below, and **never deletes an original until you explicitly clean
 up** — and then only after verifying the destination copy.
 
-Folders can also be **pipelines**: a configurable command that runs on a
-schedule (or manually), locally or as a Kubernetes Job on another node, with
-its output placed into the destination. That covers push-style jobs — e.g.
-archiving Wine-prefix game saves from a gaming PC — alongside the watched
-media folders.
+`copy` folders can also be **snapshots**: instead of watching a source, they
+run on demand or on a schedule and copy whole entries (optionally one
+subdirectory of each) from one or more sources. A snapshot can run locally or
+as a Kubernetes Job on another node — e.g. archiving Wine-prefix game saves
+from a gaming PC — alongside the watched media folders.
 
 ## Methods
 
@@ -16,33 +16,44 @@ media folders.
 |---------------|--------------|
 | `standardize` | Picks a date (`DateTimeOriginal`, else the oldest date-like tag), writes all date tags, renames to `YYYY-MM-DD-HH-MM-SS-(<original-name>).ext`, and copies into the destination. |
 | `snapchat`    | Waits until the folder has been quiet for `settleSeconds` (default 30 min), groups `Snapchat-*.mp4` clips whose timestamps are within `groupWindowSeconds` (default 15s), concatenates + re-encodes each group, standardizes the output, and records the input list in a custom `XMP-media-sync:Inputs` tag on the output. |
-| `copy`        | Byte-verified copy, original name preserved (call recordings). Add `recursive: true` to mirror a whole tree (WhatsApp AllMedia archives) and `onChanged` to control what happens when a same-name source changes. |
+| `copy`        | Byte-verified copy, original name preserved (call recordings). Add `recursive: true` to mirror a whole tree (WhatsApp AllMedia archives) and `onChanged` to control what happens when a same-name source changes. Add `snapshot: true` to run on demand/schedule instead of watching (see below). |
 | `voicenotes`  | Concatenates same-day clips from the same folder into one MP4 (a 0.1s tone between clips), standardizes it, and records inputs in XMP. The clip-date scheme is **user-defined** per folder via `datePattern` (e.g. WhatsApp push-to-talk `PTT-YYYYMMDD-WA####.opus` uses `-(\d{8})-`); see Manual placement below. |
-| `command`     | A **pipeline**: runs `command` (bash) on the configured schedule or on demand. `{{source}}`, `{{destination}}` and `{{staging}}` resolve per run. With `runner.node`, the command runs as a Kubernetes Job on that node (the source is mounted at `/source` read-only); its output under `{{staging}}` is then placed into the destination. Without a runner the command runs in the daemon. |
 
-## Pipeline folders
+## Snapshot copies
 
 ```jsonc
 {
-  "name": "Wine Sync",
-  "source": "/home/me/Games/Installs/Synced",   // absolute path on the runner node
+  "name": "Wine Game Save Files",
+  "method": "copy",
+  "snapshot": true,
+  "sources": [                                  // one or more; absolute paths on the runner node
+    "/home/me/Games/Installs/Synced",
+    "/home/me/Games/Installs/Unsynced"
+  ],
   "destination": "/backup/Game Save Files",
-  "method": "command",
-  "command": "rsync -a \"{{source}}/\" \"{{destination}}/\"",
+  "subdir": "drive_c/users/steamuser",          // optional: copy only this path within each entry
+  "nameSuffix": " (Wine prefix home dir)",      // optional: destination naming
+  "touch": "lastBackedUp.txt",                  // optional: write the run date here
   "runner": { "node": "bigpc" },                // null = this server
-  "schedule": { "enabled": true, "days": [1], "at": "03:00", "catchUp": true }
+  "schedule": { "enabled": true, "days": [0], "at": "04:00", "catchUp": true }
 }
 ```
+
+Each run copies every top-level entry of every source into
+`<destination>/<entry><nameSuffix>` with `rsync -a` (symlinks preserved; only
+entries containing `subdir` are copied when it is set). A `command` on the
+folder replaces the generated script and sees `{{source}}`,
+`{{destination}}` and `{{staging}}`.
 
 `days` are 0 (Sunday) to 6; an empty list means every day. `catchUp: false`
 skips an occurrence missed while the daemon was off instead of running it on
 startup, and a folder's first-ever tick only seeds the schedule (no surprise
-run). Pipeline commands should be self-contained: the job image carries
-bash/rsync/tar/ffmpeg, and remote sources must be absolute paths on the
-target node. Remote runs need the deployment's shared RWX staging volume
-(`PIPELINES_STAGING_DIR`), the job image (`PIPELINES_IMAGE`) and its claim
-(`PIPELINES_STAGING_CLAIM`); the daemon needs `kubectl` and permission to
-manage Jobs in its namespace.
+run). The job image carries bash/rsync/tar/ffmpeg. Remote runs need the
+deployment's shared RWX staging volume (`PIPELINES_STAGING_DIR`), the job
+image (`PIPELINES_IMAGE`) and its claim (`PIPELINES_STAGING_CLAIM`); the
+daemon needs `kubectl` and permission to manage Jobs in its namespace. A
+snapshot copy keeps no per-file state (no cleanup of originals): its history
+is the run log in the UI.
 
 On SELinux-enforcing nodes, host sources may carry labels containers cannot
 read (e.g. `user_home_t`). Set `PIPELINES_SELINUX_TYPE=spc_t` (with
@@ -111,7 +122,7 @@ Paths accept `~` and environment variables. Key fields:
 
 | field | meaning |
 |---|---|
-| `folders[].source` / `.destination` | watched folder and its destination |
+| `folders[].source` / `sources` / `.destination` | watched folder (or snapshot sources) and the destination |
 | `folders[].method` | `standardize` \| `snapchat` \| `copy` \| `voicenotes` |
 | `folders[].settleSeconds` | quiet period before processing (snaps: 1800) |
 | `folders[].groupWindowSeconds` | snap grouping window |
@@ -124,6 +135,9 @@ Paths accept `~` and environment variables. Key fields:
 | `folders[].placement` | `auto` (default) or `manual` — park processed files for review (not valid for `copy`) |
 | `folders[].autoProcess` | `placement: manual` only: process new items automatically instead of on demand |
 | `folders[].datePattern` | `voicenotes` only (required): regex extracting the clip date; capture groups are joined, non-digits stripped, result must be `YYYYMMDD` |
+| `folders[].snapshot` | `copy` only: run on demand/schedule instead of watching; enables `sources`, `subdir`, `nameSuffix`, `touch`, `runner`, `schedule`, `command` |
+| `folders[].runner` | snapshot only: Kubernetes node to run the Job on (`null` = this server) |
+| `folders[].schedule` | snapshot only: `{enabled, days, at, catchUp}` |
 | `stagingDir` / `reviewDir` / `trashDir` | working area (same filesystem as destinations for atomic renames), parked review outputs, and cleaned-original storage |
 | `trashRetentionDays` | days before trash is swept |
 | `concurrency` | parallel jobs (per-folder jobs are serialized) |

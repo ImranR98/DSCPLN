@@ -5,7 +5,7 @@ import { createExifTool } from "./exif.js";
 import { Logger } from "./log.js";
 import { Notifier } from "./notify.js";
 import { Queue } from "./queue.js";
-import { PipelineRunner } from "./pipeline.js";
+import { SnapshotRunner } from "./snapshot.js";
 import { Scheduler } from "./scheduler.js";
 import { Store } from "./store.js";
 import { SyncLock } from "./lock.js";
@@ -58,9 +58,9 @@ export class Daemon {
     await this.lock.acquire({ force: this.options.force });
 
     this.queue = new Queue(this.ctx);
-    this.pipeline = new PipelineRunner(this.ctx);
-    this.ctx.pipeline = this.pipeline;
-    this.ctx.pipelineChanged = () => this.store.emit("update");
+    this.snapshot = new SnapshotRunner(this.ctx);
+    this.ctx.snapshot = this.snapshot;
+    this.ctx.snapshotChanged = () => this.store.emit("update");
     this.scheduler = new Scheduler(this.ctx, { historyFile: path.join(path.dirname(this.configPath), "pipeline-runs.json") });
     await this.scheduler.init();
     this.watchers = new Watchers(this.store, this.log);

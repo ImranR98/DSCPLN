@@ -1,26 +1,37 @@
-// Pipeline folders: a configurable `command` that runs either in the daemon
-// (spawned as bash) or as a Kubernetes Job on another node (`runner.node`).
+// Snapshot copies: a `copy` folder with `snapshot: true` runs on demand or on
+// a schedule instead of watching a local source. `sources` lists one or more
+// directories; entries in each source are copied into the destination
+// (`subdir` narrows what gets copied, `nameSuffix` renames entries, `touch`
+// writes a timestamp marker). A folder-level `command` replaces the generated
+// script and sees `{{source}}`, `{{destination}}` and `{{staging}}`.
 //
-// Remote runs mount the source directory from the target node read-only at
-// /source, write into a shared RWX staging claim mounted at /staging, and the
-// daemon then moves the staging output into the folder's destination. Commands
-// are self-contained bash; `{{source}}`, `{{destination}}` and `{{staging}}`
-// resolve per run (for remote runs `{{destination}}` is the staging output).
+// With `runner.node`, the run becomes a Kubernetes Job on that node: the
+// sources are mounted read-only from that node (`/source`, or `/source-<i>`
+// for several), output is written to a shared RWX staging claim mounted at
+// /staging, and the daemon then copies the staging output into the
+// destination. Without a runner the generated script runs in the daemon and
+// writes into the destination directly.
 
 import { spawn } from "node:child_process";
 import fsp from "node:fs/promises";
 import path from "node:path";
 
-export const isPipelineFolder = (def) => def && def.method === "command";
+export const isSnapshotFolder = (def) => Boolean(def && def.method === "copy" && def.snapshot);
+
+// Where each source is mounted inside a remote run's Job.
+export const snapshotMountPaths = (sources) =>
+  sources.map((_, index) => (sources.length === 1 ? "/source" : `/source-${index}`));
 
 const slugify = (text) =>
   String(text ?? "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 30) || "pipeline";
+    .slice(0, 30) || "snapshot";
 
 const runId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+const shellQuote = (text) => `'${String(text).replace(/'/g, `'\\''`)}'`;
 
 // Copies a tree over an existing destination, preserving symlinks the way
 // `rsync -a` does. fsp.cp({ recursive, force }) cannot be used here: with an
@@ -49,12 +60,40 @@ export function resolveCommand(command, tokens) {
   return String(command ?? "").replace(/\{\{(source|destination|staging)\}\}/g, (_, key) => tokens[key] ?? "");
 }
 
-// The Job a remote pipeline run creates. Pure so it can be unit-tested.
+// The bash a snapshot copy runs when no `command` overrides it: for every
+// top-level entry of every source, rsync the entry (or its `subdir`) into
+// <destination>/<name><nameSuffix>, optionally dropping a timestamp marker.
+export function buildSnapshotCommand(def, { sourcePaths, destination }) {
+  const lines = [
+    "set -e",
+    `dest=${shellQuote(destination)}`,
+    `sub=${shellQuote(def.subdir ?? "")}`,
+    `suffix=${shellQuote(def.nameSuffix ?? "")}`,
+    `marker=${shellQuote(def.touch ?? "")}`,
+    "copy_tree() {",
+    '  local src="$1" d name out',
+    '  for d in "$src"/*; do',
+    '    [ -d "$d" ] || continue',
+    '    [ -z "$sub" ] || [ -d "$d/$sub" ] || continue',
+    '    name=$(basename "$d")',
+    '    out="$dest/$name$suffix"',
+    '    mkdir -p "$out"',
+    '    if [ -n "$sub" ]; then rsync -a "$d/$sub/" "$out/"; else rsync -a "$d/" "$out/"; fi',
+    '    [ -z "$marker" ] || date > "$out/$marker"',
+    "  done",
+    "}",
+    ...sourcePaths.map((source) => `copy_tree ${shellQuote(source)}`),
+  ];
+  return lines.join("\n");
+}
+
+// The Job a remote snapshot run creates. Pure so it can be unit-tested.
 export function buildJobManifest({
   name,
   node,
   image,
-  sourcePath,
+  sourcePath = null,
+  sourcePaths = null,
   command,
   stagingClaim,
   stagingMount = "/staging",
@@ -63,6 +102,8 @@ export function buildJobManifest({
   seLinuxType = null,
   seLinuxLevel = null,
 }) {
+  const sources = sourcePaths?.length ? sourcePaths : [sourcePath];
+  const mounts = snapshotMountPaths(sources);
   const securityContext = { runAsUser: uid, runAsGroup: uid, fsGroup: uid };
   if (seLinuxType) {
     // Host sources can carry labels containers may not read (e.g. user_home_t
@@ -87,23 +128,24 @@ export function buildJobManifest({
           securityContext,
           containers: [
             {
-              name: "pipeline",
+              name: "snapshot",
               image,
               command: ["bash", "-lc", command],
               env: [
                 { name: "PIPELINE_FOLDER", value: name },
-                { name: "PIPELINE_SOURCE", value: "/source" },
+                { name: "PIPELINE_SOURCE", value: mounts[0] },
+                { name: "PIPELINE_SOURCES", value: mounts.join(",") },
                 { name: "PIPELINE_DESTINATION", value: `${stagingMount}/out` },
                 { name: "PIPELINE_STAGING", value: `${stagingMount}/out` },
               ],
               volumeMounts: [
-                { name: "source", mountPath: "/source", readOnly: true },
+                ...sources.map((_, index) => ({ name: `source-${index}`, mountPath: mounts[index], readOnly: true })),
                 { name: "staging", mountPath: stagingMount, subPath: stagingSubPath },
               ],
             },
           ],
           volumes: [
-            { name: "source", hostPath: { path: sourcePath, type: "Directory" } },
+            ...sources.map((source, index) => ({ name: `source-${index}`, hostPath: { path: source, type: "Directory" } })),
             { name: "staging", persistentVolumeClaim: { claimName: stagingClaim } },
           ],
         },
@@ -112,7 +154,7 @@ export function buildJobManifest({
   };
 }
 
-export class PipelineRunner {
+export class SnapshotRunner {
   constructor(ctx, { spawnImpl = spawn, kubectl = "kubectl" } = {}) {
     this.ctx = ctx;
     this.spawnImpl = spawnImpl;
@@ -134,43 +176,45 @@ export class PipelineRunner {
     const folder = this.ctx.store.getFolder(folderName);
     if (!folder) return { ok: false, error: "unknown folder" };
     const def = folder.def;
-    if (!isPipelineFolder(def)) return { ok: false, error: "not a pipeline folder" };
-    if (this.active.has(folderName)) return { ok: false, busy: true, error: "a pipeline is already running for this folder" };
+    if (!isSnapshotFolder(def)) return { ok: false, error: "not a snapshot copy folder" };
+    if (this.active.has(folderName)) return { ok: false, busy: true, error: "a run is already in progress for this folder" };
     if (this.ctx.config.dryRun) return { ok: false, error: "dry run is enabled" };
 
     this.active.add(folderName);
     const state = { folder: folderName, trigger, running: true, ok: null, startedAt: Date.now(), endedAt: null, summary: "" };
     this.runs.set(folderName, state);
-    this.ctx.log(`pipeline ${folderName}: starting (${trigger}${def.runner.node ? `, node ${def.runner.node}` : ""})`);
+    this.ctx.log(`snapshot ${folderName}: starting (${trigger}${def.runner.node ? `, node ${def.runner.node}` : ""})`);
     try {
       const result = def.runner.node ? await this.#runRemote(def, state) : await this.#runLocal(def, state);
       state.ok = result.ok;
       state.summary = result.summary ?? result.error ?? "";
-      if (result.ok) this.ctx.log(`pipeline ${folderName}: done${state.summary ? ` — ${state.summary}` : ""}`);
-      else this.ctx.log(`pipeline ${folderName}: failed — ${result.error}`);
+      if (result.ok) this.ctx.log(`snapshot ${folderName}: done${state.summary ? ` — ${state.summary}` : ""}`);
+      else this.ctx.log(`snapshot ${folderName}: failed — ${result.error}`);
       return result;
     } catch (err) {
       state.ok = false;
       state.summary = err.message;
-      this.ctx.log(`pipeline ${folderName}: failed — ${err.message}`);
+      this.ctx.log(`snapshot ${folderName}: failed — ${err.message}`);
       return { ok: false, error: err.message };
     } finally {
       state.running = false;
       state.endedAt = Date.now();
       this.active.delete(folderName);
-      this.ctx.pipelineChanged?.();
+      this.ctx.snapshotChanged?.();
     }
   }
 
   async #runLocal(def, state) {
     const staging = this.#stagingDir(`local-${slugify(def.name)}-${runId()}`);
     await fsp.mkdir(staging, { recursive: true });
-    const tokens = { source: def.source, destination: def.destination, staging };
-    const command = resolveCommand(def.command, tokens);
+    const command = def.command
+      ? resolveCommand(def.command, { source: def.sources[0] ?? def.source, destination: def.destination, staging })
+      : buildSnapshotCommand(def, { sourcePaths: def.sources, destination: def.destination });
     const result = await this.#exec(command, {
       env: {
         PIPELINE_FOLDER: def.name,
-        PIPELINE_SOURCE: def.source,
+        PIPELINE_SOURCE: def.sources[0] ?? def.source,
+        PIPELINE_SOURCES: def.sources.join(","),
         PIPELINE_DESTINATION: def.destination,
         PIPELINE_STAGING: staging,
       },
@@ -185,23 +229,25 @@ export class PipelineRunner {
     const outputDir = path.join(stagingRoot, "out");
     await fsp.mkdir(outputDir, { recursive: true });
 
+    const mounts = snapshotMountPaths(def.sources);
+    const command = def.command
+      ? resolveCommand(def.command, {
+          source: mounts[0],
+          destination: `${this.#stagingMount()}/out`,
+          staging: `${this.#stagingMount()}/out`,
+        })
+      : buildSnapshotCommand(def, { sourcePaths: mounts, destination: `${this.#stagingMount()}/out` });
     const manifest = buildJobManifest({
       name: jobName,
       node: def.runner.node,
       image: this.ctx.config.pipelineImage,
-      sourcePath: def.source,
-      command: resolveCommand(def.command, { source: "/source", destination: null, staging: null }),
+      sourcePaths: def.sources,
+      command,
       stagingClaim: this.ctx.config.pipelineStagingClaim,
       stagingMount: this.#stagingMount(),
       uid: this.ctx.config.pipelineUid,
       seLinuxType: this.ctx.config.pipelineSeLinuxType,
       seLinuxLevel: this.ctx.config.pipelineSeLinuxLevel,
-    });
-    // The manifest command still contains the remote-side tokens.
-    manifest.spec.template.spec.containers[0].command[2] = resolveCommand(def.command, {
-      source: "/source",
-      destination: `${this.#stagingMount()}/out`,
-      staging: `${this.#stagingMount()}/out`,
     });
 
     try {

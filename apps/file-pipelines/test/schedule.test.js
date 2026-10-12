@@ -42,14 +42,15 @@ test("scheduler: seeds first sight, then runs due schedules", async () => {
   const folder = {
     def: {
       name: "wine",
-      method: "command",
+      method: "copy",
+      snapshot: true,
       schedule: { enabled: true, days: [], at: "03:00", catchUp: true },
     },
   };
   const ctx = {
     config: { paused: false },
     store: { getFolder: () => folder, listFolders: () => [folder] },
-    pipeline: { run: async (name, opts) => runs.push({ name, opts }), lastRunAt: () => 0 },
+    snapshot: { run: async (name, opts) => runs.push({ name, opts }), lastRunAt: () => 0 },
     log: () => {},
   };
   const scheduler = new Scheduler(ctx, { historyFile: "/tmp/does-not-exist.json" });

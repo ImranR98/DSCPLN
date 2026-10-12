@@ -467,3 +467,65 @@ test("api: the app mounts under BASE_PATH with the shared kit", async () => {
     await fsp.rm(root, { recursive: true, force: true });
   }
 });
+
+test("api: cleanup-all skips folders that opt out of cleanup", async () => {
+  const exists = (target) => fsp.stat(target).then(() => true).catch(() => false);
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-cleanup-all-"));
+  const configPath = path.join(root, "config.json");
+  const enabledSrc = path.join(root, "enabled-src");
+  const archiveSrc = path.join(root, "archive-src");
+  const dest = path.join(root, "dest");
+  await fsp.mkdir(enabledSrc, { recursive: true });
+  await fsp.mkdir(archiveSrc, { recursive: true });
+  await fsp.mkdir(dest, { recursive: true });
+  await fsp.writeFile(path.join(enabledSrc, "one.txt"), "data");
+  await fsp.writeFile(path.join(archiveSrc, "keep.txt"), "data");
+  await fsp.writeFile(path.join(dest, "one.txt"), "data");
+  await fsp.writeFile(path.join(dest, "keep.txt"), "data");
+  await fsp.writeFile(
+    configPath,
+    JSON.stringify({
+      configVersion: 1,
+      bindHost: "127.0.0.1",
+      port: 0,
+      concurrency: 1,
+      paused: false,
+      dryRun: false,
+      trashRetentionDays: 30,
+      settleSeconds: 0,
+      maxAutoRetries: 3,
+      stagingDir: path.join(root, "staging"),
+      reviewDir: path.join(root, "review"),
+      trashDir: path.join(root, "trash"),
+      logDir: path.join(root, "logs"),
+      syncLockFile: path.join(root, "lock.json"),
+      lockHeartbeatSeconds: 60,
+      lockStaleSeconds: 120,
+      ntfy: { url: "", token: "" },
+      folders: [
+        { name: "enabled", source: enabledSrc, destination: dest, method: "copy", settleSeconds: 0 },
+        { name: "archive", source: archiveSrc, destination: dest, method: "copy", cleanup: false, settleSeconds: 0 },
+      ],
+    }),
+  );
+  const daemon = new Daemon(configPath, { port: 0 });
+  await daemon.start();
+  try {
+    await daemon.store.scanFolder("enabled");
+    await daemon.store.scanFolder("archive");
+    daemon.store.getFolder("enabled").files.get("one.txt").status = STATUS.DONE;
+    daemon.store.getFolder("archive").files.get("keep.txt").status = STATUS.DONE;
+
+    const base = `http://127.0.0.1:${daemon.api.server.address().port}`;
+    const res = await fetch(`${base}/api/cleanup-all`, { method: "POST" });
+    assert.equal(res.status, 200);
+    const { results } = await res.json();
+    assert.deepEqual(Object.keys(results), ["enabled"], "disabled folders are skipped entirely");
+    assert.equal(results.enabled[0].ok, true);
+    assert.equal(await exists(path.join(enabledSrc, "one.txt")), false, "enabled folder original was cleaned");
+    assert.equal(await exists(path.join(archiveSrc, "keep.txt")), true, "archive original stays");
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});

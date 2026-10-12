@@ -1,4 +1,4 @@
-// Schedules for pipeline folders: the same shape the D$CPLN shell apps use —
+// Schedules for snapshot copies: the same shape the D$CPLN shell apps use —
 // `enabled`, `days` (0 = Sunday … 6 = Saturday; empty = every day),
 // `at` ("HH:MM") and `catchUp` (run a missed occurrence when the daemon
 // starts after it, instead of waiting for the next one).

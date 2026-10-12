@@ -1,79 +1,97 @@
-<script>
-  import { onMount } from 'svelte'
-  import { ChartNoAxesColumn, LayoutDashboard, Wrench } from 'lucide-svelte'
-  import {
-    formats,
-    startOfDay,
-    toIso,
-    parseIso,
-    breakable,
-    colorFrom,
-    showToast,
-    ThemeToggle,
-    Toasts,
-  } from '@dscpln/ui-kit'
-  import * as IM from './lib/insights-math.js'
-  import { moneyFor, currencyColor } from './lib/money.js'
-  import { renderMonthly } from './lib/chart.js'
-  import { sortNewestFirst, formatCount } from './lib/transactions.js'
-  import { requestJson } from './lib/request.js'
-  import TransactionList from './TransactionList.svelte'
-  import CumulativeChart from './CumulativeChart.svelte'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ChartNoAxesColumn, LayoutDashboard, Wrench } from 'lucide-react'
+import {
+  formats,
+  startOfDay,
+  toIso,
+  parseIso,
+  Breakable,
+  colorFrom,
+  showToast,
+  ThemeToggle,
+  Toasts,
+} from '@dscpln/ui-kit'
+import * as IM from './lib/insights-math.js'
+import { moneyFor, currencyColor } from './lib/money.js'
+import { renderMonthly } from './lib/chart.js'
+import { sortNewestFirst, formatCount } from './lib/transactions.js'
+import { requestJson } from './lib/request.js'
+import TransactionList from './TransactionList.jsx'
+import CumulativeChart from './CumulativeChart.jsx'
 
-  const COMPARISON_MODES = ['prev', 'yoy', 'avg3', 'avg6', 'avg12']
-  const CATEGORY_PALETTE = ['#2f6fed', '#16a34a', '#d97706', '#8b5cf6', '#0891b2', '#db2777', '#65a30d', '#e11d48', '#0d9488', '#7c3aed', '#ca8a04', '#4f46e5']
-  const INCOME_GROUP = 'Money In'
+const COMPARISON_MODES = ['prev', 'yoy', 'avg3', 'avg6', 'avg12']
+const CATEGORY_PALETTE = ['#2f6fed', '#16a34a', '#d97706', '#8b5cf6', '#0891b2', '#db2777', '#65a30d', '#e11d48', '#0d9488', '#7c3aed', '#ca8a04', '#4f46e5']
 
-  let reference = $state(null)
-  let transactions = $state([])
-  let range = $state(null)
-  let comparison = $state('prev')
-  let comparisonData = $state(null)
-  let excluded = $state(new Map())
-  let error = $state('')
+const categoryColor = (name) => colorFrom(CATEGORY_PALETTE, String(name || ''))
 
-  let fetchSequence = 0
-  let monthInput = $state(null)
-  let historyHost = $state(null)
-  let historyTooltip = $state(null)
-  let historyHidden = $state(true)
-  let historyRange = $state('')
+function currentMonthRange(date = new Date()) {
+  return { start: IM.startOfMonth(date), end: IM.endOfMonth(date) }
+}
 
-  const categoryColor = (name) => colorFrom(CATEGORY_PALETTE, String(name || ''))
+function lastMonthRange() {
+  const now = new Date()
+  const firstOfThisMonth = IM.startOfMonth(now)
+  const lastMonthDay = IM.addDays(firstOfThisMonth, -1)
+  return { start: IM.startOfMonth(lastMonthDay), end: lastMonthDay }
+}
 
-  const fractionalCurrencies = $derived(new Set(
-    (reference?.currencies || []).filter((entry) => entry.fractional).map((entry) => entry.code)))
-  const symbols = $derived(new Map(
-    (reference?.currencies || []).filter((entry) => entry.symbol).map((entry) => [entry.code, entry.symbol])))
-  const money = $derived(moneyFor((code) => fractionalCurrencies.has(code), (code) => symbols.get(code)))
+function lastFullMonthsRange(count) {
+  return IM.lastCompleteMonths(count, new Date())
+}
 
-  $effect(() => {
+function ytdRange() {
+  const now = new Date()
+  return { start: new Date(now.getFullYear(), 0, 1), end: now }
+}
+
+function formatDateRange(start, end) {
+  return `${formats.dayMonth.format(start)} ${formats.year.format(start)} – ${formats.dayMonth.format(end)} ${formats.year.format(end)}`
+}
+
+function isFullMonth(window) {
+  return IM.isWholeMonthsRange(window.start, window.end) &&
+    window.start.getMonth() === window.end.getMonth() &&
+    window.start.getFullYear() === window.end.getFullYear()
+}
+
+function stateFromUrl() {
+  const params = new URLSearchParams(location.search)
+  const start = IM.parseIsoDate(params.get('start'))
+  const end = IM.parseIsoDate(params.get('end'))
+  const mode = COMPARISON_MODES.includes(params.get('cmp')) ? params.get('cmp') : 'prev'
+  return {
+    range: start && end && start <= end ? { start, end } : null,
+    comparison: mode,
+  }
+}
+
+export default function Insights() {
+  const [reference, setReference] = useState(null)
+  const [transactions, setTransactions] = useState([])
+  const [range, setRangeState] = useState(null)
+  const [comparison, setComparison] = useState('prev')
+  const [comparisonData, setComparisonData] = useState(null)
+  const [excluded, setExcluded] = useState(new Map())
+  const [error, setError] = useState('')
+  const [historyHidden, setHistoryHidden] = useState(true)
+  const [historyRange, setHistoryRange] = useState('')
+
+  const fetchSequence = useRef(0)
+  const monthInputRef = useRef(null)
+  const historyHostRef = useRef(null)
+  const historyTooltipRef = useRef(null)
+
+  const fractionalCurrencies = new Set(
+    (reference?.currencies || []).filter((entry) => entry.fractional).map((entry) => entry.code))
+  const symbols = new Map(
+    (reference?.currencies || []).filter((entry) => entry.symbol).map((entry) => [entry.code, entry.symbol]))
+  const money = moneyFor((code) => fractionalCurrencies.has(code), (code) => symbols.get(code))
+
+  useLayoutEffect(() => {
     document.body.classList.toggle('is-loading', !reference)
-  })
+  }, [reference])
 
-  /* ---------- Ranges & presets ---------- */
-
-  function currentMonthRange(date = new Date()) {
-    return { start: IM.startOfMonth(date), end: IM.endOfMonth(date) }
-  }
-
-  function lastMonthRange() {
-    const today = new Date()
-    const firstOfThisMonth = IM.startOfMonth(today)
-    const lastMonthDay = IM.addDays(firstOfThisMonth, -1)
-    return { start: IM.startOfMonth(lastMonthDay), end: lastMonthDay }
-  }
-
-  function lastFullMonthsRange(count) {
-    return IM.lastCompleteMonths(count, new Date())
-  }
-
-  function ytdRange() {
-    const today = new Date()
-    return { start: new Date(today.getFullYear(), 0, 1), end: today }
-  }
-
-  function allTimeRange() {
+  const allTimeRange = () => {
     const transactionRange = reference && reference.transactionRange
     if (!transactionRange || !transactionRange.first || !transactionRange.last) {
       return null
@@ -92,15 +110,6 @@
   }
 
   const quickRange = (name) => (QUICK_RANGES[name] ? QUICK_RANGES[name]() : null)
-
-  function isFullMonth(window) {
-    return IM.isWholeMonthsRange(window.start, window.end) &&
-      window.start.getMonth() === window.end.getMonth() &&
-      window.start.getFullYear() === window.end.getFullYear()
-  }
-
-  const formatDateRange = (start, end) =>
-    `${formats.dayMonth.format(start)} ${formats.year.format(start)} – ${formats.dayMonth.format(end)} ${formats.year.format(end)}`
 
   // A compact date range ("1 Oct – 7 Oct"), with the year when it is not the
   // selected range's year (so last-year comparisons stay unambiguous).
@@ -144,24 +153,8 @@
     return `${plan.count}-month average of ${formats.monthShort.format(first.start)}–${formats.monthShort.format(last.end)} ${formats.year.format(last.end)}`
   }
 
-  // The comparison note is deliberately one short line; the full explanation
-  // lives in its tooltip.
-  const compareNote = $derived.by(() => {
-    if (!range || !comparisonData) {
-      return { text: '', title: '' }
-    }
-    const statsRange = elapsedRange()
-    if (range.start > startOfDay(new Date())) {
-      return { text: 'This range has not started yet.', title: '' }
-    }
-    const statsPlan = IM.comparisonPlan(comparison, statsRange, comparisonData.earliest)
-    const partial = toIso(statsRange.end) !== toIso(range.end)
-    const baseline = statsPlan.count === 0 ? 'no earlier data' : comparisonBasisLabel(statsPlan)
-    return {
-      text: `${shortRange(statsRange)} vs ${baseline}`,
-      title: comparisonDetails(statsRange, statsPlan, partial),
-    }
-  })
+  const elapsedOf = (rangeValue) =>
+    IM.elapsedRange(rangeValue.start, rangeValue.end, startOfDay(new Date()))
 
   function comparisonDetails(statsRange, statsPlan, partial) {
     const parts = [`Figures cover ${formatDateRange(statsRange.start, statsRange.end)}.`]
@@ -203,57 +196,47 @@
     return shortRange(plan.windows[0])
   }
 
-  function elapsedRange() {
-    return IM.elapsedRange(range.start, range.end, startOfDay(new Date()))
-  }
+  // The comparison note is deliberately one short line; the full explanation
+  // lives in its tooltip.
+  const compareNote = (() => {
+    if (!range || !comparisonData) {
+      return { text: '', title: '' }
+    }
+    const statsRange = elapsedOf(range)
+    if (range.start > startOfDay(new Date())) {
+      return { text: 'This range has not started yet.', title: '' }
+    }
+    const statsPlan = IM.comparisonPlan(comparison, statsRange, comparisonData.earliest)
+    const partial = toIso(statsRange.end) !== toIso(range.end)
+    const baseline = statsPlan.count === 0 ? 'no earlier data' : comparisonBasisLabel(statsPlan)
+    return {
+      text: `${shortRange(statsRange)} vs ${baseline}`,
+      title: comparisonDetails(statsRange, statsPlan, partial),
+    }
+  })()
 
-  const chips = $derived.by(() =>
-    Object.keys(QUICK_RANGES).map((name) => {
-      const preset = quickRange(name)
-      const active = Boolean(preset) && Boolean(range) &&
-        IM.toIsoDate(preset.start) === IM.toIsoDate(range.start) &&
-        IM.toIsoDate(preset.end) === IM.toIsoDate(range.end)
-      return { name, active }
-    }))
+  const chips = Object.keys(QUICK_RANGES).map((name) => {
+    const preset = quickRange(name)
+    const active = Boolean(preset) && Boolean(range) &&
+      IM.toIsoDate(preset.start) === IM.toIsoDate(range.start) &&
+      IM.toIsoDate(preset.end) === IM.toIsoDate(range.end)
+    return { name, active }
+  })
 
-  const monthChipLabel = $derived(range && isFullMonth(range) ? formats.monthYear.format(range.start) : 'Pick a month')
-  const rangeLabel = $derived(range ? formatDateRange(range.start, range.end) : '')
-  const monthInputValue = $derived(range && isFullMonth(range)
+  const monthChipLabel = range && isFullMonth(range) ? formats.monthYear.format(range.start) : 'Pick a month'
+  const rangeLabel = range ? formatDateRange(range.start, range.end) : ''
+  const monthInputValue = range && isFullMonth(range)
     ? `${range.start.getFullYear()}-${String(range.start.getMonth() + 1).padStart(2, '0')}`
-    : '')
+    : ''
 
-  function syncUrl() {
+  const syncUrl = (rangeValue = range, comparisonValue = comparison) => {
     const params = new URLSearchParams({
-      start: IM.toIsoDate(range.start),
-      end: IM.toIsoDate(range.end),
-      cmp: comparison,
+      start: IM.toIsoDate(rangeValue.start),
+      end: IM.toIsoDate(rangeValue.end),
+      cmp: comparisonValue,
     })
     history.replaceState(null, '', `${location.pathname}?${params}`)
   }
-
-  function setRange(start, end, { fetch = true } = {}) {
-    if (!start || !end || start > end) {
-      return
-    }
-    range = { start, end }
-    syncUrl()
-    if (fetch) {
-      fetchData()
-    }
-  }
-
-  function stateFromUrl() {
-    const params = new URLSearchParams(location.search)
-    const start = IM.parseIsoDate(params.get('start'))
-    const end = IM.parseIsoDate(params.get('end'))
-    const mode = COMPARISON_MODES.includes(params.get('cmp')) ? params.get('cmp') : 'prev'
-    return {
-      range: start && end && start <= end ? { start, end } : null,
-      comparison: mode,
-    }
-  }
-
-  /* ---------- Data ---------- */
 
   function transactionsIn(currency, window, excludedSet) {
     return IM.filterTransactions(transactions, {
@@ -286,20 +269,20 @@
       }
     }
     next.set(code, set)
-    excluded = next
+    setExcluded(next)
   }
 
-  async function fetchData() {
-    const sequence = ++fetchSequence
+  async function fetchData({ range: rangeArg = range, comparison: comparisonArg = comparison } = {}) {
+    const sequence = ++fetchSequence.current
     try {
       // Statistics use the elapsed part of the range, while the chart and
       // forecast use the selected range so they can show the full comparison
       // periods. Plans fetched without the per-currency data-age clamp cover a
       // superset of the windows used for display.
-      const statsRange = elapsedRange()
-      const chartRange = range
-      const statsPlan = IM.comparisonPlan(comparison, statsRange)
-      const chartPlan = IM.comparisonPlan(comparison, chartRange)
+      const statsRange = elapsedOf(rangeArg)
+      const chartRange = rangeArg
+      const statsPlan = IM.comparisonPlan(comparisonArg, statsRange)
+      const chartPlan = IM.comparisonPlan(comparisonArg, chartRange)
       const today = startOfDay(new Date())
       let fetchStart = [...statsPlan.windows, ...chartPlan.windows].reduce((earliest, window) =>
         !earliest || window.start < earliest ? window.start : earliest, null)
@@ -317,11 +300,11 @@
         reference ? Promise.resolve(reference) : requestJson('/data'),
         requestJson(`/transactions?${params}`),
       ])
-      if (sequence !== fetchSequence) {
+      if (sequence !== fetchSequence.current) {
         return
       }
-      reference = referenceResult
-      transactions = transactionsResult.transactions || []
+      setReference(referenceResult)
+      setTransactions(transactionsResult.transactions || [])
       const firstMonths = new Map((referenceResult.currencies || []).map((entry) => [
         entry.code,
         entry.firstMonth ? IM.parseIsoDate(entry.firstMonth) : null,
@@ -330,17 +313,17 @@
       // data; each section clamps further to its own currency's first month.
       const earliest = [...firstMonths.values()].reduce((min, date) =>
         date && (!min || date < min) ? date : min, null)
-      comparisonData = {
+      setComparisonData({
         statsRange,
         chartRange,
         earliest,
         firstMonths,
-      }
-      error = ''
+      })
+      setError('')
     } catch (e) {
-      if (sequence === fetchSequence) {
+      if (sequence === fetchSequence.current) {
         console.error(e)
-        error = 'Could not load insights. Check the server logs.'
+        setError('Could not load insights. Check the server logs.')
         showToast('Could not load insights')
       }
     }
@@ -348,12 +331,12 @@
 
   /* ---------- Page model ---------- */
 
-  const model = $derived.by(() => {
+  const model = (() => {
     if (!reference || !range || !comparisonData) {
       return null
     }
     const today = startOfDay(new Date())
-    const statsRange = elapsedRange()
+    const statsRange = elapsedOf(range)
     const statTxs = rangeTransactions(statsRange)
     const rangeTxs = rangeTransactions(range)
 
@@ -428,10 +411,10 @@
       history,
       sections: codes.map((code) => buildSection(code, byCurrency.get(code))),
     }
-  })
+  })()
 
   function daysElapsed() {
-    const statsRange = comparisonData ? comparisonData.statsRange : elapsedRange()
+    const statsRange = comparisonData ? comparisonData.statsRange : elapsedOf(range)
     return Math.max(1, IM.daysInclusive(statsRange.start, statsRange.end))
   }
 
@@ -610,7 +593,7 @@
     const baseline = cumulativeBaseline(code, excludedSet, plans.chart)
     const middle = daily[Math.floor((daily.length - 1) / 2)]
     // The solid lines end at today; the dashed baselines span the full range.
-    const solidDays = IM.daysInclusive(range.start, elapsedRange().end)
+    const solidDays = IM.daysInclusive(range.start, elapsedOf(range).end)
     const short = comparisonShortLabel(plans.stats)
     const laneColor = currencyColor(code) || 'var(--accent)'
 
@@ -684,34 +667,48 @@
     }
   }
 
-  const rangeTxCount = $derived(model ? model.rangeTxs.length : 0)
-  const sortedRangeTxs = $derived(model ? sortNewestFirst(model.rangeTxs) : [])
+  const rangeTxCount = model ? model.rangeTxs.length : 0
+  const sortedRangeTxs = model ? sortNewestFirst(model.rangeTxs) : []
 
-  $effect(() => {
-    if (!historyHost || !historyTooltip || !model || model.future || model.history.hidden || !model.history.months) {
-      historyHidden = true
+  useLayoutEffect(() => {
+    if (!historyHostRef.current || !historyTooltipRef.current || !model || model.future || model.history.hidden || !model.history.months) {
+      setHistoryHidden(true)
       return
     }
-    const rendered = renderMonthly(historyHost, historyTooltip, {
+    const rendered = renderMonthly(historyHostRef.current, historyTooltipRef.current, {
       months: model.history.months,
       codes: model.history.codes,
       money,
       symbolFor: (code) => symbols.get(code),
     })
-    historyHidden = !rendered
-    historyRange = model.history.rangeText
-  })
+    setHistoryHidden(!rendered)
+    setHistoryRange(model.history.rangeText)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model])
 
-  onMount(() => {
+  useEffect(() => {
     const initial = stateFromUrl()
-    comparison = initial.comparison
-    range = initial.range || currentMonthRange()
-    syncUrl()
-    fetchData()
-  })
+    const initialRange = initial.range || currentMonthRange()
+    setComparison(initial.comparison)
+    setRangeState(initialRange)
+    syncUrl(initialRange, initial.comparison)
+    fetchData({ range: initialRange, comparison: initial.comparison })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function setRange(start, end, { fetch = true } = {}) {
+    if (!start || !end || start > end) {
+      return
+    }
+    setRangeState({ start, end })
+    syncUrl({ start, end }, comparison)
+    if (fetch) {
+      fetchData({ range: { start, end } })
+    }
+  }
 
   function openMonthPicker() {
-    const input = monthInput
+    const input = monthInputRef.current
     if (!input) return
     input.value = monthInputValue
     if (typeof input.showPicker === 'function') {
@@ -727,7 +724,7 @@
   }
 
   function onMonthPicked() {
-    const match = /^(\d{4})-(\d{2})$/.exec(monthInput.value)
+    const match = /^(\d{4})-(\d{2})$/.exec(monthInputRef.current.value)
     if (!match) {
       return
     }
@@ -751,236 +748,243 @@
   }
 
   function onComparisonChange(event) {
-    comparison = COMPARISON_MODES.includes(event.target.value) ? event.target.value : 'prev'
-    syncUrl()
-    fetchData()
+    const next = COMPARISON_MODES.includes(event.target.value) ? event.target.value : 'prev'
+    setComparison(next)
+    syncUrl(range, next)
+    fetchData({ comparison: next })
   }
-</script>
 
-<header class="app-header">
-  <div class="app-header__top">
-    <h1><a class="app-header__brand" href="/">D<span class="accent">$</span>CPLN <span class="app-header__app">⋅ Balance XLSX</span></a></h1>
-    <div class="app-header__actions">
-      <a role="button" class="outline secondary icon-button" href="./" title="Dashboard" aria-label="Dashboard">
-        <LayoutDashboard size={16} strokeWidth={1.8} />
-      </a>
-      <a role="button" class="outline secondary icon-button" href="settings" title="API settings" aria-label="API settings">
-        <Wrench size={16} strokeWidth={1.8} />
-      </a>
-      <ThemeToggle />
-    </div>
-  </div>
-  <div class="app-header__meta">
-    <span>Insights</span>
-    <span class="app-header__meta-tools">
-      <span class="muted">{rangeLabel}</span>
-    </span>
-  </div>
-</header>
-
-<main class="insights">
-  <section class="card insights-filters" aria-label="Date range and comparison">
-    <div class="filters">
-      <label class="field">
-        <span class="field__label">Start</span>
-        <input type="date" required value={range ? IM.toIsoDate(range.start) : ''} onchange={onStartChange} />
-      </label>
-      <label class="field">
-        <span class="field__label">End</span>
-        <input type="date" required value={range ? IM.toIsoDate(range.end) : ''} onchange={onEndChange} />
-      </label>
-      <label class="field">
-        <span class="field__label">Compare with</span>
-        <select value={comparison} onchange={onComparisonChange}>
-          <option value="prev">Previous period</option>
-          <option value="yoy">Same period last year</option>
-          <option value="avg3">Trailing 3-month average</option>
-          <option value="avg6">Trailing 6-month average</option>
-          <option value="avg12">Trailing 12-month average</option>
-        </select>
-      </label>
-    </div>
-    <div class="quick-ranges" role="group" aria-label="Quick ranges">
-      <button class="chip" type="button" data-range="this-month" aria-pressed={chips.find((chip) => chip.name === 'this-month')?.active} onclick={() => { const w = quickRange('this-month'); if (w) setRange(w.start, w.end) }}>This month</button>
-      <button class="chip" type="button" data-range="last-month" aria-pressed={chips.find((chip) => chip.name === 'last-month')?.active} onclick={() => { const w = quickRange('last-month'); if (w) setRange(w.start, w.end) }}>Last month</button>
-      <button class="chip" type="button" onclick={openMonthPicker}>{monthChipLabel}</button>
-      <button class="chip" type="button" data-range="last-3" aria-pressed={chips.find((chip) => chip.name === 'last-3')?.active} onclick={() => { const w = quickRange('last-3'); if (w) setRange(w.start, w.end) }}>Last 3 full months</button>
-      <button class="chip" type="button" data-range="last-6" aria-pressed={chips.find((chip) => chip.name === 'last-6')?.active} onclick={() => { const w = quickRange('last-6'); if (w) setRange(w.start, w.end) }}>Last 6 full months</button>
-      <button class="chip" type="button" data-range="last-12" aria-pressed={chips.find((chip) => chip.name === 'last-12')?.active} onclick={() => { const w = quickRange('last-12'); if (w) setRange(w.start, w.end) }}>Last 12 full months</button>
-      <button class="chip" type="button" data-range="ytd" aria-pressed={chips.find((chip) => chip.name === 'ytd')?.active} onclick={() => { const w = quickRange('ytd'); if (w) setRange(w.start, w.end) }}>Year to date</button>
-      <button class="chip" type="button" data-range="all-time" aria-pressed={chips.find((chip) => chip.name === 'all-time')?.active} onclick={() => { const w = quickRange('all-time'); if (w) setRange(w.start, w.end) }}>All time</button>
-    </div>
-    <input bind:this={monthInput} class="visually-hidden" type="month" tabindex="-1" aria-hidden="true" onchange={onMonthPicked} />
-    <p class="insights-note" title={compareNote.title}>{compareNote.text}</p>
-  </section>
-
-  <details class="card">
-    <summary>
-      <span>Transactions</span>
-      <span class="muted">{rangeTxCount ? formatCount(rangeTxCount) : ''}</span>
-    </summary>
-    <TransactionList id="transactionsList" transactions={sortedRangeTxs} markFuture />
-    <p class="muted" hidden={rangeTxCount > 0}>No transactions in this range.</p>
-  </details>
-
-  <section class="card" hidden={historyHidden}>
-    <div class="card__header">
-      <h2>Monthly totals</h2>
-      <span class="card__header-tools">
-        <span class="card__context">{historyRange}</span>
-        <span class="chart-legend">
-          <span class="chart-legend__item">
-            <span class="chart-legend__swatch"></span>Out
+  return (
+    <>
+      <header className="app-header">
+        <div className="app-header__top">
+          <h1><a className="app-header__brand" href="/">D<span className="accent">$</span>CPLN <span className="app-header__app">⋅ Balance XLSX</span></a></h1>
+          <div className="app-header__actions">
+            <a role="button" className="outline secondary icon-button" href="./" title="Dashboard" aria-label="Dashboard">
+              <LayoutDashboard size={16} strokeWidth={1.8} />
+            </a>
+            <a role="button" className="outline secondary icon-button" href="settings" title="API settings" aria-label="API settings">
+              <Wrench size={16} strokeWidth={1.8} />
+            </a>
+            <ThemeToggle />
+          </div>
+        </div>
+        <div className="app-header__meta">
+          <span>Insights</span>
+          <span className="app-header__meta-tools">
+            <span className="muted">{rangeLabel}</span>
           </span>
-          <span class="chart-legend__item">
-            <span class="chart-legend__swatch chart-legend__swatch--in"></span>In
-          </span>
-        </span>
-      </span>
-    </div>
-    <div bind:this={historyHost} class="chart-host"></div>
-    <div bind:this={historyTooltip} class="chart-tooltip" hidden></div>
-  </section>
+        </div>
+      </header>
 
-  <div id="insightsContent">
-    {#if error}
-      <section class="card">
-        <p class="muted">{error}</p>
-      </section>
-    {:else if !model}
-      <section class="card">
-        <p class="muted">Loading insights…</p>
-      </section>
-    {:else if model.future}
-      <section class="card">
-        <p class="muted">This range is in the future. Statistics will appear once the period starts.</p>
-      </section>
-    {:else if model.sections.length === 0}
-      <section class="card">
-        <p class="muted">No transactions in this range.</p>
-      </section>
-    {:else}
-      {#each model.sections as section (section.code)}
-        <section class="card insights-section" data-currency={section.code} style={`--currency: ${section.color}`}>
-          <div class="insights-section__header">
-            <span class="currency-badge">
-              <span class="insights-section__code">{section.code}</span>
+      <main className="insights">
+        <section className="card insights-filters" aria-label="Date range and comparison">
+          <div className="filters">
+            <label className="field">
+              <span className="field__label">Start</span>
+              <input type="date" required value={range ? IM.toIsoDate(range.start) : ''} onChange={onStartChange} />
+            </label>
+            <label className="field">
+              <span className="field__label">End</span>
+              <input type="date" required value={range ? IM.toIsoDate(range.end) : ''} onChange={onEndChange} />
+            </label>
+            <label className="field">
+              <span className="field__label">Compare with</span>
+              <select value={comparison} onChange={onComparisonChange}>
+                <option value="prev">Previous period</option>
+                <option value="yoy">Same period last year</option>
+                <option value="avg3">Trailing 3-month average</option>
+                <option value="avg6">Trailing 6-month average</option>
+                <option value="avg12">Trailing 12-month average</option>
+              </select>
+            </label>
+          </div>
+          <div className="quick-ranges" role="group" aria-label="Quick ranges">
+            <button className="chip" type="button" data-range="this-month" aria-pressed={chips.find((chip) => chip.name === 'this-month')?.active} onClick={() => { const w = quickRange('this-month'); if (w) setRange(w.start, w.end) }}>This month</button>
+            <button className="chip" type="button" data-range="last-month" aria-pressed={chips.find((chip) => chip.name === 'last-month')?.active} onClick={() => { const w = quickRange('last-month'); if (w) setRange(w.start, w.end) }}>Last month</button>
+            <button className="chip" type="button" onClick={openMonthPicker}>{monthChipLabel}</button>
+            <button className="chip" type="button" data-range="last-3" aria-pressed={chips.find((chip) => chip.name === 'last-3')?.active} onClick={() => { const w = quickRange('last-3'); if (w) setRange(w.start, w.end) }}>Last 3 full months</button>
+            <button className="chip" type="button" data-range="last-6" aria-pressed={chips.find((chip) => chip.name === 'last-6')?.active} onClick={() => { const w = quickRange('last-6'); if (w) setRange(w.start, w.end) }}>Last 6 full months</button>
+            <button className="chip" type="button" data-range="last-12" aria-pressed={chips.find((chip) => chip.name === 'last-12')?.active} onClick={() => { const w = quickRange('last-12'); if (w) setRange(w.start, w.end) }}>Last 12 full months</button>
+            <button className="chip" type="button" data-range="ytd" aria-pressed={chips.find((chip) => chip.name === 'ytd')?.active} onClick={() => { const w = quickRange('ytd'); if (w) setRange(w.start, w.end) }}>Year to date</button>
+            <button className="chip" type="button" data-range="all-time" aria-pressed={chips.find((chip) => chip.name === 'all-time')?.active} onClick={() => { const w = quickRange('all-time'); if (w) setRange(w.start, w.end) }}>All time</button>
+          </div>
+          <input ref={monthInputRef} className="visually-hidden" type="month" tabIndex="-1" aria-hidden="true" onChange={onMonthPicked} />
+          <p className="insights-note" title={compareNote.title}>{compareNote.text}</p>
+        </section>
+
+        <details className="card">
+          <summary>
+            <span>Transactions</span>
+            <span className="muted">{rangeTxCount ? formatCount(rangeTxCount) : ''}</span>
+          </summary>
+          <TransactionList id="transactionsList" transactions={sortedRangeTxs} markFuture />
+          <p className="muted" hidden={rangeTxCount > 0}>No transactions in this range.</p>
+        </details>
+
+        <section className="card" hidden={historyHidden}>
+          <div className="card__header">
+            <h2>Monthly totals</h2>
+            <span className="card__header-tools">
+              <span className="card__context">{historyRange}</span>
+              <span className="chart-legend">
+                <span className="chart-legend__item">
+                  <span className="chart-legend__swatch"></span>Out
+                </span>
+                <span className="chart-legend__item">
+                  <span className="chart-legend__swatch chart-legend__swatch--in"></span>In
+                </span>
+              </span>
             </span>
-            <span class="muted insights-section__meta" title={section.basisTitle}>{section.count} · {section.basisLabel}</span>
           </div>
+          <div ref={historyHostRef} className="chart-host"></div>
+          <div ref={historyTooltipRef} className="chart-tooltip" hidden></div>
+        </section>
 
-          <div class="kpi-grid">
-            {#each section.kpis as kpi (kpi.label)}
-              <div class="kpi">
-                <span class="kpi__label" title={kpi.labelTitle}>{kpi.label}</span>
-                <span class="kpi__value" style={kpi.valueColor ? `color: ${kpi.valueColor}` : undefined} use:breakable={kpi.valueText}></span>
-                <span class="kpi__delta {kpi.delta.className}" title={kpi.delta.title}>{kpi.delta.text}</span>
-              </div>
-            {/each}
-          </div>
-
-          <div class="insights-grid">
-            <div class="insights-panel">
-              {#each [{ key: 'spending', title: 'Spending by category', list: section.spending }, { key: 'earning', title: 'Earned by category', list: section.earning }] as group (group.key)}
-                {#if group.list}
-                  <div class="panel__head">
-                    <h3 class="panel__title">{group.title}</h3>
-                    <div class="panel__controls">
-                      <button class="link-button" type="button" onclick={() => updateExcluded(section.code, group.list.categories, true)}>All</button>
-                      <button class="link-button" type="button" onclick={() => updateExcluded(section.code, group.list.categories, false)}>None</button>
-                    </div>
-                  </div>
-                  <div class="category-list">
-                    {#each group.list.rows as row (row.category)}
-                      <label class="category-row{row.checked ? '' : ' category-row--excluded'}">
-                        <input
-                          type="checkbox"
-                          checked={row.checked}
-                          onchange={(event) => updateExcluded(section.code, [row.category], event.target.checked)}
-                        />
-                        <span class="category-dot" style={`background: ${row.color}`}></span>
-                        <span class="category-row__name">
-                          <span class="category-row__label">{row.category}</span>
-                          <span class="category-row__share">{row.share}</span>
-                        </span>
-                        <span class="category-row__amount-wrap">
-                          <span class="category-row__amount" use:breakable={row.amountText}></span>
-                          {#if row.delta}
-                            <span class="category-row__delta {row.delta.className}" title={row.delta.title}>{row.delta.text}</span>
-                          {/if}
-                        </span>
-                        <span class="category-row__bar">
-                          <span class="category-row__bar-fill" style={`width: ${row.barPercent}%; background: ${row.color}`}></span>
-                        </span>
-                      </label>
-                    {/each}
-                  </div>
-                {/if}
-              {/each}
-            </div>
-
-            <div class="insights-panel">
-              <h3 class="panel__title">Cumulative spent &amp; earned</h3>
-              <CumulativeChart data={section.chartData} />
-              <div class="series-legend">
-                {#each section.legend as item (item.label)}
-                  <span class="series-legend__item{item.baseline ? ' series-legend__item--baseline' : ''}">
-                    <span class="series-legend__swatch{item.baseline ? ' series-legend__swatch--line' : ''}" style={`background: ${item.color}`}></span>
-                    {item.label}
+        <div id="insightsContent">
+          {error ? (
+            <section className="card">
+              <p className="muted">{error}</p>
+            </section>
+          ) : !model ? (
+            <section className="card">
+              <p className="muted">Loading insights…</p>
+            </section>
+          ) : model.future ? (
+            <section className="card">
+              <p className="muted">This range is in the future. Statistics will appear once the period starts.</p>
+            </section>
+          ) : model.sections.length === 0 ? (
+            <section className="card">
+              <p className="muted">No transactions in this range.</p>
+            </section>
+          ) : (
+            model.sections.map((section) => (
+              <section className="card insights-section" key={section.code} data-currency={section.code} style={{ '--currency': section.color }}>
+                <div className="insights-section__header">
+                  <span className="currency-badge">
+                    <span className="insights-section__code">{section.code}</span>
                   </span>
-                {/each}
-              </div>
-              <div class="forecast">
-                {#if section.forecast.length === 0}
-                  <p class="muted">Not enough data to forecast this range.</p>
-                {:else}
-                  {#each section.forecast as row (row.label)}
-                    <div class="forecast__row">
-                      <span>{row.label}</span>
-                      <strong title={row.title} use:breakable={row.value}></strong>
-                    </div>
-                  {/each}
-                {/if}
-              </div>
-            </div>
-          </div>
+                  <span className="muted insights-section__meta" title={section.basisTitle}>{section.count} · {section.basisLabel}</span>
+                </div>
 
-          <div class="movers">
-            {#if !section.hasComparison}
-              <p class="muted">{section.noComparisonText}</p>
-            {:else}
-              {#each section.movers as block (block.title)}
-                <div class="movers__block">
-                  <h3 class="panel__title">{block.title}</h3>
-                  <div class="movers__grid">
-                    {#each [{ key: 'increases', heading: 'Increases', entries: block.increases, empty: 'None.' }, { key: 'decreases', heading: 'Decreases', entries: block.decreases, empty: 'None.' }] as column (column.key)}
-                      <div class="movers__column">
-                        <h4 class="movers__heading">{column.heading}</h4>
-                        {#if column.entries.length === 0}
-                          <p class="muted">{column.empty}</p>
-                        {:else}
-                          <ul class="movers__list">
-                            {#each column.entries as entry (entry.category)}
-                              <li class="movers__item">
-                                <span class="category-dot" style={`background: ${entry.color}`}></span>
-                                <span class="movers__name">{entry.category}</span>
-                                <span class="movers__amount {entry.amountClass}" use:breakable={entry.amountText}></span>
-                                <span class="movers__pct muted">{entry.pctText}</span>
-                              </li>
-                            {/each}
-                          </ul>
-                        {/if}
-                      </div>
-                    {/each}
+                <div className="kpi-grid">
+                  {section.kpis.map((kpi) => (
+                    <div className="kpi" key={kpi.label}>
+                      <span className="kpi__label" title={kpi.labelTitle}>{kpi.label}</span>
+                      <Breakable className="kpi__value" style={kpi.valueColor ? { color: kpi.valueColor } : undefined} text={kpi.valueText} />
+                      <span className={`kpi__delta ${kpi.delta.className}`} title={kpi.delta.title}>{kpi.delta.text}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="insights-grid">
+                  <div className="insights-panel">
+                    {[{ key: 'spending', title: 'Spending by category', list: section.spending }, { key: 'earning', title: 'Earned by category', list: section.earning }].map((group) => (
+                      group.list ? (
+                        <div key={group.key}>
+                          <div className="panel__head">
+                            <h3 className="panel__title">{group.title}</h3>
+                            <div className="panel__controls">
+                              <button className="link-button" type="button" onClick={() => updateExcluded(section.code, group.list.categories, true)}>All</button>
+                              <button className="link-button" type="button" onClick={() => updateExcluded(section.code, group.list.categories, false)}>None</button>
+                            </div>
+                          </div>
+                          <div className="category-list">
+                            {group.list.rows.map((row) => (
+                              <label className={`category-row${row.checked ? '' : ' category-row--excluded'}`} key={row.category}>
+                                <input
+                                  type="checkbox"
+                                  checked={row.checked}
+                                  onChange={(event) => updateExcluded(section.code, [row.category], event.target.checked)}
+                                />
+                                <span className="category-dot" style={{ background: row.color }}></span>
+                                <span className="category-row__name">
+                                  <span className="category-row__label">{row.category}</span>
+                                  <span className="category-row__share">{row.share}</span>
+                                </span>
+                                <span className="category-row__amount-wrap">
+                                  <Breakable className="category-row__amount" text={row.amountText} />
+                                  {row.delta ? (
+                                    <span className={`category-row__delta ${row.delta.className}`} title={row.delta.title}>{row.delta.text}</span>
+                                  ) : null}
+                                </span>
+                                <span className="category-row__bar">
+                                  <span className="category-row__bar-fill" style={{ width: `${row.barPercent}%`, background: row.color }}></span>
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null
+                    ))}
+                  </div>
+
+                  <div className="insights-panel">
+                    <h3 className="panel__title">Cumulative spent &amp; earned</h3>
+                    <CumulativeChart data={section.chartData} />
+                    <div className="series-legend">
+                      {section.legend.map((item) => (
+                        <span className={`series-legend__item${item.baseline ? ' series-legend__item--baseline' : ''}`} key={item.label}>
+                          <span className={`series-legend__swatch${item.baseline ? ' series-legend__swatch--line' : ''}`} style={{ background: item.color }}></span>
+                          {item.label}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="forecast">
+                      {section.forecast.length === 0 ? (
+                        <p className="muted">Not enough data to forecast this range.</p>
+                      ) : (
+                        section.forecast.map((row) => (
+                          <div className="forecast__row" key={row.label}>
+                            <span>{row.label}</span>
+                            <Breakable as="strong" title={row.title} text={row.value} />
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
-              {/each}
-            {/if}
-          </div>
-        </section>
-      {/each}
-    {/if}
-  </div>
-</main>
 
-<Toasts />
+                <div className="movers">
+                  {!section.hasComparison ? (
+                    <p className="muted">{section.noComparisonText}</p>
+                  ) : (
+                    section.movers.map((block) => (
+                      <div className="movers__block" key={block.title}>
+                        <h3 className="panel__title">{block.title}</h3>
+                        <div className="movers__grid">
+                          {[{ key: 'increases', heading: 'Increases', entries: block.increases, empty: 'None.' }, { key: 'decreases', heading: 'Decreases', entries: block.decreases, empty: 'None.' }].map((column) => (
+                            <div className="movers__column" key={column.key}>
+                              <h4 className="movers__heading">{column.heading}</h4>
+                              {column.entries.length === 0 ? (
+                                <p className="muted">{column.empty}</p>
+                              ) : (
+                                <ul className="movers__list">
+                                  {column.entries.map((entry) => (
+                                    <li className="movers__item" key={entry.category}>
+                                      <span className="category-dot" style={{ background: entry.color }}></span>
+                                      <span className="movers__name">{entry.category}</span>
+                                      <Breakable className={`movers__amount ${entry.amountClass}`} text={entry.amountText} />
+                                      <span className="movers__pct muted">{entry.pctText}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            ))
+          )}
+        </div>
+      </main>
+
+      <Toasts />
+    </>
+  )
+}

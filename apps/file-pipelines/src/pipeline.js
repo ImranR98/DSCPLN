@@ -27,7 +27,26 @@ export function resolveCommand(command, tokens) {
 }
 
 // The Job a remote pipeline run creates. Pure so it can be unit-tested.
-export function buildJobManifest({ name, node, image, sourcePath, command, stagingClaim, stagingMount = "/staging", stagingSubPath = name, uid = 1000 }) {
+export function buildJobManifest({
+  name,
+  node,
+  image,
+  sourcePath,
+  command,
+  stagingClaim,
+  stagingMount = "/staging",
+  stagingSubPath = name,
+  uid = 1000,
+  seLinuxType = null,
+  seLinuxLevel = null,
+}) {
+  const securityContext = { runAsUser: uid, runAsGroup: uid, fsGroup: uid };
+  if (seLinuxType) {
+    // Host sources can carry labels containers may not read (e.g. user_home_t
+    // on SELinux-enforcing nodes); spc_t reads them without relabeling, and
+    // level s0 keeps files the job writes category-free for the host.
+    securityContext.seLinuxOptions = { type: seLinuxType, ...(seLinuxLevel ? { level: seLinuxLevel } : {}) };
+  }
   const labels = { app: "file-pipelines", "fp-run": name };
   return {
     apiVersion: "batch/v1",
@@ -42,7 +61,7 @@ export function buildJobManifest({ name, node, image, sourcePath, command, stagi
           restartPolicy: "Never",
           nodeSelector: { "kubernetes.io/hostname": node },
           // The shared staging claim is written as the deployment's UID.
-          securityContext: { runAsUser: uid, runAsGroup: uid, fsGroup: uid },
+          securityContext,
           containers: [
             {
               name: "pipeline",
@@ -152,6 +171,8 @@ export class PipelineRunner {
       stagingClaim: this.ctx.config.pipelineStagingClaim,
       stagingMount: this.#stagingMount(),
       uid: this.ctx.config.pipelineUid,
+      seLinuxType: this.ctx.config.pipelineSeLinuxType,
+      seLinuxLevel: this.ctx.config.pipelineSeLinuxLevel,
     });
     // The manifest command still contains the remote-side tokens.
     manifest.spec.template.spec.containers[0].command[2] = resolveCommand(def.command, {

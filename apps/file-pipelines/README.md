@@ -44,6 +44,12 @@ target node. Remote runs need the deployment's shared RWX staging volume
 (`PIPELINES_STAGING_CLAIM`); the daemon needs `kubectl` and permission to
 manage Jobs in its namespace.
 
+On SELinux-enforcing nodes, host sources may carry labels containers cannot
+read (e.g. `user_home_t`). Set `PIPELINES_SELINUX_TYPE=spc_t` (with
+`PIPELINES_SELINUX_LEVEL=s0` to keep written files category-free for the
+host) to have the Job run with that label instead of relabeling the source
+folders.
+
 ## Manual placement (review before writing)
 
 Any `standardize`, `snapchat` or `voicenotes` folder can set

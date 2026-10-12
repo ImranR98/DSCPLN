@@ -25,6 +25,8 @@ export function defaultConfig() {
     pipelineStagingClaim: process.env.PIPELINES_STAGING_CLAIM || "file-pipelines-staging",
     pipelineImage: process.env.PIPELINES_IMAGE || "imranrdev/dscpln-file-pipelines:latest",
     pipelineUid: Number(process.env.PIPELINES_UID ?? 1000),
+    pipelineSeLinuxType: process.env.PIPELINES_SELINUX_TYPE || null,
+    pipelineSeLinuxLevel: process.env.PIPELINES_SELINUX_LEVEL || null,
     pipelineTimeoutSeconds: 3600,
     reviewDir: "~/.file-pipelines/review",
     trashDir: "~/.file-pipelines/trash",

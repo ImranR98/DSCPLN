@@ -57,6 +57,7 @@ test("pipeline: the Job manifest mounts the node source and staging claim", () =
   });
   const pod = manifest.spec.template.spec;
   assert.equal(pod.nodeSelector["kubernetes.io/hostname"], "bigpc");
+  assert.equal(pod.securityContext.seLinuxOptions, undefined);
   assert.equal(pod.securityContext.fsGroup, 1000);
   assert.equal(pod.containers[0].command[2], "bash /source/run.sh");
   assert.equal(pod.volumes[0].hostPath.path, "/srv/games");
@@ -97,4 +98,19 @@ test("pipeline: guard rails (dry run, unknown folder, busy, non-pipeline)", asyn
   const copyRunner = new PipelineRunner(copyCtx);
   assert.equal((await copyRunner.run(folder.name)).ok, false);
   await fsp.rm(stagingDir, { recursive: true, force: true });
+});
+
+test("buildJobManifest: optional SELinux options land on the Job pod", () => {
+  const manifest = buildJobManifest({
+    name: "fp-wine-sync-abc",
+    node: "bigpc",
+    image: "img",
+    sourcePath: "/home/me/Games/Synced",
+    command: "true",
+    stagingClaim: "file-pipelines-staging",
+    uid: 1000,
+    seLinuxType: "spc_t",
+    seLinuxLevel: "s0",
+  });
+  assert.deepEqual(manifest.spec.template.spec.securityContext.seLinuxOptions, { type: "spc_t", level: "s0" });
 });

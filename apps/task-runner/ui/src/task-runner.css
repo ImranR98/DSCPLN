@@ -254,6 +254,31 @@ main.page-wrap {
     line-height: 1.5;
 }
 
+.browser-block {
+    margin-top: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.browser-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.browser-newtab {
+    font-size: var(--fs-sm);
+}
+
+.browser-frame {
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: #000;
+}
+
 @media (max-width: 900px) {
     .task-grid {
         grid-template-columns: 1fr;

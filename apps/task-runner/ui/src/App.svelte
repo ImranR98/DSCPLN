@@ -8,6 +8,8 @@
   let missingConfig = $state(false)
   let queues = $state({})
   let uploading = $state({})
+  let browserAvailable = $state(false)
+  let openBrowsers = $state({})
   let liveLogs = $state({})
   let now = $state(Date.now())
   let globalDragging = $state(false)
@@ -48,12 +50,18 @@
     return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`
   }
 
+  /* The noVNC viewer is proxied under <basePath>/browser/; its WebSocket path
+   * is relative to the viewer page, so it lands on <basePath>/browser/websockify
+   * where the server bridges it to the Selenium sidecar. */
+  const browserSrc = './browser/?autoconnect=1&resize=scale&reconnect=1&path=websockify'
+
   async function loadTasks() {
     try {
       const data = await getJson('api/tasks')
       groups = data.groups || []
       tasks = groups.flatMap((group) => group.tasks)
       missingConfig = Boolean(data.missing_config)
+      browserAvailable = Boolean(data.browser)
     } catch {
       // keep the last state
     }
@@ -162,6 +170,7 @@
         queues = nextQueues
       }
       liveLogs = { ...liveLogs, [task.name]: [] }
+      if (task.browser && browserAvailable) openBrowsers = { ...openBrowsers, [task.name]: true }
       if (result?.queued) toast(`${task.name} queued — another task sharing its destination is running`, 'error')
       await loadTasks()
     } catch (err) {
@@ -425,6 +434,20 @@
             >{busy ? 'Stop' : 'Run'}</button>
             <button class="outline secondary" onclick={() => openLog(task)}>Log</button>
           </div>
+
+          {#if task.browser && browserAvailable}
+            <div class="browser-block">
+              <div class="browser-actions">
+                <button class="outline secondary" onclick={() => (openBrowsers = { ...openBrowsers, [task.name]: !openBrowsers[task.name] })}>
+                  {openBrowsers[task.name] ? 'Hide login browser' : 'Open login browser'}
+                </button>
+                <a class="browser-newtab" href={browserSrc} target="_blank" rel="noreferrer">New tab</a>
+              </div>
+              {#if openBrowsers[task.name]}
+                <iframe class="browser-frame" title={`${task.name} login browser`} src={browserSrc}></iframe>
+              {/if}
+            </div>
+          {/if}
         </section>
       {/each}
     </div>

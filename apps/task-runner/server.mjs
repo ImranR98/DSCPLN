@@ -26,6 +26,14 @@ import {
 } from './config-loader.mjs';
 import { expand, resolve } from './template.mjs';
 import {
+  attachBrowserWebSocket,
+  browserEnabled,
+  browserPrefix,
+  createBrowserHttpHandler,
+} from './browser-proxy.mjs';
+
+export { attachBrowserWebSocket };
+import {
   clearRunning,
   loadTaskState,
   markRunning,
@@ -341,6 +349,7 @@ export function taskJson(t) {
     group: t.group,
     note: t.note,
     host: t.host,
+    browser: Boolean(t.browser),
     prompts: t.prompts ?? [],
     uploads: supportsUploads(t),
     export_url: t.export_url,
@@ -357,13 +366,20 @@ export function taskJson(t) {
 
 export function createApp(options = {}) {
   const basePath = options.basePath ?? process.env.BASE_PATH ?? ''
+  const browserRemote = options.browserUpstream ?? process.env.BROWSER_REMOTE
   const app = createKitApp({
     title: 'Task Runner',
     basePath,
     staticDir: path.join(REPO_DIR, 'static'),
     jsonBody: false, // /api/upload streams raw bytes, JSON-typed uploads included
-    healthExtra: () => ({ tasks: TASK_LIST.length, missingConfig: MISSING_CONFIG }),
+    healthExtra: () => ({ tasks: TASK_LIST.length, missingConfig: MISSING_CONFIG, browser: Boolean(browserRemote) }),
     routes: (router) => {
+      // Login-browser viewer (the Selenium sidecar's noVNC) on the same origin.
+      // The kit mounts this router at basePath, so the path is base-relative;
+      // the WebSocket bridge (attachBrowserWebSocket) works on the raw server
+      // and uses the full prefix instead.
+      if (browserRemote) router.use(browserPrefix(''), createBrowserHttpHandler(browserRemote))
+
       // JSON body parsing only for the endpoints that need it; /api/upload
       // streams raw bytes straight to disk (JSON-typed uploads included).
       router.use(['/api/run', '/api/cancel', '/api/paste_done'], express.json({ limit: '1mb' }))
@@ -389,6 +405,7 @@ export function createApp(options = {}) {
         res.json({
           groups: names.map((name) => ({ name, tasks: TASK_LIST.filter((t) => t.group === name).map(taskJson) })),
           missing_config: MISSING_CONFIG,
+          browser: Boolean(browserRemote),
         })
       })
 
@@ -540,7 +557,10 @@ export function main() {
     }, 1000);
   }
   const app = createApp();
-  app.listen(port, values.host, () => console.log(`Task Runner listening on ${url}`));
+  const server = app.listen(port, values.host, () => console.log(`Task Runner listening on ${url}`));
+  if (browserEnabled()) {
+    attachBrowserWebSocket(server, process.env.BASE_PATH ?? '', process.env.BROWSER_REMOTE);
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

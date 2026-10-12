@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -1064,4 +1066,56 @@ test('API: empty uploads are rejected and leave no .part file', async () => {
   const staging = bctl.stagingDir('Empty Upload');
   assert.deepEqual(fs.readdirSync(staging), [], 'no .part file is left behind');
   await close();
+});
+
+test('browser proxy: HTTP and WebSocket bridge to the sidecar viewer', async () => {
+  const upstream = http.createServer((req, res) => {
+    if (req.url === '/') return res.end('noVNC home');
+    if (req.url === '/vnc.html') return res.end('vnc page');
+    res.writeHead(404).end();
+  });
+  upstream.on('upgrade', (req, socket) => {
+    socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n');
+    socket.on('data', (chunk) => socket.write(chunk));
+    socket.on('end', () => socket.end());
+  });
+  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  const upstreamUrl = `http://127.0.0.1:${upstream.address().port}`;
+
+  await bootWith(makeConfig([task('Anything', { commands: 'true' })]));
+  const app = bctl.createApp({ basePath: '/tasks', browserUpstream: upstreamUrl });
+  const srv = await new Promise((resolve) => {
+    const server = app.listen(0, '127.0.0.1', () => resolve(server));
+  });
+  try {
+    bctl.attachBrowserWebSocket(srv, '/tasks', upstreamUrl);
+    const base = `http://127.0.0.1:${srv.address().port}`;
+    assert.equal(await (await fetch(`${base}/tasks/browser/`)).text(), 'noVNC home');
+    assert.equal(await (await fetch(`${base}/tasks/browser/vnc.html`)).text(), 'vnc page');
+    const tasks = await (await fetch(`${base}/tasks/api/tasks`)).json();
+    assert.equal(tasks.browser, true);
+    const health = await (await fetch(`${base}/tasks/api/health`)).json();
+    assert.equal(health.browser, true);
+
+    const ws = net.connect(srv.address().port, '127.0.0.1');
+    await new Promise((resolve) => ws.on('connect', resolve));
+    const received = new Promise((resolve) => {
+      let buf = '';
+      ws.on('data', (chunk) => {
+        buf += chunk;
+        if (buf.includes('hello')) resolve(buf);
+      });
+    });
+    ws.write(
+      'GET /tasks/browser/websockify HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\n' +
+        'Connection: Upgrade\r\nSec-WebSocket-Key: abc\r\nSec-WebSocket-Version: 13\r\n\r\nhello',
+    );
+    const data = await received;
+    assert.match(data, /101 Switching Protocols/);
+    assert.match(data, /hello/);
+    ws.destroy();
+  } finally {
+    await new Promise((resolve) => srv.close(resolve));
+    await new Promise((resolve) => upstream.close(resolve));
+  }
 });

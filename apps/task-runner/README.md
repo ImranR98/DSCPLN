@@ -80,8 +80,9 @@ value), `capture: true` + `commit_dir` (output becomes the summary, shown in a
 copy/paste dialog whose Done button git-commits `commit_dir`), `root:` (source
 directory the card requires; glob-aware), `check:` (bash gate: the task is
 unavailable while it exits non-zero, with its first output line as the card's
-badge; results are cached ~15s), `summary_last_line: true` (summary = last
-non-command log line).
+badge; results are cached ~15s), `browser: true` (the card gets an embedded
+login-browser section; it auto-opens when the task starts), `summary_last_line:
+true` (summary = last non-command log line).
 
 - `script: 'bash body'` — wrapped in a temp-file heredoc so inner processes
   can't consume the rest of the script from stdin.
@@ -96,6 +97,24 @@ Per-run tokens: `{{uploads}}` (shell-quoted staged file paths) plus one
 wiped when the run ends. `prompts: [{key, label, type: confirm|secret}]` are
 rendered generically; secret values are redacted from the command display and
 output.
+
+### Login browser sidecar
+
+When `BROWSER_REMOTE` points at a noVNC endpoint (e.g.
+`http://localhost:7900`, the Selenium container's viewer), the server proxies
+it at `<basePath>/browser/` on the same origin and reports `browser: true`
+in `/api/tasks` and `/api/health`. Task cards with `browser: true` get an
+embedded iframe (`<basePath>/browser/?autoconnect=1&resize=scale`) and an
+auto-open when the run starts, so a scraper can wait for a manual sign-in or
+2FA while the user watches. The WebSocket (`websockify`) is bridged by the
+same proxy, including the half-close teardown.
+
+Scraper tools connect WebDriver to `SELENIUM_REMOTE_URL` when set (and fall
+back to a local Chrome otherwise, so they still work off-server);
+`SELENIUM_PROFILE_DIR` overrides the Chrome profile directory (in the
+container the tools default it under `/home/seluser/.config`, which a volume
+can persist). Runs that drive the browser use a shared `serial_key` so only
+one session is active at a time.
 
 ## Adding your own tools and tasks
 

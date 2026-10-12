@@ -5,17 +5,10 @@
 // playwright-core) is not installed.
 
 import test from 'node:test'
+import { launchBrowser } from '@dscpln/test-kit'
 import assert from 'node:assert/strict'
 import { startServer } from './helpers.mjs'
 
-async function launchBrowser() {
-    const { chromium } = await import('playwright-core')
-    try {
-        return await chromium.launch()
-    } catch (e) {
-        return null
-    }
-}
 
 test('dashboard loads under BASE_PATH with the shared kit', async (t) => {
     const browser = await launchBrowser()

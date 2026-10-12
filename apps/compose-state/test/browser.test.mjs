@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { launchBrowser } from '@dscpln/test-kit'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -6,14 +7,6 @@ import path from 'node:path'
 import { once } from 'node:events'
 import { createComposeApp } from '../server.mjs'
 
-async function launchBrowser() {
-  const { chromium } = await import('playwright-core')
-  try {
-    return await chromium.launch()
-  } catch {
-    return null
-  }
-}
 
 test('shell UI: header, archives card, targets editor and key panel', async (t) => {
   const browser = await launchBrowser()

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { launchBrowser } from '@dscpln/test-kit';
 
 // Sandboxed state dir — set BEFORE importing the module so its module-level
 // STATE_DIR / askpass paths point at the sandbox.
@@ -12,21 +13,6 @@ process.env.BACKUPCTL_TMP_DIR = path.join(SANDBOX, 'tmp-root');
 
 const bctl = await import('../server.mjs');
 
-let chromium = null;
-try {
-  ({ chromium } = await import('playwright-core'));
-} catch {
-  chromium = null;
-}
-
-async function launchBrowser() {
-  if (!chromium) return null;
-  try {
-    return await chromium.launch({ headless: true });
-  } catch {
-    return null;
-  }
-}
 
 const writeConfig = (data) => {
   const p = path.join(SANDBOX, `ui-config-${Math.random().toString(36).slice(2)}.mjs`);

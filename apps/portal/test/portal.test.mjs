@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { launchBrowser } from '@dscpln/test-kit'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { once } from 'node:events'
@@ -10,14 +11,6 @@ const STATIC_DIR = path.join(here, '..', 'static')
 
 const EXPECTED_LINKS = ['/balance', '/pipelines', '/watxt', '/tasks', '/contacts', '/compose', '/ytmusic']
 
-async function launchBrowser() {
-  const { chromium } = await import('playwright-core')
-  try {
-    return await chromium.launch()
-  } catch {
-    return null
-  }
-}
 
 test('portal renders every function link and loads the ui kit', async (t) => {
   const browser = await launchBrowser()

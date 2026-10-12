@@ -3,30 +3,14 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { browserAvailable, launchBrowser } from '@dscpln/test-kit'
 import { createApp, createState } from '../server.mjs'
 
 // Browser tests for the import dialog. Playwright is a devDependency and
 // Chromium may not be installed everywhere, so the file skips unless launch
 // succeeds.
 
-let chromium = null
-try {
-    ({ chromium } = await import('playwright-core'))
-} catch {
-    chromium = null
-}
-
-const CAN_LAUNCH = await (async () => {
-    if (!chromium) return false
-    try {
-        const browser = await chromium.launch({ headless: true })
-        await browser.close()
-        return true
-    } catch {
-        return false
-    }
-})()
-
+const CAN_LAUNCH = await browserAvailable()
 const TXT_EXPORT = [
     '2024-01-15, 9:00 a.m. - Alice: Hello from the browser',
     '2024-01-15, 9:01 a.m. - Bob: Imported and merged',
@@ -48,7 +32,7 @@ const withApp = async (fn) => {
     const server = await new Promise(resolve => {
         const s = app.listen(0, '127.0.0.1', () => resolve(s))
     })
-    const browser = await chromium.launch({ headless: true })
+    const browser = await launchBrowser()
     try {
         const page = await browser.newPage()
         await fn({ page, dir, fixture, base: `http://127.0.0.1:${server.address().port}` })

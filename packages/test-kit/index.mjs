@@ -1,6 +1,9 @@
 // Shared test helpers. Every app's tests spin up an ephemeral server, use a
-// temp dir and poll for async state; these are the common shapes.
+// temp dir and poll for async state; these are the common shapes. The browser
+// helpers keep Chromium optional: they return null and the test skips instead
+// of failing when Playwright/Chromium is unavailable.
 
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -39,4 +42,37 @@ export async function waitFor(probe, predicate = (value) => Boolean(value), { ti
     await new Promise((resolve) => setTimeout(resolve, intervalMs))
   }
   throw new Error(`waitFor timed out after ${timeoutMs}ms; last=${JSON.stringify(last)}`)
+}
+
+// Launches Chromium, or returns null when Playwright/Chromium is unavailable.
+export async function launchBrowser(options = { headless: true }) {
+  let chromium = null
+  try {
+    ({ chromium } = await import('playwright-core'))
+  } catch {
+    return null
+  }
+  try {
+    return await chromium.launch(options)
+  } catch {
+    return null
+  }
+}
+
+// True when a browser can be launched (used for `{ skip: !CAN_RUN }`).
+export async function browserAvailable() {
+  const browser = await launchBrowser()
+  if (!browser) return false
+  await browser.close()
+  return true
+}
+
+// True when a command exists on PATH (for tests that need ffmpeg/exiftool...).
+export function have(cmd) {
+  try {
+    execFileSync('which', [cmd], { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
 }

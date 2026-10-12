@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { browserAvailable, have, launchBrowser } from "@dscpln/test-kit";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -10,34 +11,7 @@ import { Daemon } from "../src/daemon.js";
 // and Chromium may not be installed everywhere, so the whole file skips unless
 // a launch succeeds.
 
-let chromium = null;
-try {
-  ({ chromium } = await import("playwright-core"));
-} catch {
-  chromium = null;
-}
-
-const CAN_LAUNCH = await (async () => {
-  if (!chromium) return false;
-  try {
-    const browser = await chromium.launch({ headless: true });
-    await browser.close();
-    return true;
-  } catch {
-    return false;
-  }
-})();
-
-function have(cmd) {
-  try {
-    execFileSync("which", [cmd], { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const CAN_RUN = CAN_LAUNCH && have("ffmpeg") && have("exiftool") && have("ffprobe");
+const CAN_RUN = (await browserAvailable()) && have("ffmpeg") && have("exiftool") && have("ffprobe");
 
 async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -103,7 +77,7 @@ async function makeSetup() {
 
 test("ui: review a parked voice note from the browser and place it", { skip: !CAN_RUN }, async () => {
   const { root, daemon, dest, base } = await makeSetup();
-  const browser = await chromium.launch({ headless: true });
+  const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
     await page.goto(base);
@@ -139,7 +113,7 @@ test("ui: review a parked voice note from the browser and place it", { skip: !CA
 
 test("ui: settings editor round-trips the new folder options", { skip: !CAN_RUN }, async () => {
   const { root, daemon, base } = await makeSetup();
-  const browser = await chromium.launch({ headless: true });
+  const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
     await page.goto(base);
@@ -183,7 +157,7 @@ test("ui: settings editor round-trips the new folder options", { skip: !CAN_RUN 
 
 test("ui: discard requires confirmation and leaves the destination untouched", { skip: !CAN_RUN }, async () => {
   const { root, daemon, dest, base } = await makeSetup();
-  const browser = await chromium.launch({ headless: true });
+  const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
     await page.goto(base);
@@ -216,7 +190,7 @@ test("ui: discard requires confirmation and leaves the destination untouched", {
 
 test("ui: archive folders (cleanup disabled) expose no Cleanup button", { skip: !CAN_RUN }, async () => {
   const { root, daemon, base } = await makeSetup();
-  const browser = await chromium.launch({ headless: true });
+  const browser = await launchBrowser();
   try {
     const config = await (await fetch(`${base}/api/config`)).json();
     config.reviewDir = path.join(root, "review");

@@ -88,6 +88,14 @@ export class Store extends EventEmitter {
     const folder = this.folders.get(folderName);
     if (!folder) return;
     const { def } = folder;
+    if (def.method === "command") {
+      // Pipeline folders run commands instead of scanning a local source.
+      if (!folder.exists) {
+        folder.exists = true;
+        this.emit("update");
+      }
+      return;
+    }
     const names = await this.#listFiles(def);
     if (names === null) {
       if (folder.exists) {
@@ -438,6 +446,9 @@ export class Store extends EventEmitter {
         placement: folder.def.placement,
         autoProcess: folder.def.autoProcess,
         notify: folder.def.notify,
+        command: folder.def.command ?? null,
+        runner: folder.def.runner ?? { node: null },
+        schedule: folder.def.schedule ?? null,
         exists: folder.exists,
         lastEventAt: folder.lastEventAt,
         counts,

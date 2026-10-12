@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { defaultConfig, loadConfig, validateConfig } from "../src/config.js";
+import { defaultConfig, loadConfig, normalizeConfig, validateConfig } from "../src/config.js";
 
 test("fresh boot writes an empty config (no folders)", async () => {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-config-"));
@@ -39,4 +39,42 @@ test("an existing config is loaded without being rewritten", async () => {
   } finally {
     await fsp.rm(dir, { recursive: true, force: true });
   }
+});
+
+test("config: command folders carry a runner and a schedule", () => {
+  const cfg = normalizeConfig({
+    ...defaultConfig(),
+    folders: [
+      {
+        name: "wine",
+        source: "/home/imranr/Games/Installs/Synced",
+        destination: "/home/imranr/Main/Backups/Game Save Files",
+        method: "command",
+        command: "rsync -a {{source}}/ {{destination}}/",
+        runner: { node: "bigpc" },
+        schedule: { enabled: true, days: [1, 3], at: "4:30" },
+      },
+    ],
+  });
+  validateConfig(cfg);
+  assert.equal(cfg.folders[0].command, "rsync -a {{source}}/ {{destination}}/");
+  assert.deepEqual(cfg.folders[0].runner, { node: "bigpc" });
+  assert.deepEqual(cfg.folders[0].schedule, { enabled: true, days: [1, 3], at: "04:30", catchUp: true });
+  assert.equal(cfg.pipelineStagingClaim, "file-pipelines-staging");
+  assert.ok(cfg.pipelineStagingDir.endsWith(".file-pipelines/pipeline-staging"));
+});
+
+test("config: command folders need a command and runners are command-only", () => {
+  const base = (folder) => ({ ...defaultConfig(), folders: [folder] });
+  assert.throws(
+    () => validateConfig(base({ name: "a", source: "/s", destination: "/d", method: "command" })),
+    /need a command/,
+  );
+  assert.throws(
+    () =>
+      validateConfig(
+        base({ name: "b", source: "/s", destination: "/d", method: "copy", runner: { node: "bigpc" } }),
+      ),
+    /only supported for command pipelines/,
+  );
 });

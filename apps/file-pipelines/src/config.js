@@ -1,8 +1,12 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { atomicWriteFile, expandPath, pathExists } from "./util.js";
+import { normalizeSchedule } from "./schedule.js";
 
-export const METHODS = ["standardize", "snapchat", "copy", "voicenotes"];
+export const METHODS = ["standardize", "snapchat", "copy", "voicenotes", "command"];
+// Pipeline folders run a command (optionally on another node) instead of
+// watching a local source directory for files.
+export const PIPELINE_METHODS = new Set(["command"]);
 export const MANUAL_PLACEMENT_METHODS = new Set(["standardize", "snapchat", "voicenotes"]);
 
 export function defaultConfig() {
@@ -17,6 +21,11 @@ export function defaultConfig() {
     settleSeconds: 60,
     maxAutoRetries: 3,
     stagingDir: "~/.file-pipelines/staging",
+    pipelineStagingDir: process.env.PIPELINES_STAGING_DIR || "~/.file-pipelines/pipeline-staging",
+    pipelineStagingClaim: process.env.PIPELINES_STAGING_CLAIM || "file-pipelines-staging",
+    pipelineImage: process.env.PIPELINES_IMAGE || "imranrdev/dscpln-file-pipelines:latest",
+    pipelineUid: Number(process.env.PIPELINES_UID ?? 1000),
+    pipelineTimeoutSeconds: 3600,
     reviewDir: "~/.file-pipelines/review",
     trashDir: "~/.file-pipelines/trash",
     logDir: "~/.file-pipelines/logs",
@@ -51,6 +60,8 @@ export function normalizeConfig(raw) {
   cfg.paused = Boolean(cfg.paused);
   cfg.dryRun = Boolean(cfg.dryRun);
   cfg.stagingDir = expandPath(cfg.stagingDir);
+  cfg.pipelineStagingDir = expandPath(cfg.pipelineStagingDir);
+  cfg.pipelineTimeoutSeconds = Math.max(60, Math.floor(asNumber(cfg.pipelineTimeoutSeconds, 3600)));
   cfg.reviewDir = expandPath(cfg.reviewDir);
   cfg.trashDir = expandPath(cfg.trashDir);
   cfg.logDir = expandPath(cfg.logDir);
@@ -74,6 +85,11 @@ export function normalizeConfig(raw) {
       placement: folder.placement === "manual" ? "manual" : "auto",
       autoProcess: Boolean(folder.autoProcess),
       notify: folder.notify === "errors" ? "errors" : "all",
+      // Pipeline additions: a command plus an optional remote node, with the
+      // same schedule shape the other D$CPLN apps use.
+      command: method === "command" ? String(folder.command ?? "").trim() : null,
+      runner: { node: method === "command" ? String(folder.runner?.node ?? "").trim() || null : null },
+      schedule: normalizeSchedule(folder.schedule),
     };
   });
   return cfg;
@@ -89,6 +105,12 @@ export function validateConfig(cfg) {
     if (!folder.source) errors.push(`folder ${folder.name}: missing source`);
     if (!folder.destination) errors.push(`folder ${folder.name}: missing destination`);
     if (!METHODS.includes(folder.method)) errors.push(`folder ${folder.name}: unknown method ${folder.method}`);
+    if (folder.method === "command" && !folder.command) {
+      errors.push(`folder ${folder.name}: command pipelines need a command`);
+    }
+    if (folder.runner?.node && folder.method !== "command") {
+      errors.push(`folder ${folder.name}: a remote runner is only supported for command pipelines`);
+    }
     if (folder.method === "voicenotes") {
       if (!folder.datePattern) {
         errors.push(`folder ${folder.name}: voicenotes requires datePattern (a regex matching the clip date)`);

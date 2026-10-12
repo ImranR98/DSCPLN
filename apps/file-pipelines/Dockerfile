@@ -1,8 +1,14 @@
 FROM node:24-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg perl ca-certificates \
+    && apt-get install -y --no-install-recommends ffmpeg perl ca-certificates rsync bash tar gzip \
     && rm -rf /var/lib/apt/lists/*
+
+# kubectl drives the remote pipeline Jobs (keep it in step with the k3s
+# version); pipeline commands themselves use bash/rsync from above.
+ARG TARGETARCH=amd64
+RUN wget -q "https://dl.k8s.io/release/v1.37.1/bin/linux/${TARGETARCH}/kubectl" -O /usr/local/bin/kubectl \
+    && chmod +x /usr/local/bin/kubectl
 
 WORKDIR /app
 

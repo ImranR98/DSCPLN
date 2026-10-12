@@ -5,6 +5,8 @@ import { createExifTool } from "./exif.js";
 import { Logger } from "./log.js";
 import { Notifier } from "./notify.js";
 import { Queue } from "./queue.js";
+import { PipelineRunner } from "./pipeline.js";
+import { Scheduler } from "./scheduler.js";
 import { Store } from "./store.js";
 import { SyncLock } from "./lock.js";
 import { Watchers } from "./watchers.js";
@@ -56,6 +58,11 @@ export class Daemon {
     await this.lock.acquire({ force: this.options.force });
 
     this.queue = new Queue(this.ctx);
+    this.pipeline = new PipelineRunner(this.ctx);
+    this.ctx.pipeline = this.pipeline;
+    this.ctx.pipelineChanged = () => this.store.emit("update");
+    this.scheduler = new Scheduler(this.ctx, { historyFile: path.join(path.dirname(this.configPath), "pipeline-runs.json") });
+    await this.scheduler.init();
     this.watchers = new Watchers(this.store, this.log);
 
     await this.#cleanStaleStaging();
@@ -73,6 +80,7 @@ export class Daemon {
     }
 
     this.queue.start();
+    this.scheduler.start();
     this.rescanTimer = setInterval(() => this.#rescan(), 60_000);
     this.rescanTimer.unref?.();
     this.sweepTimer = setInterval(() => sweepTrash(this.ctx).catch(() => {}), 3600_000);
@@ -94,6 +102,7 @@ export class Daemon {
     } catch {
       // ignore
     }
+    this.scheduler?.stop();
     clearInterval(this.rescanTimer);
     clearInterval(this.sweepTimer);
     await this.api?.close().catch(() => {});

@@ -4,7 +4,17 @@
   import { apiUrl, formatBytes, formatDateTime, formatDuration, formatTime, getJson, modal, postJson, putJson, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
 
   const STATUS_RANK = { error: 0, conflict: 1, queued: 2, processing: 3, pending: 4, review: 5, done: 6, duplicate: 7, discarded: 8, cleaned: 9, ignored: 10 }
-  const METHOD_LABEL = { standardize: 'standardize', snapchat: 'snapchat', copy: 'copy', voicenotes: 'voicenotes' }
+  const METHOD_LABEL = { standardize: 'standardize', snapchat: 'snapchat', copy: 'copy', voicenotes: 'voicenotes', command: 'pipeline' }
+  const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+  const isPipeline = (folder) => folder.method === 'command'
+  const pipelineFor = (folder) => state?.pipelines?.[folder.name] ?? null
+
+  function scheduleLabel(schedule) {
+    if (!schedule?.enabled) return 'manual'
+    const days = schedule.days?.length ? schedule.days.map((day) => DAY_NAMES[day]).join(', ') : 'every day'
+    return `${days} at ${schedule.at}`
+  }
   const FILE_LIMIT = 300
 
   let state = $state(null)
@@ -85,6 +95,9 @@
   }
 
   function folderContext(folder) {
+    if (folder.method === 'command') {
+      return [folder.runner?.node ? `node ${folder.runner.node}` : 'this server', scheduleLabel(folder.schedule)].join(' · ')
+    }
     const parts = [`settle ${formatDuration(folder.settleSeconds)}`]
     if (folder.method === 'snapchat') parts.push(`window ${formatDuration(folder.groupWindowSeconds)}`)
     if (folder.method === 'copy') {
@@ -119,6 +132,7 @@
   }
 
   const processNow = (folder, files) => act(`api/process/${encodeURIComponent(folder)}`, files ? { files } : {})
+  const runPipeline = (folderName) => act(`api/pipeline/${encodeURIComponent(folderName)}`)
   const fileAction = (folder, file, action, extra = {}) => act(`api/actions/${encodeURIComponent(folder)}/${encodeURIComponent(file)}`, { action, ...extra })
   const togglePaused = () => act('api/pause', { paused: !state.paused })
   const toggleDryRun = () => act('api/dry-run', { dryRun: !state.dryRun })
@@ -321,6 +335,7 @@
     settingsDraft.folders = [...settingsDraft.folders, {
       name: '', source: '', destination: '', method: 'standardize', settleSeconds: 60,
       groupWindowSeconds: 15, placement: 'auto', onChanged: 'overwrite', notify: 'all',
+      command: '', runner: { node: '' }, schedule: { enabled: false, days: [], at: '03:00', catchUp: true },
     }]
   }
 
@@ -330,6 +345,10 @@
     config.trashRetentionDays = Number(config.trashRetentionDays)
     config.settleSeconds = Number(config.settleSeconds)
     for (const folder of config.folders) {
+      if (folder.method === 'command') {
+        folder.runner = { node: String(folder.runner?.node ?? '').trim() || null }
+        continue
+      }
       folder.settleSeconds = Number(folder.settleSeconds)
       folder.groupWindowSeconds = Number(folder.groupWindowSeconds)
       folder.filePattern ||= null
@@ -465,6 +484,46 @@
           <span class="card__context">{folderContext(folder)}</span>
         </div>
 
+        {#if isPipeline(folder)}
+          <p class="folder-paths">
+            <code>{folder.source}</code>
+            <span class="folder-paths__arrow">→</span>
+            <code>{folder.destination}</code>
+          </p>
+
+          <div class="pipeline-meta">
+            <div class="pipeline-meta__row">
+              <span class="muted">Schedule</span>
+              <span>{scheduleLabel(folder.schedule)}</span>
+            </div>
+            <div class="pipeline-meta__row">
+              <span class="muted">Next run</span>
+              <span>{pipelineFor(folder)?.nextRun ? formatDateTime(pipelineFor(folder).nextRun) : '—'}</span>
+            </div>
+            <div class="pipeline-meta__row">
+              <span class="muted">Last run</span>
+              <span>
+                {#if pipelineFor(folder)?.running}
+                  <span class="pill pill--running">running…</span>
+                {:else if pipelineFor(folder)?.lastRunAt}
+                  <span class={`pill pill--${pipelineFor(folder).ok === false ? 'fail' : 'ok'}`}>{pipelineFor(folder).ok === false ? 'failed' : 'ok'}</span>
+                  <span class="muted"> {formatDateTime(pipelineFor(folder).lastRunAt)}</span>
+                {:else}
+                  <span class="muted">never</span>
+                {/if}
+              </span>
+            </div>
+            {#if pipelineFor(folder)?.summary}
+              <p class="muted pipeline-meta__summary">{pipelineFor(folder).summary}</p>
+            {/if}
+          </div>
+
+          <div class="folder-card__actions">
+            <button disabled={pipelineFor(folder)?.running || state?.dryRun} onclick={() => runPipeline(folder.name)}>
+              {pipelineFor(folder)?.running ? 'Running…' : 'Run pipeline'}
+            </button>
+          </div>
+        {:else}
         <p class="figure">
           <span class="figure__spend">{stats.pending}</span>
           <span class="figure__meta">
@@ -555,6 +614,7 @@
             {/if}
           {/if}
         </details>
+        {/if}
       </section>
     {/each}
     {#if state && !state.folders.length}
@@ -840,20 +900,69 @@
             <div class="field"><span class="field__label">Destination</span><input value={folder.destination} oninput={(event) => (folder.destination = event.target.value)} /></div>
             <div class="field"><span class="field__label">Method</span>
               <select value={folder.method} onchange={(event) => (folder.method = event.target.value)}>
-                {#each ['standardize', 'snapchat', 'copy', 'voicenotes'] as method}<option value={method}>{method}</option>{/each}
+                {#each ['standardize', 'snapchat', 'copy', 'voicenotes', 'command'] as method}<option value={method}>{method === 'command' ? 'command (pipeline)' : method}</option>{/each}
               </select>
             </div>
-            <div class="field"><span class="field__label">Settle (s)</span><input type="number" value={folder.settleSeconds ?? 60} oninput={(event) => (folder.settleSeconds = event.target.value)} /></div>
-            <div class="field"><span class="field__label">Group window (s)</span><input type="number" value={folder.groupWindowSeconds ?? 15} oninput={(event) => (folder.groupWindowSeconds = event.target.value)} /></div>
-            <div class="field"><span class="field__label">File pattern</span><input value={folder.filePattern ?? ''} oninput={(event) => (folder.filePattern = event.target.value)} /></div>
+            {#if folder.method === 'command'}
+              <div class="field field--wide">
+                <span class="field__label">Command</span>
+                <textarea rows="6" spellcheck="false" placeholder={'rsync -a "{{source}}/" "{{destination}}/"'}
+                  value={folder.command ?? ''} oninput={(event) => (folder.command = event.target.value)}></textarea>
+                <p class="hint">Bash, run on the runner below. Tokens: {'{{source}}'}, {'{{destination}}'}, {'{{staging}}'}. Remote runs mount the source at /source and place the staging output into the destination.</p>
+              </div>
+              <div class="field">
+                <span class="field__label">Runner node</span>
+                <input value={folder.runner?.node ?? ''} placeholder="this server" oninput={(event) => (folder.runner = { node: event.target.value })} />
+                <p class="hint">A Kubernetes node name (e.g. bigpc) to run the command there; empty runs it on this server.</p>
+              </div>
+            {/if}
+            <div class="field" hidden={folder.method === 'command'}><span class="field__label">Settle (s)</span><input type="number" value={folder.settleSeconds ?? 60} oninput={(event) => (folder.settleSeconds = event.target.value)} /></div>
+            <div class="field" hidden={folder.method === 'command'}><span class="field__label">Group window (s)</span><input type="number" value={folder.groupWindowSeconds ?? 15} oninput={(event) => (folder.groupWindowSeconds = event.target.value)} /></div>
+            <div class="field" hidden={folder.method === 'command'}><span class="field__label">File pattern</span><input value={folder.filePattern ?? ''} oninput={(event) => (folder.filePattern = event.target.value)} /></div>
           </div>
-          <div class="form-grid field-grid--checks">
+          <div class="form-grid field-grid--checks" hidden={folder.method === 'command'}>
             <label><input type="checkbox" checked={folder.recursive === true} onchange={(event) => (folder.recursive = event.target.checked)} /> Recursive (mirror subdirectories)</label>
             <label><input type="checkbox" checked={folder.includeHidden === true} onchange={(event) => (folder.includeHidden = event.target.checked)} /> Include hidden files</label>
             <label><input type="checkbox" checked={folder.cleanup !== false} onchange={(event) => (folder.cleanup = event.target.checked)} /> Allow cleanup of processed originals</label>
             <label><input type="checkbox" checked={folder.autoProcess === true} onchange={(event) => (folder.autoProcess = event.target.checked)} /> Prepare new files automatically (manual review)</label>
           </div>
-          <div class="form-grid">
+          {#if folder.method === 'command'}
+            <div class="form-grid">
+              <div class="field"><span class="field__label">Schedule</span>
+                <select value={folder.schedule?.enabled ? 'on' : 'off'}
+                  onchange={(event) => (folder.schedule = { ...folder.schedule, enabled: event.target.value === 'on' })}>
+                  <option value="off">manual</option>
+                  <option value="on">scheduled</option>
+                </select>
+              </div>
+              <div class="field"><span class="field__label">At</span>
+                <input type="time" value={folder.schedule?.at ?? '03:00'} oninput={(event) => (folder.schedule = { ...folder.schedule, at: event.target.value })} />
+              </div>
+              <div class="field"><span class="field__label">Missed runs</span>
+                <select value={folder.schedule?.catchUp === false ? 'skip' : 'catchup'}
+                  onchange={(event) => (folder.schedule = { ...folder.schedule, catchUp: event.target.value === 'catchup' })}>
+                  <option value="catchup">run on start</option>
+                  <option value="skip">skip</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-grid field-grid--checks">
+              {#each DAY_NAMES as name, day (name)}
+                <label>
+                  <input type="checkbox" checked={(folder.schedule?.days ?? []).includes(day)}
+                    onchange={(event) => {
+                      const days = new Set(folder.schedule?.days ?? [])
+                      if (event.target.checked) days.add(day)
+                      else days.delete(day)
+                      folder.schedule = { ...folder.schedule, days: [...days].sort() }
+                    }} />
+                  {name}
+                </label>
+              {/each}
+              <p class="hint">No days selected = every day.</p>
+            </div>
+          {/if}
+          <div class="form-grid" hidden={folder.method === 'command'}>
             <div class="field"><span class="field__label">Placement</span>
               <select value={folder.placement ?? 'auto'} onchange={(event) => (folder.placement = event.target.value)}>
                 <option value="auto">auto</option><option value="manual">manual</option>
@@ -869,7 +978,7 @@
                 <option value="all">all</option><option value="errors">errors</option>
               </select>
             </div>
-            <div class="field"><span class="field__label">Date pattern (voicenotes)</span><input value={folder.datePattern ?? ''} oninput={(event) => (folder.datePattern = event.target.value)} /></div>
+            <div class="field" hidden={folder.method === 'command'}><span class="field__label">Date pattern (voicenotes)</span><input value={folder.datePattern ?? ''} oninput={(event) => (folder.datePattern = event.target.value)} /></div>
           </div>
         </div>
       {/each}

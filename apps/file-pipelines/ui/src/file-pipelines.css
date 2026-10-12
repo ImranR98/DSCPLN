@@ -1,0 +1,27 @@
+/* File Pipelines: pipeline-folder additions on top of the shared kit. */
+
+.pipeline-meta {
+    display: grid;
+    gap: var(--space-1);
+    margin-top: var(--space-3);
+}
+
+.pipeline-meta__row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    font-size: var(--fs-sm);
+}
+
+.pipeline-meta__summary {
+    margin: var(--space-1) 0 0;
+    font-size: var(--fs-xs);
+    overflow-wrap: anywhere;
+}
+
+.folder-edit textarea {
+    min-height: 6rem;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: var(--fs-sm);
+}

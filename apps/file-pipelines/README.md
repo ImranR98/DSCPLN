@@ -1,9 +1,14 @@
 # File Pipelines
 
-Watches configured folders for new media, processes each file with one of four
-methods, places the result into a destination folder, and **never deletes an
-original until you explicitly clean up** — and then only after verifying the
-destination copy.
+Watches configured folders for new media, processes each file with one of the
+file methods below, and **never deletes an original until you explicitly clean
+up** — and then only after verifying the destination copy.
+
+Folders can also be **pipelines**: a configurable command that runs on a
+schedule (or manually), locally or as a Kubernetes Job on another node, with
+its output placed into the destination. That covers push-style jobs — e.g.
+archiving Wine-prefix game saves from a gaming PC — alongside the watched
+media folders.
 
 ## Methods
 
@@ -13,6 +18,31 @@ destination copy.
 | `snapchat`    | Waits until the folder has been quiet for `settleSeconds` (default 30 min), groups `Snapchat-*.mp4` clips whose timestamps are within `groupWindowSeconds` (default 15s), concatenates + re-encodes each group, standardizes the output, and records the input list in a custom `XMP-media-sync:Inputs` tag on the output. |
 | `copy`        | Byte-verified copy, original name preserved (call recordings). Add `recursive: true` to mirror a whole tree (WhatsApp AllMedia archives) and `onChanged` to control what happens when a same-name source changes. |
 | `voicenotes`  | Concatenates same-day clips from the same folder into one MP4 (a 0.1s tone between clips), standardizes it, and records inputs in XMP. The clip-date scheme is **user-defined** per folder via `datePattern` (e.g. WhatsApp push-to-talk `PTT-YYYYMMDD-WA####.opus` uses `-(\d{8})-`); see Manual placement below. |
+| `command`     | A **pipeline**: runs `command` (bash) on the configured schedule or on demand. `{{source}}`, `{{destination}}` and `{{staging}}` resolve per run. With `runner.node`, the command runs as a Kubernetes Job on that node (the source is mounted at `/source` read-only); its output under `{{staging}}` is then placed into the destination. Without a runner the command runs in the daemon. |
+
+## Pipeline folders
+
+```jsonc
+{
+  "name": "Wine Sync",
+  "source": "/home/me/Games/Installs/Synced",   // absolute path on the runner node
+  "destination": "/backup/Game Save Files",
+  "method": "command",
+  "command": "rsync -a \"{{source}}/\" \"{{destination}}/\"",
+  "runner": { "node": "bigpc" },                // null = this server
+  "schedule": { "enabled": true, "days": [1], "at": "03:00", "catchUp": true }
+}
+```
+
+`days` are 0 (Sunday) to 6; an empty list means every day. `catchUp: false`
+skips an occurrence missed while the daemon was off instead of running it on
+startup, and a folder's first-ever tick only seeds the schedule (no surprise
+run). Pipeline commands should be self-contained: the job image carries
+bash/rsync/tar/ffmpeg, and remote sources must be absolute paths on the
+target node. Remote runs need the deployment's shared RWX staging volume
+(`PIPELINES_STAGING_DIR`), the job image (`PIPELINES_IMAGE`) and its claim
+(`PIPELINES_STAGING_CLAIM`); the daemon needs `kubectl` and permission to
+manage Jobs in its namespace.
 
 ## Manual placement (review before writing)
 

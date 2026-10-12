@@ -120,10 +120,21 @@ export class ApiServer {
     if (method !== "GET" && !this.#checkOrigin(req)) return json(res, 403, { error: "cross-origin request rejected" });
 
     if (method === "GET" && pathname === "/state") {
+      const pipelines = {};
+      const status = this.daemon.pipeline?.status() ?? {};
+      for (const folder of this.daemon.store.listFolders()) {
+        if (folder.def.method !== "command") continue;
+        pipelines[folder.def.name] = {
+          ...(status[folder.def.name] ?? { running: false, ok: null, summary: "" }),
+          lastRunAt: this.daemon.scheduler?.lastRunAt(folder.def.name) ?? 0,
+          nextRun: this.daemon.scheduler?.nextRun(folder.def.name) ?? null,
+        };
+      }
       return json(res, 200, {
         ...this.daemon.store.snapshot(),
         config: this.daemon.config,
         lock: { file: this.daemon.config.syncLockFile },
+        pipelines,
       });
     }
 
@@ -167,9 +178,21 @@ export class ApiServer {
 
     if (method === "POST" && pathname.startsWith("/process/")) {
       const folderName = decodeURIComponent(pathname.slice("/process/".length));
+      const folder = this.daemon.store.getFolder(folderName);
+      if (!folder) return json(res, 404, { error: "unknown folder" });
+      if (folder.def.method === "command") {
+        return json(res, 409, { error: "pipeline folders run via /api/pipeline" });
+      }
       const body = await readBody(req).catch(() => ({}));
       const result = await this.daemon.queue.processNow(folderName, { files: body.files });
       return json(res, result.ok ? 200 : 409, result);
+    }
+
+    if (method === "POST" && pathname.startsWith("/pipeline/")) {
+      const folderName = decodeURIComponent(pathname.slice("/pipeline/".length));
+      const result = await this.daemon.pipeline.run(folderName, { trigger: "manual" });
+      const status = result.ok ? 200 : result.busy ? 409 : 400;
+      return json(res, status, result);
     }
 
     if (method === "GET" && pathname === "/review") {

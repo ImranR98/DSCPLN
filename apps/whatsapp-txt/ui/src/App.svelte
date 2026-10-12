@@ -1,16 +1,6 @@
 <script>
   import { onMount, tick } from 'svelte'
-  import {
-    ArrowDown,
-    ArrowUp,
-    AlignJustify,
-    AlignLeft,
-    Import,
-    Menu,
-    MessageSquare,
-    RefreshCw,
-    X,
-  } from 'lucide-svelte'
+  import { ArrowDown, ArrowUp, Import, Menu, RefreshCw, X } from 'lucide-svelte'
   import { apiUrl, formatDateTime, getJson, postJson, ThemeToggle } from '@dscpln/ui-kit'
 
   const PAGE_SIZE = 200
@@ -89,7 +79,6 @@
   let loadedLast = $state(-1)
   let loading = $state(false)
   let viewToken = 0
-  let viewMode = $state(localStorage.getItem('whatsapptxt-view') ?? 'transcript')
   let palettes = $state(new Map())
   let skeleton = $state(false)
 
@@ -624,11 +613,6 @@
     results[next].focus()
   }
 
-  function setViewMode(mode) {
-    viewMode = mode
-    localStorage.setItem('whatsapptxt-view', mode)
-  }
-
   const openResult = (result) => {
     location.hash = `#/c/${encodeURIComponent(result.conversationId)}?at=${result.index}`
   }
@@ -658,10 +642,10 @@
 
 <header class="topbar app-header">
   <div class="app-header__top">
+    <h1><a class="app-header__brand" href="/">D<span class="accent">$</span>CPLN</a> <span class="app-header__app">⋅ WhatsApp TXT</span></h1>
     <button id="sidebar-toggle" class="outline secondary icon-button" aria-label="Toggle conversation list" onclick={() => (sidebarOpen = !sidebarOpen)}>
       <Menu size={16} strokeWidth={1.8} />
     </button>
-    <h1><a class="app-header__brand" href="/">D<span class="accent">$</span>CPLN</a> <span class="app-header__app">⋅ WhatsApp TXT</span></h1>
     <form id="search-form" class="search-form" role="search" onsubmit={submitSearch}>
       <span class="search-box">
         <input id="search-input" bind:this={searchInput} type="search" placeholder="Search messages…  /" autocomplete="off" spellcheck="false"
@@ -729,7 +713,7 @@
     </ul>
   </aside>
 
-  <section id="content" class="content" class:view-transcript={viewMode === 'transcript'} class:view-bubbles={viewMode === 'bubbles'} class:view-compact={viewMode === 'compact'}>
+  <section id="content" class="content view-bubbles">
     {#if searchActive}
       <div class="search-view">
         <div class="search-filters">
@@ -815,17 +799,6 @@
             {conversation.messageCount.toLocaleString()} messages · {dateLabel(conversation.first)} → {dateLabel(conversation.last)} · {conversation.senders.length} participants
           </div>
         </div>
-        <div class="mode-switch">
-          <button class="mode-btn" data-mode="transcript" title="Transcript" aria-label="Transcript view" aria-pressed={viewMode === 'transcript'} onclick={() => setViewMode('transcript')}>
-            <AlignLeft size={16} strokeWidth={1.8} />
-          </button>
-          <button class="mode-btn" data-mode="bubbles" title="Bubbles" aria-label="Bubbles view" aria-pressed={viewMode === 'bubbles'} onclick={() => setViewMode('bubbles')}>
-            <MessageSquare size={16} strokeWidth={1.8} />
-          </button>
-          <button class="mode-btn" data-mode="compact" title="Compact" aria-label="Compact view" aria-pressed={viewMode === 'compact'} onclick={() => setViewMode('compact')}>
-            <AlignJustify size={16} strokeWidth={1.8} />
-          </button>
-        </div>
       </div>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div id="message-scroll" class="message-scroll" bind:this={scrollEl} onscroll={onMessageScroll}>
@@ -851,31 +824,7 @@
                   id={`m-${message.index}`}
                   style={message.sender ? senderStyle(conversation.id, message.sender) : ''}
                 >
-                  {#if viewMode === 'compact'}
-                    <div class="body">
-                      <span class="prefix">
-                        <span class="time">{timeLabel(message.date)}</span>
-                        {#if !row.grouped && message.sender}<span class="sender">{message.sender}: </span>{/if}
-                      </span>
-                      {#each bodyParts(message.body) as part}
-                        {#if part.href}<a href={part.href} target="_blank" rel="noopener noreferrer">{part.href}</a>{:else}{part.text}{/if}
-                      {/each}
-                    </div>
-                  {:else if viewMode === 'bubbles'}
-                    <div class="bubble">
-                      {#if !row.grouped}
-                        <div class="line1">
-                          {#if message.sender}<span class="sender">{message.sender}</span>{/if}
-                          <span class="time">{timeLabel(message.date)}</span>
-                        </div>
-                      {/if}
-                      <div class="body">
-                        {#each bodyParts(message.body) as part}
-                          {#if part.href}<a href={part.href} target="_blank" rel="noopener noreferrer">{part.href}</a>{:else}{part.text}{/if}
-                        {/each}
-                      </div>
-                    </div>
-                  {:else}
+                  <div class="bubble">
                     {#if !row.grouped}
                       <div class="line1">
                         {#if message.sender}<span class="sender">{message.sender}</span>{/if}
@@ -887,7 +836,7 @@
                         {#if part.href}<a href={part.href} target="_blank" rel="noopener noreferrer">{part.href}</a>{:else}{part.text}{/if}
                       {/each}
                     </div>
-                  {/if}
+                  </div>
                 </div>
               {/if}
             {/each}

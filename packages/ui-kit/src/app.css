@@ -1195,7 +1195,10 @@ button svg, a[role="button"] svg {
 /* Pico adds block spacing to sections, details and top-level landmarks; the
    design system owns rhythm through containers, so neutralize those defaults. */
 section,
-details {
+details,
+form,
+[role="search"],
+[role="group"] {
     margin-bottom: 0;
 }
 
@@ -1229,8 +1232,7 @@ button,
 [type="submit"],
 input:not([type="checkbox"], [type="radio"]),
 select,
-textarea,
-[role="group"] {
+textarea {
     margin-bottom: 0;
 }
 

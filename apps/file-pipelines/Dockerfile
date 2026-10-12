@@ -1,4 +1,4 @@
-FROM node:24-slim
+FROM imranrdev/dscpln-base:latest
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg perl ca-certificates curl rsync bash tar gzip \
@@ -10,14 +10,9 @@ ARG TARGETARCH=amd64
 RUN curl -fsSL "https://dl.k8s.io/release/v1.37.1/bin/linux/${TARGETARCH}/kubectl" -o /usr/local/bin/kubectl \
     && chmod +x /usr/local/bin/kubectl
 
-WORKDIR /app
-
-# Monorepo install (build context = repo root).
-COPY package.json package-lock.json ./
-COPY packages ./packages
-COPY apps ./apps
-RUN npm install --no-audit --no-fund \
-    && npm run build:ui --workspace dscpln-file-pipelines \
+# Build this app's UI, then drop the build-time dependencies from the shared
+# base image's workspace install.
+RUN npm run build:ui --workspace dscpln-file-pipelines \
     && npm prune --omit=dev
 
 ENV NODE_ENV=production

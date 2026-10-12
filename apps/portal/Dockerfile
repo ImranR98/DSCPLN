@@ -1,14 +1,8 @@
-FROM node:24-slim
+FROM imranrdev/dscpln-base:latest
 
-WORKDIR /app
-
-# Monorepo install + UI build (build context = repo root). The portal only
-# needs the kit at runtime; Vite/Svelte are pruned after building static/.
-COPY package.json package-lock.json ./
-COPY packages ./packages
-COPY apps ./apps
-RUN npm install --no-audit --no-fund \
-    && npm run build:ui --workspace dscpln-portal \
+# Build the UI, then drop the build-time dependencies from the shared base
+# image's workspace install.
+RUN npm run build:ui --workspace dscpln-portal \
     && npm prune --omit=dev
 
 ENV NODE_ENV=production

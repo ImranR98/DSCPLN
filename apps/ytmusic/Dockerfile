@@ -1,18 +1,13 @@
-FROM node:24-slim
+FROM imranrdev/dscpln-base:latest
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         python3 python3-venv python3-pip ffmpeg ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-
-# Monorepo install (build context = repo root).
-COPY package.json package-lock.json ./
-COPY packages ./packages
-COPY apps ./apps
-RUN npm install --no-audit --no-fund \
-    && npm run build:ui --workspace dscpln-ytmusic \
+# Build this app's UI, then drop the build-time dependencies from the shared
+# base image's workspace install.
+RUN npm run build:ui --workspace dscpln-ytmusic \
     && npm prune --omit=dev
 
 # The downloader's Python environment (ytmusicapi, yt-dlp, dotenv).

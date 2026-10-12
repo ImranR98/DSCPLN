@@ -1,4 +1,4 @@
-FROM node:24-slim
+FROM imranrdev/dscpln-base:latest
 
 # Runtime tools used by the configured bash tasks: file operations, git
 # commits, age encryption, archives, JSON, SSH and the Python pty helper.
@@ -7,16 +7,10 @@ RUN apt-get update \
         bash rsync openssh-client git age jq unzip tar wget python3 python3-venv python3-pip ca-certificates adb \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-
-# Monorepo install (build context = repo root): the shared kits, this app and
-# the config/state. Tasks may provision venvs/npm deps at run time, so the app tree
-# must be writable by the runtime user.
-COPY package.json package-lock.json ./
-COPY packages ./packages
-COPY apps ./apps
-RUN npm install --no-audit --no-fund \
-    && npm run build:ui --workspace dscpln-task-runner \
+# Tasks may provision venvs/npm deps at run time, so the app tree must be
+# writable by the runtime user; prune dev dependencies from the shared base
+# image's workspace install after building the UI.
+RUN npm run build:ui --workspace dscpln-task-runner \
     && npm prune --omit=dev
 RUN chown -R node:node /app
 

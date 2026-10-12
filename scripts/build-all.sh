@@ -59,6 +59,9 @@ if [ "$PIN" = 1 ] && [ -n "$(git -C "$INFRA_DIR" status --porcelain 2>/dev/null)
     exit 1
 fi
 
+# Every app image builds FROM the shared base, so refresh it first.
+"$ROOT/scripts/build-base.sh"
+
 declare -A DIGESTS=()
 for app in "${APPS[@]}"; do
     image="${REGISTRY:-docker.io}/${IMAGE_ORG:-imranrdev}/${IMAGE_NAMES[$app]:-dscpln-$app}:latest"

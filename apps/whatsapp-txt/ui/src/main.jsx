@@ -1,6 +1,6 @@
-import { createRoot } from 'react-dom/client'
 import '@dscpln/ui-kit/app.css'
 import './whatsapp.css'
+import { mountApp } from '@dscpln/ui-kit'
 import App from './App.jsx'
 
-createRoot(document.getElementById('app')).render(<App />)
+mountApp(App)

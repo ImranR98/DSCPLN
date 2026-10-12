@@ -1,13 +1,3 @@
-import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { appViteConfig } from '@dscpln/ui-kit/vite'
 
-export default defineConfig({
-  root: fileURLToPath(new URL('./ui', import.meta.url)),
-  base: './',
-  plugins: [react()],
-  build: {
-    outDir: fileURLToPath(new URL('./static', import.meta.url)),
-    emptyOutDir: true,
-  },
-})
+export default appViteConfig(import.meta.url)

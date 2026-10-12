@@ -6,7 +6,8 @@
   "main": "./src/lib/index.js",
   "exports": {
     ".": "./src/lib/index.js",
-    "./app.css": "./src/app.css"
+    "./app.css": "./src/app.css",
+    "./vite": "./vite.mjs"
   },
   "dependencies": {
     "@picocss/pico": "^2.1.1",
@@ -15,5 +16,9 @@
   "peerDependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.4",
+    "@vitejs/plugin-react": "^6.1.2"
   }
 }

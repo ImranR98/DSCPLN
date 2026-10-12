@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Import, Menu, RefreshCw, X } from 'lucide-react'
 import { apiUrl, formatDateTime, getJson, postJson, ThemeToggle } from '@dscpln/ui-kit'
 
@@ -89,7 +89,7 @@ export default function App() {
   const [loadedFirst, setLoadedFirst] = useState(0)
   const [loadedLast, setLoadedLast] = useState(-1)
   const [loading, setLoading] = useState(false)
-  const [palettes, setPalettes] = useState(new Map())
+
   const [skeleton, setSkeleton] = useState(false)
   const [bannerText, setBannerText] = useState('')
   const [bannerVisible, setBannerVisible] = useState(false)
@@ -138,20 +138,20 @@ export default function App() {
     setBannerVisible(false)
   }
 
+  // Deterministic sender colors, computed once per conversation list (never
+  // during render): storing this in state used to trigger React error #301
+  // ("too many re-renders") with one nested update per conversation.
+  const palettes = useMemo(() => {
+    const map = new Map()
+    for (const entry of conversations) {
+      map.set(entry.id, buildSenderPalette(entry.senders))
+    }
+    return map
+  }, [conversations])
+
   const senderColor = (conversationId, sender) => {
     if (!sender) return null
-    if (!palettes.has(conversationId)) {
-      const entry = byId.get(conversationId)
-      const palette = buildSenderPalette(entry ? entry.senders : [])
-      const next = new Map(palettes)
-      next.set(conversationId, palette)
-      setPalettes(next)
-      return palette.get(sender) ?? {
-        light: `hsl(${senderHue(sender)} 55% 38%)`,
-        dark: `hsl(${senderHue(sender)} 60% 74%)`,
-      }
-    }
-    return palettes.get(conversationId).get(sender) ?? {
+    return palettes.get(conversationId)?.get(sender) ?? {
       light: `hsl(${senderHue(sender)} 55% 38%)`,
       dark: `hsl(${senderHue(sender)} 60% 74%)`,
     }
@@ -208,7 +208,6 @@ export default function App() {
     const next = await getJson('api/conversations')
     setConversations(next)
     setById(new Map(next.map((entry) => [entry.id, entry])))
-    setPalettes(new Map())
   }
 
   const loadMeta = async () => {

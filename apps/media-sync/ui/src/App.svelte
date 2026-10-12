@@ -1,42 +1,52 @@
 <script>
   import { onMount } from 'svelte'
-  import { Play, Pause, Settings, RefreshCw, FlaskConical } from 'lucide-svelte'
-  import { apiUrl, formatBytes, formatDateTime, formatDuration, formatTime, getJson, postJson, putJson, ThemeToggle, LogDialog } from '@dscpln/ui-kit'
+  import { CalendarDays, Import, Pause, Play, RefreshCw, Settings, FlaskConical, Wrench, X } from 'lucide-svelte'
+  import { apiUrl, formatBytes, formatDateTime, formatDuration, formatTime, getJson, postJson, putJson, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
 
-  const STATUS_VARIANT = {
-    pending: 'secondary', queued: 'primary', processing: 'primary', review: 'primary',
-    done: 'success', duplicate: 'secondary', error: 'danger', conflict: 'warning',
-    discarded: 'secondary', ignored: 'secondary', cleaned: 'secondary',
-  }
   const STATUS_RANK = { error: 0, conflict: 1, queued: 2, processing: 3, pending: 4, review: 5, done: 6, duplicate: 7, discarded: 8, cleaned: 9, ignored: 10 }
+  const METHOD_LABEL = { standardize: 'standardize', snapchat: 'snapchat', copy: 'copy', voicenotes: 'voicenotes' }
   const FILE_LIMIT = 300
 
   let state = $state(null)
-  let toasts = $state([])
-  let toastId = 0
-  let confirmDialog = $state(null) // { title, text, confirmLabel, resolve }
-  let reportDialog = $state(null) // { title, entries }
-  let cleanupDialog = $state(null) // { folder, files, totalBytes, selected:Set }
-  let setDateDialog = $state(null) // { folder, file, date, time, error }
-  let restoreDialog = $state(null) // { items, dir, error }
-  let reviewDialog = $state(null) // { entries, selectedGroups:Set }
+  let now = $state(Date.now())
+  let confirmDialog = $state(null)
+  let reportDialog = $state(null)
+  let cleanupDialog = $state(null)
+  let setDateDialog = $state(null)
+  let restoreDialog = $state(null)
+  let reviewDialog = $state(null)
   let settingsDraft = $state(null)
-  let logDialog = $state(null)
-  let trashDialog = $state(null)
   let expanded = $state(new Set())
+  let trash = $state({ entries: [], selectAll: false })
   let trashSelection = $state(new Set())
+  let logLines = $state([])
 
-  function notify(message, tone = 'success') {
-    const id = ++toastId
-    toasts = [...toasts, { id, message, tone }]
-    setTimeout(() => (toasts = toasts.filter((t) => t.id !== id)), 6000)
-  }
+  const notify = (message, tone = 'success') => showToast(message, tone)
 
   async function refresh() {
     try {
       state = await getJson('api/state')
     } catch (err) {
       notify(`Could not load state: ${err.message}`, 'error')
+    }
+  }
+
+  async function refreshTrash() {
+    try {
+      const { entries } = await getJson('api/trash')
+      trash = { entries, selectAll: false }
+      trashSelection = new Set()
+    } catch {
+      // keep the last list
+    }
+  }
+
+  async function refreshLog() {
+    try {
+      const { lines } = await getJson('api/log?limit=200')
+      logLines = lines ?? []
+    } catch {
+      // keep the last log
     }
   }
 
@@ -51,6 +61,10 @@
     }
     return counters
   })
+
+  const trashCount = $derived((trash.entries ?? []).reduce((sum, entry) => sum + (entry.count ?? 0), 0))
+  const statusText = $derived(state?.paused ? 'paused' : state?.dryRun ? 'dry run' : 'live')
+  const statusTone = $derived(state?.paused ? 'paused' : state?.dryRun ? 'dry' : 'live')
 
   function folderStats(folder) {
     const counts = folder.counts ?? {}
@@ -70,6 +84,18 @@
     }
   }
 
+  function folderContext(folder) {
+    const parts = [`settle ${formatDuration(folder.settleSeconds)}`]
+    if (folder.method === 'snapchat') parts.push(`window ${formatDuration(folder.groupWindowSeconds)}`)
+    if (folder.method === 'copy') {
+      parts.push(folder.recursive ? 'recursive mirror' : 'flat copy')
+      parts.push(`on change: ${folder.onChanged}`)
+    }
+    if (folder.placement === 'manual') parts.push('review before placing')
+    if (folder.filePattern) parts.push(folder.filePattern)
+    return parts.join(' · ')
+  }
+
   function sortedFiles(folder) {
     return [...folder.files]
       .sort((a, b) => {
@@ -79,12 +105,12 @@
       .slice(0, FILE_LIMIT)
   }
 
-  // ---------- actions ----------
+  /* ---------- actions ---------- */
 
   async function act(path, body = {}) {
     try {
       const result = await postJson(path, body)
-      await refresh()
+      await Promise.all([refresh(), refreshLog()])
       return result
     } catch (err) {
       notify(err.message, 'error')
@@ -97,13 +123,13 @@
   const togglePaused = () => act('api/pause', { paused: !state.paused })
   const toggleDryRun = () => act('api/dry-run', { dryRun: !state.dryRun })
 
-  function askConfirm(title, text, confirmLabel) {
+  function askConfirm(title, text, confirmLabel, tone = 'danger') {
     return new Promise((resolve) => {
-      confirmDialog = { title, text, confirmLabel, resolve: (value) => { confirmDialog = null; resolve(value) } }
+      confirmDialog = { title, text, confirmLabel, tone, resolve: (value) => { confirmDialog = null; resolve(value) } }
     })
   }
 
-  // ---------- cleanup ----------
+  /* ---------- cleanup ---------- */
 
   async function openCleanup(folderName) {
     try {
@@ -112,7 +138,7 @@
         notify('Nothing to clean up in this folder.', 'error')
         return
       }
-      cleanupDialog = { folder: folderName, files: preview.files, totalBytes: preview.totalBytes, selected: new Set(preview.files.map((f) => f.name)) }
+      cleanupDialog = { folder: folderName, files: preview.files, totalBytes: preview.totalBytes, selected: new Set(preview.files.map((file) => file.name)) }
     } catch (err) {
       notify(err.message, 'error')
     }
@@ -128,27 +154,30 @@
     cleanupDialog = null
     try {
       const { results } = await postJson(`api/cleanup/${encodeURIComponent(folder)}`, { names })
-      const failed = results.filter((r) => !r.ok)
+      const failed = results.filter((result) => !result.ok)
       notify(`Moved ${results.length - failed.length} file(s) to trash.`, failed.length ? 'error' : 'success')
-      if (failed.length) reportDialog = { title: 'Cleanup finished with issues', entries: failed }
+      if (failed.length) reportDialog = { entries: failed }
     } catch (err) {
       notify(`Cleanup failed: ${err.message}`, 'error')
     }
     refresh()
+    refreshTrash()
   }
 
   async function cleanupAll() {
-    if (!(await askConfirm('Cleanup all folders', `Move ${totals.processed} processed original(s) to trash? Destination copies are verified first.`, 'Cleanup all'))) return
+    if (!(await askConfirm('Confirm', `Move ${totals.processed} processed original(s) to trash? Destination copies are verified first.`, 'Cleanup all'))) return
     try {
       await postJson('api/cleanup-all', {})
       notify('Cleanup finished.')
       refresh()
+      refreshTrash()
+      refreshLog()
     } catch (err) {
       notify(`Cleanup failed: ${err.message}`, 'error')
     }
   }
 
-  // ---------- review ----------
+  /* ---------- review ---------- */
 
   async function openReview() {
     try {
@@ -217,7 +246,7 @@
 
   async function reviewAction(folder, id, place) {
     const path = place ? 'api/review/place' : 'api/review/discard'
-    if (!place && !(await askConfirm('Discard', 'Discard this parked item?', 'Discard'))) return
+    if (!place && !(await askConfirm('Confirm', 'Discard this parked item?', 'Discard'))) return
     await postJson(path, { folder, id })
     await openReview()
     refresh()
@@ -225,34 +254,42 @@
 
   async function reviewActionAll(folder, place) {
     const path = place ? 'api/review/place-all' : 'api/review/discard-all'
-    if (!place && !(await askConfirm('Discard all', `Discard every parked item in ${folder}?`, 'Discard all'))) return
+    if (!place && !(await askConfirm('Confirm', `Discard every parked item in ${folder}?`, 'Discard all'))) return
     await postJson(path, { folder })
     await openReview()
     refresh()
   }
 
-  // ---------- trash ----------
+  /* ---------- trash ---------- */
 
-  async function openTrash() {
-    try {
-      const { entries } = await getJson('api/trash')
-      trashSelection = new Set()
-      trashDialog = { entries }
-    } catch (err) {
-      notify(err.message, 'error')
-    }
+  function trashKey(day, name) {
+    return `${day}/${name}`
+  }
+
+  function toggleTrashSelection(key, checked) {
+    if (checked) trashSelection.add(key)
+    else trashSelection.delete(key)
+    trashSelection = trashSelection
+    trash = trash
+  }
+
+  function selectAllTrash(checked) {
+    const keys = trash.entries.flatMap((entry) => entry.files.slice(0, 300).map((file) => trashKey(entry.day, file.name)))
+    trashSelection = checked ? new Set(keys) : new Set()
+    trash = { ...trash, selectAll: checked }
   }
 
   async function restoreFiles(items, targetDir) {
     try {
       const { results } = await postJson('api/trash/restore', { files: items, targetDir: targetDir || null })
-      const failed = results.filter((r) => !r.ok)
+      const failed = results.filter((result) => !result.ok)
       notify(`Restored ${results.length - failed.length} file(s).`, failed.length ? 'error' : 'success')
-      if (failed.length) reportDialog = { title: 'Restore finished with issues', entries: failed.map((f) => ({ name: f.name, reason: f.reason })) }
+      if (failed.length) reportDialog = { entries: failed.map((file) => ({ name: file.name, reason: file.reason })) }
     } catch (err) {
       notify(err.message, 'error')
     }
-    await openTrash()
+    await refreshTrash()
+    refresh()
   }
 
   function restoreSelected() {
@@ -268,12 +305,13 @@
   }
 
   async function emptyTrash() {
-    if (!(await askConfirm('Empty trash', 'Permanently delete every trashed file?', 'Empty trash'))) return
+    if (!(await askConfirm('Confirm', 'Permanently delete every trashed file?', 'Empty trash'))) return
     await postJson('api/trash/empty', {})
-    await openTrash()
+    await refreshTrash()
+    refreshLog()
   }
 
-  // ---------- settings ----------
+  /* ---------- settings ---------- */
 
   function openSettings() {
     settingsDraft = structuredClone($state.snapshot(state.config))
@@ -317,14 +355,25 @@
     }
   }
 
+  function toggleExpanded(name, open) {
+    if (open) expanded.add(name)
+    else expanded.delete(name)
+    expanded = expanded
+  }
+
   onMount(() => {
     refresh()
-    const timer = setInterval(refresh, 5000)
+    refreshTrash()
+    refreshLog()
+    const timer = setInterval(() => {
+      now = Date.now()
+      refresh()
+      refreshLog()
+    }, 5000)
     return () => clearInterval(timer)
   })
 
-  // Parked items appear asynchronously after processing; keep the review dialog
-  // fresh while it is open.
+  // Parked items appear asynchronously after processing; keep the review dialog fresh.
   $effect(() => {
     if (!reviewDialog) return
     const timer = setInterval(async () => {
@@ -339,164 +388,301 @@
   })
 </script>
 
-<header class="app-header container">
+<header class="app-header">
   <div class="app-header__top">
-    <h1>D<span class="accent">$</span>CPLN <span class="app-name">&middot; Media Sync</span></h1>
+    <h1>D<span class="accent">$</span>CPLN <span class="app-header__app">⋅ Media Sync</span></h1>
     <div class="app-header__actions">
-      <span class={`status-tag ${state?.paused ? 'status-warn' : state?.dryRun ? '' : 'status-ok'}`}>
-        {state?.paused ? 'paused' : state?.dryRun ? 'dry run' : 'live'}
-      </span>
-      <small>{totals.pending} pending · {totals.issues} issue{totals.issues === 1 ? '' : 's'}</small>
-      <button class="outline secondary" title={state?.paused ? 'Resume processing' : 'Pause processing'}
-        onclick={togglePaused}>{#if state?.paused}<Play size={16} />{:else}<Pause size={16} />{/if}</button>
-      <button class="outline secondary" title="Toggle dry run" onclick={toggleDryRun}><FlaskConical size={16} /></button>
-      <button class="outline secondary" title="Settings" onclick={openSettings}><Settings size={16} /></button>
-      <button class="outline secondary" title="Refresh" onclick={refresh}><RefreshCw size={16} /></button>
+      <button class="outline secondary icon-button" title={state?.paused ? 'Resume processing' : 'Pause processing'} aria-label="Pause/Resume" onclick={togglePaused}>
+        {#if state?.paused}<Play size={16} strokeWidth={1.8} />{:else}<Pause size={16} strokeWidth={1.8} />{/if}
+      </button>
+      <button class="outline secondary icon-button" title="Toggle dry-run mode" aria-label="Toggle dry-run mode" onclick={toggleDryRun}>
+        <FlaskConical size={16} strokeWidth={1.8} />
+      </button>
+      <button class="outline secondary icon-button" title="Settings" aria-label="Settings" onclick={openSettings}>
+        <Settings size={16} strokeWidth={1.8} />
+      </button>
+      <button class="outline secondary icon-button" title="Refresh" aria-label="Refresh" onclick={() => { refresh(); refreshTrash(); refreshLog() }}>
+        <RefreshCw size={16} strokeWidth={1.8} />
+      </button>
       <ThemeToggle />
     </div>
   </div>
-  <p class="app-header__meta"><small>{state ? `updated ${formatTime(Date.now())}` : ''}</small></p>
+  <div class="app-header__meta">
+    <span class={`status-tag status-tag--${statusTone}`}><span>{statusText}</span></span>
+    <span class="app-header__meta-tools">
+      <span class="muted">{totals.pending} pending · {totals.issues} issue{totals.issues === 1 ? '' : 's'}</span>
+      <span class="muted">{state ? `updated ${formatTime(now)}` : ''}</span>
+    </span>
+  </div>
 </header>
 
-<main class="container">
-  <article>
-    <header><strong>Overview</strong><small>{state?.folders?.length ?? 0} folder(s) watched</small></header>
-    <dl class="tiles">
-      <div><dt>Pending</dt><dd>{totals.pending}</dd></div>
-      <div><dt>Processing</dt><dd>{totals.processing}</dd></div>
-      <div><dt>Processed</dt><dd>{totals.processed}</dd></div>
-      <div><dt>Issues</dt><dd class={totals.issues ? 'status-over' : ''}>{totals.issues}</dd></div>
-    </dl>
-    <footer class="actions">
-      <button class="secondary" onclick={openReview}>Review</button>
-      <button class="secondary" onclick={openTrash}>Trash</button>
-      <button class="secondary" onclick={() => logDialog.show()}>Activity log</button>
-      <button disabled={!totals.processed} onclick={cleanupAll}>Cleanup all ({totals.processed})</button>
-    </footer>
-  </article>
+<main>
+  <section class="card card--hero" id="overviewCard" aria-labelledby="overviewHeading">
+    <div class="card__header">
+      <h2 id="overviewHeading">Overview</h2>
+      <span class="card__header-tools">
+        <span class="card__context">{state?.folders?.length ?? 0} folder{state?.folders?.length === 1 ? '' : 's'} watched</span>
+      </span>
+    </div>
+    <div class="overview__grid">
+      <div class="stat-tile">
+        <span class="stat-tile__label">Pending</span>
+        <span class="stat-tile__value">{totals.pending}</span>
+      </div>
+      <div class="stat-tile">
+        <span class="stat-tile__label">Processing</span>
+        <span class="stat-tile__value">{totals.processing}</span>
+      </div>
+      <div class="stat-tile">
+        <span class="stat-tile__label">Processed</span>
+        <span class="stat-tile__value">{totals.processed}</span>
+      </div>
+      <div class="stat-tile">
+        <span class="stat-tile__label">Issues</span>
+        <span class="stat-tile__value" class:is-over={totals.issues > 0}>{totals.issues}</span>
+      </div>
+      <div class="stat-tile">
+        <span class="stat-tile__label">Trash</span>
+        <span class="stat-tile__value">{trashCount}</span>
+      </div>
+    </div>
+    <div class="overview__actions">
+      <button class="outline secondary" onclick={openReview}>Review</button>
+      <button disabled={!totals.processed} onclick={cleanupAll}>Cleanup all{totals.processed ? ` (${totals.processed})` : ''}</button>
+    </div>
+  </section>
 
-  {#each state?.folders ?? [] as folder (folder.name)}
-    {@const stats = folderStats(folder)}
-    <article class:card-over={folder.counts.conflict} class:card-warn={!folder.counts.conflict && stats.issues}>
-      <header>
-        <span>
-          <strong>{folder.name}</strong>
-          <small> · {folder.method}</small>
-          {#if !folder.exists}<small class="status-over"> · source unavailable</small>{/if}
-        </span>
-        <small>{folder.source} → {folder.destination}</small>
-      </header>
+  <div class="folder-grid">
+    {#each state?.folders ?? [] as folder (folder.name)}
+      {@const stats = folderStats(folder)}
+      <section class="card folder-card" class:card--over={folder.counts.conflict} class:card--warn={!folder.counts.conflict && stats.issues}>
+        <div class="card__header">
+          <div class="folder-title">
+            <h2>{folder.name}</h2>
+            <span class="method-badge">{METHOD_LABEL[folder.method] ?? folder.method}</span>
+            {#if !folder.exists}<span class="status-tag status-tag--interrupted"><span>source unavailable</span></span>{/if}
+          </div>
+          <span class="card__context">{folderContext(folder)}</span>
+        </div>
 
-      <p class="figure">
-        <strong>{stats.pending}</strong> pending of {stats.total} file{stats.total === 1 ? '' : 's'}
-        {#if folder.lastEventAt} · last change {formatDateTime(folder.lastEventAt)}{/if}
-        · {stats.processed} processed{#if stats.ignored > 0} · {stats.ignored} ignored{/if}
-      </p>
-      <progress value={stats.percent} max="100"></progress>
+        <p class="figure">
+          <span class="figure__spend">{stats.pending}</span>
+          <span class="figure__meta">
+            <span class="figure__of">pending of</span>
+            <span class="figure__budget">{stats.total} file{stats.total === 1 ? '' : 's'}</span>
+          </span>
+        </p>
 
-      <dl class="tiles compact">
-        <div><dt>pending</dt><dd>{stats.pending}</dd></div>
-        <div><dt>processing</dt><dd>{stats.processing}</dd></div>
-        <div><dt>processed</dt><dd>{stats.processed}</dd></div>
-        <div><dt>issues</dt><dd class={stats.issues ? 'status-over' : ''}>{stats.issues}</dd></div>
-      </dl>
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={stats.percent}>
+          <div class="progress__fill" style={`width: ${stats.percent}%`}></div>
+        </div>
 
-      <footer class="actions">
-        <button class="secondary" onclick={() => processNow(folder.name)}>Process now</button>
-        {#if folder.placement === 'manual' || stats.review > 0}
-          <button class={stats.review > 0 ? '' : 'secondary'} onclick={openReview}>
-            Review{stats.review > 0 ? ` (${stats.review})` : ''}
-          </button>
-        {/if}
-        {#if stats.processed > 0 && folder.cleanup !== false}
-          <button onclick={() => openCleanup(folder.name)}>Cleanup {stats.processed}</button>
-        {/if}
-      </footer>
+        <p class="pace">
+          {#if folder.lastEventAt}last change {formatDateTime(folder.lastEventAt)} · {/if}{stats.processed} processed{#if stats.ignored > 0} · {stats.ignored} ignored{/if}
+        </p>
 
-      <details open={expanded.has(folder.name)} ontoggle={(event) => {
-        if (event.target.open) expanded.add(folder.name); else expanded.delete(folder.name)
-        expanded = expanded
-      }}>
-        <summary>Files · {folder.files.length}</summary>
-        {#if !folder.files.length}
-          <p><small>No files in this folder right now.</small></p>
-        {:else}
-          <ul class="files">
-            {#each sortedFiles(folder) as file (file.name)}
-              <li>
-                <span>
-                  <code>{file.name}</code>
-                  {#if file.message}<small> · {file.message}</small>{/if}
-                  {#if file.attempts}<small> · attempt {file.attempts}</small>{/if}
-                  {#if file.destName}<small> → {file.destName}</small>{/if}
-                </span>
-                <span class="file-meta">
-                  <small>{formatBytes(file.size)} · {formatDateTime(file.mtimeMs)}</small>
-                  <span class={`badge badge-${STATUS_VARIANT[file.status] ?? 'secondary'}`}>{file.status}</span>
-                  {#if file.status === 'error' || file.status === 'conflict'}
-                    <button class="secondary outline sm" onclick={() => fileAction(folder.name, file.name, 'retry')}>Retry</button>
-                  {/if}
-                  {#if file.status === 'error'}
-                    <button class="secondary outline sm" onclick={() => fileAction(folder.name, file.name, 'repair')}>Repair</button>
-                    <button class="secondary outline sm" onclick={() => (setDateDialog = { folder: folder.name, file: file.name, date: '', time: '00:00', error: '' })}>Set date</button>
-                  {/if}
-                  {#if ['error', 'conflict', 'pending'].includes(file.status)}
-                    <button class="secondary outline sm" onclick={() => fileAction(folder.name, file.name, 'import')}>Import</button>
-                  {/if}
-                </span>
-              </li>
-            {/each}
-          </ul>
-          {#if folder.files.length > FILE_LIMIT}
-            <p><small>… and {folder.files.length - FILE_LIMIT} more file(s)</small></p>
+        <div class="stat-tiles">
+          <div class="stat-tile"><span class="stat-tile__label">pending</span><span class="stat-tile__value">{stats.pending}</span></div>
+          <div class="stat-tile"><span class="stat-tile__label">processing</span><span class="stat-tile__value">{stats.processing}</span></div>
+          <div class="stat-tile"><span class="stat-tile__label">processed</span><span class="stat-tile__value">{stats.processed}</span></div>
+          <div class="stat-tile"><span class="stat-tile__label">issues</span><span class="stat-tile__value" class:is-over={stats.issues > 0}>{stats.issues}</span></div>
+        </div>
+
+        <p class="folder-paths">
+          <code>{folder.source}</code>
+          <span class="folder-paths__arrow">→</span>
+          <code>{folder.destination}</code>
+        </p>
+
+        <div class="folder-card__actions">
+          <button class="outline secondary" onclick={() => processNow(folder.name)}>Process now</button>
+          {#if folder.placement === 'manual' || stats.review > 0}
+            <button class={stats.review > 0 ? '' : 'outline secondary'} onclick={openReview}>
+              Review{stats.review > 0 ? ` (${stats.review})` : ''}
+            </button>
           {/if}
-        {/if}
-      </details>
-    </article>
-  {/each}
+          {#if stats.processed > 0 && folder.cleanup !== false}
+            <button onclick={() => openCleanup(folder.name)}>Cleanup {stats.processed}</button>
+          {/if}
+        </div>
 
-  {#if state && !state.folders.length}
-    <article><p>No folders configured yet — open Settings to add one.</p></article>
-  {/if}
+        <details open={expanded.has(folder.name)} ontoggle={(event) => toggleExpanded(folder.name, event.target.open)}>
+          <summary>Files · {folder.files.length}</summary>
+          {#if !folder.files.length}
+            <p class="muted files-empty">No files in this folder right now.</p>
+          {:else}
+            <ul class="files__list">
+              {#each sortedFiles(folder) as file (file.name)}
+                <li class={`file file--${file.status}`}>
+                  <div class="file__main">
+                    <span class="file__name">{file.name}</span>
+                    {#if file.message || file.attempts || file.destName}
+                      <span class="file__notes">
+                        {[file.message, file.attempts ? `attempt ${file.attempts}` : null, file.destName ? `→ ${file.destName}` : null].filter(Boolean).join(' · ')}
+                      </span>
+                    {/if}
+                  </div>
+                  <div class="file__meta">
+                    <span class="file__size">{formatBytes(file.size)}</span>
+                    <span class="file__date">{formatDateTime(file.mtimeMs)}</span>
+                    <span class={`pill pill--${file.status === 'done' ? 'ok' : file.status === 'error' ? 'fail' : file.status === 'conflict' ? 'neutral' : 'running'}`}>{file.status}</span>
+                  </div>
+                  <div class="file__actions">
+                    {#if file.status === 'error' || file.status === 'conflict'}
+                      <button class="outline secondary icon-button icon-button--small" title="Retry" aria-label={`Retry ${file.name}`} onclick={() => fileAction(folder.name, file.name, 'retry')}>
+                        <RefreshCw size={14} strokeWidth={1.8} />
+                      </button>
+                    {/if}
+                    {#if file.status === 'error'}
+                      <button class="outline secondary icon-button icon-button--small" title="Repair (ffmpeg remux)" aria-label={`Repair ${file.name}`} onclick={() => fileAction(folder.name, file.name, 'repair')}>
+                        <Wrench size={14} strokeWidth={1.8} />
+                      </button>
+                      <button class="outline secondary icon-button icon-button--small" title="Set date and retry" aria-label={`Set date for ${file.name}`} onclick={() => (setDateDialog = { folder: folder.name, file: file.name, date: '', time: '00:00', error: '' })}>
+                        <CalendarDays size={14} strokeWidth={1.8} />
+                      </button>
+                    {/if}
+                    {#if file.status === 'error' || file.status === 'conflict' || file.status === 'pending'}
+                      <button class="outline secondary icon-button icon-button--small" title="Import as-is" aria-label={`Import ${file.name} as-is`} onclick={() => fileAction(folder.name, file.name, 'import')}>
+                        <Import size={14} strokeWidth={1.8} />
+                      </button>
+                    {/if}
+                  </div>
+                </li>
+              {/each}
+            </ul>
+            {#if folder.files.length > FILE_LIMIT}
+              <p class="muted files-empty">… and {folder.files.length - FILE_LIMIT} more file(s)</p>
+            {/if}
+          {/if}
+        </details>
+      </section>
+    {/each}
+    {#if state && !state.folders.length}
+      <section class="card"><p class="muted">No folders configured yet — open Settings to add one.</p></section>
+    {/if}
+  </div>
+
+  <div class="side-grid">
+    <section class="card" id="trashCard" aria-labelledby="trashHeading">
+      <div class="card__header">
+        <h2 id="trashHeading">Trash</h2>
+        <span class="card__header-tools">
+          <span class="card__context">{trash.entries.length} day(s) · keeping {state?.trashRetentionDays} days</span>
+          <button class="outline secondary icon-button" title="Refresh trash" aria-label="Refresh trash" onclick={refreshTrash}>
+            <RefreshCw size={16} strokeWidth={1.8} />
+          </button>
+        </span>
+      </div>
+      {#if trash.entries.length}
+        <label class="checklist__row">
+          <input type="checkbox" checked={trash.selectAll} onchange={(event) => selectAllTrash(event.target.checked)} />
+          <span class="checklist__main">Select all</span>
+        </label>
+        <div class="trash__list">
+          {#each trash.entries as entry (entry.day)}
+            <details>
+              <summary>{entry.day} · {entry.count} file(s) · {formatBytes(entry.bytes)}</summary>
+              {#each entry.files.slice(0, 300) as file (file.name)}
+                {@const key = trashKey(entry.day, file.name)}
+                <label class="checklist__row">
+                  <input type="checkbox" checked={trashSelection.has(key)} onchange={(event) => toggleTrashSelection(key, event.target.checked)} />
+                  <span class="checklist__main">{file.name}</span>
+                  <span class="checklist__meta">{formatBytes(file.size)} · {file.folder ?? file.sourceDir ?? 'origin unknown'}</span>
+                </label>
+              {/each}
+              {#if entry.count > 300}<p class="muted files-empty">… and {entry.count - 300} more</p>{/if}
+            </details>
+          {/each}
+        </div>
+      {:else}
+        <p class="muted files-empty">Trash is empty.</p>
+      {/if}
+      <div class="trash-actions">
+        {#if trashSelection.size}
+          <button onclick={restoreSelected}>Restore selected ({trashSelection.size})</button>
+        {/if}
+        {#if trash.entries.length}
+          <button class="danger" onclick={emptyTrash}>Empty trash</button>
+        {/if}
+      </div>
+    </section>
+
+    <section class="card" id="activityCard" aria-labelledby="activityHeading">
+      <div class="card__header">
+        <h2 id="activityHeading">Activity</h2>
+        <span class="card__header-tools">
+          <button class="outline secondary icon-button" title="Refresh log" aria-label="Refresh log" onclick={refreshLog}>
+            <RefreshCw size={16} strokeWidth={1.8} />
+          </button>
+        </span>
+      </div>
+      <pre class="code-block activity-log">{logLines.join('\n') || 'No activity yet.'}</pre>
+    </section>
+  </div>
 </main>
 
 <!-- cleanup -->
 {#if cleanupDialog}
-  <dialog open>
+  <dialog open class="wide-dialog">
     <article>
-      <header><strong>Cleanup {cleanupDialog.folder}</strong></header>
-      <p><small>{cleanupDialog.files.length} processed file(s), {formatBytes(cleanupDialog.totalBytes)}. Each destination copy is verified before the original is moved to trash.</small></p>
-      <label><input type="checkbox" checked={cleanupDialog.selected.size === cleanupDialog.files.length}
-        onchange={(event) => (cleanupDialog.selected = event.target.checked ? new Set(cleanupDialog.files.map((f) => f.name)) : new Set())} /> Select all</label>
-      {#each cleanupDialog.files as file (file.name)}
-        <label>
-          <input type="checkbox" checked={cleanupDialog.selected.has(file.name)}
-            onchange={(event) => {
-              if (event.target.checked) cleanupDialog.selected.add(file.name)
-              else cleanupDialog.selected.delete(file.name)
-              cleanupDialog = cleanupDialog
-            }} />
-          <code>{file.name}</code>{#if file.destName} <small>→ {file.destName}</small>{/if}
-        </label>
-      {/each}
-      <footer>
-        <button class="secondary" onclick={() => (cleanupDialog = null)}>Cancel</button>
-        <button onclick={runCleanup}>Move to trash ({cleanupDialog.selected.size})</button>
-      </footer>
+      <header class="card__header">
+        <h2>Cleanup {cleanupDialog.folder}</h2>
+        <span class="card__header-tools">
+          <button class="outline secondary icon-button" aria-label="Close" onclick={() => (cleanupDialog = null)}>&times;</button>
+        </span>
+      </header>
+      <p class="hint">{cleanupDialog.files.length} processed file(s), {formatBytes(cleanupDialog.totalBytes)}. Each destination copy is verified before the original is moved to trash.</p>
+      <label class="checklist__row">
+        <input type="checkbox" checked={cleanupDialog.selected.size === cleanupDialog.files.length}
+          onchange={(event) => (cleanupDialog.selected = event.target.checked ? new Set(cleanupDialog.files.map((file) => file.name)) : new Set())} />
+        <span class="checklist__main">Select all</span>
+      </label>
+      <div class="checklist">
+        {#each cleanupDialog.files as file (file.name)}
+          <label class="checklist__row">
+            <input type="checkbox" checked={cleanupDialog.selected.has(file.name)}
+              onchange={(event) => {
+                if (event.target.checked) cleanupDialog.selected.add(file.name)
+                else cleanupDialog.selected.delete(file.name)
+                cleanupDialog = cleanupDialog
+              }} />
+            <span class="checklist__main">{file.name}</span>
+            <span class="checklist__meta">{file.destName ? `→ ${file.destName}` : ''}</span>
+          </label>
+        {/each}
+      </div>
+      <div class="dialog-actions">
+        <button class="outline secondary" onclick={() => (cleanupDialog = null)}>Cancel</button>
+        <button class="danger" onclick={runCleanup}>Move to trash</button>
+      </div>
     </article>
   </dialog>
 {/if}
 
 <!-- set date -->
 {#if setDateDialog}
-  <dialog open>
+  <dialog open class="narrow-dialog">
     <article>
-      <header><strong>Set date — {setDateDialog.file}</strong></header>
-      <label>Date <input type="date" value={setDateDialog.date} oninput={(e) => (setDateDialog.date = e.target.value)} /></label>
-      <label>Time <input type="time" value={setDateDialog.time} oninput={(e) => (setDateDialog.time = e.target.value)} /></label>
-      {#if setDateDialog.error}<p class="status-over">{setDateDialog.error}</p>{/if}
-      <footer>
-        <button class="secondary" onclick={() => (setDateDialog = null)}>Cancel</button>
+      <header class="card__header">
+        <h2>Set date</h2>
+        <span class="card__header-tools">
+          <button class="outline secondary icon-button" aria-label="Close" onclick={() => (setDateDialog = null)}>&times;</button>
+        </span>
+      </header>
+      <p class="hint">The copy will be standardized with this date and placed in the destination.</p>
+      <div class="native-fields">
+        <label class="native-field">
+          <span class="field__label">Date</span>
+          <input type="date" required value={setDateDialog.date} oninput={(event) => (setDateDialog.date = event.target.value)} />
+        </label>
+        <label class="native-field">
+          <span class="field__label">Time</span>
+          <input type="time" value={setDateDialog.time} oninput={(event) => (setDateDialog.time = event.target.value)} />
+        </label>
+      </div>
+      {#if setDateDialog.error}<p class="form-error">{setDateDialog.error}</p>{/if}
+      <div class="dialog-actions">
+        <button class="outline secondary" onclick={() => (setDateDialog = null)}>Cancel</button>
         <button onclick={async () => {
           if (!setDateDialog.date) { setDateDialog.error = 'Pick a date first.'; return }
           const { folder, file, date, time } = setDateDialog
@@ -504,369 +690,233 @@
           await fileAction(folder, file, 'setDate', { date: `${date} ${time || '00:00'}` })
           notify(`Standardizing ${file} with the chosen date.`)
         }}>Standardize</button>
-      </footer>
+      </div>
     </article>
   </dialog>
 {/if}
 
 <!-- restore -->
 {#if restoreDialog}
-  <dialog open>
+  <dialog open class="narrow-dialog">
     <article>
-      <header><strong>Restore {restoreDialog.items.length} file(s)</strong></header>
-      <label>Target directory <input value={restoreDialog.dir} placeholder="e.g. /source/Camera" oninput={(e) => (restoreDialog.dir = e.target.value)} /></label>
-      {#if restoreDialog.error}<p class="status-over">{restoreDialog.error}</p>{/if}
-      <footer>
-        <button class="secondary" onclick={() => (restoreDialog = null)}>Cancel</button>
+      <header class="card__header">
+        <h2>Restore files</h2>
+        <span class="card__header-tools">
+          <button class="outline secondary icon-button" aria-label="Close" onclick={() => (restoreDialog = null)}>&times;</button>
+        </span>
+      </header>
+      <p class="hint">Files with a recorded origin return to their original folder. Files without one are restored to the directory you enter here.</p>
+      <div class="native-fields">
+        <label class="native-field">
+          <span class="field__label">Restore directory</span>
+          <input type="text" placeholder="/path/to/folder" autocomplete="off" value={restoreDialog.dir} oninput={(event) => (restoreDialog.dir = event.target.value)} />
+        </label>
+      </div>
+      {#if restoreDialog.error}<p class="form-error">{restoreDialog.error}</p>{/if}
+      <div class="dialog-actions">
+        <button class="outline secondary" onclick={() => (restoreDialog = null)}>Cancel</button>
         <button onclick={async () => {
           if (!restoreDialog.dir.trim()) { restoreDialog.error = 'Enter a directory first.'; return }
           const { items, dir } = restoreDialog
           restoreDialog = null
           await restoreFiles(items, dir.trim())
         }}>Restore</button>
-      </footer>
+      </div>
     </article>
   </dialog>
 {/if}
 
 <!-- review -->
 {#if reviewDialog}
-  <dialog open data-testid="review-dialog">
-    <article class="wide">
-      <header><strong>Review</strong></header>
+  <dialog open data-testid="review-dialog" class="wide-dialog">
+    <article>
+      <header class="card__header">
+        <h2>Review</h2>
+        <span class="card__header-tools">
+          <button class="outline secondary icon-button" aria-label="Close" onclick={() => (reviewDialog = null)}>&times;</button>
+        </span>
+      </header>
+      <p class="hint">Manual folders prepare files here without writing to the destination. Place the ones you want to keep, or discard the rest — nothing is written until you place it.</p>
       {#if !reviewFolders.length}
-        <p><small>Nothing awaiting review.</small></p>
+        <p class="muted">Nothing awaiting review.</p>
       {/if}
       {#each reviewFolders as folder (folder.name)}
         {@const parked = reviewDialog.entries.filter((entry) => entry.folder === folder.name)}
         {@const groups = folder.method === 'voicenotes' ? reviewGroups(folder) : []}
         {#if parked.length || groups.length}
-          <section>
+          <section class="review-section">
             <h3>{folder.name}</h3>
             {#if groups.length}
               <div class="review-groups">
                 {#each groups as group (group.key)}
-                  <label>
-                    <input type="checkbox" checked={reviewDialog.selectedGroups.has(group.key)}
-                      onchange={(e) => toggleGroup(group.key, e.target.checked)} />
-                    <code>{group.chat || '(root)'} · {group.date}</code>
-                    <small>{group.files.length} clip(s) · {formatBytes(group.bytes)}</small>
+                  <label class="checklist__row">
+                    <input type="checkbox" checked={reviewDialog.selectedGroups.has(group.key)} onchange={(event) => toggleGroup(group.key, event.target.checked)} />
+                    <span class="checklist__main">{group.chat || '(root)'} · {group.date} · {group.files.length} clip{group.files.length === 1 ? '' : 's'}</span>
+                    <span class="checklist__meta">{formatBytes(group.bytes)}</span>
                   </label>
                 {/each}
               </div>
-              <button class="secondary" onclick={() => processSelectedGroups(folder)}>Process selected</button>
+              <div class="folder-card__actions">
+                <button onclick={() => processSelectedGroups(folder)}>Process selected</button>
+              </div>
             {/if}
             {#each parked as entry (entry.id)}
               <div class="review-row">
-                <div>
-                  <code>{entry.destName}</code>
-                  <small> · {entry.chat || '(root)'} · {entry.inputs.length} input(s) · {formatBytes(entry.size)}{entry.missingInputs?.length ? ` · ${entry.missingInputs.length} source(s) gone` : ''}</small>
+                <div class="review-row__main">
+                  <span class="checklist__main">{entry.destName}</span>
+                  <span class="checklist__meta">
+                    {entry.chat || '(root)'} · {entry.inputs.length} input{entry.inputs.length === 1 ? '' : 's'} · {formatBytes(entry.size)}{entry.missingInputs?.length ? ` · ${entry.missingInputs.length} source(s) gone` : ''}
+                  </span>
                 </div>
                 <audio controls preload="none" src={apiUrl(`api/review/file/${encodeURIComponent(folder.name)}/${encodeURIComponent(entry.id)}`)}></audio>
-                <div class="actions">
+                <div class="review-row__actions">
                   <button onclick={() => reviewAction(folder.name, entry.id, true)}>Place</button>
-                  <button class="secondary" onclick={() => reviewAction(folder.name, entry.id, false)}>Discard</button>
+                  <button class="outline secondary" onclick={() => reviewAction(folder.name, entry.id, false)}>Discard</button>
                 </div>
               </div>
             {/each}
             {#if parked.length > 1}
-              <div class="actions">
+              <div class="folder-card__actions">
                 <button onclick={() => reviewActionAll(folder.name, true)}>Place all ({parked.length})</button>
-                <button class="secondary" onclick={() => reviewActionAll(folder.name, false)}>Discard all</button>
+                <button class="outline secondary" onclick={() => reviewActionAll(folder.name, false)}>Discard all</button>
               </div>
             {/if}
           </section>
         {/if}
       {/each}
-      <footer><button class="secondary" onclick={() => (reviewDialog = null)}>Close</button></footer>
-    </article>
-  </dialog>
-{/if}
-
-<!-- trash -->
-{#if trashDialog}
-  <dialog open>
-    <article class="wide">
-      <header><strong>Trash</strong><small>keeping {state?.trashRetentionDays} days</small></header>
-      {#if !trashDialog.entries.length}
-        <p><small>Trash is empty.</small></p>
-      {:else}
-        <div class="actions">
-          <button class="secondary" disabled={!trashSelection.size} onclick={restoreSelected}>Restore selected ({trashSelection.size})</button>
-          <button class="secondary" onclick={emptyTrash}>Empty trash</button>
-        </div>
-        {#each trashDialog.entries as entry (entry.day)}
-          <details>
-            <summary>{entry.day} · {entry.count} file(s) · {formatBytes(entry.bytes)}</summary>
-            {#each entry.files.slice(0, 300) as file (file.name)}
-              {@const key = `${entry.day}/${file.name}`}
-              <label>
-                <input type="checkbox" checked={trashSelection.has(key)}
-                  onchange={(event) => {
-                    if (event.target.checked) trashSelection.add(key)
-                    else trashSelection.delete(key)
-                    trashSelection = trashSelection
-                  }} />
-                <code>{file.name}</code>
-                <small> · {formatBytes(file.size)} · {file.folder ?? file.sourceDir ?? 'origin unknown'}</small>
-              </label>
-            {/each}
-            {#if entry.count > 300}<p><small>… and {entry.count - 300} more</small></p>{/if}
-          </details>
-        {/each}
-      {/if}
-      <footer><button class="secondary" onclick={() => (trashDialog = null)}>Close</button></footer>
+      <div class="dialog-actions">
+        <button class="outline secondary" onclick={() => (reviewDialog = null)}>Close</button>
+      </div>
     </article>
   </dialog>
 {/if}
 
 <!-- settings -->
 {#if settingsDraft}
-  <dialog open data-testid="settings-dialog">
-    <article class="wide">
-      <header><strong>Settings</strong></header>
-      <div class="form-grid">
-        <label>Concurrency <input type="number" value={settingsDraft.concurrency} oninput={(e) => (settingsDraft.concurrency = e.target.value)} /></label>
-        <label>Trash retention (days) <input type="number" value={settingsDraft.trashRetentionDays} oninput={(e) => (settingsDraft.trashRetentionDays = e.target.value)} /></label>
-        <label>Default settle (s) <input type="number" value={settingsDraft.settleSeconds} oninput={(e) => (settingsDraft.settleSeconds = e.target.value)} /></label>
-      </div>
-      <div class="form-grid">
-        <label>Staging directory <input value={settingsDraft.stagingDir} oninput={(e) => (settingsDraft.stagingDir = e.target.value)} /></label>
-        <label>Review directory <input value={settingsDraft.reviewDir} oninput={(e) => (settingsDraft.reviewDir = e.target.value)} /></label>
-        <label>Trash directory <input value={settingsDraft.trashDir} oninput={(e) => (settingsDraft.trashDir = e.target.value)} /></label>
-      </div>
-      <div class="form-grid">
-        <label>ntfy URL <input value={settingsDraft.ntfy?.url ?? ''} oninput={(e) => (settingsDraft.ntfy.url = e.target.value)} /></label>
-        <label>ntfy token <input type="password" value={settingsDraft.ntfy?.token ?? ''} oninput={(e) => (settingsDraft.ntfy.token = e.target.value)} /></label>
-      </div>
-      <label><input type="checkbox" checked={settingsDraft.ntfy?.notifySuccess !== false}
-        onchange={(e) => (settingsDraft.ntfy.notifySuccess = e.target.checked)} /> Notify when files are processed successfully</label>
-      <button class="secondary" onclick={sendTestNotification}>Send test notification</button>
+  <dialog open data-testid="settings-dialog" class="wide-dialog">
+    <article>
+      <header class="card__header">
+        <h2>Settings</h2>
+        <span class="card__header-tools">
+          <button class="outline secondary icon-button" aria-label="Close" onclick={() => (settingsDraft = null)}>&times;</button>
+        </span>
+      </header>
+      <p class="hint">Changes are written back to the config file and applied immediately. The bind host and port are fixed at deploy time.</p>
 
-      <h3>Folders</h3>
+      <div class="form-grid">
+        <div class="field"><span class="field__label">Concurrency</span><input type="number" value={settingsDraft.concurrency} oninput={(event) => (settingsDraft.concurrency = event.target.value)} /></div>
+        <div class="field"><span class="field__label">Trash retention (days)</span><input type="number" value={settingsDraft.trashRetentionDays} oninput={(event) => (settingsDraft.trashRetentionDays = event.target.value)} /></div>
+        <div class="field"><span class="field__label">Default settle (s)</span><input type="number" value={settingsDraft.settleSeconds} oninput={(event) => (settingsDraft.settleSeconds = event.target.value)} /></div>
+        <div class="field"><span class="field__label">ntfy URL</span><input value={settingsDraft.ntfy?.url ?? ''} oninput={(event) => (settingsDraft.ntfy.url = event.target.value)} /></div>
+        <div class="field"><span class="field__label">ntfy token</span><input type="password" value={settingsDraft.ntfy?.token ?? ''} oninput={(event) => (settingsDraft.ntfy.token = event.target.value)} /></div>
+      </div>
+      <div class="form-grid field-grid--checks">
+        <label><input type="checkbox" checked={settingsDraft.ntfy?.notifySuccess !== false} onchange={(event) => (settingsDraft.ntfy.notifySuccess = event.target.checked)} /> Notify when files are processed successfully</label>
+      </div>
+      <div class="form-grid">
+        <div class="field"><span class="field__label">Staging directory</span><input value={settingsDraft.stagingDir} oninput={(event) => (settingsDraft.stagingDir = event.target.value)} /></div>
+        <div class="field"><span class="field__label">Review directory</span><input value={settingsDraft.reviewDir} oninput={(event) => (settingsDraft.reviewDir = event.target.value)} /></div>
+        <div class="field"><span class="field__label">Trash directory</span><input value={settingsDraft.trashDir} oninput={(event) => (settingsDraft.trashDir = event.target.value)} /></div>
+      </div>
+      <div class="form-grid">
+        <div class="field field--wide">
+          <button class="outline secondary" onclick={sendTestNotification}>Send test notification</button>
+        </div>
+      </div>
+
+      <h3 class="settings-section">Folders</h3>
       {#each settingsDraft.folders as folder, index (index)}
-        <fieldset>
-          <legend>{folder.name || 'New folder'}</legend>
+        <div class="folder-edit">
+          <div class="folder-edit__head">
+            <h3>{folder.name || 'New folder'}</h3>
+            <button class="outline secondary icon-button icon-button--small" title="Remove this folder" aria-label="Remove this folder"
+              onclick={() => (settingsDraft.folders = settingsDraft.folders.filter((_, i) => i !== index))}>
+              <X size={14} strokeWidth={1.8} />
+            </button>
+          </div>
           <div class="form-grid">
-            <label>Name <input value={folder.name} oninput={(e) => (folder.name = e.target.value)} /></label>
-            <label>Source <input value={folder.source} oninput={(e) => (folder.source = e.target.value)} /></label>
-            <label>Destination <input value={folder.destination} oninput={(e) => (folder.destination = e.target.value)} /></label>
-            <label>Method
-              <select value={folder.method} onchange={(e) => (folder.method = e.target.value)}>
+            <div class="field"><span class="field__label">Name</span><input value={folder.name} oninput={(event) => (folder.name = event.target.value)} /></div>
+            <div class="field"><span class="field__label">Source</span><input value={folder.source} oninput={(event) => (folder.source = event.target.value)} /></div>
+            <div class="field"><span class="field__label">Destination</span><input value={folder.destination} oninput={(event) => (folder.destination = event.target.value)} /></div>
+            <div class="field"><span class="field__label">Method</span>
+              <select value={folder.method} onchange={(event) => (folder.method = event.target.value)}>
                 {#each ['standardize', 'snapchat', 'copy', 'voicenotes'] as method}<option value={method}>{method}</option>{/each}
               </select>
-            </label>
-            <label>Settle (s) <input type="number" value={folder.settleSeconds ?? 60} oninput={(e) => (folder.settleSeconds = e.target.value)} /></label>
-            <label>Group window (s) <input type="number" value={folder.groupWindowSeconds ?? 15} oninput={(e) => (folder.groupWindowSeconds = e.target.value)} /></label>
-            <label>File pattern <input value={folder.filePattern ?? ''} oninput={(e) => (folder.filePattern = e.target.value)} /></label>
-            <label>Placement
-              <select value={folder.placement ?? 'auto'} onchange={(e) => (folder.placement = e.target.value)}>
+            </div>
+            <div class="field"><span class="field__label">Settle (s)</span><input type="number" value={folder.settleSeconds ?? 60} oninput={(event) => (folder.settleSeconds = event.target.value)} /></div>
+            <div class="field"><span class="field__label">Group window (s)</span><input type="number" value={folder.groupWindowSeconds ?? 15} oninput={(event) => (folder.groupWindowSeconds = event.target.value)} /></div>
+            <div class="field"><span class="field__label">File pattern</span><input value={folder.filePattern ?? ''} oninput={(event) => (folder.filePattern = event.target.value)} /></div>
+          </div>
+          <div class="form-grid field-grid--checks">
+            <label><input type="checkbox" checked={folder.recursive === true} onchange={(event) => (folder.recursive = event.target.checked)} /> Recursive (mirror subdirectories)</label>
+            <label><input type="checkbox" checked={folder.includeHidden === true} onchange={(event) => (folder.includeHidden = event.target.checked)} /> Include hidden files</label>
+            <label><input type="checkbox" checked={folder.cleanup !== false} onchange={(event) => (folder.cleanup = event.target.checked)} /> Allow cleanup of processed originals</label>
+            <label><input type="checkbox" checked={folder.autoProcess === true} onchange={(event) => (folder.autoProcess = event.target.checked)} /> Prepare new files automatically (manual review)</label>
+          </div>
+          <div class="form-grid">
+            <div class="field"><span class="field__label">Placement</span>
+              <select value={folder.placement ?? 'auto'} onchange={(event) => (folder.placement = event.target.value)}>
                 <option value="auto">auto</option><option value="manual">manual</option>
               </select>
-            </label>
-            <label>On change
-              <select value={folder.onChanged ?? 'overwrite'} onchange={(e) => (folder.onChanged = e.target.value)}>
+            </div>
+            <div class="field"><span class="field__label">On change</span>
+              <select value={folder.onChanged ?? 'overwrite'} onchange={(event) => (folder.onChanged = event.target.value)}>
                 <option value="overwrite">overwrite</option><option value="conflict">conflict</option>
               </select>
-            </label>
-            <label>Notify on success
-              <select value={folder.notify ?? 'all'} onchange={(e) => (folder.notify = e.target.value)}>
+            </div>
+            <div class="field"><span class="field__label">Notify on success</span>
+              <select value={folder.notify ?? 'all'} onchange={(event) => (folder.notify = event.target.value)}>
                 <option value="all">all</option><option value="errors">errors</option>
               </select>
-            </label>
-            <label>Date pattern (voicenotes) <input value={folder.datePattern ?? ''} oninput={(e) => (folder.datePattern = e.target.value)} /></label>
+            </div>
+            <div class="field"><span class="field__label">Date pattern (voicenotes)</span><input value={folder.datePattern ?? ''} oninput={(event) => (folder.datePattern = event.target.value)} /></div>
           </div>
-          <div class="checks">
-            <label><input type="checkbox" checked={folder.recursive === true} onchange={(e) => (folder.recursive = e.target.checked)} /> Recursive</label>
-            <label><input type="checkbox" checked={folder.includeHidden === true} onchange={(e) => (folder.includeHidden = e.target.checked)} /> Include hidden</label>
-            <label><input type="checkbox" checked={folder.cleanup !== false} onchange={(e) => (folder.cleanup = e.target.checked)} /> Allow cleanup</label>
-            <label><input type="checkbox" checked={folder.autoProcess === true} onchange={(e) => (folder.autoProcess = e.target.checked)} /> Auto-prepare (manual review)</label>
-          </div>
-          <button class="secondary outline sm" onclick={() => (settingsDraft.folders = settingsDraft.folders.filter((_, i) => i !== index))}>Remove folder</button>
-        </fieldset>
+        </div>
       {/each}
-      <button class="secondary" onclick={addFolder}>Add folder</button>
+      <div class="folder-card__actions">
+        <button class="outline secondary" onclick={addFolder}>Add folder</button>
+      </div>
 
-      <footer>
-        <button class="secondary" onclick={() => (settingsDraft = null)}>Cancel</button>
+      <div class="dialog-actions">
+        <button class="outline secondary" onclick={() => (settingsDraft = null)}>Cancel</button>
         <button onclick={saveSettings}>Save</button>
-      </footer>
+      </div>
     </article>
   </dialog>
 {/if}
 
 <!-- confirm -->
 {#if confirmDialog}
-  <dialog open data-testid="confirm-dialog">
+  <dialog open data-testid="confirm-dialog" class="narrow-dialog">
     <article>
-      <header><strong>{confirmDialog.title}</strong></header>
-      <p>{confirmDialog.text}</p>
-      <footer>
-        <button class="secondary" onclick={() => confirmDialog.resolve(false)}>Cancel</button>
-        <button onclick={() => confirmDialog.resolve(true)}>{confirmDialog.confirmLabel}</button>
-      </footer>
+      <header class="card__header"><h2>{confirmDialog.title}</h2></header>
+      <p class="muted">{confirmDialog.text}</p>
+      <div class="dialog-actions">
+        <button class="outline secondary" onclick={() => confirmDialog.resolve(false)}>Cancel</button>
+        <button class={confirmDialog.tone === 'danger' ? 'danger' : ''} onclick={() => confirmDialog.resolve(true)}>{confirmDialog.confirmLabel}</button>
+      </div>
     </article>
   </dialog>
 {/if}
 
 <!-- report -->
 {#if reportDialog}
-  <dialog open>
+  <dialog open class="wide-dialog">
     <article>
-      <header><strong>{reportDialog.title}</strong></header>
-      {#each reportDialog.entries as entry (entry.name + entry.reason)}
-        <div><code>{entry.name}</code> <small class="status-over">{entry.reason ?? ''}</small></div>
-      {/each}
-      <footer><button onclick={() => (reportDialog = null)}>Close</button></footer>
+      <header class="card__header"><h2>Report</h2></header>
+      <div class="checklist">
+        {#each reportDialog.entries as entry (entry.name + (entry.reason ?? ''))}
+          <div class="checklist__row">
+            <span class="checklist__main">{entry.name}</span>
+            <span class="checklist__meta"><span class="msg error">{entry.reason ?? ''}</span></span>
+          </div>
+        {/each}
+      </div>
+      <div class="dialog-actions">
+        <button onclick={() => (reportDialog = null)}>Close</button>
+      </div>
     </article>
   </dialog>
 {/if}
 
-<LogDialog bind:this={logDialog} />
-
-<div class="toasts">
-  {#each toasts as toast (toast.id)}
-    <article class={toast.tone === 'error' ? 'error' : ''}>{toast.message}</article>
-  {/each}
-</div>
-
-<style>
-  .app-name {
-    font-size: 0.7em;
-    font-weight: 500;
-    color: var(--pico-muted-color);
-  }
-  .tiles {
-    display: flex;
-    gap: 2rem;
-    flex-wrap: wrap;
-    margin: 0;
-  }
-  .tiles dt {
-    font-size: 0.8rem;
-    color: var(--pico-muted-color);
-  }
-  .tiles dd {
-    margin: 0;
-    font-weight: 600;
-  }
-  .tiles.compact {
-    gap: 1.25rem;
-    margin-block: 0.5rem;
-  }
-  .actions {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    align-items: center;
-    --pico-form-element-spacing-vertical: 0.3rem;
-    --pico-form-element-spacing-horizontal: 1rem;
-  }
-  article > header {
-    display: flex;
-    gap: 0.75rem;
-    align-items: baseline;
-    justify-content: space-between;
-  }
-  .actions button {
-    width: auto;
-    margin: 0;
-  }
-  button.sm {
-    padding: 0.1rem 0.5rem;
-    font-size: 0.75rem;
-  }
-  .file-meta {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  .files {
-    list-style: none;
-    padding: 0;
-  }
-  .files li {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-    border-bottom: 1px solid var(--pico-muted-border-color);
-    padding-block: 0.35rem;
-  }
-  .badge {
-    font-size: 0.7rem;
-    padding: 0.05rem 0.5rem;
-    border-radius: 1rem;
-    background: var(--pico-secondary-background);
-  }
-  .badge-success { background: var(--pico-ins-color); color: white; }
-  .badge-danger { background: var(--pico-del-color); color: white; }
-  .badge-warning { background: var(--pico-mark-background-color); }
-  .badge-primary { background: var(--pico-primary); color: var(--pico-primary-inverse); }
-  dialog article {
-    width: min(44rem, 94vw);
-  }
-  dialog article.wide {
-    width: min(72rem, 94vw);
-  }
-  dialog footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-  }
-  dialog header {
-    margin-bottom: 0.5rem;
-  }
-  .wide h3 + .review-groups + button,
-  .actions + details {
-    margin-block: 0.5rem;
-  }
-  .review-groups label, dialog label {
-    display: block;
-    margin-block: 0.15rem;
-  }
-  .review-groups label {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-  }
-  .review-row {
-    border-top: 1px solid var(--pico-muted-border-color);
-    padding-block: 0.5rem;
-  }
-  .form-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-    gap: 0.5rem;
-  }
-  .checks {
-    display: flex;
-    gap: 1rem;
-    flex-wrap: wrap;
-  }
-  fieldset {
-    margin-block: 0.75rem;
-  }
-  .card-over {
-    border-color: var(--pico-del-color);
-  }
-  .card-warn {
-    border-color: var(--pico-mark-background-color);
-  }
-  .toasts {
-    position: fixed;
-    right: 1rem;
-    bottom: 1rem;
-    display: grid;
-    gap: 0.5rem;
-    z-index: 10;
-  }
-  .toasts article {
-    margin: 0;
-    padding: 0.5rem 0.75rem;
-  }
-  .toasts .error {
-    border-color: var(--pico-del-color);
-  }
-</style>
+<Toasts />

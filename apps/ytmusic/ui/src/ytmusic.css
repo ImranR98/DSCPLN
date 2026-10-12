@@ -1,0 +1,10 @@
+/* YTMusic Downloads: settings extras (restored from the pre-Svelte UI). */
+
+.msg.ok {
+    color: var(--ok);
+}
+
+.mono {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: var(--fs-xs);
+}

@@ -1,32 +1,57 @@
 <script>
   import { onMount } from 'svelte'
-  import { apiUrl, getJson, postJson } from '@dscpln/ui-kit'
-  import { RefreshCw } from 'lucide-svelte'
+  import { RefreshCw, X } from 'lucide-svelte'
+  import { apiUrl, getJson, postJson, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
 
   let groups = $state([])
   let tasks = $state([])
   let missingConfig = $state(false)
-  let runs = $state({}) // taskName -> [lines]
-  let queues = $state({}) // taskName -> File[]
-  let uploading = $state({}) // taskName -> percent
-  let toasts = $state([])
-  let toastId = 0
-  let dragging = $state(false)
-  let pickerFiles = $state(null) // Files awaiting a channel choice
+  let queues = $state({})
+  let uploading = $state({})
+  let liveLogs = $state({})
+  let now = $state(Date.now())
+  let globalDragging = $state(false)
 
-  let promptDialog = $state(null) // { task, fields, values, resolve }
-  let pasteDialog = $state(null) // { task, output }
+  let modals = $state([]) // { id, kind, props, resolve }
 
-  function notify(message, tone = 'success') {
-    const id = ++toastId
-    toasts = [...toasts, { id, message, tone }]
-    setTimeout(() => (toasts = toasts.filter((t) => t.id !== id)), 6000)
+  const toast = (message, tone = 'success') => showToast(message, tone)
+
+  function openModal(kind, props, resolve) {
+    const id = crypto.randomUUID()
+    modals = [...modals, { id, kind, props, resolve }]
+    return id
+  }
+
+  const closeModal = (id) => (modals = modals.filter((modal) => modal.id !== id))
+
+  function confirmModal(title, submitLabel = 'Run', lines = null) {
+    return new Promise((resolve) => openModal('confirm', { title, submitLabel, lines, resolve }, resolve))
+  }
+
+  function fieldsModal(title, fields, submitLabel = 'Run') {
+    return new Promise((resolve) => openModal('fields', { title, fields, submitLabel, resolve }, resolve))
+  }
+
+  function pickerModal(title, options) {
+    return new Promise((resolve) => openModal('picker', { title, options, resolve }, resolve))
+  }
+
+  function resultModal(title, text, { live = false, paste = false } = {}) {
+    openModal('result', { title, text, live, paste }, null)
+  }
+
+  const formatElapsed = (seconds) => {
+    const sec = Math.max(0, Math.floor(seconds))
+    const h = Math.floor(sec / 3600)
+    const m = Math.floor((sec % 3600) / 60)
+    const s = String(sec % 60).padStart(2, '0')
+    return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`
   }
 
   async function loadTasks() {
     try {
       const data = await getJson('api/tasks')
-      groups = data.groups ?? []
+      groups = data.groups || []
       tasks = groups.flatMap((group) => group.tasks)
       missingConfig = Boolean(data.missing_config)
     } catch {
@@ -34,449 +59,444 @@
     }
   }
 
-  async function pollStatus() {
-    try {
-      const data = await getJson('api/status')
-      const next = { ...runs }
-      for (const run of data.runs ?? []) {
-        next[run.task] = [...(next[run.task] ?? []), ...run.log].slice(-500)
-      }
-      runs = next
-      for (const done of data.done ?? []) {
-        notify(`${done.task}: ${done.ok ? 'finished' : 'FAILED'} — ${done.summary}`, done.ok ? 'success' : 'error')
-        delete queues[done.task]
-        queues = { ...queues }
-        if (done.paste) {
-          const { output } = await getJson(`api/log/${encodeURIComponent(done.task)}`)
-          pasteDialog = { task: done.task, output: output ?? '' }
-        }
-        loadTasks()
-      }
-    } catch {
-      // transient poll failure
-    }
-  }
+  const taskByName = (name) => tasks.find((task) => task.name === name)
 
-  function taskByName(name) {
-    return tasks.find((t) => t.name === name)
-  }
-
-  async function runTask(task) {
-    let payload = {}
-    if (task.prompts?.length) {
-      const values = await askPrompts(task)
-      if (!values) return
-      payload = values
-    }
-    try {
-      await postJson(`api/run/${encodeURIComponent(task.name)}`, payload)
-      notify(`${task.name}: started`)
-      loadTasks()
-    } catch (err) {
-      notify(err.message, 'error')
-    }
-  }
-
-  function askPrompts(task) {
-    return new Promise((resolve) => {
-      promptDialog = {
-        task,
-        values: Object.fromEntries((task.prompts ?? []).map((key) => [key, ''])),
-        submit: () => {
-          const values = { ...promptDialog.values }
-          promptDialog = null
-          resolve(values)
-        },
-        cancel: () => {
-          promptDialog = null
-          resolve(null)
-        },
-      }
-    })
-  }
-
-  async function cancelRun(name) {
-    try {
-      await postJson('api/cancel', { task: name })
-      notify(`${name}: cancelling…`)
-    } catch (err) {
-      notify(err.message, 'error')
-    }
-  }
-
-  function addFiles(task, files) {
-    queues = { ...queues, [task.name]: [...(queues[task.name] ?? []), ...files] }
-  }
-
-  async function routeFiles(files) {
+  function queueFiles(task, files) {
+    if (!task) return
+    const list = [...(queues[task.name] ?? [])]
     for (const file of files) {
-      try {
-        const { result } = await postJson(`api/detect?name=${encodeURIComponent(file.name)}`, {})
-        if (result?.ambiguous?.length > 1) {
-          pickerFiles = { files: [file, ...files.slice(files.indexOf(file) + 1)], choices: result.ambiguous }
-          return
-        }
-        if (!result?.task) {
-          notify(`${file.name}: no task accepts this file`, 'error')
-          continue
-        }
-        addFiles(taskByName(result.task), [file])
-        notify(`${file.name} → ${result.task}`)
-      } catch (err) {
-        notify(err.message, 'error')
-      }
+      const index = list.findIndex((queued) => queued.name === file.name)
+      if (index !== -1) list.splice(index, 1)
+      list.push(file)
     }
+    queues = { ...queues, [task.name]: list }
   }
 
-  function chooseChannel(taskName) {
-    const files = pickerFiles?.files ?? []
-    pickerFiles = null
-    if (taskName) addFiles(taskByName(taskName), files)
+  function removeQueued(task, file) {
+    queues = { ...queues, [task.name]: (queues[task.name] ?? []).filter((queued) => queued !== file) }
   }
 
-  function removeFile(task, file) {
-    queues = { ...queues, [task.name]: (queues[task.name] ?? []).filter((f) => f !== file) }
-  }
-
-  function uploadOne(task, file) {
+  function uploadFile(task, file, onProgress) {
     return new Promise((resolve) => {
       const xhr = new XMLHttpRequest()
       xhr.open('POST', apiUrl(`api/upload/${encodeURIComponent(task.name)}?name=${encodeURIComponent(file.name)}`))
       xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) uploading = { ...uploading, [task.name]: Math.round((event.loaded / event.total) * 100) }
+        if (event.lengthComputable && event.total > 0) onProgress(event.loaded / event.total)
       }
       xhr.onload = () => {
+        let data = {}
+        try {
+          data = JSON.parse(xhr.responseText || '{}')
+        } catch {
+          // ignore
+        }
         if (xhr.status >= 400) {
-          let detail = `HTTP ${xhr.status}`
-          try {
-            detail = JSON.parse(xhr.responseText).detail ?? detail
-          } catch {
-            // keep the status text
-          }
-          notify(`${file.name}: ${detail}`, 'error')
+          toast(data.detail || `HTTP ${xhr.status}`, 'error')
           resolve(false)
         } else {
           resolve(true)
         }
       }
-      xhr.onerror = () => resolve(false)
+      xhr.onabort = () => resolve(false)
+      xhr.onerror = () => {
+        toast(`Upload of ${file.name} failed`, 'error')
+        resolve(false)
+      }
+      uploadAborts.set(task.name, xhr)
       xhr.send(file)
     })
   }
 
-  async function uploadTask(task) {
-    const files = queues[task.name] ?? []
-    for (const file of files) {
-      const ok = await uploadOne(task, file)
+  const uploadAborts = new Map()
+
+  async function runTask(task, options = {}) {
+    const extra = {}
+    const prompts = task.prompts || []
+    const confirmPrompt = prompts.find((prompt) => prompt.type === 'confirm')
+    const secretPrompts = prompts.filter((prompt) => prompt.type !== 'confirm')
+    if (confirmPrompt) {
+      const ok = await confirmModal(confirmPrompt.label || `Run ${task.name}?`)
       if (!ok) return
-      removeFile(task, file)
+      extra[confirmPrompt.key] = true
     }
-    uploading = { ...uploading, [task.name]: 0 }
-    notify(`${task.name}: upload complete`)
-    loadTasks()
-  }
-
-  async function copyPaste() {
-    try {
-      await navigator.clipboard.writeText(pasteDialog.output)
-      notify('Copied')
-    } catch {
-      notify('Copy failed — select the text manually', 'error')
+    if (secretPrompts.length) {
+      const values = await fieldsModal(task.name, secretPrompts.map((prompt) => ({ label: prompt.label })))
+      if (!values) return
+      secretPrompts.forEach((prompt, index) => {
+        if (values[index]) extra[prompt.key] = values[index]
+      })
     }
-  }
-
-  async function finishPaste() {
+    if (!prompts.length && !task.uploads && !options.skipGenericConfirm) {
+      const ok = await confirmModal(`Run ${task.name}?`)
+      if (!ok) return
+    }
+    const files = queues[task.name] ?? []
+    if (task.uploads && !files.length) {
+      toast('Drop files here first', 'error')
+      return
+    }
+    if (task.uploads) {
+      uploading = { ...uploading, [task.name]: 0 }
+      try {
+        let done = 0
+        for (const file of files) {
+          const ok = await uploadFile(task, file, (fraction) => {
+            uploading = { ...uploading, [task.name]: ((done + fraction) / files.length) * 100 }
+          })
+          if (!ok) return
+          done += 1
+          uploading = { ...uploading, [task.name]: (done / files.length) * 100 }
+        }
+      } finally {
+        const nextUploading = { ...uploading }
+        delete nextUploading[task.name]
+        uploading = nextUploading
+        uploadAborts.delete(task.name)
+      }
+    }
     try {
-      await postJson(`api/paste_done/${encodeURIComponent(pasteDialog.task)}`, {})
-      notify(`${pasteDialog.task}: committed`)
+      const result = await postJson(`api/run/${encodeURIComponent(task.name)}`, extra)
+      if (task.uploads) {
+        const nextQueues = { ...queues }
+        delete nextQueues[task.name]
+        queues = nextQueues
+      }
+      liveLogs = { ...liveLogs, [task.name]: [] }
+      if (result?.queued) toast(`${task.name} queued — another task sharing its destination is running`, 'error')
+      await loadTasks()
     } catch (err) {
-      notify(err.message, 'error')
+      toast(err.message, 'error')
     }
-    pasteDialog = null
   }
+
+  async function cancelRun(taskName) {
+    if (uploading[taskName] != null) {
+      const nextUploading = { ...uploading }
+      delete nextUploading[taskName]
+      uploading = nextUploading
+      uploadAborts.get(taskName)?.abort()
+      uploadAborts.delete(taskName)
+      toast('Upload cancelled', 'error')
+      return
+    }
+    try {
+      const result = await postJson('api/cancel', { task: taskName })
+      if (result?.queued) toast('Removed from queue', 'error')
+      else toast('Stopping the task…', 'error')
+    } catch (err) {
+      toast(err.message, 'error')
+    }
+  }
+
+  async function handleGlobalFiles(fileList) {
+    const byTask = new Map()
+    for (const file of Array.from(fileList)) {
+      try {
+        const { result } = await postJson(`api/detect?name=${encodeURIComponent(file.name)}`, {})
+        if (!result) {
+          toast(`No task matches ${file.name} — drop it onto the matching card instead`, 'error')
+          continue
+        }
+        let taskName = result.task
+        if (result.ambiguous.length > 1) {
+          const options = result.ambiguous.map((name) => taskByName(name)).filter(Boolean)
+          const picked = await pickerModal(`Which task is ${file.name} for?`, options)
+          if (!picked) continue
+          taskName = picked.name
+        }
+        const task = taskByName(taskName)
+        if (!task) continue
+        if (!byTask.has(task.name)) byTask.set(task.name, { task, files: [] })
+        byTask.get(task.name).files.push(file)
+      } catch (err) {
+        toast(err.message, 'error')
+      }
+    }
+    const entries = [...byTask.values()]
+    if (!entries.length) return
+    for (const { task, files } of entries) queueFiles(task, files)
+    const ok = await confirmModal(
+      'Detected — run all now?',
+      'Run',
+      entries.map(({ task, files }) => `${task.name} (${files.length} file${files.length > 1 ? 's' : ''})`),
+    )
+    if (!ok) return
+    for (const { task } of entries) runTask(task, { skipGenericConfirm: true })
+  }
+
+  async function poll() {
+    now = Date.now()
+    let activity = false
+    try {
+      const status = await getJson('api/status')
+      const nextLogs = { ...liveLogs }
+      for (const run of status.runs ?? []) {
+        activity = true
+        nextLogs[run.task] = [...(nextLogs[run.task] ?? []), ...(run.log ?? [])].slice(-1000)
+      }
+      for (const done of status.done ?? []) {
+        activity = true
+        toast(`${done.task}: ${done.ok ? 'OK' : 'FAILED'} — ${done.summary.slice(0, 200)}`, done.ok ? 'success' : 'error')
+        if (done.ok && done.paste) {
+          getJson(`api/log/${encodeURIComponent(done.task)}`)
+            .then(({ output }) => resultModal(`${done.task} — output to paste`, output ?? '', { paste: true, task: done.task }))
+            .catch(() => {})
+        }
+      }
+      liveLogs = nextLogs
+      if (activity) await loadTasks()
+    } catch {
+      // transient poll failure
+    }
+  }
+
+  async function openLog(task) {
+    if (task.running) {
+      resultModal(`${task.name} — live log`, (liveLogs[task.name] ?? []).join('\n'), { live: true, task: task.name })
+      return
+    }
+    try {
+      const { output } = await getJson(`api/log/${encodeURIComponent(task.name)}`)
+      resultModal(`${task.name} — log`, output || '(no log recorded yet)')
+    } catch (err) {
+      toast(err.message, 'error')
+    }
+  }
+
+  async function finishPaste(task, close) {
+    try {
+      const result = await postJson(`api/paste_done/${encodeURIComponent(task)}`, {})
+      close()
+      if (!result.committed) {
+        toast('No commit_dir configured for this task — nothing to commit', 'error')
+        return
+      }
+      toast(`Committed ${result.dest || ''}`)
+    } catch (err) {
+      toast(err.message, 'error')
+    }
+  }
+
+  function copyText(text, close) {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        toast('Copied to clipboard')
+        close?.()
+      })
+      .catch(() => toast('Copy failed — select the text manually', 'error'))
+  }
+
+  function wireDropzone(node, handler) {
+    const onClick = () => node.querySelector('input[type=file]')?.click()
+    const onDragOver = (event) => {
+      event.preventDefault()
+      node.classList.add('dragover')
+    }
+    const onDragLeave = () => node.classList.remove('dragover')
+    const onDrop = (event) => {
+      event.preventDefault()
+      node.classList.remove('dragover')
+      handler(event.dataTransfer.files)
+    }
+    node.addEventListener('click', onClick)
+    node.addEventListener('dragover', onDragOver)
+    node.addEventListener('dragleave', onDragLeave)
+    node.addEventListener('drop', onDrop)
+    return () => {
+      node.removeEventListener('click', onClick)
+      node.removeEventListener('dragover', onDragOver)
+      node.removeEventListener('dragleave', onDragLeave)
+      node.removeEventListener('drop', onDrop)
+    }
+  }
+
+  $effect(() => {
+    const total = Object.values(liveLogs).reduce((sum, lines) => sum + lines.length, 0)
+    const pre = document.querySelector('dialog[open] .log-box')
+    if (pre && total) pre.scrollTop = pre.scrollHeight
+  })
 
   onMount(() => {
     loadTasks()
-    const status = setInterval(pollStatus, 1500)
-    const list = setInterval(loadTasks, 5000)
-    return () => {
-      clearInterval(status)
-      clearInterval(list)
-    }
+    const timer = setInterval(poll, 700)
+    return () => clearInterval(timer)
   })
 </script>
 
-<header class="app-header container">
+<header class="app-header">
   <div class="app-header__top">
-    <h1>D<span class="accent">$</span>CPLN <span class="app-name">&middot; Task Runner</span></h1>
-    <button class="outline secondary" id="refreshButton" title="Refresh tasks" aria-label="Refresh tasks"
-      onclick={loadTasks}>
-      <RefreshCw size={16} />
-    </button>
+    <h1>D<span class="accent">$</span>CPLN <span class="app-header__app">⋅ Task Runner</span></h1>
+    <div class="app-header__actions">
+      {#if missingConfig}
+        <span class="alert-badge">Missing config.mjs — create it (see README.md for the schema)</span>
+      {/if}
+      <button id="refreshButton" class="outline secondary icon-button" title="Refresh" aria-label="Refresh tasks" onclick={loadTasks}>
+        <RefreshCw size={16} strokeWidth={1.8} />
+      </button>
+      <ThemeToggle />
+    </div>
+  </div>
+  <div class="app-header__meta">
+    <span class="muted">Config-driven local backups</span>
   </div>
 </header>
 
-<main class="container">
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    id="global-dropzone"
-    class:dragging
-    class="dropzone"
-    ondragover={(event) => { event.preventDefault(); dragging = true }}
-    ondragleave={() => (dragging = false)}
-    ondrop={(event) => {
-      event.preventDefault()
-      dragging = false
-      routeFiles([...event.dataTransfer.files])
-    }}
-  >
-    <small>Drop files anywhere here to route them to the matching task.</small>
-  </div>
+<main class="page-wrap">
+  <section class="card global-drop">
+    <p class="hint">Drop an export file anywhere here — it is detected, you confirm, it runs.</p>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="dropzone-box" id="global-dropzone" tabindex="0" use:wireDropzone={handleGlobalFiles}>
+      <span class="dropzone-note">Drop files here or click to browse</span>
+      <input type="file" multiple hidden onchange={(event) => { handleGlobalFiles(event.target.files); event.target.value = '' }} />
+    </div>
+  </section>
 
-{#if missingConfig}
-  <article class="warning">No task config found — create config.mjs (see README.md).</article>
-{/if}
-
-{#each groups as group (group.name)}
-  <h2 class="group-title">{group.name} <small>{group.tasks.length} task(s)</small></h2>
-  <div class="task-grid">
-    {#each group.tasks as task (task.name)}
-      {@const running = task.running}
-      {@const queued = task.queued}
-      {@const busy = running || queued || uploading[task.name] != null}
-      {@const lines = runs[task.name] ?? []}
-      <article class="task-card" data-testid={`task-${task.name}`}>
-        <header>
-          <strong>{task.name}</strong>
-          <span class={running ? 'pill status-ok' : task.pill === 'ok' ? 'pill status-ok' : task.pill === 'neutral' ? 'pill' : 'pill status-over'}>
-            {running ? 'Running' : uploading[task.name] != null ? `Uploading ${uploading[task.name]}%` : queued ? 'Queued' : (task.state?.last_run_text ?? 'Never run')}
-          </span>
-        </header>
-
-        {#if running && task.live}<p class="live">{task.live}</p>{/if}
-        {#if !task.avail}<p class="unavailable">{task.avail_reason}</p>{/if}
-
-        {#if task.uploads}
-          <div class="dropzone">
-            <label class="secondary file-button">
-              <input type="file" multiple hidden
-                onchange={(event) => { addFiles(task, [...event.target.files]); event.target.value = '' }} />
-              Choose files…
-            </label>
-            <small>{task.note || 'Files you pick are queued on this card until you press Run.'}</small>
+  {#each groups as group (group.name)}
+    <div class="category-header">
+      <span class="category-title">{group.name}</span>
+      <span class="category-count">{group.tasks.length} task(s)</span>
+    </div>
+    <div class="task-grid">
+      {#each group.tasks as task (task.name)}
+        {@const running = task.running}
+        {@const isUploading = uploading[task.name] != null}
+        {@const queued = task.queued}
+        {@const busy = running || isUploading || queued}
+        {@const files = queues[task.name] ?? []}
+        <section class="card task-card" data-task={task.name} data-testid={`task-${task.name}`}>
+          <div class="card__header">
+            <h2 class="card-title">{task.name}</h2>
+            <span class={`pill pill--${running || isUploading ? 'running' : queued ? 'neutral' : (task.state ? task.pill : 'none') ?? 'none'}`}>
+              {#if running}
+                Running · {formatElapsed(now / 1000 - (task.started ?? now / 1000))}
+              {:else if isUploading}
+                Uploading… {Math.round(uploading[task.name])}%
+              {:else if queued}
+                Queued…
+              {:else}
+                {task.state ? task.state.last_run_text : 'Never run'}
+              {/if}
+            </span>
           </div>
-          {#if queues[task.name]?.length}
-            <ul class="queue">
-              {#each queues[task.name] as file (file.name)}
-                <li>
-                  <span>{file.name}</span>
-                  <button class="secondary outline" onclick={() => removeFile(task, file)}>&times;</button>
-                </li>
-              {/each}
-            </ul>
-            <button class="secondary" onclick={() => uploadTask(task)}>Upload queued files</button>
-          {/if}
-        {:else if task.note}
-          <p><small>{task.note}</small></p>
-        {/if}
 
-        <footer class="actions">
-          {#if task.export_url}
-            <a role="button" class="secondary" href={task.export_url} target="_blank" rel="noreferrer">Export</a>
+          {#if running && task.live}
+            <div class="card-live">{task.live}</div>
           {/if}
-          {#if busy}
-            <button class="secondary" onclick={() => cancelRun(task.name)} disabled={!running}>Stop</button>
-          {:else}
-            <button onclick={() => runTask(task)}
-              disabled={!task.avail || (task.uploads && !(queues[task.name]?.length))}>Run</button>
-          {/if}
-          <details>
-            <summary>Log</summary>
-            <pre class="log">{lines.length ? lines.join('\n') : 'No live output.'}</pre>
-          </details>
-        </footer>
-      </article>
-    {/each}
-  </div>
-{/each}
 
+          {#if isUploading}
+            <div class="upload-bar"><div class="upload-fill" style={`width: ${Math.round(uploading[task.name])}%`}></div></div>
+          {/if}
+
+          {#if !task.avail}
+            <span class="alert-badge badge-unavail">{task.avail_reason}</span>
+          {/if}
+
+          {#if task.uploads}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="dropzone-box" tabindex="0" use:wireDropzone={(dropped) => queueFiles(task, dropped)}>
+              <span class="dropzone-note">{task.note || 'Drop files here or click to browse'}</span>
+              <input type="file" multiple hidden onchange={(event) => { queueFiles(task, event.target.files); event.target.value = '' }} />
+            </div>
+            {#if files.length}
+              <div class="queue-list">
+                {#each files as file (file.name)}
+                  <div class="queue-item">
+                    <span class="queue-name">{file.name}</span>
+                    <button class="outline secondary icon-button icon-button--small" title="Remove from queue" aria-label={`Remove ${file.name} from queue`} onclick={() => removeQueued(task, file)}>
+                      <X size={14} strokeWidth={1.8} />
+                    </button>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          {:else if task.note}
+            <div class="card-note">{task.note}</div>
+          {/if}
+
+          <div class="card-actions">
+            {#if task.export_url}
+              <a role="button" class="outline secondary" href={task.export_url} target="_blank" rel="noreferrer">Generate Export</a>
+            {/if}
+            <button
+              class={busy ? 'outline secondary' : ''}
+              disabled={!busy && (!task.avail || (task.uploads && !files.length))}
+              onclick={() => (busy ? cancelRun(task.name) : runTask(task))}
+            >{busy ? 'Stop' : 'Run'}</button>
+            <button class="outline secondary" onclick={() => openLog(task)}>Log</button>
+          </div>
+        </section>
+      {/each}
+    </div>
+  {/each}
+
+  <p class="footer-note">Run state is stored per task in its destination folder (.backup-state-*.json); dropped files are held in the browser until you click Run.</p>
 </main>
 
-{#if promptDialog}
-  <dialog open>
-    <article>
-      <header><strong>{promptDialog.task.name}</strong></header>
-      {#each promptDialog.task.prompts as key (key)}
-        <label>{key}
-          <input type="password" autocomplete="off" value={promptDialog.values[key]}
-            oninput={(event) => (promptDialog.values[key] = event.target.value)} />
-        </label>
-      {/each}
-      <footer>
-        <button class="secondary" onclick={promptDialog.cancel}>Cancel</button>
-        <button onclick={promptDialog.submit}>Run</button>
-      </footer>
-    </article>
-  </dialog>
-{/if}
+{#each modals as modal (modal.id)}
+  {#if modal.kind === 'confirm'}
+    <dialog open class="narrow-dialog">
+      <article>
+        <header class="card__header"><h2>{modal.props.title}</h2></header>
+        {#if modal.props.lines}
+          <div class="modal-fields">
+            {#each modal.props.lines as line (line)}<span>{line}</span>{/each}
+          </div>
+        {/if}
+        <div class="dialog-actions">
+          <button class="outline secondary" onclick={() => { modal.props.resolve(false); closeModal(modal.id) }}>Cancel</button>
+          <button onclick={() => { modal.props.resolve(true); closeModal(modal.id) }}>{modal.props.submitLabel}</button>
+        </div>
+      </article>
+    </dialog>
+  {:else if modal.kind === 'fields'}
+    <dialog open>
+      <article>
+        <header class="card__header"><h2>{modal.props.title}</h2></header>
+        <div class="modal-fields">
+          {#each modal.props.fields as field, index (field.label)}
+            <div class="field">
+              <span class="field__label">{field.label}</span>
+              <input type="password" autocomplete="off" bind:value={modal.props.fields[index].value} />
+            </div>
+          {/each}
+        </div>
+        <div class="dialog-actions">
+          <button class="outline secondary" onclick={() => { modal.props.resolve(null); closeModal(modal.id) }}>Cancel</button>
+          <button onclick={() => { modal.props.resolve(modal.props.fields.map((field) => field.value ?? '')); closeModal(modal.id) }}>{modal.props.submitLabel}</button>
+        </div>
+      </article>
+    </dialog>
+  {:else if modal.kind === 'picker'}
+    <dialog open>
+      <article>
+        <header class="card__header"><h2>{modal.props.title}</h2></header>
+        <div class="modal-fields">
+          {#each modal.props.options as option (option.name)}
+            <button class="outline secondary picker-option" onclick={() => { modal.props.resolve(option); closeModal(modal.id) }}>{option.name}</button>
+          {/each}
+        </div>
+        <div class="dialog-actions">
+          <button class="outline secondary" onclick={() => { modal.props.resolve(null); closeModal(modal.id) }}>Cancel</button>
+        </div>
+      </article>
+    </dialog>
+  {:else}
+    <dialog open class="wide-dialog">
+      <article>
+        <header class="card__header"><h2>{modal.props.title}</h2></header>
+        <pre class="log-box">{modal.props.live ? (liveLogs[modal.props.task] ?? []).join('\n') : modal.props.text}</pre>
+        <div class="dialog-actions">
+          {#if modal.props.paste}
+            <button class="outline secondary" onclick={() => copyText(modal.props.text)}>Copy</button>
+            <button onclick={() => finishPaste(modal.props.task, () => closeModal(modal.id))}>Done</button>
+          {:else}
+            <button class="outline secondary" onclick={() => closeModal(modal.id)}>Close</button>
+          {/if}
+        </div>
+      </article>
+    </dialog>
+  {/if}
+{/each}
 
-{#if pasteDialog}
-  <dialog open>
-    <article>
-      <header><strong>{pasteDialog.task}: paste this into the destination</strong></header>
-      <textarea rows="12" readonly value={pasteDialog.output}></textarea>
-      <footer>
-        <button class="secondary" onclick={copyPaste}>Copy</button>
-        <button onclick={finishPaste}>Done</button>
-      </footer>
-    </article>
-  </dialog>
-{/if}
-
-{#if pickerFiles}
-  <dialog open>
-    <article>
-      <header><strong>Which task should receive these files?</strong></header>
-      {#each pickerFiles.choices as choice (choice)}
-        <button class="secondary" onclick={() => chooseChannel(choice)}>{choice}</button>
-      {/each}
-      <footer><button class="outline" onclick={() => chooseChannel(null)}>Cancel</button></footer>
-    </article>
-  </dialog>
-{/if}
-
-<div class="toasts">
-  {#each toasts as toast (toast.id)}
-    <article class={toast.tone === 'error' ? 'error' : ''}>{toast.message}</article>
-  {/each}
-</div>
-
-<style>
-  .app-name {
-    font-size: 0.7em;
-    font-weight: 500;
-    color: var(--pico-muted-color);
-  }
-  .group-title {
-    margin-top: 1.5rem;
-  }
-  .task-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
-    gap: 1rem;
-    align-items: start;
-  }
-  .task-card header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .pill {
-    font-size: 0.75rem;
-    padding: 0.05rem 0.55rem;
-    border-radius: 1rem;
-    border: 1px solid currentColor;
-    color: var(--pico-muted-color);
-    white-space: nowrap;
-  }
-  .pill.status-ok {
-    color: var(--pico-ins-color);
-  }
-  .pill.status-over {
-    color: var(--pico-del-color);
-  }
-  .live {
-    font-family: monospace;
-    font-size: 0.8rem;
-    overflow-wrap: anywhere;
-  }
-  .unavailable {
-    color: var(--pico-del-color);
-  }
-  .queue {
-    list-style: none;
-    padding: 0;
-  }
-  .queue li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .queue button {
-    width: auto;
-    margin: 0;
-  }
-  .actions {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    flex-wrap: wrap;
-    --pico-form-element-spacing-vertical: 0.3rem;
-    --pico-form-element-spacing-horizontal: 1rem;
-  }
-  .actions > button,
-  .actions > a {
-    width: auto;
-    margin: 0;
-    padding: 0.25rem 0.9rem;
-  }
-  .file-button {
-    display: inline-block;
-    width: auto;
-    margin: 0;
-    padding: 0.3rem 1rem;
-    background: var(--pico-secondary-background);
-    color: var(--pico-secondary-inverse);
-    border: 1px solid var(--pico-secondary-background);
-    border-radius: var(--pico-border-radius);
-    cursor: pointer;
-  }
-  .dropzone {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.4rem;
-    margin-block: 0.4rem;
-  }
-  details {
-    flex-basis: 100%;
-  }
-  summary {
-    cursor: pointer;
-  }
-  .log {
-    max-height: 16rem;
-    overflow: auto;
-  }
-  dialog article {
-    width: min(40rem, 92vw);
-  }
-  dialog footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-  }
-  dialog header {
-    margin-bottom: 0.5rem;
-  }
-  .warning {
-    border-color: var(--pico-del-color);
-  }
-  .toasts {
-    position: fixed;
-    right: 1rem;
-    bottom: 1rem;
-    display: grid;
-    gap: 0.5rem;
-    z-index: 10;
-  }
-  .toasts article {
-    margin: 0;
-    padding: 0.5rem 0.75rem;
-  }
-  .toasts .error {
-    border-color: var(--pico-del-color);
-  }
-</style>
+<Toasts />

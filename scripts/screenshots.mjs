@@ -158,7 +158,7 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
   const base = `http://127.0.0.1:${daemon.api.server.address().port}`
   const page = await newPage()
   await page.goto(base)
-  await page.waitForSelector('article', { timeout: 15000 })
+  await page.waitForSelector('.folder-card', { timeout: 15000 })
   await page.waitForTimeout(600)
   await shoot(page, 'media-sync')
   await page.close()
@@ -197,7 +197,7 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
   const page = await newPage()
   await page.goto(base)
   await page.waitForSelector('#conversation-list li')
-  await page.locator('#conversation-list li button').first().click()
+  await page.locator('#conversation-list li').first().click()
   await page.waitForSelector('.message')
   await shoot(page, 'whatsapp')
   await page.close()

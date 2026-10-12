@@ -108,7 +108,7 @@ test("ui: review a parked voice note from the browser and place it", { skip: !CA
     const page = await browser.newPage();
     await page.goto(base);
 
-    const card = page.locator("article", { hasText: "voicenotes" }).first();
+    const card = page.locator(".folder-card", { hasText: "voicenotes" }).first();
     const reviewButton = card.getByRole("button", { name: /^Review/ });
     await reviewButton.waitFor({ state: "visible" });
     await reviewButton.click();
@@ -148,15 +148,21 @@ test("ui: settings editor round-trips the new folder options", { skip: !CAN_RUN 
     await dialog.waitFor({ state: "visible" });
 
     await dialog.getByRole("button", { name: "Add folder" }).click();
-    const editor = dialog.locator("fieldset").last();
+    const editor = dialog.locator(".folder-edit").last();
     await editor.waitFor({ state: "visible" });
-    await editor.getByLabel("Name").fill("archive");
-    await editor.getByLabel("Source").fill(path.join(root, "archive-src"));
-    await editor.getByLabel("Destination").fill(path.join(root, "archive-dest"));
-    await editor.getByLabel("Method").selectOption("copy");
-    await editor.getByLabel("Recursive").check();
-    await editor.getByLabel("Include hidden").check();
-    await editor.getByLabel("Allow cleanup").uncheck();
+    const setField = async (label, value) => {
+      const row = editor.locator(".field", { hasText: label }).first();
+      const input = row.locator("input, select").first();
+      if ((await input.evaluate((el) => el.tagName)) === "SELECT") await input.selectOption(value);
+      else await input.fill(value);
+    };
+    await setField("Name", "archive");
+    await setField("Source", path.join(root, "archive-src"));
+    await setField("Destination", path.join(root, "archive-dest"));
+    await setField("Method", "copy");
+    await editor.locator("label", { hasText: "Recursive (" }).locator("input[type=checkbox]").check();
+    await editor.locator("label", { hasText: "Include hidden" }).locator("input[type=checkbox]").check();
+    await editor.locator("label", { hasText: "Allow cleanup" }).locator("input[type=checkbox]").uncheck();
     await dialog.getByRole("button", { name: "Save" }).click();
     await dialog.waitFor({ state: "detached" }).catch(() => {});
 
@@ -181,7 +187,7 @@ test("ui: discard requires confirmation and leaves the destination untouched", {
   try {
     const page = await browser.newPage();
     await page.goto(base);
-    const card = page.locator("article", { hasText: "voicenotes" }).first();
+    const card = page.locator(".folder-card", { hasText: "voicenotes" }).first();
     await card.getByRole("button", { name: /^Review/ }).click();
     const dialog = page.locator('[data-testid="review-dialog"]');
     await dialog.locator(".review-groups input[type=checkbox]").first().waitFor({ state: "visible", timeout: 30_000 });
@@ -234,10 +240,10 @@ test("ui: archive folders (cleanup disabled) expose no Cleanup button", { skip: 
 
     const page = await browser.newPage();
     await page.goto(base);
-    const archiveCard = page.locator("article", { hasText: "archive" }).first();
+    const archiveCard = page.locator(".folder-card", { hasText: "archive" }).first();
     await archiveCard.waitFor({ state: "visible" });
     assert.equal(await archiveCard.getByRole("button", { name: /Cleanup/ }).count(), 0, "cleanup must be hidden for cleanup:false folders");
-    const voicenotesCard = page.locator("article", { hasText: "voicenotes" }).first();
+    const voicenotesCard = page.locator(".folder-card", { hasText: "voicenotes" }).first();
     assert.equal(await voicenotesCard.getByRole("button", { name: /^Review/ }).count(), 1, "manual folders expose Review");
   } finally {
     await browser.close();

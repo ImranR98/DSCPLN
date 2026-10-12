@@ -12,8 +12,9 @@
     <script>
         // Apply the saved theme before first paint to avoid a flash.
         try {
-            const theme = localStorage.getItem('dscpln-theme')
-            if (theme && theme !== 'auto') document.documentElement.dataset.theme = theme
+            const stored = localStorage.getItem('dscpln-theme')
+            const dark = stored === 'dark' || ((!stored || stored === 'auto') && matchMedia('(prefers-color-scheme: dark)').matches)
+            document.documentElement.dataset.theme = dark ? 'dark' : 'light'
         } catch { /* storage unavailable */ }
     </script>
 </head>

@@ -11,8 +11,9 @@
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232f6fed'/%3E%3Ctext x='32' y='45' font-size='34' text-anchor='middle' fill='white' font-family='sans-serif'%3E%24%3C/text%3E%3C/svg%3E">
     <script>
         try {
-            const theme = localStorage.getItem('dscpln-theme')
-            if (theme && theme !== 'auto') document.documentElement.dataset.theme = theme
+            const stored = localStorage.getItem('dscpln-theme')
+            const dark = stored === 'dark' || ((!stored || stored === 'auto') && matchMedia('(prefers-color-scheme: dark)').matches)
+            document.documentElement.dataset.theme = dark ? 'dark' : 'light'
         } catch { /* storage unavailable */ }
     </script>
 </head>

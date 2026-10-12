@@ -72,7 +72,7 @@ test('portal health pill turns unreachable when an app is down', async (t) => {
   const page = await browser.newPage()
   await page.goto(`${base}/`)
   await page.waitForFunction(
-    () => document.querySelectorAll('[data-testid^="status-"].status-over').length > 0,
+    () => document.querySelectorAll('[data-testid^="status-"].is-fail').length > 0,
     null,
     { timeout: 15_000 },
   )

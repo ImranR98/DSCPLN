@@ -48,7 +48,7 @@ test('shell UI: header, overview, settings fields and Discover', async (t) => {
   assert.match(await page.textContent('h1'), /Contacts \+ Calendar/)
 
   // The schedule defaults (Sunday 03:00) surface as the next run in the overview.
-  await page.waitForFunction(() => document.querySelector('article')?.textContent?.includes('Next run'))
+  await page.waitForFunction(() => document.querySelector('#overviewCard')?.textContent?.includes('Next run'))
 
   await page.click('[aria-label="Settings"]')
   await page.waitForSelector('dialog[open]')

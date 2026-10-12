@@ -50,7 +50,7 @@ test('shell UI: header, archives card, targets editor and key panel', async (t) 
   await page.waitForSelector('[data-testid="run-now"]')
   assert.equal(await page.title(), 'D$CPLN ⋅ Infra Compose State')
 
-  const archivesCard = page.locator('article', { hasText: 'Archives' }).first()
+  const archivesCard = page.locator('#archivesCard')
   await archivesCard.waitFor()
   assert.match(await archivesCard.textContent(), /No archives yet/)
 

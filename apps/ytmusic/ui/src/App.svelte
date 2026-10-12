@@ -13,6 +13,7 @@
       label: 'browser.json contents',
       type: 'textarea',
       rows: 10,
+      className: 'mono',
       help: 'Paste the JSON from ytmusicapi’s browser.json (headers from a logged-in music.youtube.com session). It is stored on the app’s PVC and rewritten before every run.',
     },
   ]
@@ -35,14 +36,15 @@
 </script>
 
 {#snippet settingsExtra({ draft })}
-  <section>
+  <section class="settings-section">
     <h3>Authentication</h3>
-    <p><small>If runs start failing with "expired", log in to music.youtube.com again and paste fresh headers.</small></p>
-    <button class="secondary" disabled={testing} onclick={() => testAuth($state.snapshot(draft))} data-testid="test-auth">
-      Test auth
-    </button>
+    <p class="hint">If runs start failing with "expired", log in to music.youtube.com again and paste fresh headers.</p>
+    <div class="settings-row">
+      <span></span>
+      <button disabled={testing} onclick={() => testAuth($state.snapshot(draft))} data-testid="test-auth">Test auth</button>
+    </div>
     {#if testStatus.text}
-      <p class={testStatus.tone === 'ok' ? 'status-ok' : testStatus.tone === 'error' ? 'error' : ''}>{testStatus.text}</p>
+      <p class={testStatus.tone === 'ok' ? 'msg ok' : testStatus.tone === 'error' ? 'form-error' : 'hint'}>{testStatus.text}</p>
     {/if}
   </section>
 {/snippet}
@@ -53,9 +55,3 @@
   settingsNotice="The downloader writes browser.json into its working directory, runs ytmusic_dl.py, then validate_m3u8s.sh."
   settingsExtra={settingsExtra}
 />
-
-<style>
-  .error {
-    color: var(--pico-del-color);
-  }
-</style>

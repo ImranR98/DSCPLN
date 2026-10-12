@@ -58,7 +58,7 @@ test('shell UI: header, settings with browserJson and Test auth', async (t) => {
 
   await browserJson.fill('{"cookie":"fresh"}')
   await page.click('[data-testid="test-auth"]')
-  await page.waitForFunction(() => document.querySelector('dialog[open] p.status-ok')?.textContent?.includes('Auth OK'))
+  await page.waitForFunction(() => document.querySelector('dialog[open] p.msg.ok')?.textContent?.includes('Auth OK'))
 
   assert.deepEqual(errors, [])
 })

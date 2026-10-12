@@ -168,28 +168,30 @@
   })
 </script>
 
-<header class="app-header container">
+<header class="app-header">
   <div class="app-header__top">
     <h1>D<span class="accent">$</span>CPLN</h1>
     <div class="app-header__actions">
-      <button class="outline secondary" type="button" aria-label="Refresh status" title="Refresh status"
+      <button class="outline secondary icon-button" type="button" aria-label="Refresh status" title="Refresh status"
         disabled={busy} onclick={refresh}>
-        <RefreshCw size={16} />
+        <RefreshCw size={16} strokeWidth={1.8} />
       </button>
       <ThemeToggle />
     </div>
   </div>
-  <p class="app-header__meta">
-    <span>Every backup and sync workflow, one place.</span>
-    <span>
-      {#if attention.text}<strong class={`status-${attention.tone}`} data-testid="attention">{attention.text}</strong>{/if}
-      {#if checkedAt}<small data-testid="checked">checked {formatTime(checkedAt)}</small>{/if}
+  <div class="app-header__meta">
+    <span class="muted">Every backup and sync workflow, one place.</span>
+    <span class="app-header__meta-tools">
+      {#if attention.text}
+        <span class={`portal-attention${attention.tone === 'ok' ? ' is-ok' : ' is-over'}`} data-testid="attention">{attention.text}</span>
+      {/if}
+      {#if checkedAt}<span class="muted" data-testid="checked">checked {formatTime(checkedAt)}</span>{/if}
     </span>
-  </p>
+  </div>
 </header>
 
-<main class="container">
-  <div class="card-grid">
+<main>
+  <div class="portal-grid">
     {#each FUNCTIONS as fn (fn.path)}
       <FunctionCard {fn} card={cards[fn.path]} />
     {/each}

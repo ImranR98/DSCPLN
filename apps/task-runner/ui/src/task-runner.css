@@ -1,0 +1,255 @@
+/* Task Runner: task cards + drop zones on top of the shared design system. */
+
+body {
+    max-width: none;
+    padding: 0;
+    margin: 0;
+}
+
+main.page-wrap {
+    display: block;
+    max-width: 78rem;
+    margin: 0 auto;
+    padding: var(--space-4) var(--space-4) var(--space-5);
+}
+
+.app-header {
+    /* The kit header assumes the centered page column; this app is full width. */
+    margin: 0;
+    padding: var(--space-3) var(--space-4) var(--space-2);
+}
+
+.app-header .alert-badge {
+    margin-left: var(--space-3);
+}
+
+.task-card .card-title {
+    text-transform: none;
+    letter-spacing: -0.01em;
+    color: var(--text);
+}
+
+/* ---------- global drop ---------- */
+
+.global-drop {
+    margin-bottom: var(--space-4);
+}
+
+.global-drop .hint {
+    margin-top: 0;
+}
+
+.dropzone-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 4.5rem;
+    padding: var(--space-3);
+    border: 1.5px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dropzone-box:hover,
+.dropzone-box.dragover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--text);
+}
+
+/* ---------- groups + cards ---------- */
+
+.category-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin: var(--space-4) 0 var(--space-2);
+}
+
+.category-title {
+    font-weight: 800;
+    letter-spacing: -0.01em;
+}
+
+.category-count {
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+}
+
+.task-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr));
+    gap: var(--space-3);
+}
+
+.task-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+}
+
+.task-card .card-title {
+    font-size: var(--fs-lg);
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.55rem;
+    border-radius: var(--radius-pill);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    white-space: nowrap;
+    background: var(--surface-2);
+    color: var(--text-muted);
+}
+
+.pill--ok {
+    background: var(--ok-soft);
+    color: var(--ok);
+}
+
+.pill--fail {
+    background: var(--over-soft);
+    color: var(--over);
+}
+
+.pill--neutral {
+    background: var(--warn-soft);
+    color: var(--warn);
+}
+
+.pill--running {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.card-live {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border-radius: var(--radius-xs);
+    padding: var(--space-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.upload-bar {
+    height: 0.4rem;
+    border-radius: var(--radius-pill);
+    background: var(--surface-3);
+    overflow: hidden;
+}
+
+.upload-fill {
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+    transition: width 0.15s ease;
+}
+
+.alert-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--radius-pill);
+    background: var(--warn-soft);
+    color: var(--warn);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+}
+
+.badge-unavail {
+    align-self: flex-start;
+}
+
+.queue-list {
+    display: grid;
+    gap: var(--space-1);
+}
+
+.queue-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: 0.2rem 0.2rem 0.2rem var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    background: var(--surface-2);
+    font-size: var(--fs-sm);
+}
+
+.queue-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.card-note {
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+}
+
+.card-actions {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    margin-top: auto;
+}
+
+.card-actions > button:first-child {
+    margin-left: auto;
+}
+
+.footer-note {
+    margin-top: var(--space-5);
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    text-align: center;
+}
+
+/* ---------- dialogs ---------- */
+
+.modal-fields {
+    display: grid;
+    gap: var(--space-2);
+}
+
+.picker-option {
+    width: 100%;
+}
+
+.picker-option {
+    justify-content: flex-start;
+}
+
+.log-box {
+    margin: 0;
+    max-height: 55vh;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    font-size: var(--fs-xs);
+    line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+    .task-grid {
+        grid-template-columns: 1fr;
+    }
+}

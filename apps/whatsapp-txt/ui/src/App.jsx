@@ -1,83 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, Import, Menu, RefreshCw, X } from 'lucide-react'
-import { formatDateTime, getJson, postJson, ThemeToggle, uploadFile, usePolling } from '@dscpln/ui-kit'
+import { Import as ImportIcon, Menu, RefreshCw, X } from 'lucide-react'
+import { getJson, postJson, ThemeToggle, uploadFile, usePolling } from '@dscpln/ui-kit'
+import { buildSenderPalette, dateLabel, relativeTime } from './lib/format.js'
+import Banner from './components/Banner.jsx'
+import ConversationView from './components/ConversationView.jsx'
+import ImportDialog from './components/ImportDialog.jsx'
+import SearchView from './components/SearchView.jsx'
+import Sidebar from './components/Sidebar.jsx'
 
 const PAGE_SIZE = 200
 const GROUP_WINDOW_MS = 5 * 60 * 1000
 const MAX_ROWS = 3000
-
-const pad = (value) => String(value).padStart(2, '0')
-const dateLabel = (iso) => {
-  const date = new Date(iso)
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-}
-const timeLabel = (iso) => {
-  const date = new Date(iso)
-  const hours = date.getHours() % 12 || 12
-  return `${pad(hours)}:${pad(date.getMinutes())} ${date.getHours() >= 12 ? 'PM' : 'AM'}`
-}
-const relativeTime = (iso) => {
-  const seconds = Math.round((Date.now() - Date.parse(iso)) / 1000)
-  if (seconds < 60) return 'just now'
-  if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`
-  if (seconds < 86400) return `${Math.round(seconds / 3600)} h ago`
-  return `${Math.round(seconds / 86400)} d ago`
-}
-const initials = (name) => {
-  const words = name.trim().split(/\s+/).filter(Boolean)
-  if (words.length >= 2) return ([...words[0]][0] + [...words[1]][0]).toUpperCase()
-  return [...(words[0] ?? '?')].slice(0, 2).join('').toUpperCase()
-}
-const typeLabel = (type) => (type === 'text' ? '' : type.charAt(0).toUpperCase() + type.slice(1))
-
-const senderHue = (text) => {
-  let hash = 0
-  for (const char of text) hash = (hash * 31 + char.codePointAt(0)) % 360
-  return hash
-}
-const SENDER_TONES = [
-  { s: 62, l: 34, ds: 55, dl: 72 },
-  { s: 46, l: 45, ds: 44, dl: 80 },
-  { s: 72, l: 39, ds: 62, dl: 76 },
-]
-const buildSenderPalette = (senders) => {
-  const unique = [...new Set((senders ?? []).filter(Boolean))].sort((a, b) => a.localeCompare(b))
-  const palette = new Map()
-  if (unique.length === 0) return palette
-  const base = senderHue(unique.join('\u0000'))
-  unique.forEach((sender, index) => {
-    const hue = (base + (index * 360) / unique.length) % 360
-    const tone = SENDER_TONES[index % SENDER_TONES.length]
-    palette.set(sender, {
-      light: `hsl(${hue} ${tone.s}% ${tone.l}%)`,
-      dark: `hsl(${hue} ${tone.ds}% ${tone.dl}%)`,
-    })
-  })
-  return palette
-}
-
-const URL_RE = /(https?:\/\/[^\s<]+)/g
-const bodyParts = (text) => {
-  const parts = []
-  let last = 0
-  for (const match of text.matchAll(URL_RE)) {
-    if (match.index > last) parts.push({ text: text.slice(last, match.index) })
-    parts.push({ href: match[0] })
-    last = match.index + match[0].length
-  }
-  if (last < text.length) parts.push({ text: text.slice(last) })
-  return parts
-}
-
-const formatSize = (bytes) => {
-  if (!Number.isFinite(bytes)) return ''
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-}
-const newBatch = () => `imp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-
-const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()))
 
 export default function App() {
   const [meta, setMeta] = useState(null)
@@ -89,7 +22,6 @@ export default function App() {
   const [loadedFirst, setLoadedFirst] = useState(0)
   const [loadedLast, setLoadedLast] = useState(-1)
   const [loading, setLoading] = useState(false)
-
   const [skeleton, setSkeleton] = useState(false)
   const [bannerText, setBannerText] = useState('')
   const [bannerVisible, setBannerVisible] = useState(false)
@@ -123,9 +55,15 @@ export default function App() {
   const bannerTimerRef = useRef(null)
   const searchTimerRef = useRef(null)
   const searchInputRef = useRef(null)
+  const searchRunTokenRef = useRef(0)
   const sentinelRef = useRef(null)
   const scrollElRef = useRef(null)
-  const importDialogRef = useRef(null)
+
+  // Handlers read live state through this ref so the window listeners and
+  // intervals never capture a stale render.
+  const latest = useRef({})
+
+  /* ---------- banner ---------- */
 
   const banner = (message) => {
     setBannerText(message)
@@ -133,10 +71,13 @@ export default function App() {
     clearTimeout(bannerTimerRef.current)
     bannerTimerRef.current = setTimeout(() => setBannerVisible(false), 8000)
   }
+
   const hideBanner = () => {
     clearTimeout(bannerTimerRef.current)
     setBannerVisible(false)
   }
+
+  /* ---------- sender colors ---------- */
 
   // Deterministic sender colors, computed once per conversation list (never
   // during render): storing this in state used to trigger React error #301
@@ -152,10 +93,11 @@ export default function App() {
   const senderColor = (conversationId, sender) => {
     if (!sender) return null
     return palettes.get(conversationId)?.get(sender) ?? {
-      light: `hsl(${senderHue(sender)} 55% 38%)`,
-      dark: `hsl(${senderHue(sender)} 60% 74%)`,
+      light: `hsl(${senderColorFallback(sender)} 55% 38%)`,
+      dark: `hsl(${senderColorFallback(sender)} 60% 74%)`,
     }
   }
+
   const senderStyle = (conversationId, sender) => {
     const color = senderColor(conversationId, sender)
     return color ? { '--sender-color': color.light, '--sender-color-dark': color.dark } : undefined
@@ -204,6 +146,8 @@ export default function App() {
     return view
   })()
 
+  /* ---------- loading ---------- */
+
   const loadConversations = async () => {
     const next = await getJson('api/conversations')
     setConversations(next)
@@ -221,8 +165,6 @@ export default function App() {
     setLatestButtonVisible(scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight >= 80)
   }
 
-  const latest = useRef({})
-
   const loadPage = async (offset, { preserveScroll = false } = {}) => {
     if (loading || !latest.current.conversation) return
     setLoading(true)
@@ -238,8 +180,8 @@ export default function App() {
       for (const message of data.messages) nextMessages.set(message.index, message)
       let first = Math.min(loadedFirst, data.offset)
       let last = Math.max(loadedLast, data.offset + data.messages.length - 1)
-      // prune() keeps the DOM bounded while jumping around (same policy as the
-      // Svelte implementation: drop the page farthest from the centre).
+      // Drop the oldest/newest pages farthest from the centre so jumping
+      // around a huge conversation keeps the DOM bounded.
       while (nextMessages.size > MAX_ROWS) {
         const center = (first + last) / 2
         if (last - center >= center - first) {
@@ -253,7 +195,7 @@ export default function App() {
       setMessages(nextMessages)
       setLoadedFirst(first)
       setLoadedLast(last)
-      await nextFrame()
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()))
       if (preserveScroll && scrollElRef.current) {
         scrollElRef.current.scrollTop += scrollElRef.current.scrollHeight - beforeHeight
       }
@@ -277,6 +219,14 @@ export default function App() {
     updateJumpVisibility()
   }
 
+  const scrollToIndex = (index) => {
+    const row = document.getElementById(`m-${index}`)
+    if (!row) return
+    row.scrollIntoView({ block: 'center' })
+    row.classList.add('flash')
+    setTimeout(() => row.classList.remove('flash'), 1600)
+  }
+
   const openConversation = async (id, at = null) => {
     setSearchActive(false)
     const entry = byId.get(id)
@@ -298,18 +248,10 @@ export default function App() {
     const offset = target != null && !Number.isNaN(target)
       ? Math.max(0, Math.min(target, entry.messageCount - 1) - Math.floor(PAGE_SIZE / 2))
       : 0
-    await nextFrame()
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()))
     await loadPage(offset)
     if (target != null && !Number.isNaN(target)) scrollToIndex(target)
     updateJumpVisibility()
-  }
-
-  const scrollToIndex = (index) => {
-    const row = document.getElementById(`m-${index}`)
-    if (!row) return
-    row.scrollIntoView({ block: 'center' })
-    row.classList.add('flash')
-    setTimeout(() => row.classList.remove('flash'), 1600)
   }
 
   const jumpTo = async (index) => {
@@ -321,7 +263,7 @@ export default function App() {
     viewTokenRef.current += 1
     setLoading(false)
     setSkeleton(true)
-    await nextFrame()
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()))
     const offset = Math.max(0, target - Math.floor(PAGE_SIZE / 2))
     await loadPage(offset)
     const scrollEl = scrollElRef.current
@@ -375,19 +317,19 @@ export default function App() {
       if (token === searchRunTokenRef.current) setSearchLoading(false)
     }
   }
-  const searchRunTokenRef = useRef(0)
 
   const searchValue = () => (searchInputRef.current ? searchInputRef.current.value : '').trim()
 
   const onSearchInput = () => {
     clearTimeout(searchTimerRef.current)
     searchTimerRef.current = setTimeout(() => {
-      setSearchQuery(searchValue())
+      const value = searchValue()
+      setSearchQuery(value)
       if (latest.current.searchActive) {
-        syncSearchHash(searchFilters, searchValue())
+        syncSearchHash(searchFilters, value)
         runSearch(false)
-      } else if (searchValue()) {
-        location.hash = `#/search?q=${encodeURIComponent(searchValue())}`
+      } else if (value) {
+        location.hash = `#/search?q=${encodeURIComponent(value)}`
       }
     }, 250)
   }
@@ -413,18 +355,12 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    const node = sentinelRef.current
-    if (!node) return undefined
-    const observer = new IntersectionObserver((entries) => {
-      const current = latest.current
-      if (entries.some((entry) => entry.isIntersecting) && current.searchRendered < current.searchTotal && !current.searchLoading) {
-        current.runSearch(true)
-      }
-    }, { rootMargin: '240px' })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [searchRendered < searchTotal])
+  const setSearchFilter = (key, value) => {
+    const next = { ...searchFilters, [key]: value }
+    setSearchFilters(next)
+    syncSearchHash(next)
+    runSearch(false)
+  }
 
   /* ---------- import ---------- */
 
@@ -444,9 +380,6 @@ export default function App() {
     }
     setImportOpen(false)
   }
-
-  const dismissImportRef = useRef(null)
-  dismissImportRef.current = dismissImport
 
   const discardImport = async () => {
     if (!importBatch) return
@@ -470,7 +403,7 @@ export default function App() {
       setImportStatusError(false)
     }
     if (accepted.length === 0) return
-    const batch = importBatch ?? newBatch()
+    const batch = importBatch ?? `imp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     if (!importBatch) setImportBatch(batch)
     const patchItem = (name, values) => {
       setImportFiles((current) => current.map((item) => (item.name === name ? { ...item, ...values } : item)))
@@ -523,7 +456,7 @@ export default function App() {
         setImportFiles([])
         setImportStatus('Import complete.')
         await Promise.all([loadMeta(), loadConversations()])
-        await handleRoute()
+        await latest.current.handleRoute()
       }
     } catch (error) {
       setImportStatus(error.message)
@@ -592,6 +525,18 @@ export default function App() {
     }
   }
 
+  const moveResultFocus = (delta) => {
+    const results = [...document.querySelectorAll('.search-results .result')]
+    if (!results.length) return
+    const current = results.indexOf(document.activeElement)
+    const next = current === -1 ? (delta > 0 ? 0 : results.length - 1) : Math.min(Math.max(current + delta, 0), results.length - 1)
+    results[next].focus()
+  }
+
+  const openResult = (result) => {
+    location.hash = `#/c/${encodeURIComponent(result.conversationId)}?at=${result.index}`
+  }
+
   const onKeydown = (event) => {
     const current = latest.current
     if (current.importOpen) return
@@ -642,17 +587,18 @@ export default function App() {
     }
   }
 
-  const moveResultFocus = (delta) => {
-    const results = [...document.querySelectorAll('.search-results .result')]
-    if (!results.length) return
-    const current = results.indexOf(document.activeElement)
-    const next = current === -1 ? (delta > 0 ? 0 : results.length - 1) : Math.min(Math.max(current + delta, 0), results.length - 1)
-    results[next].focus()
+  latest.current = {
+    conversation,
+    searchActive,
+    total,
+    importOpen,
+    jumpTo,
+    moveResultFocus,
+    handleRoute,
+    runSearch,
   }
 
-  const openResult = (result) => {
-    location.hash = `#/c/${encodeURIComponent(result.conversationId)}?at=${result.index}`
-  }
+  /* ---------- effects ---------- */
 
   useEffect(() => {
     const onHash = () => latest.current.handleRoute()
@@ -680,46 +626,21 @@ export default function App() {
     return undefined
   }, 15_000, { runImmediately: false })
 
+  // Infinite scrolling for search results.
   useEffect(() => {
-    const element = importDialogRef.current
-    if (!element) return undefined
-    const handleCancel = (event) => {
-      event.preventDefault()
-      dismissImportRef.current?.()
-    }
-    element.addEventListener('cancel', handleCancel)
-    return () => element.removeEventListener('cancel', handleCancel)
+    const node = sentinelRef.current
+    if (!node) return undefined
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting) && searchRendered < searchTotal && !searchLoading) {
+        latest.current.runSearch(true)
+      }
+    }, { rootMargin: '240px' })
+    observer.observe(node)
+    return () => observer.disconnect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [searchRendered < searchTotal])
 
-  useEffect(() => {
-    const element = importDialogRef.current
-    if (!element) return
-    if (importOpen && !element.open) element.showModal()
-    else if (!importOpen && element.open) element.close()
-  }, [importOpen])
-
-  latest.current = {
-    conversation,
-    searchActive,
-    total,
-    importOpen,
-    jumpTo,
-    moveResultFocus,
-    handleRoute,
-    runSearch,
-    reload,
-    searchLoading,
-    searchRendered,
-    searchTotal,
-  }
-
-  const setFilter = (key, value) => {
-    const next = { ...searchFilters, [key]: value }
-    setSearchFilters(next)
-    syncSearchHash(next)
-    runSearch(false)
-  }
+  /* ---------- render ---------- */
 
   return (
     <>
@@ -743,7 +664,7 @@ export default function App() {
           <span id="status" className="status muted" role="status" title={statusTitle}>{statusText}</span>
           <span className="app-header__actions">
             <button id="import" className="outline secondary icon-button" aria-label="Import chat exports" title="Import exports" onClick={openImport}>
-              <Import size={16} strokeWidth={1.8} />
+              <ImportIcon size={16} strokeWidth={1.8} />
             </button>
             <button id="reload" className={`outline secondary icon-button${reloading ? ' spin' : ''}`} aria-label="Reindex the data directory" title="Reindex" onClick={reload}>
               <RefreshCw size={16} strokeWidth={1.8} />
@@ -753,197 +674,48 @@ export default function App() {
         </div>
       </header>
 
-      <div id="banner" className="banner" role="alert" hidden={!bannerVisible}>
-        <span id="banner-text">{bannerText}</span>
-        <button id="banner-close" className="icon-btn" aria-label="Dismiss notification" onClick={hideBanner}>
-          <X size={15} strokeWidth={1.8} />
-        </button>
-      </div>
+      <Banner text={bannerText} visible={bannerVisible} onDismiss={hideBanner} />
 
       <main className="layout">
-        <aside id="sidebar" className={`sidebar${sidebarOpen ? ' open' : ''}`} aria-label="Conversations">
-          <div className="sidebar-head">
-            <input id="conversation-filter" type="search" placeholder="Filter conversations" autoComplete="off" spellCheck="false"
-              aria-label="Filter conversations" value={listFilter} onChange={(event) => setListFilter(event.target.value)} />
-          </div>
-          <ul id="conversation-list" className="conversation-list">
-            {filteredConversations.map((entry) => (
-              <li
-                key={entry.id}
-                className={`conversation-item${conversation?.id === entry.id ? ' active' : ''}`}
-                tabIndex="0"
-                role="button"
-                aria-current={conversation?.id === entry.id ? 'true' : undefined}
-                onClick={() => (location.hash = `#/c/${encodeURIComponent(entry.id)}`)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    location.hash = `#/c/${encodeURIComponent(entry.id)}`
-                  }
-                }}
-              >
-                <div className="avatar" style={senderStyle(entry.id, (entry.senders && entry.senders[0]) ?? entry.name)}>{initials(entry.name)}</div>
-                <div className="info">
-                  <div className="name">{entry.name}</div>
-                  <div className="meta">
-                    <span>{entry.messageCount.toLocaleString()} msgs</span>
-                    <span>{dateLabel(entry.last)}</span>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </aside>
+        <Sidebar
+          conversations={filteredConversations}
+          activeId={conversation?.id}
+          open={sidebarOpen}
+          filter={listFilter}
+          onFilterChange={setListFilter}
+          senderStyle={senderStyle}
+          onOpen={(id) => (location.hash = `#/c/${encodeURIComponent(id)}`)}
+        />
 
         <section id="content" className="content view-bubbles">
           {searchActive ? (
-            <div className="search-view">
-              <div className="search-filters">
-                <select aria-label="Filter by conversation" value={searchFilters.conversation}
-                  onChange={(event) => setFilter('conversation', event.target.value)}>
-                  <option value="">All conversations</option>
-                  {conversations.map((entry) => (
-                    <option key={entry.id} value={entry.id}>{entry.name}</option>
-                  ))}
-                </select>
-                <input className="sender-input" placeholder="Sender" aria-label="Filter by sender" value={searchFilters.sender}
-                  onChange={(event) => {
-                    const next = { ...searchFilters, sender: event.target.value }
-                    setSearchFilters(next)
-                    syncSearchHash(next)
-                    runSearch(false)
-                  }} />
-                <select aria-label="Filter by type" value={searchFilters.type}
-                  onChange={(event) => setFilter('type', event.target.value)}>
-                  <option value="">Any type</option>
-                  {['text', 'media', 'attachment', 'deleted', 'system'].map((type) => (
-                    <option key={type} value={type}>{typeLabel(type)}</option>
-                  ))}
-                </select>
-                <input type="date" title="From date" aria-label="From date" value={searchFilters.from}
-                  onChange={(event) => setFilter('from', event.target.value)} />
-                <input type="date" title="To date" aria-label="To date" value={searchFilters.to}
-                  onChange={(event) => setFilter('to', event.target.value)} />
-                <select aria-label="Result order" value={searchFilters.order}
-                  onChange={(event) => setFilter('order', event.target.value)}>
-                  <option value="desc">Newest first</option>
-                  <option value="asc">Oldest first</option>
-                </select>
-                <label className="whole-toggle">
-                  <input type="checkbox" checked={searchFilters.whole === '1'}
-                    onChange={(event) => setFilter('whole', event.target.checked ? '1' : '')} />
-                  <span>Whole words</span>
-                </label>
-              </div>
-              <div className="search-summary">{searchSummary}</div>
-              <div className="search-results">
-                {searchError ? (
-                  <div className="search-error">
-                    <span>{searchError}</span>
-                    <button onClick={() => runSearch(false)}>Retry</button>
-                  </div>
-                ) : !searchSummary ? (
-                  <div className="empty-state">Type to search, or use the filters above.</div>
-                ) : null}
-                {searchResults.map((result) => (
-                  <div className="result" tabIndex="0" role="button" key={`${result.conversationId}:${result.index}`}
-                    onClick={() => openResult(result)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        openResult(result)
-                      }
-                    }}
-                  >
-                    <div className="line1">
-                      <span className="conversation-name">{result.conversationName}</span>
-                      <span className="result-time">{dateLabel(result.date)} {timeLabel(result.date)}</span>
-                      {result.sender ? (
-                        <span className="sender-chip" style={senderStyle(result.conversationId, result.sender)}>{result.sender}</span>
-                      ) : null}
-                      {typeLabel(result.type) ? <span className="type-badge">{typeLabel(result.type)}</span> : null}
-                    </div>
-                    <div className="snippet">
-                      {!result.matchLength ? (
-                        result.snippet
-                      ) : (
-                        <>
-                          {result.snippet.slice(0, result.matchStart)}<mark>{result.snippet.slice(result.matchStart, result.matchStart + result.matchLength)}</mark>{result.snippet.slice(result.matchStart + result.matchLength)}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {searchRendered < searchTotal ? (
-                  <div className="sentinel" ref={sentinelRef}></div>
-                ) : null}
-              </div>
-            </div>
+            <SearchView
+              conversations={conversations}
+              filters={searchFilters}
+              summary={searchSummary}
+              error={searchError}
+              results={searchResults}
+              renderedCount={searchRendered}
+              totalCount={searchTotal}
+              onFilter={setSearchFilter}
+              onRetry={() => runSearch(false)}
+              onOpenResult={openResult}
+              senderStyle={senderStyle}
+              sentinelRef={sentinelRef}
+            />
           ) : conversation ? (
-            <>
-              <div className="conversation-header">
-                <div className="titles">
-                  <h2>{conversation.name}</h2>
-                  <div className="meta">
-                    {conversation.messageCount.toLocaleString()} messages · {dateLabel(conversation.first)} → {dateLabel(conversation.last)} · {conversation.senders.length} participants
-                  </div>
-                </div>
-              </div>
-              <div id="message-scroll" className="message-scroll" ref={scrollElRef} onScroll={onMessageScroll}>
-                {skeleton ? (
-                  <div className="message-rows">
-                    {Array.from({ length: 8 }, (_, index) => (
-                      <div className="skeleton-row" key={index}>
-                        <div className="skeleton skeleton-line short"></div>
-                        <div className="skeleton skeleton-line"></div>
-                        <div className="skeleton skeleton-line medium"></div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="message-rows">
-                    {messageView.map((row) => {
-                      if (row.kind === 'date') {
-                        return <div className="date-separator" key={row.key}><span>{row.label}</span></div>
-                      }
-                      const message = row.message
-                      return (
-                        <div
-                          key={row.key}
-                          className={`message type-${message.type}${row.grouped ? ' grouped' : ''}`}
-                          id={`m-${message.index}`}
-                          style={message.sender ? senderStyle(conversation.id, message.sender) : undefined}
-                        >
-                          <div className="bubble">
-                            {!row.grouped ? (
-                              <div className="line1">
-                                {message.sender ? <span className="sender">{message.sender}</span> : null}
-                                <span className="time">{timeLabel(message.date)}</span>
-                              </div>
-                            ) : null}
-                            <div className="body">
-                              {bodyParts(message.body).map((part, index) => (
-                                part.href
-                                  ? <a key={index} href={part.href} target="_blank" rel="noopener noreferrer">{part.href}</a>
-                                  : part.text
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-              <div className="jump-controls">
-                <button className={`jump-btn${topButtonVisible ? '' : ' hidden'}`} title="Jump to the first message (Home)" aria-label="Jump to the first message" onClick={() => jumpTo(0)}>
-                  <ArrowUp size={16} strokeWidth={1.8} />
-                </button>
-                <button className={`jump-btn${latestButtonVisible ? '' : ' hidden'}`} title="Jump to the latest message (End)" aria-label="Jump to the latest message" onClick={() => jumpTo(total - 1)}>
-                  <ArrowDown size={16} strokeWidth={1.8} />
-                </button>
-              </div>
-            </>
+            <ConversationView
+              conversation={conversation}
+              messageView={messageView}
+              skeleton={skeleton}
+              scrollRef={scrollElRef}
+              onScroll={onMessageScroll}
+              topVisible={topButtonVisible}
+              latestVisible={latestButtonVisible}
+              onJumpFirst={() => jumpTo(0)}
+              onJumpLatest={() => jumpTo(total - 1)}
+              senderStyle={senderStyle}
+            />
           ) : (
             <div className="empty-state">
               <div>Pick a conversation or search your messages.</div>
@@ -953,45 +725,29 @@ export default function App() {
         </section>
       </main>
 
-      <dialog id="import-dialog" className="import-dialog" ref={importDialogRef}
-        onClick={(event) => { if (event.target === importDialogRef.current) dismissImport() }}>
-        <article>
-          <header className="card__header">
-            <h2>Import chat exports</h2>
-            <button className="outline secondary icon-button" aria-label="Close" onClick={dismissImport}>&times;</button>
-          </header>
-          <p className="import-hint">Upload WhatsApp exports (<code>.zip</code> or <code>.txt</code>). They are merged with the conversations stored here; nothing changes until you press Import. Preview shows the plan without writing anything.</p>
-          <div id="import-drop" className="import-drop"
-            onDragOver={(event) => { event.preventDefault(); event.currentTarget.classList.add('import-drop--over') }}
-            onDragLeave={(event) => event.currentTarget.classList.remove('import-drop--over')}
-            onDrop={(event) => { event.preventDefault(); event.currentTarget.classList.remove('import-drop--over'); chooseImportFiles(event.dataTransfer.files) }}
-          >
-            <input id="import-files" type="file" multiple accept=".zip,.txt,application/zip,text/plain" hidden
-              onChange={(event) => { chooseImportFiles(event.target.files); event.target.value = '' }} />
-            <button type="button" id="import-browse" onClick={(event) => event.currentTarget.parentElement.querySelector('input').click()}>Choose files</button>
-            <span className="import-drop__hint">or drop them here</span>
-          </div>
-          <ul id="import-list" className="import-list">
-            {importFiles.map((entry) => (
-              <li className={`import-item import-item--${entry.state}`} key={entry.name}>
-                <span className="import-item__name">{entry.name}</span>
-                <span className="import-item__meta">
-                  {entry.state === 'done' ? `${formatSize(entry.size)} uploaded` : entry.state === 'error' ? (entry.error ?? 'failed') : entry.state}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <p id="import-status" className={`import-status${importStatusError ? ' import-status--error' : ''}`} hidden={!importStatus}>{importStatus}</p>
-          <pre id="import-result" className="import-result" hidden={!importResult}>{importResult}</pre>
-          <div className="import-actions">
-            <button type="button" id="import-discard" className="outline secondary" hidden={!(importFiles.length > 0 && !importBusy && !importImported)} onClick={discardImport}>Discard uploads</button>
-            <span className="import-actions__spacer"></span>
-            <button type="button" id="import-preview" disabled={!importUploaded || importBusy || importImported} onClick={() => runImport(true)}>Preview</button>
-            <button type="button" id="import-run" disabled={!importUploaded || importBusy || importImported} onClick={() => runImport(false)}>Import</button>
-            <button type="button" id="import-done" hidden={!importImported} onClick={() => setImportOpen(false)}>Done</button>
-          </div>
-        </article>
-      </dialog>
+      <ImportDialog
+        open={importOpen}
+        busy={importBusy}
+        imported={importImported}
+        uploaded={importUploaded}
+        files={importFiles}
+        status={importStatus}
+        statusError={importStatusError}
+        result={importResult}
+        onChooseFiles={chooseImportFiles}
+        onDiscard={discardImport}
+        onRun={runImport}
+        onClose={dismissImport}
+      />
     </>
   )
+}
+
+// Fallback hue for senders that are not part of the conversation's palette
+// (e.g. search results from older data) — kept out of lib/format.js because
+// it shares the hue math with buildSenderPalette.
+function senderColorFallback(sender) {
+  let hash = 0
+  for (const char of sender) hash = (hash * 31 + char.codePointAt(0)) % 360
+  return hash
 }

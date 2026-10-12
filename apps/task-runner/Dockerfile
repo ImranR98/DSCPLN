@@ -4,7 +4,7 @@ FROM node:24-slim
 # commits, age encryption, archives, JSON, SSH and the Python pty helper.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        bash rsync openssh-client git age jq unzip tar wget python3 ca-certificates \
+        bash rsync openssh-client git age jq unzip tar wget python3 ca-certificates adb \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -977,6 +977,35 @@ test('API: host-pinned tasks are unavailable with a reason on the wrong instance
   }
 });
 
+test('availability: check commands gate tasks, cached briefly, first line as reason', () => {
+  const marker = path.join(SANDBOX, `check-${Math.random().toString(36).slice(2)}`);
+  const check = `[ -f '${marker}' ] || { touch '${marker}'; echo "device offline"; exit 1; }`;
+  assert.deepEqual(bctl.availability({ check }, { host: 'srv0' }), [false, 'Unavailable: device offline']);
+  // the marker now exists, but the failing result is cached for the TTL
+  assert.deepEqual(bctl.availability({ check }, { host: 'srv0' }), [false, 'Unavailable: device offline']);
+  assert.deepEqual(
+    bctl.availability({ check: `true # ${marker}-ok` }, { host: 'srv0' }),
+    [true, ''],
+  );
+});
+
+test('API: check-gated tasks are unavailable and refuse to run', async () => {
+  await bootWith(makeConfig([
+    task('Gated', { check: 'echo "no device attached"; exit 1', commands: 'true' }),
+    task('Open', { commands: 'true' }),
+  ]));
+  const { req, close } = await api();
+  const res = await req('GET', '/api/tasks');
+  const byName = Object.fromEntries(res.json.groups[0].tasks.map((t) => [t.name, t]));
+  assert.equal(byName['Gated'].avail, false);
+  assert.equal(byName['Gated'].avail_reason, 'Unavailable: no device attached');
+  assert.equal(byName['Open'].avail, true);
+  const run = await req('POST', '/api/run/Gated', { 'Content-Type': 'application/json' }, '{}');
+  assert.equal(run.status, 400);
+  assert.match(run.json.detail, /no device attached/);
+  await close();
+});
+
 test('config: host must be a machine name string', async () => {
   await assert.rejects(
     () => bctl.loadConfig(makeConfig([task('Bad Host', { host: 42, commands: 'true' })])),

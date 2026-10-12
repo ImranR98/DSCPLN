@@ -70,6 +70,23 @@ bctl_first_glob() {  # PATTERN — print first match (e.g. MTP mounts)
   return 0
 }
 
+bctl_quest_connect() {  # TARGET — wireless adb; connect and wait for `device`
+  local target="$1" i
+  adb connect "$target" >/dev/null 2>&1 || true
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    [[ "$(adb -s "$target" get-state 2>/dev/null)" == "device" ]] && return 0
+    sleep 1
+  done
+  log "ADB device not reachable: $target (enable Wireless debugging on the headset)" >&2
+  return 1
+}
+
+bctl_adb_pull() {  # TARGET DEST REMOTE_PATH... — stream a tar of remote paths into DEST
+  local target="$1" dest="$2"; shift 2
+  mkdir -p "$dest"
+  adb -s "$target" exec-out tar -C /sdcard -c "$@" | tar -x -C "$dest"
+}
+
 bctl_ensure_pipelines() {  # CLI — install the CLI's dependencies once
   local cli="$1" dir
   dir="$(cd "$(dirname "$cli")/.." && pwd)"

@@ -78,8 +78,10 @@ or `ingest:`. Optional: `cwd`, `uploads: true` + `glob` (drop zone; a string
 or list of patterns), `require: [key...]` (fail unless each prompt key has a
 value), `capture: true` + `commit_dir` (output becomes the summary, shown in a
 copy/paste dialog whose Done button git-commits `commit_dir`), `root:` (source
-directory the card requires; glob-aware), `summary_last_line: true` (summary =
-last non-command log line).
+directory the card requires; glob-aware), `check:` (bash gate: the task is
+unavailable while it exits non-zero, with its first output line as the card's
+badge; results are cached ~15s), `summary_last_line: true` (summary = last
+non-command log line).
 
 - `script: 'bash body'` — wrapped in a temp-file heredoc so inner processes
   can't consume the rest of the script from stdin.

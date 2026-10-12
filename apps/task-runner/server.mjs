@@ -11,7 +11,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import express from 'express';
@@ -108,6 +108,37 @@ export function instanceHost() {
   return process.env.BACKUPCTL_HOST || 'pc';
 }
 
+/* `check:` commands gate availability (e.g. a device reachable over adb).
+ * Results are cached briefly so the UI's polling doesn't re-run them; the
+ * first output line becomes the unavailable reason. */
+const CHECK_TTL_MS = 15_000;
+const CHECK_TIMEOUT_MS = 10_000;
+const CHECK_CACHE = new Map(); // expanded command -> { ts, ok, reason }
+
+export function runAvailabilityCheck(command) {
+  const cached = CHECK_CACHE.get(command);
+  const now = Date.now();
+  if (cached && now - cached.ts < CHECK_TTL_MS) return cached;
+  const res = spawnSync('bash', ['-c', command], {
+    encoding: 'utf8',
+    timeout: CHECK_TIMEOUT_MS,
+    killSignal: 'SIGKILL',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const ok = res.status === 0;
+  let reason = '';
+  if (!ok) {
+    const lines = `${res.stdout ?? ''}\n${res.stderr ?? ''}`
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    reason = (lines[0] ?? `check failed (${res.error?.code ?? `exit ${res.status}`})`).slice(0, 160);
+  }
+  const entry = { ts: now, ok, reason };
+  CHECK_CACHE.set(command, entry);
+  return entry;
+}
+
 export function availability(task, local) {
   const host = task.host ?? 'any';
   const here = local?.host ?? instanceHost();
@@ -117,6 +148,11 @@ export function availability(task, local) {
   if (rootRaw) {
     const pattern = expand(resolve(rootRaw, local));
     if (!pathFound(pattern)) return [false, 'Source directory not found'];
+  }
+  if (task.check) {
+    const command = expand(resolve(task.check, local));
+    const { ok, reason } = runAvailabilityCheck(command);
+    if (!ok) return [false, `Unavailable: ${reason}`];
   }
   return [true, ''];
 }

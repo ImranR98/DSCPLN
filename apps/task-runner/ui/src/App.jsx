@@ -1,167 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { RefreshCw, X } from 'lucide-react'
-import { getJson, postJson, showToast, ThemeToggle, Toasts, uploadFile as uploadFileRequest, useModal, usePolling } from '@dscpln/ui-kit'
-
-/* The noVNC viewer is proxied under <basePath>/browser/; its WebSocket path
- * is relative to the viewer page, so it lands on <basePath>/browser/websockify
- * where the server bridges it to the Selenium sidecar. */
-const browserSrc = './browser/?autoconnect=1&resize=scale&reconnect=1&path=websockify'
-
-const formatElapsed = (seconds) => {
-  const sec = Math.max(0, Math.floor(seconds))
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  const s = String(sec % 60).padStart(2, '0')
-  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`
-}
-
-function useDropzone(handler) {
-  const nodeRef = useRef(null)
-  const handlerRef = useRef(handler)
-  handlerRef.current = handler
-
-  useEffect(() => {
-    const node = nodeRef.current
-    if (!node) return undefined
-    const onClick = () => node.querySelector('input[type=file]')?.click()
-    const onDragOver = (event) => {
-      event.preventDefault()
-      node.classList.add('dragover')
-    }
-    const onDragLeave = () => node.classList.remove('dragover')
-    const onDrop = (event) => {
-      event.preventDefault()
-      node.classList.remove('dragover')
-      handlerRef.current(event.dataTransfer.files)
-    }
-    node.addEventListener('click', onClick)
-    node.addEventListener('dragover', onDragOver)
-    node.addEventListener('dragleave', onDragLeave)
-    node.addEventListener('drop', onDrop)
-    return () => {
-      node.removeEventListener('click', onClick)
-      node.removeEventListener('dragover', onDragOver)
-      node.removeEventListener('dragleave', onDragLeave)
-      node.removeEventListener('drop', onDrop)
-    }
-  }, [])
-
-  return nodeRef
-}
-
-function ConfirmModal({ props, close }) {
-  const ref = useRef(null)
-  useModal(ref, () => {
-    props.resolve(false)
-    close()
-  })
-  return (
-    <dialog ref={ref} className="narrow-dialog">
-      <article>
-        <header className="card__header"><h2>{props.title}</h2></header>
-        {props.lines ? (
-          <div className="modal-fields">
-            {props.lines.map((line) => <span key={line}>{line}</span>)}
-          </div>
-        ) : null}
-        <div className="dialog-actions">
-          <button className="outline secondary" onClick={() => { props.resolve(false); close() }}>Cancel</button>
-          <button onClick={() => { props.resolve(true); close() }}>{props.submitLabel}</button>
-        </div>
-      </article>
-    </dialog>
-  )
-}
-
-function FieldsModal({ props, close }) {
-  const ref = useRef(null)
-  const [values, setValues] = useState(() => props.fields.map((field) => field.value ?? ''))
-  useModal(ref, () => {
-    props.resolve(null)
-    close()
-  })
-  return (
-    <dialog ref={ref}>
-      <article>
-        <header className="card__header"><h2>{props.title}</h2></header>
-        <div className="modal-fields">
-          {props.fields.map((field, index) => (
-            <div className="field" key={field.label}>
-              <span className="field__label">{field.label}</span>
-              <input
-                type="password"
-                autoComplete="off"
-                value={values[index]}
-                onChange={(event) => {
-                  const next = [...values]
-                  next[index] = event.target.value
-                  setValues(next)
-                }}
-              />
-            </div>
-          ))}
-        </div>
-        <div className="dialog-actions">
-          <button className="outline secondary" onClick={() => { props.resolve(null); close() }}>Cancel</button>
-          <button onClick={() => { props.resolve(values); close() }}>{props.submitLabel}</button>
-        </div>
-      </article>
-    </dialog>
-  )
-}
-
-function PickerModal({ props, close }) {
-  const ref = useRef(null)
-  useModal(ref, () => {
-    props.resolve(null)
-    close()
-  })
-  return (
-    <dialog ref={ref}>
-      <article>
-        <header className="card__header"><h2>{props.title}</h2></header>
-        <div className="modal-fields">
-          {props.options.map((option) => (
-            <button className="outline secondary picker-option" key={option.name} onClick={() => { props.resolve(option); close() }}>{option.name}</button>
-          ))}
-        </div>
-        <div className="dialog-actions">
-          <button className="outline secondary" onClick={() => { props.resolve(null); close() }}>Cancel</button>
-        </div>
-      </article>
-    </dialog>
-  )
-}
-
-function ResultModal({ props, close, liveLogs }) {
-  const ref = useRef(null)
-  useModal(ref, close)
-  return (
-    <dialog ref={ref} className="wide-dialog">
-      <article>
-        <header className="card__header"><h2>{props.title}</h2></header>
-        <pre className="log-box">{props.live ? (liveLogs[props.task] ?? []).join('\n') : props.text}</pre>
-        <div className="dialog-actions">
-          {props.paste ? (
-            <>
-              <button className="outline secondary" onClick={() => copyText(props.text)}>Copy</button>
-              <button onClick={() => props.onDone(close)}>Done</button>
-            </>
-          ) : (
-            <button className="outline secondary" onClick={close}>Close</button>
-          )}
-        </div>
-      </article>
-    </dialog>
-  )
-}
-
-function copyText(text) {
-  navigator.clipboard
-    .writeText(text)
-    .then(() => showToast('Copied to clipboard'))
-    .catch(() => showToast('Copy failed — select the text manually', 'error'))
-}
+import { RefreshCw } from 'lucide-react'
+import { getJson, postJson, showToast, ThemeToggle, Toasts, uploadFile as uploadFileRequest, usePolling } from '@dscpln/ui-kit'
+import { useDropzone } from './hooks/useDropzone.js'
+import TaskCard from './components/TaskCard.jsx'
+import ConfirmModal from './components/modals/ConfirmModal.jsx'
+import FieldsModal from './components/modals/FieldsModal.jsx'
+import PickerModal from './components/modals/PickerModal.jsx'
+import ResultModal from './components/modals/ResultModal.jsx'
 
 export default function App() {
   const [groups, setGroups] = useState([])
@@ -176,10 +21,10 @@ export default function App() {
   const [modals, setModals] = useState([])
 
   const uploadAborts = useRef(new Map())
-  const liveLogsRef = useRef(liveLogs)
-  liveLogsRef.current = liveLogs
 
   const toast = (message, tone = 'success') => showToast(message, tone)
+
+  /* ---------- modal helpers (promise-based) ---------- */
 
   const openModal = (kind, props, resolve) => {
     const id = crypto.randomUUID()
@@ -201,6 +46,8 @@ export default function App() {
   const resultModal = (title, text, { live = false, paste = false, task = null, onDone = null } = {}) =>
     openModal('result', { title, text, live, paste, task, onDone }, null)
 
+  /* ---------- task data ---------- */
+
   const loadTasks = useCallback(async () => {
     try {
       const data = await getJson('api/tasks')
@@ -215,6 +62,8 @@ export default function App() {
   }, [])
 
   const taskByName = (name) => tasks.find((task) => task.name === name)
+
+  /* ---------- upload queue ---------- */
 
   const queueFiles = (task, files) => {
     if (!task) return
@@ -245,6 +94,8 @@ export default function App() {
     uploadAborts.current.set(task.name, request)
     return request
   }
+
+  /* ---------- running ---------- */
 
   const runTask = async (task, options = {}) => {
     const extra = {}
@@ -338,6 +189,8 @@ export default function App() {
     }
   }
 
+  /* ---------- global dropzone ---------- */
+
   const handleGlobalFiles = async (fileList) => {
     const byTask = new Map()
     for (const file of Array.from(fileList)) {
@@ -372,6 +225,24 @@ export default function App() {
     )
     if (!ok) return
     for (const { task } of entries) runTask(task, { skipGenericConfirm: true })
+  }
+
+  const globalDropRef = useDropzone(handleGlobalFiles)
+
+  /* ---------- polling + logs ---------- */
+
+  const finishPaste = async (task, close) => {
+    try {
+      const result = await postJson(`api/paste_done/${encodeURIComponent(task)}`, {})
+      close()
+      if (!result.committed) {
+        toast('No commit_dir configured for this task — nothing to commit', 'error')
+        return
+      }
+      toast(`Committed ${result.dest || ''}`)
+    } catch (err) {
+      toast(err.message, 'error')
+    }
   }
 
   const poll = useCallback(async () => {
@@ -410,20 +281,6 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadTasks])
 
-  const finishPaste = async (task, close) => {
-    try {
-      const result = await postJson(`api/paste_done/${encodeURIComponent(task)}`, {})
-      close()
-      if (!result.committed) {
-        toast('No commit_dir configured for this task — nothing to commit', 'error')
-        return
-      }
-      toast(`Committed ${result.dest || ''}`)
-    } catch (err) {
-      toast(err.message, 'error')
-    }
-  }
-
   const openLog = async (task) => {
     if (task.running) {
       resultModal(`${task.name} — live log`, (liveLogs[task.name] ?? []).join('\n'), { live: true, task: task.name })
@@ -452,7 +309,7 @@ export default function App() {
   // internally, so this timer never restarts).
   usePolling(poll, 700, { runImmediately: false })
 
-  const globalDropRef = useDropzone(handleGlobalFiles)
+  /* ---------- render ---------- */
 
   return (
     <>
@@ -497,7 +354,6 @@ export default function App() {
                   now={now}
                   uploading={uploading}
                   queues={queues}
-                  liveLogs={liveLogs}
                   browserAvailable={browserAvailable}
                   openBrowsers={openBrowsers}
                   onToggleBrowser={(name) => setOpenBrowsers((current) => ({ ...current, [name]: !current[name] }))}
@@ -525,108 +381,5 @@ export default function App() {
 
       <Toasts />
     </>
-  )
-}
-
-function TaskCard({
-  task,
-  now,
-  uploading,
-  queues,
-  liveLogs,
-  browserAvailable,
-  openBrowsers,
-  onToggleBrowser,
-  onQueueFiles,
-  onRemoveQueued,
-  onRun,
-  onCancel,
-  onLog,
-}) {
-  const dropRef = useDropzone((dropped) => onQueueFiles(task, dropped))
-  const running = task.running
-  const isUploading = uploading[task.name] != null
-  const queued = task.queued
-  const busy = running || isUploading || queued
-  const files = queues[task.name] ?? []
-
-  return (
-    <section className="card task-card" data-task={task.name} data-testid={`task-${task.name}`}>
-      <div className="card__header">
-        <h2 className="card-title">{task.name}</h2>
-        <span className={`pill pill--${running || isUploading ? 'running' : queued ? 'neutral' : (task.state ? task.pill : 'none') ?? 'none'}`}>
-          {running ? (
-            <>Running · {formatElapsed(now / 1000 - (task.started ?? now / 1000))}</>
-          ) : isUploading ? (
-            <>Uploading… {Math.round(uploading[task.name])}%</>
-          ) : queued ? (
-            'Queued…'
-          ) : (
-            task.state ? task.state.last_run_text : 'Never run'
-          )}
-        </span>
-      </div>
-
-      {running && task.live ? (
-        <div className="card-live">{task.live}</div>
-      ) : null}
-
-      {isUploading ? (
-        <div className="upload-bar"><div className="upload-fill" style={{ width: `${Math.round(uploading[task.name])}%` }}></div></div>
-      ) : null}
-
-      {!task.avail ? (
-        <span className="alert-badge badge-unavail">{task.avail_reason}</span>
-      ) : null}
-
-      {task.uploads ? (
-        <>
-          <div className="dropzone-box" tabIndex="0" ref={dropRef}>
-            <span className="dropzone-note">{task.note || 'Drop files here or click to browse'}</span>
-            <input type="file" multiple hidden onChange={(event) => { onQueueFiles(task, event.target.files); event.target.value = '' }} />
-          </div>
-          {files.length ? (
-            <div className="queue-list">
-              {files.map((file) => (
-                <div className="queue-item" key={file.name}>
-                  <span className="queue-name">{file.name}</span>
-                  <button className="outline secondary icon-button icon-button--small" title="Remove from queue" aria-label={`Remove ${file.name} from queue`} onClick={() => onRemoveQueued(task, file)}>
-                    <X size={14} strokeWidth={1.8} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </>
-      ) : task.note ? (
-        <div className="card-note">{task.note}</div>
-      ) : null}
-
-      <div className="card-actions">
-        {task.export_url ? (
-          <a role="button" className="outline secondary" href={task.export_url} target="_blank" rel="noreferrer">Generate Export</a>
-        ) : null}
-        <button
-          className={busy ? 'outline secondary' : ''}
-          disabled={!busy && (!task.avail || (task.uploads && !files.length))}
-          onClick={() => (busy ? onCancel(task.name) : onRun(task))}
-        >{busy ? 'Stop' : 'Run'}</button>
-        <button className="outline secondary" onClick={() => onLog(task)}>Log</button>
-      </div>
-
-      {task.browser && browserAvailable ? (
-        <div className="browser-block">
-          <div className="browser-actions">
-            <button className="outline secondary" onClick={() => onToggleBrowser(task.name)}>
-              {openBrowsers[task.name] ? 'Hide login browser' : 'Open login browser'}
-            </button>
-            <a className="browser-newtab" href={browserSrc} target="_blank" rel="noreferrer">New tab</a>
-          </div>
-          {openBrowsers[task.name] ? (
-            <iframe className="browser-frame" title={`${task.name} login browser`} src={browserSrc}></iframe>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
   )
 }

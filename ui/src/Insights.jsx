@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChartNoAxesColumn, LayoutDashboard, Wrench } from 'lucide-react'
 import {
   formats,
+  getJson,
   startOfDay,
   toIso,
   parseIso,
@@ -15,7 +16,7 @@ import * as IM from './lib/insights-math.js'
 import { moneyFor, currencyColor } from './lib/money.js'
 import { renderMonthly } from './lib/chart.js'
 import { sortNewestFirst, formatCount } from './lib/transactions.js'
-import { requestJson } from './lib/request.js'
+
 import TransactionList from './TransactionList.jsx'
 import CumulativeChart from './CumulativeChart.jsx'
 
@@ -297,8 +298,8 @@ export default function Insights() {
         end: IM.toIsoDate(chartRange.end),
       })
       const [referenceResult, transactionsResult] = await Promise.all([
-        reference ? Promise.resolve(reference) : requestJson('/data'),
-        requestJson(`/transactions?${params}`),
+        reference ? Promise.resolve(reference) : getJson('/data'),
+        getJson(`/transactions?${params}`),
       ])
       if (sequence !== fetchSequence.current) {
         return

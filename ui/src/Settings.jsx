@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChartNoAxesColumn, LayoutDashboard } from 'lucide-react'
-import { showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
-import { requestJson } from './lib/request.js'
+import { getJson, postJson, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
+
 
 /* ---------- API reference export ---------- */
 
@@ -68,7 +68,7 @@ export default function Settings() {
 
   const load = async () => {
     try {
-      const result = await requestJson('/token')
+      const result = await getJson('/token')
       setToken(result.token)
     } catch (e) {
       console.error(e)
@@ -102,7 +102,7 @@ export default function Settings() {
     }
     setRegenerating(true)
     try {
-      const result = await requestJson('/token/regenerate', { method: 'POST', body: '{}' })
+      const result = await postJson('/token/regenerate', {})
       setToken(result.token)
       showToast('API token regenerated')
     } catch (e) {

@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { showToast } from '@dscpln/ui-kit'
-import { requestJson } from './lib/request.js'
+import { deleteJson, showToast } from '@dscpln/ui-kit'
+
 
 const DeleteDialog = forwardRef(function DeleteDialog({ money, onrefresh }, ref) {
   const rootRef = useRef(null)
@@ -31,7 +31,7 @@ const DeleteDialog = forwardRef(function DeleteDialog({ money, onrefresh }, ref)
     if (!pending) return
     setDeleting(true)
     try {
-      await requestJson(`/transactions/${encodeURIComponent(pending.id)}`, { method: 'DELETE' })
+      await deleteJson(`/transactions/${encodeURIComponent(pending.id)}`)
       rootRef.current.close()
       setPending(null)
       showToast('Transaction deleted')

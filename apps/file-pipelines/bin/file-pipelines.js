@@ -9,26 +9,26 @@ import { processSnapBatch } from "../src/processors/snapchat.js";
 import { sha256File, uniqueSuffix } from "../src/util.js";
 import { Daemon } from "../src/daemon.js";
 
-const USAGE = `Media Sync CLI
+const USAGE = `File Pipelines CLI
 
 Usage:
-  media-sync standardize [-n] [-p] [--strict] [--parallel N] <dir>
+  file-pipelines standardize [-n] [-p] [--strict] [--parallel N] <dir>
       Standardize dates and file names of media files in a directory tree.
       -n  take the date from the file name when possible (also repairs truncated MP4s)
       -p  do not rename files
-  media-sync snapconcat [--park DIR] [--dest DIR] [--window SECONDS] <dir>
+  file-pipelines snapconcat [--park DIR] [--dest DIR] [--window SECONDS] <dir>
       Concatenate Snapchat-*.mp4 clips by time proximity, standardize and place them.
       --park DIR   move the raw clips aside after successful concatenation
-  media-sync concataudio <src dir> <dest dir>
+  file-pipelines concataudio <src dir> <dest dir>
       Concatenate same-day audio files with a 0.1s tone between them.
-  media-sync clean-synced [--delete | --trash DIR] [--force] <src dir> <dest dir>
+  file-pipelines clean-synced [--delete | --trash DIR] [--force] <src dir> <dest dir>
       Remove files from src that are already present in dest.
-  media-sync serve [--config FILE] [--port N] [--bind HOST] [--force]
+  file-pipelines serve [--config FILE] [--port N] [--bind HOST] [--force]
       Run the watch daemon + web UI.
 `;
 
 function fail(message) {
-  console.error(`media-sync: ${message}`);
+  console.error(`file-pipelines: ${message}`);
   process.exit(2);
 }
 
@@ -171,7 +171,7 @@ async function snapconcatCommand(args) {
     return;
   }
 
-  const stagingDir = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-snap-"));
+  const stagingDir = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-snap-"));
   const exiftool = createExifTool();
   const folder = {
     def: {
@@ -223,7 +223,7 @@ async function concataudioCommand(args) {
 }
 
 async function cleanSyncedCommand(args) {
-  const flags = { mode: "trash", trashDir: path.join(os.homedir(), ".media-sync", "trash"), force: false };
+  const flags = { mode: "trash", trashDir: path.join(os.homedir(), ".file-pipelines", "trash"), force: false };
   const positional = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];

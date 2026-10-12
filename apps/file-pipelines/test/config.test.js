@@ -6,7 +6,7 @@ import path from "node:path";
 import { defaultConfig, loadConfig, validateConfig } from "../src/config.js";
 
 test("fresh boot writes an empty config (no folders)", async () => {
-  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-config-"));
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-config-"));
   try {
     const file = path.join(dir, "config.json");
     const cfg = await loadConfig(file);
@@ -15,7 +15,7 @@ test("fresh boot writes an empty config (no folders)", async () => {
     assert.deepEqual(written.folders, []);
     assert.ok(written.stagingDir);
     assert.ok(written.trashDir);
-    assert.ok(written.syncLockFile.endsWith(".media-sync/lock.json"));
+    assert.ok(written.syncLockFile.endsWith(".file-pipelines/lock.json"));
   } finally {
     await fsp.rm(dir, { recursive: true, force: true });
   }
@@ -26,7 +26,7 @@ test("zero-folder configs are valid", () => {
 });
 
 test("an existing config is loaded without being rewritten", async () => {
-  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-config-"));
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-config-"));
   try {
     const file = path.join(dir, "config.json");
     const custom = { configVersion: 1, folders: [], concurrency: 3, trashRetentionDays: 7 };

@@ -19,7 +19,7 @@ test("matchesPattern handles *, ? and literals", () => {
 });
 
 test("moveIntoPlace refuses to overwrite an existing destination", async () => {
-  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-place-"));
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-place-"));
   try {
     const src = path.join(dir, "src.txt");
     const dest = path.join(dir, "dest.txt");
@@ -37,7 +37,7 @@ test("moveIntoPlace refuses to overwrite an existing destination", async () => {
 });
 
 test("moveIntoPlace places a file when the destination is free", async () => {
-  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-place2-"));
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-place2-"));
   try {
     const src = path.join(dir, "src.txt");
     const dest = path.join(dir, "dest.txt");
@@ -53,12 +53,12 @@ test("moveIntoPlace places a file when the destination is free", async () => {
 test("default config ships no personal paths or folders", () => {
   const cfg = defaultConfig();
   assert.deepEqual(cfg.folders, []);
-  assert.ok(cfg.stagingDir.startsWith("~/.media-sync/"));
-  assert.ok(cfg.syncLockFile.startsWith("~/.media-sync/"));
+  assert.ok(cfg.stagingDir.startsWith("~/.file-pipelines/"));
+  assert.ok(cfg.syncLockFile.startsWith("~/.file-pipelines/"));
 });
 
 test("replaceIntoPlace replaces atomically and leaves no temp files", async () => {
-  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-replace-"));
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-replace-"));
   try {
     const src = path.join(dir, "staged.txt");
     const dest = path.join(dir, "dest.txt");
@@ -75,7 +75,7 @@ test("replaceIntoPlace replaces atomically and leaves no temp files", async () =
 });
 
 test("replaceIntoPlace creates the destination directory", async () => {
-  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-replace2-"));
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-replace2-"));
   try {
     const src = path.join(dir, "staged.txt");
     const dest = path.join(dir, "nested", "deeper", "dest.txt");
@@ -88,7 +88,7 @@ test("replaceIntoPlace creates the destination directory", async () => {
 });
 
 test("replaceIntoPlace cleans up its temp file when the destination is unusable", async () => {
-  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-replace3-"));
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-replace3-"));
   try {
     const src = path.join(dir, "staged.txt");
     const dest = path.join(dir, "dest-dir");
@@ -96,7 +96,7 @@ test("replaceIntoPlace cleans up its temp file when the destination is unusable"
     await fsp.mkdir(dest);
     await assert.rejects(() => replaceIntoPlace(src, dest));
     assert.equal(await fsp.stat(src).then(() => true).catch(() => false), true, "staged file must survive a failed replace");
-    const leftovers = (await fsp.readdir(dir)).filter((name) => name.includes(".media-sync-"));
+    const leftovers = (await fsp.readdir(dir)).filter((name) => name.includes(".file-pipelines-"));
     assert.deepEqual(leftovers, [], "failed replaces must not leave temp files");
   } finally {
     await fsp.rm(dir, { recursive: true, force: true });
@@ -110,7 +110,7 @@ test("skip-name helpers protect sync artifacts and honor includeHidden", () => {
   assert.equal(shouldSkipName(".stversions", true), true);
   assert.equal(shouldSkipName(".stignore", true), true);
   assert.equal(shouldSkipName(".syncthing.foo", true), true);
-  assert.equal(shouldSkipName(".media-sync-staging", true), true);
+  assert.equal(shouldSkipName(".file-pipelines-staging", true), true);
   assert.equal(shouldSkipName("file.tmp", true), true);
   assert.equal(shouldSkipName("file.tmp.chck", true), true);
   assert.equal(shouldSkipName("file!sync", true), true);

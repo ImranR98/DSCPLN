@@ -205,7 +205,7 @@ export async function concatAudio(srcDir, destDir, { log = console.log } = {}) {
     log(`Date ${++count} of ${dates.length}: ${date}...`);
     const files = entries.filter((name) => name.includes(`-${date}-`));
     if (files.length === 0) continue;
-    const tmpDir = await fsp.mkdtemp(path.join(destDir, ".media-sync-audio-"));
+    const tmpDir = await fsp.mkdtemp(path.join(destDir, ".file-pipelines-audio-"));
     try {
       const tonePcm = path.join(tmpDir, "tone.pcm");
       await makeTonePcm(tonePcm);

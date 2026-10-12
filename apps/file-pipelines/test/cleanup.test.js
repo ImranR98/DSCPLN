@@ -18,7 +18,7 @@ async function exists(p) {
 }
 
 test("trash records the origin and restore returns the file to it", async () => {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-trash-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-trash-"));
   try {
     const sourceDir = path.join(root, "src");
     await fsp.mkdir(sourceDir, { recursive: true });
@@ -51,7 +51,7 @@ test("trash records the origin and restore returns the file to it", async () => 
 });
 
 test("restore without a recorded origin requires a target directory", async () => {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-trash-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-trash-"));
   try {
     const ctx = makeCtx(root);
     const day = "2020-01-02";
@@ -76,7 +76,7 @@ test("restore without a recorded origin requires a target directory", async () =
 });
 
 test("restore refuses to overwrite an existing file", async () => {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-trash-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-trash-"));
   try {
     const sourceDir = path.join(root, "src");
     await fsp.mkdir(sourceDir, { recursive: true });
@@ -97,7 +97,7 @@ test("restore refuses to overwrite an existing file", async () => {
 });
 
 test("emptyTrash removes all day directories", async () => {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-trash-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-trash-"));
   try {
     const ctx = makeCtx(root);
     const day = path.join(ctx.config.trashDir, "2020-01-02");

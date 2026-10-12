@@ -44,7 +44,7 @@ export async function moveIntoPlace(src, dest) {
 // the existing destination file. The destination never sees a partial file.
 export async function replaceIntoPlace(src, dest) {
   await fsp.mkdir(path.dirname(dest), { recursive: true });
-  const tmp = path.join(path.dirname(dest), `.${path.basename(dest)}.media-sync-${uniqueSuffix()}.tmp`);
+  const tmp = path.join(path.dirname(dest), `.${path.basename(dest)}.file-pipelines-${uniqueSuffix()}.tmp`);
   try {
     await fsp.copyFile(src, tmp);
     const [srcStat, tmpStat] = await Promise.all([fsp.stat(src), fsp.stat(tmp)]);

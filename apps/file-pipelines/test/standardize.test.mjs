@@ -34,7 +34,7 @@ async function waitFor(fn, timeoutMs = 60_000, intervalMs = 250) {
 }
 
 test("stageCopy preserves the source mtime (dateless files need a stable date)", async () => {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-stage-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-stage-"));
   try {
     const source = path.join(root, "photo.jpg");
     await fsp.writeFile(source, "not-really-a-jpeg");
@@ -54,7 +54,7 @@ test("stageCopy preserves the source mtime (dateless files need a stable date)",
 });
 
 test("dateless files standardize to their source mtime and clean up (no duplicate copies)", { skip: !CAN_RUN }, async () => {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-dateless-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-dateless-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
   await fsp.mkdir(src, { recursive: true });

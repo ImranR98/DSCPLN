@@ -6,7 +6,7 @@ import path from "node:path";
 import { DirCache, classifyDestMatch, destNamesForSource, isSnapOutputName, parseSnapInputs, plausibleSameSize } from "../src/verify.js";
 
 test("destNamesForSource matches exact, standardized and LifeTagger-renamed files", async () => {
-  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-verify-"));
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-verify-"));
   try {
     await fsp.writeFile(path.join(dir, "2021-01-02-03-04-05-(IMG_1).jpg"), "x");
     await fsp.writeFile(path.join(dir, "2021-01-02-03-04-05-(IMG_2)-[beach, sunny].jpg"), "x");

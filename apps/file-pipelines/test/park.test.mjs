@@ -15,7 +15,7 @@ test("parkPathFor keeps ids inside the folder's park directory", () => {
 });
 
 test("review file API rejects traversal ids with 404", async () => {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-traversal-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-traversal-"));
   const configPath = path.join(root, "config.json");
   await fsp.mkdir(path.join(root, "src"), { recursive: true });
   await fsp.mkdir(path.join(root, "dest"), { recursive: true });

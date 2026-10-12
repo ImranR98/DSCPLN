@@ -6,8 +6,8 @@
     DollarSign,
     MessageSquareText,
     Music,
-    Play,
     RefreshCw,
+    Workflow,
     Wrench,
   } from 'lucide-svelte'
   import { apiUrl, formatDateTime, formatTime, getJson, humanAgo, ThemeToggle } from '@dscpln/ui-kit'
@@ -15,7 +15,7 @@
 
   const FUNCTIONS = [
     { path: 'balance', icon: DollarSign, name: 'Balance XLSX', description: 'Budget dashboard backed by the live workbook', kind: 'balance' },
-    { path: 'media', icon: Play, name: 'Media Sync', description: 'Device media ingestion, review and cleanup', kind: 'media' },
+    { path: 'pipelines', icon: Workflow, name: 'File Pipelines', description: 'Scheduled folder pipelines: standardize, copy, archive', kind: 'pipelines' },
     { path: 'watxt', icon: MessageSquareText, name: 'WhatsApp TXT', description: 'Browse, import and merge WhatsApp exports', kind: 'watxt' },
     { path: 'tasks', icon: Wrench, name: 'Task Runner', description: 'Config-driven backup and export workflows', kind: 'tasks' },
     { path: 'contacts', icon: Contact, name: 'Contacts + Calendar', description: 'Scheduled Nextcloud exports', kind: 'scheduled' },
@@ -70,7 +70,7 @@
     return { detail, tone, next, nextTone, issue }
   }
 
-  async function mediaDetail(fn) {
+  async function pipelinesDetail(fn) {
     const state = await getJson(`${fn.path}/api/state`)
     if (state.paused) return { detail: 'paused', tone: 'warn', issue: false }
     let active = 0
@@ -123,7 +123,7 @@
 
   const DETAILS = {
     scheduled: scheduledDetail,
-    media: mediaDetail,
+    pipelines: pipelinesDetail,
     watxt: watxtDetail,
     tasks: tasksDetail,
     balance: balanceDetail,

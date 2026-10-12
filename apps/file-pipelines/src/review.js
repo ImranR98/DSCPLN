@@ -93,7 +93,7 @@ async function markInputs(ctx, folder, manifest, status, message) {
 // A late clip causes a group to be re-merged under the same destination name.
 // Replacing the earlier destination merge is only allowed when the existing
 // file is provably an earlier merge of the same group: it must carry the
-// media-sync XMP input list and every listed input must be in the new manifest.
+// file-pipelines XMP input list and every listed input must be in the new manifest.
 // Any other same-name destination file is never a replace candidate.
 async function supersedesExisting(ctx, folder, destPath, manifest) {
   if (folder.def.method !== "voicenotes" && folder.def.method !== "snapchat") return false;

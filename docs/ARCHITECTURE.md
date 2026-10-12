@@ -11,7 +11,7 @@ DSCPLN/
   apps/
     portal/         root landing page (host root)
     balance-xlsx/   Balance XLSX          /balance
-    media-sync/     Media Sync            /media
+    file-pipelines/     File Pipelines            /pipelines
     whatsapp-txt/   WhatsApp TXT          /watxt
     task-runner/    Task Runner           /tasks
     contacts-calendar/ Contacts + Calendar /contacts
@@ -100,7 +100,7 @@ prunes them. Balance builds three pages from one Vite config
 - **Files that replace user data are atomic**: kit atomic writes for
   config/state; watxt merges write temp+fsync+rename and only delete old
   outputs after every write; balance's API token file is atomic + 0600;
-  media-sync review ids are containment-checked (no escape from the park dir).
+  file-pipelines review ids are containment-checked (no escape from the park dir).
 - **Pods are hardened**: every app drops ALL capabilities, runs with
   `seccompProfile: RuntimeDefault` and `readOnlyRootFilesystem: true` plus a
   memory-backed `/tmp`; Task Runner is the exception (its tasks provision tools
@@ -121,7 +121,7 @@ reverse proxy works — the apps only need `BASE_PATH` set per subpath.
 |---|---|---|---|---|
 | Portal | `/` | `portal` | — | — |
 | Balance XLSX | `/balance` | `balance-xlsx` | config Secret → `/app/config.json`; API state next to the workbook | — (limit checks every 30 min) |
-| Media Sync | `/media` | `media-sync` | config PVC → `/config/config.json` | daemon (no scheduler) |
+| File Pipelines | `/pipelines` | `file-pipelines` | config PVC → `/config/config.json` | daemon (no scheduler) |
 | WhatsApp TXT | `/watxt` | `whatsapp-txt` | data PVC → `/data` (conversations) | — |
 | Task Runner | `/tasks` | `task-runner` | mounted config file, state in `~/.backupctl` | per-task `serial_key` |
 | Contacts + Calendar | `/contacts` | `contacts-calendar` | config PVC → `/data/{config,state}.json` | Sun 03:00 |
@@ -133,7 +133,7 @@ reverse proxy works — the apps only need `BASE_PATH` set per subpath.
 - Portal pills: `online`/`unreachable` from `GET /<path>/api/health`, plus a
   detail line per app and an "N need attention" count. What the portal reads:
   scheduled apps `GET /<path>/api/state` (last run, next run, missed, paused),
-  Media Sync `GET /media/api/state` (queue/error counts), WhatsApp TXT
+  File Pipelines `GET /pipelines/api/state` (queue/error counts), WhatsApp TXT
   `GET /watxt/api/state` (conversations/messages), Task Runner
   `GET /tasks/api/tasks` (per-task last run), Balance `GET /balance/status`
   (budget overage; memoized 60 s so the poll stays cheap).
@@ -157,7 +157,7 @@ reverse proxy works — the apps only need `BASE_PATH` set per subpath.
   `D$CPLN - <Function>: <event>` (ASCII `-`; the ntfy apps mangle non-ASCII
   header characters).
 - Priority/tags: success `default` + `white_check_mark`; failure `high` +
-  `warning`; warnings (balance over budget) `default` + `warning`; Media Sync
+  `warning`; warnings (balance over budget) `default` + `warning`; File Pipelines
   info `low` + `white_check_mark`.
 - Tapping a notification opens the app when the pod has `DSCPLN_ORIGIN`
   (`https://dscpln.<domain>`) — the kit builds `DSCPLN_ORIGIN + BASE_PATH` and
@@ -165,7 +165,7 @@ reverse proxy works — the apps only need `BASE_PATH` set per subpath.
 - Failures always notify; successes only when each app's `ntfy.notifySuccess`
   is on (contacts/compose on; ytmusic off — daily runs would be spam). Media
   Sync keeps its per-folder `notify: all|errors` setting.
-- Media Sync has a test button/endpoint: `POST /media/api/ntfy-test`.
+- File Pipelines has a test button/endpoint: `POST /pipelines/api/ntfy-test`.
 
 **Scheduler semantics** (`packages/server-kit/scheduler.mjs`)
 
@@ -182,7 +182,7 @@ reverse proxy works — the apps only need `BASE_PATH` set per subpath.
 
 - Compose State: retention 1 archive per target; the old archive is removed only
   after the new one is written (destination `~/compose_state_backups`).
-- Media Sync: staged copies are verified before originals move to trash; review
+- File Pipelines: staged copies are verified before originals move to trash; review
   items park in the review dir until approved.
 - WhatsApp TXT: merges write temp files that are fsynced+renamed; old outputs
   are deleted only after every write succeeds.

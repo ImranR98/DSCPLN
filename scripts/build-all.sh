@@ -13,11 +13,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 INFRA_DIR="${INFRA_DIR:-}"
 
-ALL_APPS=(portal balance-xlsx media-sync whatsapp-txt task-runner contacts-calendar compose-state ytmusic)
+ALL_APPS=(portal balance-xlsx file-pipelines whatsapp-txt task-runner contacts-calendar compose-state ytmusic)
 # app -> image name suffix (matches scripts/build.sh)
 declare -A IMAGE_NAMES=(
     [balance-xlsx]=dscpln-balance
-    [media-sync]=dscpln-media-sync
+    [file-pipelines]=dscpln-file-pipelines
     [whatsapp-txt]=dscpln-watxt
     [task-runner]=dscpln-task-runner
     [contacts-calendar]=dscpln-contacts
@@ -28,7 +28,7 @@ declare -A IMAGE_NAMES=(
 # app -> deployment-template name used by --pin (edit for your repo)
 declare -A TEMPLATES=(
     [balance-xlsx]=dscpln.yaml
-    [media-sync]=immrtlize.yaml
+    [file-pipelines]=file-pipelines.yaml
     [whatsapp-txt]=whatsapp-txt-browser.yaml
     [task-runner]=backupctl.yaml
     [contacts-calendar]=contacts-calendar.yaml

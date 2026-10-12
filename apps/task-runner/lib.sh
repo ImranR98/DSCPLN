@@ -70,29 +70,29 @@ bctl_first_glob() {  # PATTERN — print first match (e.g. MTP mounts)
   return 0
 }
 
-bctl_ensure_media_sync() {  # CLI — install the CLI's dependencies once
+bctl_ensure_pipelines() {  # CLI — install the CLI's dependencies once
   local cli="$1" dir
   dir="$(cd "$(dirname "$cli")/.." && pwd)"
   if [[ ! -f "$dir/package-lock.json" ]]; then
     # Monorepo checkout or baked image: the workspace install already provides
     # the CLI's dependencies (no per-app node_modules).
-    log "Media Sync runs from the monorepo install in $dir; skipping npm ci."
+    log "File Pipelines runs from the monorepo install in $dir; skipping npm ci."
     return 0
   fi
   if [[ ! -d "$dir/node_modules" ]]; then
-    log "Installing Media Sync CLI dependencies in $dir..."
+    log "Installing File Pipelines CLI dependencies in $dir..."
     (cd "$dir" && npm ci --omit=dev)
   fi
 }
 
-bctl_media_sync() {  # CLI ARGS... — ensure dependencies, then run the CLI
+bctl_pipelines() {  # CLI ARGS... — ensure dependencies, then run the CLI
   local cli="$1"; shift
-  bctl_ensure_media_sync "$cli"
+  bctl_ensure_pipelines "$cli"
   node "$cli" "$@"
 }
 
-bctl_standardize_into() {  # SRC DEST MEDIA_SYNC_CLI
-  # Copy SRC's files to a temp dir, standardize them with the Media Sync CLI,
+bctl_standardize_into() {  # SRC DEST PIPELINES_CLI
+  # Copy SRC's files to a temp dir, standardize them with the File Pipelines CLI,
   # and move the results into DEST (originals are left in place).
   local src="$1" dest="$2" cli="$3"
   local tmp f found=0
@@ -108,7 +108,7 @@ bctl_standardize_into() {  # SRC DEST MEDIA_SYNC_CLI
     return 0
   fi
   mkdir -p "$dest"
-  if ! bctl_media_sync "$cli" standardize "$tmp"; then
+  if ! bctl_pipelines "$cli" standardize "$tmp"; then
     log "Standardize failed for $src" >&2
     rm -rf "$tmp"
     return 1
@@ -119,13 +119,13 @@ bctl_standardize_into() {  # SRC DEST MEDIA_SYNC_CLI
   rm -rf "$tmp"
 }
 
-bctl_import_pair() {  # SRC DEST MEDIA_SYNC_CLI — clean already-synced + standardize + move + delete originals
+bctl_import_pair() {  # SRC DEST PIPELINES_CLI — clean already-synced + standardize + move + delete originals
   local src="$1" dest="$2" cli="$3"
   if [[ ! -d "$src" ]]; then
     log "Missing source dir: $src"
     return 0
   fi
-  bctl_media_sync "$cli" clean-synced --delete "$src" "$dest"
+  bctl_pipelines "$cli" clean-synced --delete "$src" "$dest"
   log "Importing $(basename "$src") → $dest..."
   bctl_standardize_into "$src" "$dest" "$cli"
   find "$src" -maxdepth 1 -type f -delete

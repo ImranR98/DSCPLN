@@ -44,7 +44,7 @@ async function waitFor(fn, timeoutMs = 75_000, intervalMs = 250) {
 }
 
 async function makeSetup({ paused = false, settleSeconds = 0, dryRun = false } = {}) {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-e2e-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-e2e-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
   await fsp.mkdir(src, { recursive: true });

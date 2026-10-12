@@ -2,7 +2,7 @@
 # Build and push one D$CPLN app image, then print the registry digest to pin
 # in the Infra template. The build context is the monorepo root.
 #
-#   scripts/build.sh media-sync
+#   scripts/build.sh file-pipelines
 #   ENGINE=docker scripts/build.sh balance-xlsx
 #
 # Registry digests must come from the push itself: `podman image inspect
@@ -16,7 +16,7 @@ DOCKERFILE="$ROOT/apps/$APP/Dockerfile"
 
 declare -A IMAGE_NAMES=(
     [balance-xlsx]=dscpln-balance
-    [media-sync]=dscpln-media-sync
+    [file-pipelines]=dscpln-file-pipelines
     [whatsapp-txt]=dscpln-watxt
     [task-runner]=dscpln-task-runner
     [contacts-calendar]=dscpln-contacts

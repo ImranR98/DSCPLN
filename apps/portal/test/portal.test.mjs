@@ -8,7 +8,7 @@ import { createApp } from '@dscpln/server-kit'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const STATIC_DIR = path.join(here, '..', 'static')
 
-const EXPECTED_LINKS = ['/balance', '/media', '/watxt', '/tasks', '/contacts', '/compose', '/ytmusic']
+const EXPECTED_LINKS = ['/balance', '/pipelines', '/watxt', '/tasks', '/contacts', '/compose', '/ytmusic']
 
 async function launchBrowser() {
   const { chromium } = await import('playwright-core')
@@ -124,12 +124,12 @@ test('portal tiles show per-app detail lines', async (t) => {
 
   const page = await browser.newPage()
   const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
-  for (const path of ['balance', 'media', 'watxt', 'tasks', 'contacts', 'compose', 'ytmusic']) {
+  for (const path of ['balance', 'pipelines', 'watxt', 'tasks', 'contacts', 'compose', 'ytmusic']) {
     await page.route(`**/${path}/api/health`, (route) => route.fulfill(json({ ok: true })))
     await page.route(`**/${path}/api/state`, (route) => route.fulfill(json({ paused: false })))
   }
   await page.route('**/balance/status', (route) => route.fulfill(json({ overBudget: ['USD'] })))
-  await page.route('**/media/api/state', (route) =>
+  await page.route('**/pipelines/api/state', (route) =>
     route.fulfill(json({ paused: false, folders: [{ counts: { queued: 2, error: 1 } }] })))
   await page.route('**/watxt/api/state', (route) =>
     route.fulfill(json({ conversations: 3, messages: 42 })))
@@ -150,7 +150,7 @@ test('portal tiles show per-app detail lines', async (t) => {
   const detailOf = (path) => page.$eval(`[data-testid="detail-${path}"]`, (node) => node.textContent)
   assert.match(await detailOf('contacts'), /^last .* · OK$/)
   assert.match(await detailOf('balance'), /USD over budget/)
-  assert.match(await detailOf('media'), /2 active · 1 errors/)
+  assert.match(await detailOf('pipelines'), /2 active · 1 errors/)
   assert.match(await detailOf('watxt'), /3 conversations · 42 messages/)
   assert.match(await detailOf('tasks'), /2 tasks · 1 failing/)
 

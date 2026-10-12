@@ -1,4 +1,4 @@
-# Media Sync
+# File Pipelines
 
 Watches configured folders for new media, processes each file with one of four
 methods, places the result into a destination folder, and **never deletes an
@@ -44,7 +44,7 @@ merge may be the only copy.
   updates, applied atomically); set `onChanged: "conflict"` to flag instead.
   Every other method never overwrites.
 - `copy` folders with `cleanup: false` (e.g. a forever archive) hide and
-  refuse the Cleanup action, so originals are never removed by Media Sync.
+  refuse the Cleanup action, so originals are never removed by File Pipelines.
 - Cleanup verifies before deleting: `copy` files must hash-match; `standardize`
   files must exist under the standardized/tagged name with a matching embedded
   date; snap and voicenote groups must have their output file present, with the
@@ -52,7 +52,7 @@ merge may be the only copy.
   unverifiable is blocked and surfaced as a conflict.
 - Cleaned originals move to **trash** (default retention 30 days) instead of
   being deleted outright.
-- A heartbeat lock file in the synced tree prevents two Media Sync instances
+- A heartbeat lock file in the synced tree prevents two File Pipelines instances
   (e.g. a server and a laptop) from processing the same mirrored folders at once.
 - `dryRun` mode reports what would happen without writing anything.
 
@@ -81,7 +81,7 @@ Paths accept `~` and environment variables. Key fields:
 | `folders[].groupWindowSeconds` | snap grouping window |
 | `folders[].filePattern` | optional glob (`Snapchat-*.mp4`); non-matching files show as ignored |
 | `folders[].recursive` | mirror subdirectories (implied by `voicenotes`); `copy` uses it for whole-tree archives |
-| `folders[].includeHidden` | also ingest dot-files (`copy` archives); sync internals (`.stfolder`, `!sync`, `*.tmp`, `.media-sync*`) are always skipped |
+| `folders[].includeHidden` | also ingest dot-files (`copy` archives); sync internals (`.stfolder`, `!sync`, `*.tmp`, `.file-pipelines*`) are always skipped |
 | `folders[].onChanged` | `copy` only: `overwrite` (default) replaces a changed destination copy atomically; `conflict` flags it |
 | `folders[].cleanup` | `false` hides and refuses cleanup (forever archives) |
 | `folders[].notify` | `all` (default) notifies on every success; `errors` only notifies failures (use for bulk archives) |
@@ -97,14 +97,14 @@ Paths accept `~` and environment variables. Key fields:
 ## CLI
 
 The same processing core is exposed as a standalone CLI
-(`node bin/media-sync.js <cmd>` or `media-sync` after `npm link`):
+(`node bin/file-pipelines.js <cmd>` or `file-pipelines` after `npm link`):
 
 ```sh
-media-sync standardize [-n] [-p] [--strict] [--parallel N] <dir>
-media-sync snapconcat [--park DIR] [--dest DIR] [--window SECONDS] <dir>
-media-sync concataudio <src dir> <dest dir>
-media-sync clean-synced [--delete | --trash DIR] [--force] <src dir> <dest dir>
-media-sync serve [--config FILE] [--port N] [--bind HOST] [--force]
+file-pipelines standardize [-n] [-p] [--strict] [--parallel N] <dir>
+file-pipelines snapconcat [--park DIR] [--dest DIR] [--window SECONDS] <dir>
+file-pipelines concataudio <src dir> <dest dir>
+file-pipelines clean-synced [--delete | --trash DIR] [--force] <src dir> <dest dir>
+file-pipelines serve [--config FILE] [--port N] [--bind HOST] [--force]
 ```
 
 - `standardize`: `-n` takes the date from the file name when possible (with MP4

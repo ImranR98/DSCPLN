@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const CLI = path.join(HERE, "..", "bin", "media-sync.js");
+const CLI = path.join(HERE, "..", "bin", "file-pipelines.js");
 // Optional: point MEDIA_SYNC_BASH_STANDARDIZE at an existing standardize
 // implementation to compare outputs; the suite is skipped without it.
 const BASH_SCRIPT = process.env.MEDIA_SYNC_BASH_STANDARDIZE ?? null;
@@ -40,7 +40,7 @@ function setTags(file, args) {
 }
 
 async function fixtureDir(name, { jpeg = false } = {}) {
-  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), `media-sync-${name}-`));
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), `file-pipelines-${name}-`));
   return dir;
 }
 

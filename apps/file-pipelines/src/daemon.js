@@ -37,7 +37,7 @@ export class Daemon {
     this.log = new Logger(this.config.logDir);
     await this.log.init();
     await ensureRuntimeDirs(this.config, (message) => this.log.log(`WARN: ${message}`));
-    this.log.log(`Media Sync starting (config: ${this.configPath})`);
+    this.log.log(`File Pipelines starting (config: ${this.configPath})`);
 
     this.exiftool = createExifTool();
     this.store = new Store(this.config, this.exiftool);
@@ -82,7 +82,7 @@ export class Daemon {
     this.api = new ApiServer(this);
     await this.api.start();
     this.started = true;
-    this.log.log(`Media Sync running on http://${this.config.bindHost}:${this.config.port}`);
+    this.log.log(`File Pipelines running on http://${this.config.bindHost}:${this.config.port}`);
   }
 
   async stop() {
@@ -99,7 +99,7 @@ export class Daemon {
     await this.api?.close().catch(() => {});
     await this.watchers?.close().catch(() => {});
     await this.lock?.release().catch(() => {});
-    this.log?.log("Media Sync stopped");
+    this.log?.log("File Pipelines stopped");
     this.log?.close();
     await this.exiftool?.end().catch(() => {});
   }

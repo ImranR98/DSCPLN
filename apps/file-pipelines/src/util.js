@@ -66,13 +66,13 @@ export function isTempName(name) {
 }
 
 // Files/folders that are never ingested regardless of includeHidden: Syncthing
-// internals/partials, media-sync scratch files and similar sync/temp artifacts.
+// internals/partials, file-pipelines scratch files and similar sync/temp artifacts.
 export function isSyncOrTempName(name) {
   if (isTempName(name)) return true;
   if (name.endsWith(".tmp.chck")) return true;
   if (name === ".stfolder" || name === ".stversions" || name === ".stignore" || name.startsWith(".stignore.")) return true;
   if (name.startsWith(".syncthing")) return true;
-  if (name.startsWith(".media-sync")) return true;
+  if (name.startsWith(".file-pipelines")) return true;
   return false;
 }
 

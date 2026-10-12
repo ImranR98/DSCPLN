@@ -1,4 +1,4 @@
-// Media Sync notifications: thin level-based wrapper over the shared kit
+// File Pipelines notifications: thin level-based wrapper over the shared kit
 // Notifier so titles, auth, header sanitizing and click-through stay uniform.
 
 import { Notifier as KitNotifier } from "@dscpln/server-kit";
@@ -29,7 +29,7 @@ export class Notifier {
     if (level === "info" && !this.notifySuccess) return { ok: true, skipped: true };
     const { priority, tags } = LEVELS[level] ?? LEVELS.info;
     const result = await this.inner.notify(message, {
-      title: "D$CPLN - Media Sync",
+      title: "D$CPLN - File Pipelines",
       priority,
       tags,
     });

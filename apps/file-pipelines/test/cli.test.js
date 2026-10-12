@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { standardNameFor } from "../src/exif.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const CLI = path.join(HERE, "..", "bin", "media-sync.js");
+const CLI = path.join(HERE, "..", "bin", "file-pipelines.js");
 
 function have(cmd) {
   try {
@@ -22,7 +22,7 @@ function have(cmd) {
 const CAN_RUN = have("ffmpeg") && have("exiftool");
 
 test("cli clean-synced verifies the standardized destination name before removing", { skip: !CAN_RUN }, async () => {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-cli-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-cli-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
   const trash = path.join(root, "trash");
@@ -46,7 +46,7 @@ test("cli clean-synced verifies the standardized destination name before removin
 });
 
 test("cli clean-synced leaves sources alone when the destination name does not match", { skip: !CAN_RUN }, async () => {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-cli2-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-cli2-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
   const trash = path.join(root, "trash");

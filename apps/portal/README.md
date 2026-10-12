@@ -11,7 +11,7 @@ works:
 |---|---|
 | `online` / `unreachable` | `GET /<path>/api/health` |
 | Scheduled apps (last run, next run, missed, paused) | `GET /<path>/api/state` |
-| Media Sync (queue/error counts) | `GET /media/api/state` |
+| File Pipelines (queue/error counts) | `GET /pipelines/api/state` |
 | WhatsApp TXT (conversation/message counts) | `GET /watxt/api/state` |
 | Task Runner (per-task last run) | `GET /tasks/api/tasks` |
 | Balance (budget overage) | `GET /balance/status` |

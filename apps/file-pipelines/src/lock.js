@@ -21,13 +21,13 @@ export class SyncLock {
         const age = Date.now() - Number(data.at ?? 0);
         if (!force && data.host !== this.host && age < this.staleMs) {
           throw new Error(
-            `another Media Sync instance appears to be running on ${data.host} (heartbeat ${Math.round(age / 1000)}s old) — refusing to start`,
+            `another File Pipelines instance appears to be running on ${data.host} (heartbeat ${Math.round(age / 1000)}s old) — refusing to start`,
           );
         }
         if (data.host === this.host && data.pid !== process.pid && age < this.staleMs) {
           try {
             process.kill(data.pid, 0);
-            throw new Error(`another Media Sync process (pid ${data.pid}) is running on this host — refusing to start`);
+            throw new Error(`another File Pipelines process (pid ${data.pid}) is running on this host — refusing to start`);
           } catch (err) {
             if (err.message?.includes("refusing")) throw err;
           }

@@ -390,7 +390,7 @@
 
 <header class="app-header">
   <div class="app-header__top">
-    <h1><a class="app-header__brand" href="/">D<span class="accent">$</span>CPLN</a> <span class="app-header__app">⋅ Media Sync</span></h1>
+    <h1><a class="app-header__brand" href="/">D<span class="accent">$</span>CPLN</a> <span class="app-header__app">⋅ File Pipelines</span></h1>
     <div class="app-header__actions">
       <button class="outline secondary icon-button" title={state?.paused ? 'Resume processing' : 'Pause processing'} aria-label="Pause/Resume" onclick={togglePaused}>
         {#if state?.paused}<Play size={16} strokeWidth={1.8} />{:else}<Pause size={16} strokeWidth={1.8} />{/if}

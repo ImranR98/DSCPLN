@@ -1,14 +1,14 @@
 {
-  "name": "dscpln-media-sync",
+  "name": "dscpln-file-pipelines",
   "version": "1.0.0",
-  "description": "Media Sync \u2014 watch configured folders, standardize/concat/copy media into destination folders, and clean up originals only when it is safe to do so.",
+  "description": "File Pipelines \u2014 watch configured folders, standardize/concat/copy media into destination folders, and clean up originals only when it is safe to do so.",
   "type": "module",
   "license": "MIT",
   "engines": {
     "node": ">=24"
   },
   "bin": {
-    "media-sync": "./bin/media-sync.js"
+    "file-pipelines": "./bin/file-pipelines.js"
   },
   "scripts": {
     "build:ui": "vite build",

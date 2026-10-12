@@ -42,7 +42,7 @@ export class ApiServer {
   async start() {
     const basePath = this.daemon.options.basePath ?? process.env.BASE_PATH ?? "";
     const app = createApp({
-      title: "Media Sync",
+      title: "File Pipelines",
       pageTitle: null, // the page carries its own <title>
       basePath,
       staticDir: PUBLIC_DIR,
@@ -161,7 +161,7 @@ export class ApiServer {
       if (!url) return json(res, 400, { error: "set an ntfy URL first" });
       if (!/^https?:\/\//i.test(url)) return json(res, 400, { error: "ntfy URL must start with http:// or https://" });
       const tester = new Notifier({ ntfy: { url, token } }, this.daemon.log);
-      const result = await tester.notify("low", "Media Sync test notification");
+      const result = await tester.notify("low", "File Pipelines test notification");
       return json(res, result.ok ? 200 : 502, result.ok ? { ok: true } : { error: result.error });
     }
 

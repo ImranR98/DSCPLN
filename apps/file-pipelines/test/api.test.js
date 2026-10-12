@@ -20,7 +20,7 @@ function have(cmd) {
 const CAN_RUN = have("ffmpeg") && have("exiftool") && have("ffprobe");
 
 async function makeDaemon(options = {}) {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-api-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-api-"));
   const configPath = path.join(root, "config.json");
   await fsp.mkdir(path.join(root, "src"), { recursive: true });
   await fsp.mkdir(path.join(root, "dest"), { recursive: true });
@@ -103,7 +103,7 @@ test("api: health, state, pause, process-now, config validation", async () => {
     assert.equal(page.status, 200);
     assert.match(page.headers.get("content-type"), /text\/html/);
     const html = await page.text();
-    assert.match(html, /<title>D\$CPLN ⋅ Media Sync<\/title>/);
+    assert.match(html, /<title>D\$CPLN ⋅ File Pipelines<\/title>/);
     const asset = /src="\.\/(assets\/[^"]+\.js)"/.exec(html)?.[1];
     assert.ok(asset, "the built UI bundle must be referenced");
     assert.equal((await fetch(`${base}/${asset}`)).status, 200);
@@ -173,7 +173,7 @@ test("api: ntfy test endpoint posts to the supplied URL", async () => {
     assert.equal(ok.status, 200);
     assert.equal(received.length, 1);
     assert.equal(received[0].method, "POST");
-    assert.equal(received[0].headers.title, "D$CPLN - Media Sync");
+    assert.equal(received[0].headers.title, "D$CPLN - File Pipelines");
     assert.match(received[0].body, /test notification/);
     assert.equal(received[0].headers.authorization, "Bearer sekret");
 
@@ -187,7 +187,7 @@ test("api: ntfy test endpoint posts to the supplied URL", async () => {
 });
 
 async function makeReviewDaemon(options = {}) {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-api-review-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-api-review-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
   await fsp.mkdir(path.join(src, "201301"), { recursive: true });
@@ -435,28 +435,28 @@ test("api: discard-all clears every parked entry without touching the destinatio
 });
 
 test("api: the app mounts under BASE_PATH with the shared kit", async () => {
-  const { root, daemon, base } = await makeDaemon({ basePath: "/media" });
+  const { root, daemon, base } = await makeDaemon({ basePath: "/pipelines" });
   try {
-    const page = await fetch(`${base}/media`);
+    const page = await fetch(`${base}/pipelines`);
     assert.equal(page.status, 200);
     const html = await page.text();
-    assert.match(html, /<base href="\/media\/">/);
-    assert.match(html, /<title>D\$CPLN ⋅ Media Sync<\/title>/);
+    assert.match(html, /<base href="\/pipelines\/">/);
+    assert.match(html, /<title>D\$CPLN ⋅ File Pipelines<\/title>/);
 
-    const state = await (await fetch(`${base}/media/api/state`)).json();
+    const state = await (await fetch(`${base}/pipelines/api/state`)).json();
     assert.equal(state.folders.length, 1);
 
-    const health = await fetch(`${base}/media/api/health`);
+    const health = await fetch(`${base}/pipelines/api/health`);
     assert.equal(health.status, 200);
 
-    const index = await fetch(`${base}/media/`);
+    const index = await fetch(`${base}/pipelines/`);
     const indexHtml = await index.text();
     const asset = /src="\.\/(assets\/[^"]+\.js)"/.exec(indexHtml)?.[1];
     assert.ok(asset, "the built UI bundle must be referenced");
-    const bundle = await fetch(`${base}/media/${asset}`);
+    const bundle = await fetch(`${base}/pipelines/${asset}`);
     assert.equal(bundle.status, 200);
 
-    const crossOrigin = await fetch(`${base}/media/api/pause`, {
+    const crossOrigin = await fetch(`${base}/pipelines/api/pause`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Origin: "http://evil.example" },
       body: JSON.stringify({ paused: true }),

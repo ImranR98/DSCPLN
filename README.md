@@ -8,7 +8,7 @@ small always-on Node apps — one per function — served behind a single host
 |---|---|---|
 | [Portal](apps/portal/README.md) | `/` | Landing page linking every function with live status |
 | [Balance XLSX](apps/balance-xlsx/README.md) | `/balance` | Budget dashboard backed by an Excel workbook (external, token-protected API at `/balance/api`) |
-| [Media Sync](apps/media-sync/README.md) | `/media` | Watches device folders, standardizes media, queues review/trash |
+| [File Pipelines](apps/file-pipelines/README.md) | `/pipelines` | Watches device folders, standardizes media, queues review/trash |
 | [WhatsApp TXT](apps/whatsapp-txt/README.md) | `/watxt` | Browses, imports and merges WhatsApp chat exports |
 | [Task Runner](apps/task-runner/README.md) | `/tasks` | Config-driven backup/export workflows (bash tasks, drop zones, prompts) |
 | [Contacts + Calendar](apps/contacts-calendar/README.md) | `/contacts` | Scheduled Nextcloud contacts/calendar exports |
@@ -31,14 +31,14 @@ All images use synthetic demo data — regenerate them with
 | | |
 |---|---|
 | ![D$CPLN portal](docs/screenshots/portal.png) | ![Balance dashboard](docs/screenshots/balance-dashboard.png) |
-| ![Media Sync](docs/screenshots/media-sync.png) | ![WhatsApp TXT](docs/screenshots/whatsapp.png) |
+| ![File Pipelines](docs/screenshots/file-pipelines.png) | ![WhatsApp TXT](docs/screenshots/whatsapp.png) |
 | ![Task Runner](docs/screenshots/task-runner.png) | ![Contacts + Calendar settings](docs/screenshots/contacts-settings.png) |
 | ![Infra Compose State](docs/screenshots/compose.png) | ![YTMusic Downloads](docs/screenshots/ytmusic.png) |
 | ![Balance insights](docs/screenshots/balance-insights.png) | ![Contacts + Calendar](docs/screenshots/contacts.png) |
 
 ## Run with Docker
 
-Images are published as `imranrdev/dscpln-<app>` (portal, balance, media-sync,
+Images are published as `imranrdev/dscpln-<app>` (portal, balance, file-pipelines,
 watxt, task-runner, contacts, compose, ytmusic). `docker-compose.example.yaml`
 shows the expected volumes and ports for a few of them:
 
@@ -48,7 +48,7 @@ docker run -p 8080:8080 imranrdev/dscpln-portal:latest
 
 Apps keep their config/state in the directories you mount (or on a Docker
 volume) and can be configured from their Settings UI. When you put several apps
-behind one reverse proxy, set `BASE_PATH=/<name>` (for example `/media`) and
+behind one reverse proxy, set `BASE_PATH=/<name>` (for example `/pipelines`) and
 route `/<name>` to that container; otherwise leave it empty.
 
 ## Development

@@ -73,7 +73,7 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
     await page.route(`**/${p}/api/health`, (route) => route.fulfill(json({ ok: true })))
   }
   await page.route('**/balance/status', (route) => route.fulfill(json({ overBudget: [] })))
-  await page.route('**/media/api/state', (route) => route.fulfill(json({ paused: false, folders: [{ counts: { queued: 2, review: 1 } }] })))
+  await page.route('**/pipelines/api/state', (route) => route.fulfill(json({ paused: false, folders: [{ counts: { queued: 2, review: 1 } }] })))
   await page.route('**/watxt/api/state', (route) => route.fulfill(json({ conversations: 12, messages: 8421 })))
   await page.route('**/tasks/api/tasks', (route) => route.fulfill(json({ groups: [{ tasks: [{ state: { ok: true } }, { state: { ok: true } }, { state: { ok: true } }] }] })))
   await page.route('**/contacts/api/state', (route) => route.fulfill(json({ paused: false, lastRun: { endedAt: ago(120), ok: true }, nextRun: Date.now() + 5 * 86400_000, missed: 0 })))
@@ -139,11 +139,11 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
     trashRetentionDays: 30,
     settleSeconds: 60,
     maxAutoRetries: 3,
-    stagingDir: path.join(root, '.media-sync/staging'),
-    reviewDir: path.join(root, '.media-sync/review'),
-    trashDir: path.join(root, '.media-sync/trash'),
-    logDir: path.join(root, '.media-sync/logs'),
-    syncLockFile: path.join(root, '.media-sync/lock.json'),
+    stagingDir: path.join(root, '.file-pipelines/staging'),
+    reviewDir: path.join(root, '.file-pipelines/review'),
+    trashDir: path.join(root, '.file-pipelines/trash'),
+    logDir: path.join(root, '.file-pipelines/logs'),
+    syncLockFile: path.join(root, '.file-pipelines/lock.json'),
     lockHeartbeatSeconds: 300,
     lockStaleSeconds: 900,
     ntfy: { url: '', token: '', notifySuccess: true },
@@ -152,7 +152,7 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
       { name: 'Screenshots', source: shotsSrc, destination: path.join(root, 'media/Screenshots'), method: 'standardize', settleSeconds: 3600 },
     ],
   }, null, 2))
-  const { Daemon } = await import(path.join(REPO, 'apps/media-sync/src/daemon.js'))
+  const { Daemon } = await import(path.join(REPO, 'apps/file-pipelines/src/daemon.js'))
   const daemon = new Daemon(configPath, {})
   await daemon.start()
   const base = `http://127.0.0.1:${daemon.api.server.address().port}`
@@ -160,7 +160,7 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
   await page.goto(base)
   await page.waitForSelector('.folder-card', { timeout: 15000 })
   await page.waitForTimeout(600)
-  await shoot(page, 'media-sync')
+  await shoot(page, 'file-pipelines')
   await page.close()
   await daemon.stop()
 }

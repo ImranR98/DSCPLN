@@ -11,7 +11,7 @@ function parseArgs(argv) {
     else if (arg === "--bind") options.bind = argv[++i];
     else if (arg === "--force") options.force = true;
     else if (arg === "--help" || arg === "-h") {
-      console.log("Usage: media-sync [--config FILE] [--port N] [--bind HOST] [--force]");
+      console.log("Usage: file-pipelines [--config FILE] [--port N] [--bind HOST] [--force]");
       process.exit(0);
     }
   }
@@ -24,7 +24,7 @@ const daemon = new Daemon(options.config, options);
 try {
   await daemon.start();
 } catch (err) {
-  console.error(`Media Sync failed to start: ${err.message}`);
+  console.error(`File Pipelines failed to start: ${err.message}`);
   process.exit(1);
 }
 

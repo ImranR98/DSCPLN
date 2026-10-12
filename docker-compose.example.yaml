@@ -13,13 +13,13 @@ services:
     ports:
       - "8080:8080"
 
-  media-sync:
-    image: imranrdev/dscpln-media-sync:latest
+  file-pipelines:
+    image: imranrdev/dscpln-file-pipelines:latest
     ports:
       - "8791:8791"
     volumes:
       # config.json + staging/review/trash/logs live here ("~" is HOME=/config).
-      - ./media-sync:/config
+      - ./file-pipelines:/config
       # Your phone-sync folder and the media destination:
       - /path/to/phone-sync:/phone-sync:ro
       - /path/to/media:/media

@@ -19,7 +19,7 @@
     "balance-xlsx": "npm start --workspace dscpln-balance-xlsx",
     "compose-state": "npm start --workspace dscpln-compose",
     "contacts-calendar": "npm start --workspace dscpln-contacts",
-    "media-sync": "npm start --workspace dscpln-media-sync",
+    "file-pipelines": "npm start --workspace dscpln-file-pipelines",
     "portal": "npm start --workspace dscpln-portal",
     "task-runner": "npm start --workspace dscpln-task-runner",
     "whatsapp-txt": "npm start --workspace dscpln-watxt",

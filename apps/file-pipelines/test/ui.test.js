@@ -53,7 +53,7 @@ async function waitFor(fn, timeoutMs = 30_000, intervalMs = 200) {
 }
 
 async function makeSetup() {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-ui-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-ui-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
   await fsp.mkdir(path.join(src, "201301"), { recursive: true });

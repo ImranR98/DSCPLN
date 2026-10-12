@@ -29,7 +29,7 @@ async function writeFile(file, content, mtime = FIXED) {
 }
 
 async function makeSetup(folderOverrides = {}, configOverrides = {}) {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-copy-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-copy-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
   await fsp.mkdir(src, { recursive: true });
@@ -164,7 +164,7 @@ test("copy e2e: overwrite survives a restart by adopting on size+mtime", async (
     const adopted = await waitFor(() => daemon.store.fileFor("mirror", "a.txt")?.status === STATUS.DUPLICATE);
     assert.equal(adopted, true, "a replaced file must be adopted on restart instead of recopied");
     assert.equal(await fsp.readFile(path.join(dest, "a.txt"), "utf8"), "version two");
-    const leftovers = (await fsp.readdir(dest)).filter((name) => name.includes(".media-sync-"));
+    const leftovers = (await fsp.readdir(dest)).filter((name) => name.includes(".file-pipelines-"));
     assert.deepEqual(leftovers, [], "atomic replaces must not leave temp files in the destination");
   } finally {
     await daemon.stop();

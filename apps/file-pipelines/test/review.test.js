@@ -43,7 +43,7 @@ async function waitFor(fn, timeoutMs = 60_000, intervalMs = 250) {
 }
 
 async function makeSetup({ autoProcess = false } = {}) {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-review-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-review-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
   const reviewDir = path.join(root, "review");
@@ -415,7 +415,7 @@ test("voicenotes: cleanup can be disabled for a folder", { skip: !CAN_RUN }, asy
 });
 
 test("standardize: manual placement parks processed photos until approved", { skip: !CAN_RUN }, async () => {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "media-sync-manual-std-"));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-manual-std-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
   await fsp.mkdir(src, { recursive: true });

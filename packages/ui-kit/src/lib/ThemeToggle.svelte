@@ -1,26 +1,30 @@
 <script>
-  import { Moon, Sun } from 'lucide-svelte'
-  import { effectiveTheme, toggleTheme } from './theme.js'
+  import { Monitor, Moon, Sun } from 'lucide-svelte'
+  import { currentTheme, setTheme } from './theme.js'
 
-  let dark = $state(effectiveTheme() === 'dark')
+  const ORDER = ['auto', 'light', 'dark']
 
-  function toggle() {
-    toggleTheme()
-    dark = effectiveTheme() === 'dark'
+  let theme = $state(currentTheme())
+
+  function cycle() {
+    theme = ORDER[(ORDER.indexOf(theme) + 1) % ORDER.length]
+    setTheme(theme)
   }
 </script>
 
 <button
-  class="outline secondary"
+  class="outline secondary icon-button"
   type="button"
   data-testid="theme-toggle"
-  aria-label="Toggle theme"
-  title="Toggle theme"
-  onclick={toggle}
+  title={`Theme: ${theme}`}
+  aria-label={`Theme: ${theme}. Click to change.`}
+  onclick={cycle}
 >
-  {#if dark}
-    <Sun size={16} />
+  {#if theme === 'auto'}
+    <Monitor size={16} strokeWidth={1.8} />
+  {:else if theme === 'dark'}
+    <Moon size={16} strokeWidth={1.8} />
   {:else}
-    <Moon size={16} />
+    <Sun size={16} strokeWidth={1.8} />
   {/if}
 </button>

@@ -46,108 +46,86 @@
   }
 </script>
 
-<dialog bind:this={dialog}>
+<dialog bind:this={dialog} class="wide-dialog">
   <article>
-    <header>
-      <strong>Settings</strong>
-      <button class="close" aria-label="Close" onclick={() => dialog.close()}>&times;</button>
+    <header class="card__header">
+      <h2>Settings</h2>
+      <span class="card__header-tools">
+        <button class="outline secondary icon-button" aria-label="Close" onclick={() => dialog.close()}>&times;</button>
+      </span>
     </header>
 
-    {#if notice}<p><small>{notice}</small></p>{/if}
+    <div class="settings-body">
+      {#if notice}<p class="hint">{notice}</p>{/if}
 
-    {#if schedule}
-      <fieldset>
-        <legend>Schedule</legend>
-        <label>
-          <input type="checkbox" checked={Boolean(draft.schedule.enabled)}
-            onchange={(event) => (draft.schedule.enabled = event.target.checked)} />
-          Enabled
-        </label>
-        <div class="row">
-          <label>At <input type="time" value={draft.schedule.at ?? '03:00'}
-            oninput={(event) => (draft.schedule.at = event.target.value)} /></label>
-          <label>
+      {#if schedule}
+        <section class="settings-section">
+          <h3>Schedule</h3>
+          <div class="settings-row">
+            <span>Enabled</span>
+            <input type="checkbox" checked={Boolean(draft.schedule.enabled)}
+              onchange={(event) => (draft.schedule.enabled = event.target.checked)} />
+          </div>
+          <div class="settings-row">
+            <span>Catch up missed runs</span>
             <input type="checkbox" checked={draft.schedule.catchUp !== false}
               onchange={(event) => (draft.schedule.catchUp = event.target.checked)} />
-            Catch up missed runs
-          </label>
-        </div>
-        <div class="days">
-          {#each DAYS as day, index}
-            <label>
-              <input type="checkbox" checked={(draft.schedule.days ?? []).includes(index)}
-                onchange={(event) => toggleDay(index, event.target.checked)} />
-              {day}
-            </label>
-          {/each}
-        </div>
-        <small>No days selected = every day.</small>
-      </fieldset>
-    {/if}
-
-    {#each fields as field (field.path)}
-      <label>
-        {#if field.type === 'checkbox'}
-          <input type="checkbox" checked={Boolean(value(field.path))}
-            onchange={(event) => update(field.path, event.target.checked)} />
-          {field.label ?? field.path}
-        {:else if field.type === 'textarea'}
-          {field.label ?? field.path}
-          <textarea rows={field.rows ?? 5} placeholder={field.placeholder} spellcheck="false"
-            value={value(field.path)} oninput={(event) => update(field.path, event.target.value)}></textarea>
-        {:else if field.type === 'select'}
-          {field.label ?? field.path}
-          <select value={value(field.path)} onchange={(event) => update(field.path, event.target.value)}>
-            {#each field.options ?? [] as option}
-              <option value={option.value}>{option.label}</option>
+          </div>
+          <div class="field">
+            <span class="field__label">At</span>
+            <input type="time" value={draft.schedule.at ?? '03:00'}
+              oninput={(event) => (draft.schedule.at = event.target.value)} />
+          </div>
+          <p class="hint">No days selected = every day.</p>
+          <div class="settings-days">
+            {#each DAYS as day, index}
+              <label>
+                <input type="checkbox" checked={(draft.schedule.days ?? []).includes(index)}
+                  onchange={(event) => toggleDay(index, event.target.checked)} />
+                {day}
+              </label>
             {/each}
-          </select>
-        {:else}
-          {field.label ?? field.path}
-          <input type={field.type === 'password' ? 'password' : field.type ?? 'text'} placeholder={field.placeholder}
-            autocomplete="off" value={value(field.path)}
-            oninput={(event) => update(field.path, field.type === 'number' ? Number(event.target.value) : event.target.value)} />
-        {/if}
-        {#if field.help && field.type !== 'checkbox'}<small>{field.help}</small>{/if}
-      </label>
-    {/each}
+          </div>
+        </section>
+      {/if}
 
-    {@render extra?.({ draft, update })}
+      {#each fields as field (field.path)}
+        <div class="field">
+          {#if field.type === 'checkbox'}
+            <label>
+              <input type="checkbox" checked={Boolean(value(field.path))}
+                onchange={(event) => update(field.path, event.target.checked)} />
+              {field.label ?? field.path}
+            </label>
+          {:else}
+            <span class="field__label">{field.label ?? field.path}</span>
+            {#if field.type === 'textarea'}
+              <textarea rows={field.rows ?? 5} placeholder={field.placeholder} spellcheck="false" class={field.className}
+                value={value(field.path)} oninput={(event) => update(field.path, event.target.value)}></textarea>
+            {:else if field.type === 'select'}
+              <select value={value(field.path)} onchange={(event) => update(field.path, event.target.value)}>
+                {#each field.options ?? [] as option}
+                  <option value={option.value}>{option.label}</option>
+                {/each}
+              </select>
+            {:else}
+              <input type={field.type === 'password' ? 'password' : field.type ?? 'text'} placeholder={field.placeholder}
+                autocomplete="off" value={value(field.path)}
+                oninput={(event) => update(field.path, field.type === 'number' ? Number(event.target.value) : event.target.value)} />
+            {/if}
+            {#if field.help}<p class="hint">{field.help}</p>{/if}
+          {/if}
+        </div>
+      {/each}
 
-    {#if error}<p class="error">{error}</p>{/if}
+      {@render extra?.({ draft, update })}
 
-    <footer>
-      <button class="secondary" onclick={() => dialog.close()}>Cancel</button>
+      {#if error}<p class="form-error">{error}</p>{/if}
+    </div>
+
+    <div class="dialog-actions">
+      <button class="outline secondary" onclick={() => dialog.close()}>Cancel</button>
       <button onclick={save}>Save</button>
-    </footer>
+    </div>
   </article>
 </dialog>
-
-<style>
-  dialog article {
-    width: min(44rem, 92vw);
-  }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .row {
-    display: flex;
-    gap: 1.5rem;
-    flex-wrap: wrap;
-  }
-  .days {
-    display: flex;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-  }
-  .error {
-    color: var(--pico-del-color);
-  }
-  footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-  }
-</style>

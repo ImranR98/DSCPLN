@@ -10,6 +10,10 @@
     load()
   }
 
+  export function append(line) {
+    lines = [...lines, line].slice(-1000)
+  }
+
   async function load() {
     try {
       lines = (await getJson('api/log?limit=500')).lines ?? []
@@ -21,7 +25,7 @@
     source.onmessage = (message) => {
       try {
         const event = JSON.parse(message.data)
-        if (event.type === 'line') lines = [...lines, event.line].slice(-500)
+        if (event.type === 'line') append(event.line)
       } catch {
         // ignore malformed frames
       }
@@ -35,31 +39,17 @@
   }
 </script>
 
-<dialog bind:this={dialog} onclose={stop}>
+<dialog bind:this={dialog} class="wide-dialog" onclose={stop}>
   <article>
-    <header>
-      <strong>Live log</strong>
-      <button class="close" aria-label="Close" onclick={() => dialog.close()}>&times;</button>
+    <header class="card__header">
+      <h2>Log</h2>
+      <span class="card__header-tools">
+        <button class="outline secondary icon-button" aria-label="Close" onclick={() => dialog.close()}>&times;</button>
+      </span>
     </header>
-    {#if lines.length}
-      <pre class="log">{lines.join('\n')}</pre>
-    {:else}
-      <p>No output yet.</p>
-    {/if}
+    <pre class="code-block log-dialog__output">{lines.length ? lines.join('\n') : 'No output yet.'}</pre>
+    <div class="dialog-actions">
+      <button onclick={() => dialog.close()}>Close</button>
+    </div>
   </article>
 </dialog>
-
-<style>
-  dialog article {
-    width: min(70rem, 92vw);
-  }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .log {
-    max-height: 60vh;
-    overflow: auto;
-  }
-</style>

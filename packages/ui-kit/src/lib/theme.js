@@ -1,7 +1,12 @@
-// Theme is Pico's: the effective theme comes from <html data-theme> when set,
-// otherwise the OS preference. The choice is remembered in localStorage.
+// Theme: "auto" follows the OS and resolves to an explicit light/dark value on
+// <html data-theme>, so the design tokens switch with the system. The choice is
+// remembered in localStorage.
 
 const KEY = 'dscpln-theme'
+
+function prefersDark() {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+}
 
 export function currentTheme() {
   try {
@@ -11,30 +16,47 @@ export function currentTheme() {
   }
 }
 
+function apply(theme) {
+  const dark = theme === 'dark' || (theme === 'auto' && prefersDark())
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+}
+
 export function setTheme(theme) {
-  const root = document.documentElement
   if (theme === 'auto') {
-    delete root.dataset.theme
     try {
       localStorage.removeItem(KEY)
     } catch {
       // storage unavailable
     }
-    return
+  } else {
+    try {
+      localStorage.setItem(KEY, theme)
+    } catch {
+      // storage unavailable
+    }
   }
-  root.dataset.theme = theme
-  try {
-    localStorage.setItem(KEY, theme)
-  } catch {
-    // storage unavailable
-  }
+  apply(theme)
 }
 
 export function effectiveTheme() {
-  return document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+  return document.documentElement.dataset.theme || (prefersDark() ? 'dark' : 'light')
 }
 
 export function toggleTheme() {
   setTheme(effectiveTheme() === 'dark' ? 'light' : 'dark')
   return currentTheme()
+}
+
+if (typeof window !== 'undefined') {
+  const media = window.matchMedia('(prefers-color-scheme: dark)')
+  const onSystemChange = () => {
+    if (currentTheme() === 'auto') {
+      apply('auto')
+    }
+  }
+  if (media.addEventListener) {
+    media.addEventListener('change', onSystemChange)
+  } else if (media.addListener) {
+    media.addListener(onSystemChange)
+  }
 }

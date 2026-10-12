@@ -26,3 +26,15 @@ export function startOfMonth(date) {
 export function endOfMonth(date) {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0)
 }
+
+export function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+
+export function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+export function daysBetween(start, end) {
+  return Math.round((end - start) / (24 * 60 * 60 * 1000)) + 1
+}

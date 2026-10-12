@@ -1,11 +1,21 @@
 <script>
   import { onMount } from 'svelte'
-  import { Settings, Square, Play, ScrollText, RefreshCw } from 'lucide-svelte'
+  import {
+    Activity,
+    ListRestart,
+    Pause,
+    Play,
+    RefreshCw,
+    ScrollText,
+    Settings,
+  } from 'lucide-svelte'
   import { getJson, postJson, putJson, subscribe } from './api.js'
-  import { formatDateTime, formatDuration, humanAgo } from './format.js'
+  import { formatDateTime, formatDuration, formatTime, humanAgo } from './format.js'
   import ThemeToggle from './ThemeToggle.svelte'
   import LogDialog from './LogDialog.svelte'
   import SettingsDialog from './SettingsDialog.svelte'
+  import Toasts from './Toasts.svelte'
+  import { showToast } from './toast.svelte.js'
 
   let {
     name,
@@ -20,20 +30,42 @@
 
   let state = $state(null)
   let config = $state({})
-  let saveError = $state('')
+  let interruptedAt = $state(null)
+  let updatedAt = $state(null)
   let logDialog = $state(null)
   let settingsDialog = $state(null)
 
-  const running = $derived(Boolean(state?.runMarker))
+  const running = $derived(Boolean(state?.run?.running ?? state?.running))
   const paused = $derived(Boolean(config.paused))
-  const status = $derived(running ? 'running' : paused ? 'paused' : 'live')
+  const status = $derived(running ? 'running' : interruptedAt ? 'interrupted' : paused ? 'paused' : 'live')
+  const statusText = $derived(status)
   const last = $derived(state?.lastRun ?? null)
+  const history = $derived(state?.history ?? [])
+
+  const tiles = $derived.by(() => {
+    if (!state) return []
+    return [
+      { label: 'Last run', value: last ? humanAgo(last.endedAt) : 'Never' },
+      { label: 'Result', value: last ? (last.ok ? 'OK' : 'Failed') : '—', tone: last ? (last.ok ? 'ok' : 'over') : null },
+      { label: 'Duration', value: last ? formatDuration(last.durationSec) : '—' },
+      { label: 'Next run', value: state.nextRun ? formatDateTime(state.nextRun) : 'Manual' },
+      state.missed ? { label: 'Missed', value: String(state.missed), tone: 'warn' } : null,
+    ].filter(Boolean)
+  })
+
+  function renderState(next, { keepConfig = false } = {}) {
+    if (!next) return
+    state = next
+    if (!keepConfig && next.config) config = next.config
+    if (next.paused !== undefined) config = { ...config, paused: next.paused }
+    const isRunning = Boolean(next.run?.running ?? next.running)
+    interruptedAt = !isRunning && next.runMarker && (next.lastRun?.endedAt ?? 0) < next.runMarker.startedAt ? next.runMarker.startedAt : null
+    updatedAt = Date.now()
+  }
 
   async function refresh() {
     try {
-      const data = await getJson('api/state')
-      state = data
-      config = data.config ?? config
+      renderState(await getJson('api/state'))
     } catch {
       // keep the last known state
     }
@@ -42,37 +74,48 @@
   async function runNow() {
     try {
       await postJson('api/run', {})
+      showToast(`${name}: run started`)
       await refresh()
     } catch (err) {
-      saveError = err.message
+      showToast(err.message, 'error')
     }
   }
 
   async function stop() {
     try {
       await postJson('api/cancel', {})
-    } catch {
-      // the run may already be gone
+      showToast('Cancelling…')
+    } catch (err) {
+      showToast(err.message, 'error')
     }
   }
 
   async function togglePause() {
-    await postJson('api/pause', { paused: !paused })
-    await refresh()
+    try {
+      await postJson('api/pause', { paused: !paused })
+      showToast(paused ? 'Resumed' : 'Paused')
+      await refresh()
+    } catch (err) {
+      showToast(err.message, 'error')
+    }
   }
 
   async function saveConfig(next) {
     const saved = await putJson('api/config', next)
     config = saved
-    state = state ? { ...state, config: saved } : state
+    if (state) state = { ...state, config: saved }
     onconfig?.(saved)
+    await refresh()
+    return saved
   }
 
   onMount(() => {
     refresh()
     const unsubscribe = subscribe('', (event) => {
-      if (event.type === 'state' && event.state) state = { ...state, ...event.state }
-      if (event.type === 'config' && event.config) config = event.config
+      if (event.type === 'line' && logDialog) logDialog.append(event.line)
+      else if (event.type === 'state' && event.state) renderState(event.state)
+      else if (event.type === 'config' && event.config) config = event.config
+      else if (event.type === 'update') refresh()
     }, { events: 'events' })
     const timer = setInterval(refresh, 15_000)
     return () => {
@@ -82,51 +125,74 @@
   })
 </script>
 
-<header class="app-header container">
+<header class="app-header" data-app={name}>
   <div class="app-header__top">
-    <h1>D<span class="accent">$</span>CPLN <span class="app-name">&middot; {name}</span></h1>
+    <h1>D<span class="accent">$</span>CPLN <span class="app-header__app">· {name}</span></h1>
     <div class="app-header__actions">
-      <span class={`status-tag status-${status}`} data-testid="status">{status}</span>
-      <button class="outline secondary" type="button" title="Pause/Resume" aria-label="Pause/Resume" onclick={togglePause}>
-        {#if paused}<Play size={16} />{:else}<Square size={16} />{/if}
+      <button class="outline secondary icon-button" type="button" title={paused ? 'Resume' : 'Pause'} aria-label="Pause/Resume" onclick={togglePause}>
+        {#if paused}<Play size={16} strokeWidth={1.8} />{:else}<Pause size={16} strokeWidth={1.8} />{/if}
       </button>
       {@render actions?.()}
-      <button class="outline secondary" type="button" title="Settings" aria-label="Settings" onclick={() => settingsDialog.show(config)}>
-        <Settings size={16} />
+      <button class="outline secondary icon-button" type="button" title="Settings" aria-label="Settings" onclick={() => settingsDialog.show(config)}>
+        <Settings size={16} strokeWidth={1.8} />
       </button>
-      <button class="outline secondary" type="button" title="Refresh" aria-label="Refresh" onclick={refresh}>
-        <RefreshCw size={16} />
+      <button class="outline secondary icon-button" type="button" title="Refresh" aria-label="Refresh" onclick={refresh}>
+        <RefreshCw size={16} strokeWidth={1.8} />
       </button>
       <ThemeToggle />
     </div>
   </div>
+  <div class="app-header__meta">
+    <span class={`status-tag status-tag--${status}`} data-testid="status"><span>{statusText}</span></span>
+    <span class="app-header__meta-tools muted">{updatedAt ? `updated ${formatTime(updatedAt)}` : ''}</span>
+  </div>
 </header>
 
-<main class="container">
-  <article class="overview">
-    <header>
-      <strong>Overview</strong>
-      {#if state?.nextRun}<small>next {formatDateTime(state.nextRun)}</small>
-      {:else if schedule}<small>manual</small>{/if}
-    </header>
-    <dl class="tiles">
-      <div><dt>Last run</dt><dd>{last ? humanAgo(last.endedAt) : 'Never'}</dd></div>
-      <div><dt>Result</dt><dd class={last ? (last.ok ? 'status-ok' : 'status-over') : ''}>{last ? (last.ok ? 'OK' : 'Failed') : '—'}</dd></div>
-      <div><dt>Duration</dt><dd>{last ? formatDuration(last.durationSec) : '—'}</dd></div>
-      <div><dt>Next run</dt><dd>{state?.nextRun ? formatDateTime(state.nextRun) : 'Manual'}</dd></div>
-      {#if state?.missed}<div><dt>Missed</dt><dd class="status-warn">{state.missed}</dd></div>{/if}
-    </dl>
-    <footer class="overview-actions">
-      {#if !running}
-        <button onclick={runNow} data-testid="run-now">Run now</button>
+<main>
+  <section class="card card--hero" id="overviewCard">
+    <div class="card__header">
+      <h2>Overview</h2>
+      <span class="card__header-tools">
+        <span class="card__context">{state?.nextRun ? `next ${formatDateTime(state.nextRun)}` : ''}</span>
+      </span>
+    </div>
+
+    <div class="stat-tiles">
+      {#each tiles as tile (tile.label)}
+        <div class="stat-tile">
+          <span class="stat-tile__label">{tile.label}</span>
+          <span class={`stat-tile__value${tile.tone ? ` is-${tile.tone}` : ''}`}>{tile.value ?? '—'}</span>
+        </div>
+      {/each}
+    </div>
+
+    <div class="overview__actions">
+      {#if running}
+        <button class="danger" onclick={stop} data-testid="stop">Stop</button>
       {:else}
-        <button class="secondary" onclick={stop} data-testid="stop">Stop</button>
+        <button onclick={runNow} data-testid="run-now">Run now</button>
       {/if}
-      <button class="secondary" onclick={() => logDialog.show()} data-testid="show-log">Log</button>
-    </footer>
-    {#if last?.summary}<p><small>{last.summary}</small></p>{/if}
-    {#if saveError}<p class="error">{saveError}</p>{/if}
-  </article>
+      <button class="outline secondary" onclick={() => logDialog.show()} data-testid="show-log"><ScrollText size={16} strokeWidth={1.8} /> Log</button>
+    </div>
+
+    {#if last?.summary}<p class="muted">{last.summary}</p>{/if}
+
+    <div class="run-history" hidden={!history.length}>
+      {#if history.length}
+        <h3>Recent runs</h3>
+        <ul class="run-history__list">
+          {#each history.slice(0, 10) as run (run.startedAt + ':' + run.endedAt)}
+            <li class={run.ok ? 'is-ok' : 'is-fail'}>
+              <span>{formatDateTime(run.endedAt)}</span>
+              <span>{run.ok ? 'OK' : 'Failed'}</span>
+              <span class="muted">{formatDuration(run.durationSec)}</span>
+              <span class="run-history__summary">{run.summary ?? ''}</span>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
+  </section>
 
   {@render children?.()}
 </main>
@@ -140,64 +206,12 @@
   onsave={saveConfig}
   extra={settingsExtra}
 />
+<Toasts />
 
 <style>
-  .app-name {
-    font-size: 0.7em;
-    font-weight: 500;
-    color: var(--pico-muted-color);
-  }
-  .status-tag {
-    font-size: 0.75rem;
-    padding: 0.15rem 0.5rem;
-    border-radius: 1rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    background: var(--pico-secondary-background);
-    color: var(--pico-secondary-inverse);
-  }
-  .status-running {
-    background: var(--pico-primary);
-    color: var(--pico-primary-inverse);
-    animation: pulse 1.2s ease-in-out infinite;
-  }
-  .status-paused {
-    background: var(--pico-mark-background-color);
-    color: var(--pico-color);
-  }
-  @keyframes pulse {
-    50% {
-      opacity: 0.6;
-    }
-  }
-  .overview header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-  }
-  .tiles {
-    display: flex;
-    gap: 2rem;
-    flex-wrap: wrap;
-    margin: 0;
-  }
-  .tiles dt {
-    font-size: 0.8rem;
-    color: var(--pico-muted-color);
-  }
-  .tiles dd {
-    margin: 0;
-    font-weight: 600;
-  }
-  .overview-actions {
-    display: flex;
-    gap: 0.5rem;
-  }
-  .overview-actions button {
-    width: auto;
-    margin: 0;
-  }
-  .error {
-    color: var(--pico-del-color);
+  .overview__actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
   }
 </style>

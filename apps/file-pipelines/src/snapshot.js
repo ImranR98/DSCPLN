@@ -126,11 +126,22 @@ export function buildJobManifest({
           nodeSelector: { "kubernetes.io/hostname": node },
           // The shared staging claim is written as the deployment's UID.
           securityContext,
+          // The job only copies files; it never needs the API.
+          automountServiceAccountToken: false,
           containers: [
             {
               name: "snapshot",
               image,
               command: ["bash", "-lc", command],
+              // Defence in depth around the spc_t SELinux type: no privilege
+              // escalation, no capabilities, default seccomp, read-only root
+              // (writes go to the staging PVC / tmp emptyDir / mounted sources).
+              securityContext: {
+                allowPrivilegeEscalation: false,
+                capabilities: { drop: ["ALL"] },
+                seccompProfile: { type: "RuntimeDefault" },
+                readOnlyRootFilesystem: true,
+              },
               env: [
                 { name: "PIPELINE_FOLDER", value: name },
                 { name: "PIPELINE_SOURCE", value: mounts[0] },
@@ -141,12 +152,14 @@ export function buildJobManifest({
               volumeMounts: [
                 ...sources.map((_, index) => ({ name: `source-${index}`, mountPath: mounts[index], readOnly: true })),
                 { name: "staging", mountPath: stagingMount, subPath: stagingSubPath },
+                { name: "tmp", mountPath: "/tmp" },
               ],
             },
           ],
           volumes: [
             ...sources.map((source, index) => ({ name: `source-${index}`, hostPath: { path: source, type: "Directory" } })),
             { name: "staging", persistentVolumeClaim: { claimName: stagingClaim } },
+            { name: "tmp", emptyDir: {} },
           ],
         },
       },

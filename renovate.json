@@ -1,0 +1,23 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "rangeStrategy": "replace",
+  "labels": [
+    "deps"
+  ],
+  "prHourlyLimit": 10,
+  "prConcurrentLimit": 10,
+  "packageRules": [
+    {
+      "description": "Batch non-major npm updates into one PR; majors stay separate",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "groupName": "npm deps (non-major)"
+    }
+  ]
+}

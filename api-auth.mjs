@@ -38,7 +38,7 @@ const readState = (file) => {
     try {
         parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
     } catch (e) {
-        throw new Error(`Could not read API state file ${file}: ${e.message}. Delete it to regenerate the API token.`)
+        throw new Error(`Could not read API state file ${file}: ${e.message}. Delete it to regenerate the API token.`, { cause: e })
     }
     if (!parsed || typeof parsed.token !== 'string') {
         throw new Error(`API state file ${file} is malformed. Delete it to regenerate the API token.`)

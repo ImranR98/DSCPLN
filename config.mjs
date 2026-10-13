@@ -84,7 +84,7 @@ const loadConfig = (configPath) => {
     try {
         parsed = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'))
     } catch (e) {
-        throw new Error(`Could not parse config file ${resolvedPath}: ${e.message}`)
+        throw new Error(`Could not parse config file ${resolvedPath}: ${e.message}`, { cause: e })
     }
     if (!isPlainObject(parsed)) {
         throw new Error(`Config file ${resolvedPath} must contain a JSON object`)

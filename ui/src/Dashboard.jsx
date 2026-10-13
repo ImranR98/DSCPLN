@@ -58,7 +58,7 @@ export default function Dashboard() {
 
   /* ---------- data ---------- */
 
-  const fetchData = async ({ silent = false } = {}) => {
+  const fetchData = async () => {
     const sequence = ++fetchSequence.current
     setToday(startOfDay(new Date()))
     try {
@@ -78,7 +78,7 @@ export default function Dashboard() {
   const refreshNow = () => {
     setSpinning(true)
     window.setTimeout(() => setSpinning(false), 600)
-    fetchData({ silent: true })
+    fetchData()
   }
 
   useLayoutEffect(() => {
@@ -107,7 +107,7 @@ export default function Dashboard() {
     fetchData()
     const onVisibility = () => {
       if (document.visibilityState === 'visible' && Date.now() - lastFetchAt > REFRESH_STALE_MS) {
-        fetchData({ silent: true })
+        fetchData()
       }
     }
     document.addEventListener('visibilitychange', onVisibility)
@@ -169,10 +169,10 @@ export default function Dashboard() {
         </div>
       </main>
 
-      <BudgetDialog ref={budgetDialogRef} data={data} onrefresh={() => fetchData({ silent: true })} />
-      <TransactionDialog ref={transactionDialogRef} data={data} today={today} onrefresh={() => fetchData({ silent: true })} />
-      <ImportDialog ref={importDialogRef} data={data} today={today} onrefresh={() => fetchData({ silent: true })} />
-      <DeleteDialog ref={deleteDialogRef} money={money} onrefresh={() => fetchData({ silent: true })} />
+      <BudgetDialog ref={budgetDialogRef} data={data} onrefresh={() => fetchData()} />
+      <TransactionDialog ref={transactionDialogRef} data={data} today={today} onrefresh={() => fetchData()} />
+      <ImportDialog ref={importDialogRef} data={data} today={today} onrefresh={() => fetchData()} />
+      <DeleteDialog ref={deleteDialogRef} money={money} onrefresh={() => fetchData()} />
 
       <Toasts />
     </>

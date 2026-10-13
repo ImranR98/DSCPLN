@@ -285,7 +285,7 @@ export default (config = {}, configDir = process.cwd()) => {
         try {
             stat = fs.statSync(workbookFile)
         } catch (e) {
-            throw new Error(`Workbook not found: ${workbookFile}`)
+            throw new Error(`Workbook not found: ${workbookFile}`, { cause: e })
         }
         if (parsedCache && parsedCache.mtimeMs === stat.mtimeMs && parsedCache.size === stat.size) {
             return parsedCache

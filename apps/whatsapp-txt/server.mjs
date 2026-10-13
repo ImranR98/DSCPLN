@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 import { execFile as execFileCallback } from 'node:child_process'
 import { parseArgs, promisify } from 'node:util'
 import express from 'express'
-import { createApp as createKitApp } from '@dscpln/server-kit'
+import { asyncRoute, createApp as createKitApp } from '@dscpln/server-kit'
 
 const STATIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'static')
 const MESSAGE_TYPES = new Set(['text', 'media', 'attachment', 'deleted', 'system'])
@@ -235,6 +235,22 @@ const uploadFileName = (value) => {
     return value
 }
 
+// Reject archives that could escape extraction: absolute or `..` member
+// names, or any symlink entry (unzip creates it and a later member written
+// through it lands outside the staging dir — sanitizeStaging runs too late).
+const assertSafeZip = async (file) => {
+    const names = await execFile('unzip', ['-Z1', file])
+    for (const name of names.stdout.split('\n')) {
+        if (!name) continue
+        if (name.startsWith('/') || /^[A-Za-z]:[\\/]/.test(name)) throw new Error('the archive contains an absolute path')
+        if (name.split(/[\\/]/).includes('..')) throw new Error('the archive contains a parent path')
+    }
+    const listing = await execFile('unzip', ['-Z', file])
+    for (const line of listing.stdout.split('\n')) {
+        if (line.startsWith('l')) throw new Error('the archive contains a symlink')
+    }
+}
+
 // Extracted archives must stay inside the staging dir: symlinks are removed
 // (unzip can create them and a later read would follow them) and every real
 // path is re-checked against the staging root (zip-slip defense in depth).
@@ -322,19 +338,19 @@ export const createApp = (state, options = {}) => {
         res.json(result)
     })
 
-            router.post('/api/reload', async (req, res) => {
+            router.post('/api/reload', asyncRoute(async (req, res) => {
         try {
             await state.reload()
             res.json(stateSummary(state.index, state.watching))
         } catch (e) {
             res.status(500).json({ error: e.message })
         }
-    })
+    }))
 
     // --- importing exports --------------------------------------------------
 
     // Streams one uploaded file (raw body) into the batch's incoming directory.
-            router.post('/api/import/upload', checkSameOrigin, async (req, res) => {
+            router.post('/api/import/upload', checkSameOrigin, asyncRoute(async (req, res) => {
         const batch = req.query.batch
         const name = uploadFileName(req.query.name)
         if (!safeBatchName(batch)) return res.status(400).json({ error: 'batch must match [A-Za-z0-9_-]{1,64}' })
@@ -372,11 +388,11 @@ export const createApp = (state, options = {}) => {
         }
         await fsp.rename(part, target)
         res.json({ ok: true, batch, name, size })
-    })
+    }))
 
     // Merges a batch's uploads into the data directory. `dryRun` previews
     // without touching anything (and keeps the batch for a real merge).
-            router.post('/api/import/merge', checkSameOrigin, async (req, res) => {
+            router.post('/api/import/merge', checkSameOrigin, asyncRoute(async (req, res) => {
         const { batch } = req.body ?? {}
         const dryRun = req.body?.dryRun === true
         const dateOrder = req.body?.dateOrder ?? 'auto'
@@ -399,6 +415,7 @@ export const createApp = (state, options = {}) => {
                 const stat = await fsp.stat(full)
                 if (!stat.isFile()) continue
                 if (name.toLowerCase().endsWith('.zip')) {
+                    await assertSafeZip(full)
                     await execFile('unzip', ['-oq', full, '-d', staging])
                 } else {
                     await fsp.copyFile(full, path.join(staging, name))
@@ -407,8 +424,10 @@ export const createApp = (state, options = {}) => {
             // Archives can contain another zip level.
             for (const name of await fsp.readdir(staging)) {
                 if (!name.toLowerCase().endsWith('.zip')) continue
-                await execFile('unzip', ['-oq', path.join(staging, name), '-d', staging])
-                await fsp.rm(path.join(staging, name), { force: true })
+                const nested = path.join(staging, name)
+                await assertSafeZip(nested)
+                await execFile('unzip', ['-oq', nested, '-d', staging])
+                await fsp.rm(nested, { force: true })
             }
             await sanitizeStaging(staging)
             for (const name of await fsp.readdir(staging)) {
@@ -445,14 +464,14 @@ export const createApp = (state, options = {}) => {
         } finally {
             state.mergeInFlight = false
         }
-    })
+    }))
 
-            router.post('/api/import/cancel', checkSameOrigin, async (req, res) => {
+            router.post('/api/import/cancel', checkSameOrigin, asyncRoute(async (req, res) => {
         const { batch } = req.body ?? {}
         if (!safeBatchName(batch)) return res.status(400).json({ error: 'batch must match [A-Za-z0-9_-]{1,64}' })
         await fsp.rm(path.join(state.incomingRoot, batch), { recursive: true, force: true })
         res.json({ ok: true })
-    })
+    }))
 
             router.get('/api/import/last', (req, res) => {
         res.json(state.lastImport ?? null)

@@ -34,8 +34,9 @@ export class ApiServer {
       routes: (router) => {
         router.use("/api", (req, res) => {
           this.#handleApi(req, res).catch((err) => {
-            this.daemon.log.log(`api error: ${err.stack ?? err.message}`);
-            if (!res.headersSent) json(res, 500, { error: err.message });
+            const statusCode = Number.isInteger(err.statusCode) ? err.statusCode : 500;
+            if (statusCode >= 500) this.daemon.log.log(`api error: ${err.stack ?? err.message}`);
+            if (!res.headersSent) json(res, statusCode, { error: err.message });
             else res.end();
           });
         });

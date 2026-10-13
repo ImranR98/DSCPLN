@@ -169,7 +169,17 @@ test("api: ntfy test endpoint posts to the supplied URL", async () => {
     body: JSON.stringify(body),
   });
   try {
-    const ok = await post({ url: `http://127.0.0.1:${port}/topic`, token: "sekret" });
+    // The stored ntfy server is the only legitimate private destination:
+    // configure the stub, then test with the token alone.
+    const cfg = await (await fetch(`${base}/api/config`)).json();
+    const save = await fetch(`${base}/api/config`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...cfg, ntfy: { url: `http://127.0.0.1:${port}/topic`, token: "" } }),
+    });
+    assert.equal(save.status, 200);
+
+    const ok = await post({ token: "sekret" });
     assert.equal(ok.status, 200);
     assert.equal(received.length, 1);
     assert.equal(received[0].method, "POST");
@@ -178,7 +188,8 @@ test("api: ntfy test endpoint posts to the supplied URL", async () => {
     assert.equal(received[0].headers.authorization, "Bearer sekret");
 
     assert.equal((await post({ url: "notaurl" })).status, 400);
-    assert.equal((await post({})).status, 400);
+    // A private address that is not the configured server is an SSRF probe.
+    assert.equal((await post({ url: "http://10.1.2.3/topic" })).status, 400);
   } finally {
     await new Promise((resolve) => fake.close(resolve));
     await daemon.stop();
@@ -527,5 +538,106 @@ test("api: cleanup-all skips folders that opt out of cleanup", async () => {
   } finally {
     await daemon.stop();
     await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("api: the ntfy token is masked on read and preserved across masked saves", async () => {
+  const { daemon, base, root } = await makeDaemon();
+  try {
+    const initial = await (await fetch(`${base}/api/state`)).json();
+    assert.equal(initial.config.ntfy.token, "", "unset token stays empty");
+
+    const saved = await fetch(`${base}/api/config`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...initial.config, ntfy: { url: "https://ntfy.example", token: "secret-token" } }),
+    });
+    assert.equal(saved.status, 200);
+    assert.equal((await saved.json()).ntfy.token, "***");
+
+    const masked = await (await fetch(`${base}/api/config`)).json();
+    assert.equal(masked.ntfy.token, "***");
+
+    // Round-trip the masked value: the stored token must survive.
+    await fetch(`${base}/api/config`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...masked, paused: true }),
+    });
+    assert.equal(daemon.config.ntfy.token, "secret-token");
+    assert.equal(daemon.config.paused, true);
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("api: trash restore only targets configured source/destination trees", async () => {
+  const { daemon, base, root } = await makeDaemon();
+  try {
+    const bad = await fetch(`${base}/api/trash/restore`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files: [], targetDir: path.join(root, "..", "elsewhere") }),
+    });
+    assert.equal(bad.status, 400);
+
+    const good = await fetch(`${base}/api/trash/restore`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files: [], targetDir: path.join(root, "dest", "sub") }),
+    });
+    assert.equal(good.status, 200);
+    assert.deepEqual((await good.json()).results, []);
+
+    const traversal = await fetch(`${base}/api/trash/restore`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files: [], targetDir: path.join(root, "dest", "..", "..") }),
+    });
+    assert.equal(traversal.status, 400);
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("api: ntfy-test refuses private hosts that are not the configured server", async () => {
+  const { daemon, base, root } = await makeDaemon();
+  try {
+    const res = await fetch(`${base}/api/ntfy-test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "http://127.0.0.1:9999" }),
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("api: oversized bodies are rejected with 413", async () => {
+  const { daemon, base, root } = await makeDaemon();
+  try {
+    const res = await fetch(`${base}/api/config`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: `{"pad":"${"x".repeat(1024 * 1024 + 16)}"}`,
+    });
+    assert.equal(res.status, 413);
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("isPrivateHost flags loopback/private/link-local names and literals", async () => {
+  const { isPrivateHost } = await import("../src/api/http.js");
+  for (const host of ["localhost", "127.0.0.1", "10.0.0.5", "192.168.1.10", "172.16.0.1", "172.31.255.255", "169.254.1.1", "[::1]", "fc00::1", "fd12::3", "fe80::1", "box.local"]) {
+    assert.equal(isPrivateHost(host), true, host);
+  }
+  for (const host of ["ntfy.sh", "192.168.0.1.evil.com", "8.8.8.8", "172.32.0.1", "fe81::1"]) {
+    assert.equal(isPrivateHost(host), false, host);
   }
 });

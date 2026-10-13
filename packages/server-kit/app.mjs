@@ -1,6 +1,7 @@
 import express from 'express'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { authFromEnv, proxyAuth } from './auth.mjs'
 import { sameOrigin } from './http.mjs'
 
 // Express app factory shared by every D$CPLN app.
@@ -107,6 +108,10 @@ export function createApp(options = {}) {
   const app = express()
   app.disable('x-powered-by')
   app.set('trust proxy', true)
+  // options.auth === undefined consults AUTH_MODE; null disables the guard
+  // (tests/local runs); an object configures it directly.
+  const authConfig = options.auth === undefined ? authFromEnv() : options.auth
+  if (authConfig) app.use(proxyAuth(authConfig))
   app.use(csrfGuard)
   if (jsonBody) {
     app.use(express.json({ limit: bodyLimit, type: ['application/json'] }))

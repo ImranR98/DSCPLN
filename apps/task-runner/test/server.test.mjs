@@ -232,7 +232,7 @@ test('resolve: nested lookup, typed values, loops, tildes', () => {
   assert.equal(bctl.resolve('{{missing}}', local), '{{missing}}'); // unresolved literal
   assert.equal(bctl.resolve('{{missing}}/x', local), '{{missing}}/x');
   const extra = { uploads: 'a b' };
-  assert.equal(bctl.resolve('{{uploads}}', local, extra), 'a b');
+  assert.equal(bctl.resolve('{{uploads}}', local, extra), `'a b'`); // extras are shell-quoted
 });
 
 test('slugify + state file round-trip (atomic, full output preserved)', () => {
@@ -342,6 +342,34 @@ test('shellQuote', () => {
   assert.equal(bctl.shellQuote('plain'), 'plain');
   assert.equal(bctl.shellQuote('a b'), `'a b'`);
   assert.equal(bctl.shellQuote(`c'd`), `'c'\\''d'`);
+});
+
+test('resolve: extras are shell-quoted literals, locals keep recursive expansion', () => {
+  assert.equal(bctl.resolve('x {{password}} y', {}, { password: 'a b' }), `x 'a b' y`);
+  assert.equal(bctl.resolve('{{password}}', {}, { password: `it's` }), `'it'\\''s'`);
+  assert.equal(bctl.resolve('{{password}}', {}, { password: '$(touch /tmp/x)' }), `'$(touch /tmp/x)'`);
+  assert.equal(bctl.resolve('{{password}}', {}, { password: '{{evil}}' }), `'{{evil}}'`);
+  assert.equal(bctl.resolve('{{uploads}}', {}, { uploads: bctl.shellSafe(`'/a b.txt'`) }), `'/a b.txt'`);
+  assert.equal(bctl.resolve('{{a}}/{{b.c}}', { a: '{{b.c}}', b: { c: 'deep' } }), 'deep/deep');
+});
+
+test('run: prompt values cannot inject shell syntax', async () => {
+  const pwned = path.join(SANDBOX, 'pwned');
+  const t = task('Inject', {
+    group: 'G',
+    prompts: [{ key: 'password', label: 'Password', type: 'secret' }],
+    commands: [`printf '%s' {{password}}`],
+  });
+  const cfgPath = makeConfig([t]);
+  const [local, tasks] = await bctl.loadConfig(cfgPath);
+  const log = [];
+  const hostile = `'; touch '${pwned}'; echo '`;
+  const [ok] = await bctl.runTask(tasks[0], local, [], (l) => log.push(l), { password: hostile });
+  assert.equal(ok, true);
+  assert.equal(fs.existsSync(pwned), false);
+  // The printed value is the literal input (redacted as a prompted secret).
+  assert.ok(log.includes('***'));
+  assert.ok(!log.join('\n').includes(`touch '${pwned}'`));
 });
 
 test('run: shell commands execute under bash', async () => {

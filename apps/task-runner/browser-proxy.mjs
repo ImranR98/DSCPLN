@@ -47,11 +47,17 @@ export function createBrowserHttpHandler(raw) {
   };
 }
 
-export function attachBrowserWebSocket(server, basePath, raw) {
+export function attachBrowserWebSocket(server, basePath, raw, { isAuthorized = null } = {}) {
   const prefix = browserPrefix(basePath);
   const target = upstreamTarget(raw);
   server.on('upgrade', (req, socket, head) => {
     if (req.url !== prefix && !req.url.startsWith(`${prefix}/`)) return;
+    // Upgrades bypass express entirely, so the app's auth guard must run here.
+    if (isAuthorized && !isAuthorized(req)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
     const path = req.url.slice(prefix.length) || '/';
     const up = http.request({
       hostname: target.hostname,

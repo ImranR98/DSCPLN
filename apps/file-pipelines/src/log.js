@@ -27,7 +27,7 @@ export class Logger {
     this.stream?.end();
     try {
       const file = path.join(this.logDir, `file-pipelines-${day}.log`);
-      const stream = fs.createWriteStream(file, { flags: "a" });
+      const stream = fs.createWriteStream(file, { flags: "a", mode: 0o600 });
       stream.on("error", () => {
         if (this.stream === stream) this.stream = null;
       });

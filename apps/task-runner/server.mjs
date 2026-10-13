@@ -15,7 +15,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import express from 'express';
-import { createApp as createKitApp } from '@dscpln/server-kit';
+import { authFromEnv, createApp as createKitApp, isAuthorized } from '@dscpln/server-kit';
 import {
   ConfigError,
   ConfigMissingError,
@@ -23,7 +23,7 @@ import {
   REPO_DIR,
   loadConfig,
 } from './config-loader.mjs';
-import { expand, resolve } from './template.mjs';
+import { expand, resolve, shellSafe } from './template.mjs';
 import {
   attachBrowserWebSocket,
   browserEnabled,
@@ -75,7 +75,8 @@ export async function runCommands(ctx) {
     if (!ctx.extra[key]) return [false, `Missing required input: ${key}`];
   }
   const extra = {
-    uploads: ctx.files.map((f) => shellQuote(String(f))).join(' '),
+    // Each path is quoted; the joined list is already safe shell text.
+    uploads: shellSafe(ctx.files.map((f) => shellQuote(String(f))).join(' ')),
     ...Object.fromEntries(Object.entries(ctx.extra).map(([k, v]) => [k, String(v)])),
   };
   const redact = Object.values(ctx.extra).filter((v) => v).map(String);
@@ -558,7 +559,10 @@ export function main() {
   const app = createApp();
   const server = app.listen(port, values.host, () => console.log(`Task Runner listening on ${url}`));
   if (browserEnabled()) {
-    attachBrowserWebSocket(server, process.env.BASE_PATH ?? '', process.env.BROWSER_REMOTE);
+    const authConfig = authFromEnv();
+    attachBrowserWebSocket(server, process.env.BASE_PATH ?? '', process.env.BROWSER_REMOTE, {
+      isAuthorized: authConfig ? (req) => isAuthorized(req, authConfig) : null,
+    });
   }
 }
 

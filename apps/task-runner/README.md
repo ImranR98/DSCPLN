@@ -93,7 +93,10 @@ true` (summary = last non-command log line).
   into `dest/<name>` (default `state_dir`), and git-commit.
 
 Per-run tokens: `{{uploads}}` (shell-quoted staged file paths) plus one
-`{{key}}` per prompt value. Every command runs with a fresh per-run `$TMPDIR`,
+`{{key}}` per prompt value. Both are substituted as shell-quoted literals —
+never write quotes around a prompt token in `commands`, and a value can never
+inject shell syntax or expand `{{...}}`/`$VAR` (config tokens are trusted and
+still resolve recursively). Every command runs with a fresh per-run `$TMPDIR`,
 wiped when the run ends. `prompts: [{key, label, type: confirm|secret}]` are
 rendered generically; secret values are redacted from the command display and
 output.

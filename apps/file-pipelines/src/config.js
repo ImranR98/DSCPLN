@@ -45,6 +45,14 @@ function asNumber(value, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+// Sentinel the settings UI round-trips unchanged: GET masks the ntfy token,
+// PUT/ntfy-test treat this value as "keep the stored token".
+export const SECRET_MASK = "***";
+
+export function maskConfig(cfg) {
+  return { ...cfg, ntfy: { ...cfg.ntfy, token: cfg.ntfy?.token ? SECRET_MASK : "" } };
+}
+
 export function normalizeConfig(raw) {
   const cfg = {
     ...defaultConfig(),

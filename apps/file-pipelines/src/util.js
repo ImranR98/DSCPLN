@@ -28,7 +28,8 @@ export async function atomicWriteFile(file, data) {
   const dir = path.dirname(file);
   await fsp.mkdir(dir, { recursive: true });
   const tmp = path.join(dir, `.${path.basename(file)}.tmp-${process.pid}-${Date.now()}`);
-  const handle = await fsp.open(tmp, "w");
+  // Config/manifests/lock carry tokens and private paths; never world-readable.
+  const handle = await fsp.open(tmp, "w", 0o600);
   try {
     await handle.writeFile(data);
     await handle.sync();

@@ -29,7 +29,8 @@ export function saveTaskState(task, local, ok, summary, output = '') {
     output,
   };
   const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 1));
+  // Captured output can include secrets/financial data; never world-readable.
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 1), { mode: 0o600 });
   fs.renameSync(tmp, file);
 }
 
@@ -44,7 +45,7 @@ export function loadTaskState(task, local) {
 }
 
 function writeRunning(list) {
-  if (list.length) fs.writeFileSync(RUNNING_FILE, JSON.stringify(list));
+  if (list.length) fs.writeFileSync(RUNNING_FILE, JSON.stringify(list), { mode: 0o600 });
   else fs.rmSync(RUNNING_FILE, { force: true });
 }
 
@@ -71,7 +72,13 @@ export function runningMarker() {
 
 export function stagingDir(taskName) {
   const d = path.join(STATE_DIR, 'staging', slugify(taskName));
-  fs.mkdirSync(d, { recursive: true });
+  fs.mkdirSync(d, { recursive: true, mode: 0o700 });
+  // mkdir mode only applies to new dirs; uploads wait here between stages.
+  try {
+    fs.chmodSync(d, 0o700);
+  } catch {
+    // best effort
+  }
   return d;
 }
 

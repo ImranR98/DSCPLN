@@ -399,3 +399,21 @@ test('sanitizeStaging removes symlinks and keeps real files', async () => {
     assert.deepEqual(fs.readdirSync(dir).sort(), ['chat.txt'])
     fs.rmSync(dir, { recursive: true, force: true })
 })
+
+test('api: import refuses archives containing symlinks', { skip: !haveZip }, async () => {
+    const { state } = makeImportState()
+    await withServer(state, async base => {
+        const work = fs.mkdtempSync(path.join(os.tmpdir(), 'whatsapptxt-zip-'))
+        const src = path.join(work, 'src')
+        fs.mkdirSync(src)
+        fs.writeFileSync(path.join(src, 'chat.txt'), TXT_EXPORT)
+        fs.symlinkSync('/etc/passwd', path.join(src, 'escape.txt'))
+        execFileSync('zip', ['-q', '-y', path.join(work, 'evil.zip'), 'chat.txt', 'escape.txt'], { cwd: src })
+
+        const uploaded = await upload(base, 'evil', 'evil.zip', fs.readFileSync(path.join(work, 'evil.zip')))
+        assert.equal(uploaded.status, 200)
+        const merged = await merge(base, { batch: 'evil' })
+        assert.equal(merged.status, 400)
+        assert.match((await merged.json()).error, /symlink/)
+    })
+})

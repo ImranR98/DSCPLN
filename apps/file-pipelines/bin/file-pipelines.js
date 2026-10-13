@@ -301,7 +301,7 @@ async function cleanSyncedCommand(args) {
           const [a, b] = await Promise.all([sha256File(sourcePath), sha256File(target)]);
           if (a !== b) {
             await fsp.rm(target, { force: true });
-            throw new Error("trash copy failed hash verification");
+            throw new Error("trash copy failed hash verification", { cause: err });
           }
           await fsp.unlink(sourcePath);
         }

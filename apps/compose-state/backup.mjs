@@ -104,7 +104,7 @@ export async function runBackup({ config, dataDir, log = console.log, stamp = AR
         written.push({ target: target.name, name, size: stat.size })
       } catch (err) {
         await fsp.rm(part, { force: true }).catch(() => {})
-        throw new Error(`${target.name}: ${err.message}`)
+        throw new Error(`${target.name}: ${err.message}`, { cause: err })
       }
     }
 

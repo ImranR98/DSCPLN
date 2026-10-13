@@ -63,7 +63,7 @@ export async function defaultTestAuth({ browserJson, downloaderDir = DOWNLOADER_
     return { playlists: Number.parseInt(stdout.trim(), 10) || 0 }
   } catch (err) {
     const detail = `${err.stderr ?? ''}${err.stdout ?? ''}`.trim() || err.message
-    throw new Error(`auth test failed: ${detail.split('\n').slice(-3).join(' ')}`)
+    throw new Error(`auth test failed: ${detail.split('\n').slice(-3).join(' ')}`, { cause: err })
   } finally {
     await fsp.rm(tmpDir, { recursive: true, force: true })
   }

@@ -116,7 +116,7 @@ export class Store extends EventEmitter {
       if (!stat || !stat.isFile()) continue;
       this.addOrUpdate(folderName, name, stat);
     }
-    for (const [name, file] of folder.files) {
+    for (const name of folder.files.keys()) {
       if (!seen.has(name)) {
         folder.files.delete(name);
       }
@@ -261,7 +261,7 @@ export class Store extends EventEmitter {
     const key = `${file.size}:${Math.round(file.mtimeMs)}`;
     if (file.expectFor === key) return file.expected ?? null;
     const sourcePath = path.join(folder.def.source, file.name);
-    let date = null;
+    let date;
     try {
       date = await findRealExifDate(this.exiftool, sourcePath);
     } catch {

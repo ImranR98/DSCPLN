@@ -51,7 +51,7 @@ test('regenerating the key replaces both halves', async () => {
 })
 
 test('archives endpoint lists per-target archives', async () => {
-  await withApp(async ({ base, app, dataDir }) => {
+  await withApp(async ({ base, dataDir }) => {
     const destination = path.join(dataDir, 'backups')
     fs.mkdirSync(destination, { recursive: true })
     fs.writeFileSync(path.join(destination, 'srv0-backup-20260101_000000.tar'), 'x')

@@ -13,29 +13,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 INFRA_DIR="${INFRA_DIR:-}"
 
-ALL_APPS=(portal balance-xlsx file-pipelines whatsapp-txt task-runner contacts-calendar compose-state ytmusic)
-# app -> image name suffix (matches scripts/build.sh)
-declare -A IMAGE_NAMES=(
-    [balance-xlsx]=dscpln-balance
-    [file-pipelines]=dscpln-file-pipelines
-    [whatsapp-txt]=dscpln-watxt
-    [task-runner]=dscpln-task-runner
-    [contacts-calendar]=dscpln-contacts
-    [compose-state]=dscpln-compose
-    [ytmusic]=dscpln-ytmusic
-    [portal]=dscpln-portal
-)
-# app -> deployment-template name used by --pin (edit for your repo)
-declare -A TEMPLATES=(
-    [balance-xlsx]=dscpln.yaml
-    [file-pipelines]=file-pipelines.yaml
-    [whatsapp-txt]=whatsapp-txt-browser.yaml
-    [task-runner]=backupctl.yaml
-    [contacts-calendar]=contacts-calendar.yaml
-    [compose-state]=compose-state.yaml
-    [ytmusic]=ytmusic.yaml
-    [portal]=portal.yaml
-)
+source "$ROOT/scripts/images.sh"
 
 PIN=0
 APPS=()

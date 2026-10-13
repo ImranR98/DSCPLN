@@ -107,7 +107,7 @@ test("api: health, state, pause, process-now, config validation", async () => {
     const asset = /src="\.\/(assets\/[^"]+\.js)"/.exec(html)?.[1];
     assert.ok(asset, "the built UI bundle must be referenced");
     assert.equal((await fetch(`${base}/${asset}`)).status, 200);
-    const traversal = await fetch(`${base}/../src/api.js`);
+    const traversal = await fetch(`${base}/../src/api/index.js`);
     assert.equal(traversal.status, 404);
   } finally {
     await daemon.stop();

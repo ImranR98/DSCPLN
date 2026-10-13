@@ -344,6 +344,12 @@ test('shellQuote', () => {
   assert.equal(bctl.shellQuote(`c'd`), `'c'\\''d'`);
 });
 
+test('run: shell commands execute under bash', async () => {
+  const { rc, out } = await bctl.shCapture('echo "$0"');
+  assert.equal(rc, 0);
+  assert.match(out.trim(), /bash$/);
+});
+
 test('globMatch: literal + * patterns', () => {
   const cases = [
     ['bitwarden_export_2024.json', 'bitwarden_export_*.json', true],
@@ -523,7 +529,7 @@ test('ingest subcommand: empty suffix fails the run instead of syncing into DEST
     uploads: true,
     glob: '*.tar.gz',
     summary_last_line: true,
-    commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/TikTok' "grep -oP '(?<=\\\"userName\\\": \\\")([^\\\"]+)' user_data*.json | head -1" {{uploads}}`,
+    commands: `bash '{{lib}}' ingest '{{maindir}}/Backups/TikTok' "grep -oP '(?<=\\"userName\\": \\")([^\\"]+)' user_data*.json | head -1" {{uploads}}`,
   });
   const cfgPath = makeConfig([t]);
   await stage(t.name, 'bad.tar.gz', fs.readFileSync(path.join(SANDBOX, 'bad.tar.gz')));
@@ -637,7 +643,7 @@ test('redaction: secret in command output is masked, state output too', async ()
     commands: "echo 'my-super-secret-token'",
   });
   const log = [];
-  const [ok, summary] = await bctl.runTask(t, { maindir }, [], (l) => log.push(l), { password: 'my-super-secret-token' });
+  const [ok] = await bctl.runTask(t, { maindir }, [], (l) => log.push(l), { password: 'my-super-secret-token' });
   assert.equal(ok, true);
   assert.ok(!log.join('\n').includes('my-super-secret-token'));
   const state = bctl.loadTaskState(t, { maindir });
@@ -711,7 +717,7 @@ test('validate-fresh: stale newest export fails the run', async () => {
   const cfgPath = makeConfig([t]);
   const [local, tasks] = await bctl.loadConfig(cfgPath);
   const log = [];
-  const [ok, summary] = await bctl.runTask(tasks[0], local, [], (l) => log.push(l));
+  const [ok] = await bctl.runTask(tasks[0], local, [], (l) => log.push(l));
   assert.equal(ok, false);
   assert.ok(log.join('\n').includes('empty or stale'));
 });
@@ -910,11 +916,11 @@ test('API: paste_done commits the capture dir', async () => {
   const t = task('Paste', { group: 'G', capture: true, commit_dir: commitDir, commands: 'true' });
   await bootWith(makeConfig([t]));
   const { req, close } = await api();
-  let res = await req('POST', '/api/run/Paste', {});
+  await req('POST', '/api/run/Paste', {});
   await pollUntil(() => !bctl.RUNS.has('Paste'));
   fs.mkdirSync(commitDir, { recursive: true });
   fs.writeFileSync(path.join(commitDir, 'data.txt'), 'x');
-  res = await req('POST', '/api/paste_done/Paste', {});
+  const res = await req('POST', '/api/paste_done/Paste', {});
   assert.equal(res.status, 200);
   assert.equal(res.json.committed, true);
   const { out } = await bctl.shCapture(`git -C ${bctl.shellQuote(commitDir)} ls-files`);
@@ -926,9 +932,9 @@ test('API: /api/log returns the last run output', async () => {
   const t = task('Log Task', { group: 'G', commands: 'echo hello-log' });
   await bootWith(makeConfig([t]));
   const { req, close } = await api();
-  let res = await req('POST', '/api/run/Log%20Task', {});
+  await req('POST', '/api/run/Log%20Task', {});
   await pollUntil(() => !bctl.RUNS.has('Log Task'));
-  res = await req('GET', '/api/log/Log%20Task');
+  let res = await req('GET', '/api/log/Log%20Task');
   assert.equal(res.status, 200);
   assert.match(res.json.output, /hello-log/);
   res = await req('GET', '/api/log/No%20Such%20Task');

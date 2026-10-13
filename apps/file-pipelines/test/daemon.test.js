@@ -4,12 +4,9 @@ import { execFileSync } from "node:child_process";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { Daemon } from "../src/daemon.js";
 import { cleanupFiles } from "../src/cleanup.js";
 import { STATUS } from "../src/store.js";
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 function have(cmd) {
   try {

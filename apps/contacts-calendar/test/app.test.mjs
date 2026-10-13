@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { once } from 'node:events'
-import { createContactsApp, mergeCollections } from '../server.mjs'
+import { createContactsApp } from '../server.mjs'
 import { startFakeDav } from '../fixtures/fake-dav.mjs'
 
 const stubCommands = () => [[process.execPath, '-e', 'console.log("stub: exported collections")']]

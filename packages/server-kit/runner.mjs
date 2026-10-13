@@ -132,18 +132,19 @@ export class Runner {
 
     let exitCode = 0
     let signal = null
+    let result
     try {
       for (const [index, cmd] of commands.entries()) {
         if (index > 0) this.#emitLine(`--- next command ---`)
         const [file, args] = Array.isArray(cmd) ? [cmd[0], cmd.slice(1)] : [cmd, []]
-        const result = await this.#spawnOne(file, args, { shell: Array.isArray(cmd) ? false : shell, cwd, env })
-        exitCode = result.exitCode
-        signal = result.signal
+        const spawned = await this.#spawnOne(file, args, { shell: Array.isArray(cmd) ? false : shell, cwd, env })
+        exitCode = spawned.exitCode
+        signal = spawned.signal
         if (exitCode !== 0) break
       }
     } finally {
       const endedAt = Date.now()
-      const result = {
+      result = {
         ok: exitCode === 0 && !this.cancelled,
         cancelled: this.cancelled,
         exitCode,
@@ -159,8 +160,8 @@ export class Runner {
         this.logStream = null
       }
       this.#emitState()
-      return result
     }
+    return result
   }
 
   #spawnOne(file, args, { shell, cwd, env }) {

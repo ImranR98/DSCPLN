@@ -58,7 +58,7 @@ const createApp = (config) => {
         const loaded = require(path.join(__dirname, 'dataProviders', `${config.dataProvider}.mjs`))
         providerFactory = loaded.default ?? loaded
     } catch (e) {
-        throw new Error(`Could not load data provider "${config.dataProvider}": ${e.message}`)
+        throw new Error(`Could not load data provider "${config.dataProvider}": ${e.message}`, { cause: e })
     }
     if (typeof providerFactory !== 'function') {
         throw new Error(`Data provider "${config.dataProvider}" must export a factory function`)

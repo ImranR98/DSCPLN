@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChartNoAxesColumn, LayoutDashboard } from 'lucide-react'
 import { getJson, postJson, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
 
@@ -115,7 +115,6 @@ export default function Settings() {
 
   useEffect(() => {
     load().finally(() => document.body.classList.remove('is-loading'))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (

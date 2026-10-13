@@ -17,7 +17,6 @@ import { parseArgs } from 'node:util';
 import express from 'express';
 import { createApp as createKitApp } from '@dscpln/server-kit';
 import {
-  CONFIG_FILE,
   ConfigError,
   ConfigMissingError,
   LIB_PATH,

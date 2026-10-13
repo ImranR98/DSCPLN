@@ -5,16 +5,21 @@
 // mock workbook) and writes docs/screenshots/*.png. Never point this at real
 // data: it exists so the README images can be regenerated with no personal
 // content in them.
+//
+// `--compare` captures into a temp dir instead and diffs each shot against the
+// committed one with ImageMagick (prints pixel deltas; never rewrites files).
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { once } from 'node:events'
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const OUT = path.join(REPO, 'docs', 'screenshots')
+const COMMITTED = path.join(REPO, 'docs', 'screenshots')
+const COMPARE = process.argv.includes('--compare')
+const OUT = COMPARE ? fs.mkdtempSync(path.join(os.tmpdir(), 'dscpln-shots-')) : COMMITTED
 fs.mkdirSync(OUT, { recursive: true })
 
 const requireFromRoot = createRequire(path.join(REPO, 'package.json'))
@@ -370,4 +375,45 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
 }
 
 await browser.close()
-console.log('all screenshots written to', OUT)
+
+if (COMPARE) {
+  compareWithCommitted(OUT, COMMITTED)
+  console.log('\ncaptured to', OUT, '(committed files untouched)')
+} else {
+  console.log('all screenshots written to', OUT)
+}
+
+function compareWithCommitted(capturedDir, baselineDir) {
+  const names = fs.readdirSync(capturedDir).filter((name) => name.endsWith('.png')).sort()
+  let changed = 0
+  let total = 0
+  for (const name of names) {
+    const captured = path.join(capturedDir, name)
+    const baseline = path.join(baselineDir, name)
+    if (!fs.existsSync(baseline)) {
+      console.log(`${name}: no committed baseline`)
+      changed += 1
+      continue
+    }
+    const result = spawnSync('magick', ['compare', '-metric', 'AE', '-fuzz', '2%', captured, baseline, 'null:'], { encoding: 'utf8' })
+    if (result.error) {
+      throw new Error('ImageMagick (`magick`) is required for --compare', { cause: result.error })
+    }
+    const count = Number.parseFloat((result.stderr ?? '').trim().split(/\s+/)[0])
+    if (!Number.isFinite(count)) {
+      console.log(`${name}: dimension mismatch or unreadable (${(result.stderr ?? '').trim().split('\n')[0]})`)
+      changed += 1
+      continue
+    }
+    total += count
+    if (count > 0) {
+      const pixels = Math.round(Number.parseFloat(execFileSync('magick', ['identify', '-format', '%[fx:w*h]', baseline], { encoding: 'utf8' })))
+      const percent = pixels > 0 ? ((count / pixels) * 100).toFixed(2) : '?'
+      console.log(`${name}: ${count} px differ (${percent}%)`)
+      changed += 1
+    } else {
+      console.log(`${name}: identical`)
+    }
+  }
+  console.log(`\n${changed}/${names.length} screenshots differ (${total} px total)`)
+}

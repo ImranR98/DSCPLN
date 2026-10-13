@@ -261,7 +261,6 @@ const TransactionDialog = forwardRef(function TransactionDialog({ data, today, o
     if (!element) return undefined
     element.addEventListener('close', hideDetailsSuggestions)
     return () => element.removeEventListener('close', hideDetailsSuggestions)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (

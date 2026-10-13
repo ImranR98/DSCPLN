@@ -54,11 +54,11 @@ export const dateFormats = [
 ]
 
 // Loose date shape used to infer the component order
-export const dateShapeRegex = /^[\[(]?(\d{1,4})([-/.])(\d{1,2})\2(\d{1,4})/
+export const dateShapeRegex = /^[[(]?(\d{1,4})([-/.])(\d{1,2})\2(\d{1,4})/
 
 // Generic matcher: optional bracket, three date components with a consistent separator,
 // time H:MM[:SS], optional meridiem, optional closing bracket
-export const genericDateRegex = /^([\[(])?(\d{1,4})([-/.])(\d{1,2})\3(\d{1,4})(?:,\s*|\s+)(\d{1,2}):(\d{1,2})(?::(\d{1,2})(?:\.\d{1,3})?)?(?:\s*([ap])\.?\s*m\.?)?(\s*[\])])?/i
+export const genericDateRegex = /^([[()])?(\d{1,4})([-/.])(\d{1,2})\3(\d{1,4})(?:,\s*|\s+)(\d{1,2}):(\d{1,2})(?::(\d{1,2})(?:\.\d{1,3})?)?(?:\s*([ap])\.?\s*m\.?)?(\s*[\])])?/i
 
 // Normalizes a two-digit year to 2000+
 export const normalizeYear = (value) => {

@@ -89,7 +89,7 @@ export function scheduledApp(options) {
 
   async function execute(trigger) {
     const cfg = config.get()
-    let result = null
+    let result
     const startedAt = Date.now()
     await state.beginRun({ startedAt, trigger })
     try {

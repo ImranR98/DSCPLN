@@ -13,6 +13,8 @@
     "node": ">=22"
   },
   "scripts": {
+    "lint": "eslint .",
+    "check:html": "node scripts/sync-app-html.mjs --check",
     "test": "npm run test --workspaces --if-present",
     "mock": "npm run mock --workspace dscpln-balance-xlsx",
     "ui": "npm run build:ui --workspaces --if-present",
@@ -26,6 +28,10 @@
     "ytmusic": "npm start --workspace dscpln-ytmusic"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
     "playwright-core": "1.63.0"
   }
 }

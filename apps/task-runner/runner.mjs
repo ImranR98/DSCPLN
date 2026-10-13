@@ -43,10 +43,21 @@ export function killpg(pid, log = () => {}) {
 
 function spawnSafe(cmd, opts = {}) {
   const { cwd, shell = false, env = {} } = opts;
-  const [file, args] = Array.isArray(cmd) ? [cmd[0], cmd.slice(1)] : [cmd, []];
+  let file;
+  let args;
+  if (Array.isArray(cmd)) {
+    [file, args] = [cmd[0], cmd.slice(1)];
+  } else if (shell) {
+    /* Commands are documented as bash. spawn(..., { shell: true }) would use
+     * /bin/sh, which is dash on Debian and lacks `source`, `[[`, etc. */
+    file = 'bash';
+    args = ['-c', cmd];
+  } else {
+    file = cmd;
+    args = [];
+  }
   return spawn(file, args, {
     cwd,
-    shell,
     detached: true,
     env: { ...SAFE_ENV, ...env },
     stdio: ['ignore', 'pipe', 'pipe'],

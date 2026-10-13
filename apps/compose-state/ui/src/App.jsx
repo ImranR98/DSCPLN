@@ -34,7 +34,6 @@ export default function App() {
     refreshArchives()
     const timer = setInterval(refreshArchives, 30_000)
     return () => clearInterval(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const settingsExtra = ({ draft, update }) => (

@@ -1,7 +1,6 @@
 import express from 'express'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { sameOrigin } from './http.mjs'
 
 // Express app factory shared by every D$CPLN app.

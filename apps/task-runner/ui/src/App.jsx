@@ -302,7 +302,6 @@ export default function App() {
 
   useEffect(() => {
     loadTasks()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadTasks])
 
   // Poll run status while the page is open (the poll callback is refreshed

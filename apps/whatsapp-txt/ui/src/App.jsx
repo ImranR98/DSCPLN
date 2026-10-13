@@ -617,7 +617,6 @@ export default function App() {
       window.removeEventListener('hashchange', onHash)
       window.removeEventListener('keydown', onKey)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Refresh the conversation list in the background while browsing.

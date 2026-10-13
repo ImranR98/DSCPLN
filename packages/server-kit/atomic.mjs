@@ -40,7 +40,7 @@ export async function readJsonFile(file, fallback = null) {
   } catch (err) {
     if (fallback !== undefined && (err.code === 'ENOENT' || err instanceof SyntaxError)) {
       if (err instanceof SyntaxError) {
-        throw new Error(`${file} is not valid JSON: ${err.message}`)
+        throw new Error(`${file} is not valid JSON: ${err.message}`, { cause: err })
       }
       return fallback
     }

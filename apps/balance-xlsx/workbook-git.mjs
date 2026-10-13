@@ -36,7 +36,7 @@ const runGit = (args, cwd) => {
         })
     } catch (e) {
         if (e.code === 'ENOENT') {
-            throw new Error('git is required to commit workbook changes but was not found in PATH')
+            throw new Error('git is required to commit workbook changes but was not found in PATH', { cause: e })
         }
         throw e
     }

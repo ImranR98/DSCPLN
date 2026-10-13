@@ -46,7 +46,7 @@ export async function waitFor(probe, predicate = (value) => Boolean(value), { ti
 
 // Launches Chromium, or returns null when Playwright/Chromium is unavailable.
 export async function launchBrowser(options = { headless: true }) {
-  let chromium = null
+  let chromium
   try {
     ({ chromium } = await import('playwright-core'))
   } catch {

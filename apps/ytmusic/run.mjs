@@ -41,7 +41,7 @@ export async function writeBrowserJson(config, workDir = DOWNLOADER_DIR) {
   try {
     JSON.parse(contents)
   } catch (err) {
-    throw new Error(`browser.json is not valid JSON: ${err.message}`)
+    throw new Error(`browser.json is not valid JSON: ${err.message}`, { cause: err })
   }
   await fsp.mkdir(workDir, { recursive: true })
   const file = path.join(workDir, 'browser.json')

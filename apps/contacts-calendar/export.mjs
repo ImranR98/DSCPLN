@@ -11,7 +11,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { parseArgs } from 'node:util'
 import { atomicWriteFile, expandPath } from '@dscpln/server-kit/atomic'
-import { discoverCollections, exportCollection, normalizeBaseUrl } from './dav.mjs'
+import { exportCollection, normalizeBaseUrl } from './dav.mjs'
 
 const { values } = parseArgs({
   options: { config: { type: 'string', short: 'c' }, help: { type: 'boolean', short: 'h' } },

@@ -73,7 +73,6 @@ export function formatZonedDate(yyyymmdd, timeStr) {
 }
 
 export function selectDateFromTags(tags, fileName) {
-  const all = tagValueStrings(tags);
   const passesCommonFilters = (v) => !containsZeroDate(v) && !endsWithYearMonth(v);
 
   let dto = null;

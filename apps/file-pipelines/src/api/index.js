@@ -32,7 +32,7 @@ export class ApiServer {
       staticDir: PUBLIC_DIR,
       jsonBody: false, // the API reads its own bodies (and /events streams)
       routes: (router) => {
-        router.use("/api", (req, res, next) => {
+        router.use("/api", (req, res) => {
           this.#handleApi(req, res).catch((err) => {
             this.daemon.log.log(`api error: ${err.stack ?? err.message}`);
             if (!res.headersSent) json(res, 500, { error: err.message });

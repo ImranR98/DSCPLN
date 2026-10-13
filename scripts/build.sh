@@ -14,16 +14,7 @@ ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 DOCKERFILE="$ROOT/apps/$APP/Dockerfile"
 [ -f "$DOCKERFILE" ] || { echo "Error: $DOCKERFILE not found" >&2; exit 1; }
 
-declare -A IMAGE_NAMES=(
-    [balance-xlsx]=dscpln-balance
-    [file-pipelines]=dscpln-file-pipelines
-    [whatsapp-txt]=dscpln-watxt
-    [task-runner]=dscpln-task-runner
-    [contacts-calendar]=dscpln-contacts
-    [compose-state]=dscpln-compose
-    [ytmusic]=dscpln-ytmusic
-    [portal]=dscpln-portal
-)
+source "$ROOT/scripts/images.sh"
 REGISTRY="${REGISTRY:-docker.io}"
 IMAGE_ORG="${IMAGE_ORG:-imranrdev}"
 IMAGE="${2:-${REGISTRY}/${IMAGE_ORG}/${IMAGE_NAMES[$APP]:-dscpln-$APP}:latest}"

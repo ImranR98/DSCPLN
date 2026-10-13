@@ -32,7 +32,7 @@ export function humanAgo(ts) {
 
 /* Does a path pattern exist? Glob-aware, drives the availability badge. */
 export function pathFound(pattern) {
-  if (/[*?\[]/.test(pattern)) {
+  if (/[*?[]/.test(pattern)) {
     try {
       return fs.globSync(pattern).length > 0;
     } catch {

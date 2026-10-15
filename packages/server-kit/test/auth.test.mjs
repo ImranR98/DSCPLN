@@ -7,7 +7,8 @@ import { authFromEnv, isAuthorized, proxyAuth } from '../auth.mjs'
 async function withServer(config, fn) {
   const app = express()
   if (config) app.use(proxyAuth(config))
-  app.get('*', (req, res) => res.json({ ok: true }))
+  // express 5 removed bare '*' routes; a catch-all middleware works on both.
+  app.use((req, res) => res.json({ ok: true }))
   const server = app.listen(0, '127.0.0.1')
   await once(server, 'listening')
   const base = `http://127.0.0.1:${server.address().port}`

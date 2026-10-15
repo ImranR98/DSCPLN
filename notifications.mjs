@@ -1,8 +1,9 @@
 'use strict'
 
-// Monthly budget-limit notifications over an ntfy-compatible endpoint.
+// Monthly budget-limit notifications over the portal relay, which owns the
+// ntfy URL + token (DSCPLN_PORTAL_URL).
 
-import axios from 'axios'
+import { Notifier } from '@dscpln/server-kit'
 
 // Plain (unformatted) compact amount for notification text: 2 decimals at
 // least, more for values below 1.
@@ -15,36 +16,31 @@ const plainAmount = (value) => {
     return `${integerPart}.${trimmed.length < 2 ? fractionPart.slice(0, 2) : trimmed}`
 }
 
-const startNotifications = (config, dataProvider) => {
-    const { monthlyLimitUrl, ntfyToken, checkIntervalMinutes } = config.notifications
+const startNotifications = (config, dataProvider, options = {}) => {
+    const { checkIntervalMinutes } = config.notifications
     const onlyWarnOnce = config.notifications.onlyWarnOnce !== false
-    if (!monthlyLimitUrl) {
+    const relayUrl = options.relayUrl ?? process.env.DSCPLN_PORTAL_URL ?? ''
+    if (!relayUrl) {
         return
     }
-    const authHeader = ntfyToken ? `Bearer ${ntfyToken}` : null
     const origin = String(process.env.DSCPLN_ORIGIN ?? '').trim().replace(/\/+$/, '')
-    const clickUrl = /^https?:\/\//i.test(origin) ? `${origin}/balance` : null
+    const clickUrl = /^https?:\/\//i.test(origin) ? `${origin}/balance` : ''
+    const notifier = new Notifier({
+        app: 'Balance XLSX',
+        relayUrl,
+        click: clickUrl,
+    }, (line) => console.error(line))
     const intervalMs = Math.max(1, checkIntervalMinutes || 30) * 60 * 1000
     const warnedCurrencies = new Set()
     const previousSpend = new Map()
 
     const send = async (message, title) => {
-        try {
-            await axios.post(monthlyLimitUrl, message, {
-                headers: {
-                    Title: title,
-                    Priority: 'default',
-                    Tags: 'warning',
-                    ...(authHeader ? { Authorization: authHeader } : {}),
-                    ...(clickUrl ? { Click: clickUrl } : {}),
-                },
-                timeout: 10000,
-            })
-            return true
-        } catch (e) {
-            console.error(`Failed to send notification: ${e.message}`)
+        const result = await notifier.notify(message, { title, priority: 'default', tags: ['warning'] })
+        if (!result.ok) {
+            console.error(`Failed to send notification: ${result.error}`)
             return false
         }
+        return true
     }
 
     const checkLimits = async () => {

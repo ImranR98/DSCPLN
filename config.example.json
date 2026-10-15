@@ -9,8 +9,6 @@
     }
   },
   "notifications": {
-    "monthlyLimitUrl": null,
-    "ntfyToken": null,
     "checkIntervalMinutes": 30,
     "onlyWarnOnce": false
   },

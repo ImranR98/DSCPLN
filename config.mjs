@@ -10,8 +10,6 @@ const DEFAULTS = {
     dataProvider: 'excelDataProvider',
     providers: {},
     notifications: {
-        monthlyLimitUrl: null,
-        ntfyToken: null,
         checkIntervalMinutes: 30,
         onlyWarnOnce: false,
     },
@@ -49,11 +47,6 @@ const validateConfig = (config) => {
 
     if (!isPlainObject(config.notifications)) {
         throw new Error('Config error: "notifications" must be an object')
-    }
-    for (const key of ['monthlyLimitUrl', 'ntfyToken']) {
-        if (config.notifications[key] != null && typeof config.notifications[key] !== 'string') {
-            throw new Error(`Config error: "notifications.${key}" must be a string or null`)
-        }
     }
     const checkIntervalMinutes = Number(config.notifications.checkIntervalMinutes)
     if (!Number.isFinite(checkIntervalMinutes) || checkIntervalMinutes <= 0) {

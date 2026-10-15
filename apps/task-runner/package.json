@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@dscpln/server-kit": "*",
-    "express": "^4.21.2"
+    "express": "^5.0.0"
   },
   "engines": {
     "node": ">=22"

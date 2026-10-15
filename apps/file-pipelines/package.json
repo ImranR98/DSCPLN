@@ -19,7 +19,7 @@
   "dependencies": {
     "@dscpln/server-kit": "*",
     "chokidar": "^4.0.3",
-    "exiftool-vendored": "^35.0.0"
+    "exiftool-vendored": "^39.0.0"
   },
   "devDependencies": {
     "@dscpln/ui-kit": "*",

@@ -11,6 +11,12 @@ import path from 'node:path';
 const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'bctl-'));
 process.env.BACKUPCTL_STATE_DIR = path.join(SANDBOX, 'state');
 process.env.BACKUPCTL_TMP_DIR = path.join(SANDBOX, 'tmp-root');
+// Hermetic git identity: the commit subcommands must not depend on the
+// machine's global git config (CI runners have none).
+process.env.GIT_AUTHOR_NAME = 'test';
+process.env.GIT_AUTHOR_EMAIL = 'test@test';
+process.env.GIT_COMMITTER_NAME = 'test';
+process.env.GIT_COMMITTER_EMAIL = 'test@test';
 
 const bctl = await import('../server.mjs');
 
@@ -944,16 +950,21 @@ test('API: paste_done commits the capture dir', async () => {
   const t = task('Paste', { group: 'G', capture: true, commit_dir: commitDir, commands: 'true' });
   await bootWith(makeConfig([t]));
   const { req, close } = await api();
-  await req('POST', '/api/run/Paste', {});
-  await pollUntil(() => !bctl.RUNS.has('Paste'));
-  fs.mkdirSync(commitDir, { recursive: true });
-  fs.writeFileSync(path.join(commitDir, 'data.txt'), 'x');
-  const res = await req('POST', '/api/paste_done/Paste', {});
-  assert.equal(res.status, 200);
-  assert.equal(res.json.committed, true);
-  const { out } = await bctl.shCapture(`git -C ${bctl.shellQuote(commitDir)} ls-files`);
-  assert.ok(out.includes('data.txt'));
-  await close();
+  try {
+    await req('POST', '/api/run/Paste', {});
+    await pollUntil(() => !bctl.RUNS.has('Paste'));
+    fs.mkdirSync(commitDir, { recursive: true });
+    fs.writeFileSync(path.join(commitDir, 'data.txt'), 'x');
+    const res = await req('POST', '/api/paste_done/Paste', {});
+    assert.equal(res.status, 200);
+    assert.equal(res.json.committed, true);
+    const { out } = await bctl.shCapture(`git -C ${bctl.shellQuote(commitDir)} ls-files`);
+    assert.ok(out.includes('data.txt'));
+  } finally {
+    // Keep the listener closed even when an assertion above fails, otherwise
+    // the open handle hangs the whole test run (the 6h CI timeout).
+    await close();
+  }
 });
 
 test('API: /api/log returns the last run output', async () => {

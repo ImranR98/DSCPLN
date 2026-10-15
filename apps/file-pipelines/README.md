@@ -161,8 +161,12 @@ Paths accept `~` and environment variables. Key fields:
 | `stagingDir` / `reviewDir` / `trashDir` | working area (same filesystem as destinations for atomic renames), parked review outputs, and cleaned-original storage |
 | `trashRetentionDays` | days before trash is swept |
 | `concurrency` | parallel jobs (per-folder jobs are serialized) |
-| `ntfy` | optional `{url, token, notifySuccess}`; failures always notify, successes notify unless `notifySuccess` is off |
+| `notifySuccess` | failures always notify; successes notify unless `notifySuccess` is off |
 | `paused` / `dryRun` | persisted toggles |
+
+Notifications are relayed through the portal (`DSCPLN_PORTAL_URL`, e.g.
+`http://portal:8080` in Kubernetes), whose Settings hold the ntfy URL and
+token; without a relay configured they are skipped.
 
 ## CLI
 

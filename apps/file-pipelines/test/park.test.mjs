@@ -31,7 +31,7 @@ test("review file API rejects traversal ids with 404", async () => {
     syncLockFile: path.join(root, "lock.json"),
     lockHeartbeatSeconds: 60,
     lockStaleSeconds: 120,
-    ntfy: { url: "", token: "" },
+    notifySuccess: true,
     folders: [{ name: "photos", source: path.join(root, "src"), destination: path.join(root, "dest"), method: "standardize", settleSeconds: 0 }],
   }, null, 2));
   const daemon = new Daemon(configPath, {});

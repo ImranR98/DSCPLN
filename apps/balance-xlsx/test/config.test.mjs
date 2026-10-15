@@ -25,8 +25,8 @@ test('applies defaults for missing fields', () => {
     assert.equal(config.port, 3300)
     assert.equal(config.notifications.checkIntervalMinutes, 30)
     assert.equal(config.notifications.onlyWarnOnce, false)
-    assert.equal(config.notifications.monthlyLimitUrl, null)
-    assert.equal('weeklyLimitUrl' in config.notifications, false)
+    assert.equal('monthlyLimitUrl' in config.notifications, false)
+    assert.equal('ntfyToken' in config.notifications, false)
     assert.equal(config.api.stateFile, './api-state.json')
     assert.equal(config.configDir, dir)
 })
@@ -36,12 +36,11 @@ test('keeps values from the config file', () => {
         ...minimalConfig,
         port: 8080,
         providers: { excelDataProvider: { workbookFile: '/tmp/notes.xlsx' } },
-        notifications: { monthlyLimitUrl: 'https://example.com/topic', onlyWarnOnce: true },
+        notifications: { onlyWarnOnce: true },
     })
     const config = loadConfig(file)
     assert.equal(config.port, 8080)
     assert.equal(config.providers.excelDataProvider.workbookFile, '/tmp/notes.xlsx')
-    assert.equal(config.notifications.monthlyLimitUrl, 'https://example.com/topic')
     assert.equal(config.notifications.onlyWarnOnce, true)
     assert.equal(config.notifications.checkIntervalMinutes, 30)
 })

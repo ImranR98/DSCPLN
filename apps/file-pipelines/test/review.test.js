@@ -67,7 +67,7 @@ async function makeSetup({ autoProcess = false } = {}) {
     syncLockFile: path.join(root, "lock.json"),
     lockHeartbeatSeconds: 60,
     lockStaleSeconds: 120,
-    ntfy: { url: "", token: "" },
+    notifySuccess: true,
     folders: [
       {
         name: "voicenotes",
@@ -438,7 +438,7 @@ test("standardize: manual placement parks processed photos until approved", { sk
     syncLockFile: path.join(root, "lock.json"),
     lockHeartbeatSeconds: 60,
     lockStaleSeconds: 120,
-    ntfy: { url: "", token: "" },
+    notifySuccess: true,
     folders: [{ name: "photos", source: src, destination: dest, method: "standardize", placement: "manual", settleSeconds: 0 }],
   };
   await fsp.writeFile(configPath, JSON.stringify(config, null, 2));

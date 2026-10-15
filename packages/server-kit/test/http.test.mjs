@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import express from 'express'
 import { once } from 'node:events'
-import { asyncRoute, readBody, sameOrigin, sendJson } from '../http.mjs'
+import { asyncRoute, isPrivateHost, readBody, sameOrigin, sendJson } from '../http.mjs'
 
 async function withServer(routes) {
   const app = express()
@@ -45,6 +45,15 @@ test('sameOrigin allows missing or matching origins and rejects others', () => {
   assert.equal(sameOrigin({ headers: { origin: 'https://app.test', host: 'app.test' } }), true)
   assert.equal(sameOrigin({ headers: { origin: 'https://evil.test', host: 'app.test' } }), false)
   assert.equal(sameOrigin({ headers: { origin: 'not a url', host: 'app.test' } }), false)
+})
+
+test('isPrivateHost flags loopback/private/link-local names and literals', () => {
+  for (const host of ['localhost', '127.0.0.1', '10.0.0.5', '192.168.1.10', '172.16.0.1', '172.31.255.255', '169.254.1.1', '[::1]', 'fc00::1', 'fd12::3', 'fe80::1', 'box.local']) {
+    assert.equal(isPrivateHost(host), true, host)
+  }
+  for (const host of ['ntfy.sh', '192.168.0.1.evil.com', '8.8.8.8', '172.32.0.1', 'fe81::1']) {
+    assert.equal(isPrivateHost(host), false, host)
+  }
 })
 
 test('asyncRoute forwards rejections to the error handler', async () => {

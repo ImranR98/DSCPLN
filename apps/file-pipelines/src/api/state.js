@@ -1,10 +1,8 @@
-// App-level endpoints: health, state snapshot, config, log, pause/dry-run,
-// ntfy test and per-folder status counts.
+// App-level endpoints: health, state snapshot, config, log, pause/dry-run
+// and per-folder status counts.
 
-import { maskConfig, SECRET_MASK } from "../config.js";
-import { Notifier } from "../notify.js";
 import { isSnapshotFolder } from "../snapshot.js";
-import { isPrivateHost, json, readBody } from "./http.js";
+import { json, readBody } from "./http.js";
 
 export async function handleState(ctx, method, pathname, url) {
   const { daemon, res } = ctx;
@@ -27,7 +25,7 @@ export async function handleState(ctx, method, pathname, url) {
     }
     json(res, 200, {
       ...daemon.store.snapshot(),
-      config: maskConfig(daemon.config),
+      config: daemon.config,
       lock: { file: daemon.config.syncLockFile },
       runs,
     });
@@ -35,14 +33,14 @@ export async function handleState(ctx, method, pathname, url) {
   }
 
   if (method === "GET" && pathname === "/config") {
-    json(res, 200, maskConfig(daemon.config));
+    json(res, 200, daemon.config);
     return true;
   }
 
   if (method === "PUT" && pathname === "/config") {
     const body = await readBody(ctx.req);
     const next = await daemon.applyConfig(body);
-    json(res, 200, maskConfig(next));
+    json(res, 200, next);
     return true;
   }
 
@@ -63,44 +61,6 @@ export async function handleState(ctx, method, pathname, url) {
     const body = await readBody(ctx.req);
     await daemon.setDryRun(body.dryRun);
     json(res, 200, { dryRun: daemon.config.dryRun });
-    return true;
-  }
-
-  if (method === "POST" && pathname === "/ntfy-test") {
-    const body = await readBody(ctx.req);
-    const url_ = String(body.url ?? "").trim() || daemon.config.ntfy?.url || "";
-    let token = String(body.token ?? "").trim() || daemon.config.ntfy?.token || "";
-    if (token === SECRET_MASK) token = daemon.config.ntfy?.token ?? "";
-    if (!url_) {
-      json(res, 400, { error: "set an ntfy URL first" });
-      return true;
-    }
-    if (!/^https?:\/\//i.test(url_)) {
-      json(res, 400, { error: "ntfy URL must start with http:// or https://" });
-      return true;
-    }
-    // The test may target a draft URL, but the stored server is the only
-    // legitimate private/LAN destination; anything else private is an SSRF probe.
-    let hostname;
-    try {
-      hostname = new URL(url_).hostname;
-    } catch {
-      json(res, 400, { error: "ntfy URL is not a valid URL" });
-      return true;
-    }
-    let configuredHost;
-    try {
-      configuredHost = new URL(daemon.config.ntfy?.url ?? "").hostname;
-    } catch {
-      configuredHost = "";
-    }
-    if (isPrivateHost(hostname) && hostname !== configuredHost) {
-      json(res, 400, { error: "ntfy URL must not target a private address" });
-      return true;
-    }
-    const tester = new Notifier({ ntfy: { url: url_, token } }, daemon.log);
-    const result = await tester.notify("low", "File Pipelines test notification");
-    json(res, result.ok ? 200 : 502, result.ok ? { ok: true } : { error: result.error });
     return true;
   }
 

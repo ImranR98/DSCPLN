@@ -13,7 +13,7 @@ destination folder, optionally committed to git, and replaced atomically.
 | `destination` | where the exports are written (default `~/Backups/Manual`) |
 | `collections` | discovered calendars/address books: `{ href, type, displayName, enabled, filename }`; the export file defaults to the collection's Nextcloud display name |
 | `git` | `{ enabled, message }` — commit the exports after each run (`message` empty uses a timestamp) |
-| `schedule` / `ntfy` | `{enabled, days, at, catchUp}` (default Sundays 03:00) and `{url, token, notifySuccess}` |
+| `schedule` / `notifySuccess` | `{enabled, days, at, catchUp}` (default Sundays 03:00) and whether successful runs notify |
 
 Press **Discover** in Settings to list the account's collections (new ones are
 enabled by default; uncheck any to skip). Files are written atomically and the

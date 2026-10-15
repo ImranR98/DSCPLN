@@ -16,6 +16,12 @@ const FIELDS = [
     className: 'mono',
     help: 'Paste the JSON from ytmusicapi’s browser.json (headers from a logged-in music.youtube.com session). It is stored on the app’s PVC and rewritten before every run.',
   },
+  {
+    path: 'notifySuccess',
+    label: 'Notify when a run succeeds',
+    type: 'checkbox',
+    help: 'Failures always notify; notifications are sent through the portal’s ntfy settings.',
+  },
 ]
 
 export default function App() {

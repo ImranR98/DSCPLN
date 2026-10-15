@@ -20,7 +20,7 @@ export const DEFAULT_CONFIG = {
   retention: 1,
   sshPrivateKey: '',
   sshPublicKey: '',
-  ntfy: { url: '', token: '', notifySuccess: false },
+  notifySuccess: true,
   schedule: { enabled: true, days: [0], at: '04:00', catchUp: true },
 }
 
@@ -29,9 +29,12 @@ export function normalizeConfig(raw) {
     ...raw,
     targets: Array.isArray(raw.targets) ? raw.targets : [],
     retention: Math.max(1, Math.floor(Number(raw.retention ?? 1) || 1)),
-    ntfy: { url: '', token: '', notifySuccess: false, ...(raw.ntfy ?? {}) },
+    // Notifications relay through the portal now; keep the pre-upgrade
+    // notifySuccess choice that used to live under `ntfy`.
+    notifySuccess: Boolean(raw.notifySuccess ?? raw.ntfy?.notifySuccess ?? true),
     schedule: { enabled: true, days: [], at: '04:00', catchUp: true, ...(raw.schedule ?? {}) },
   }
+  delete cfg.ntfy
   cfg.destination = expandPath(cfg.destination)
   return cfg
 }

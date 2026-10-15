@@ -1,6 +1,6 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { normalizeConfig, saveConfig, validateConfig, ensureRuntimeDirs, loadConfig, SECRET_MASK } from "./config.js";
+import { normalizeConfig, saveConfig, validateConfig, ensureRuntimeDirs, loadConfig } from "./config.js";
 import { createExifTool } from "./exif.js";
 import { Logger } from "./log.js";
 import { Notifier } from "./notify.js";
@@ -137,12 +137,7 @@ export class Daemon {
   }
 
   async applyConfig(raw) {
-    // The settings UI receives a masked token; an unchanged mask means the
-    // token was not edited.
     const incoming = { ...raw, folders: raw.folders ?? [] };
-    if (incoming.ntfy?.token === SECRET_MASK) {
-      incoming.ntfy = { ...incoming.ntfy, token: this.config.ntfy?.token ?? "" };
-    }
     const next = normalizeConfig(incoming);
     validateConfig(next);
     await ensureRuntimeDirs(next, (message) => this.log.log(`WARN: ${message}`));

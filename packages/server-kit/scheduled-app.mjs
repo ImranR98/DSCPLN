@@ -7,7 +7,7 @@ import { Notifier } from './notifier.mjs'
 import { createApp } from './app.mjs'
 
 // Standard wiring for a scheduled D$CPLN app: config + state on disk, one
-// Runner, a Scheduler that fires the same run function as the UI, ntfy
+// Runner, a Scheduler that fires the same run function as the UI, portal-relay
 // notifications, and the kit's standard API routes.
 //
 //   const app = scheduledApp({
@@ -55,6 +55,8 @@ export function scheduledApp(options) {
     logDir = dataDir ? path.join(dataDir, 'logs') : null,
     onConfigChanged = null,
     onStart = null,
+    // Portal notification relay: the app posts here instead of talking to ntfy.
+    portalUrl = process.env.DSCPLN_PORTAL_URL ?? '',
     port = Number(process.env.PORT ?? 8080),
     host = process.env.HOST ?? '0.0.0.0',
   } = options
@@ -65,7 +67,7 @@ export function scheduledApp(options) {
   const config = configStore(configFile, { defaults, normalize, validate, secrets })
   const state = stateStore(stateFile)
   const runner = new Runner({ logDir, title: name })
-  const notifier = new Notifier(defaults.ntfy ?? {}, (line) => console.log(line))
+  const notifier = new Notifier({ app: name, relayUrl: portalUrl }, (line) => console.log(line))
   const scheduler = new Scheduler({
     getSpec: () => (config.get() ?? defaults).schedule ?? {},
     onDue: () => runNow({ trigger: 'schedule' }),
@@ -140,10 +142,15 @@ export function scheduledApp(options) {
   const start = async () => {
     await config.load()
     await state.load()
-    const clickUrl = clickFor(basePath)
-    notifier.setConfig({ ntfy: config.get().ntfy ?? {}, click: clickUrl })
+    const notifyConfig = (cfg) => ({
+      app: name,
+      relayUrl: portalUrl,
+      notifySuccess: Boolean(cfg.notifySuccess),
+      click: clickFor(basePath),
+    })
+    notifier.setConfig(notifyConfig(config.get()))
     config.onChange((cfg) => {
-      notifier.setConfig({ ntfy: cfg.ntfy ?? {}, click: clickUrl })
+      notifier.setConfig(notifyConfig(cfg))
       onConfigChanged?.(cfg)
     })
     scheduler.start()

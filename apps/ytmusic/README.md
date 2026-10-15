@@ -16,7 +16,7 @@ rewritten before every run.
 |---|---|
 | `musicDir` | where downloads and the playlist `.m3u8` files land (default `~/Music`) |
 | `browserJson` | ytmusicapi `browser.json` contents (write-only secret) |
-| `schedule` / `ntfy` | `{enabled, days, at, catchUp}` (default daily 05:00) and `{url, token, notifySuccess}` (success notifications are off by default — daily runs would be noisy) |
+| `schedule` / `notifySuccess` | `{enabled, days, at, catchUp}` (default daily 05:00) and whether successful runs notify (off by default — daily runs would be noisy) |
 
 The image bundles Python (ytmusicapi + yt-dlp), ffmpeg and Node; yt-dlp uses
 Node as its JavaScript runtime and fetches the challenge-solver script on first

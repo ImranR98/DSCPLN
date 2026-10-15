@@ -16,7 +16,7 @@ export const DEFAULT_CONFIG = {
   destination: '~/Backups/Manual',
   collections: [],
   git: { enabled: true, message: '' },
-  ntfy: { url: '', token: '', notifySuccess: false },
+  notifySuccess: true,
   schedule: { enabled: true, days: [0], at: '03:00', catchUp: true },
 }
 
@@ -25,9 +25,12 @@ export function normalizeConfig(raw) {
     ...raw,
     collections: Array.isArray(raw.collections) ? raw.collections : [],
     git: { enabled: true, message: '', ...(raw.git ?? {}) },
-    ntfy: { url: '', token: '', notifySuccess: false, ...(raw.ntfy ?? {}) },
+    // Notifications relay through the portal now; keep the pre-upgrade
+    // notifySuccess choice that used to live under `ntfy`.
+    notifySuccess: Boolean(raw.notifySuccess ?? raw.ntfy?.notifySuccess ?? true),
     schedule: { enabled: true, days: [], at: '03:00', catchUp: true, ...(raw.schedule ?? {}) },
   }
+  delete cfg.ntfy
   cfg.destination = expandPath(cfg.destination)
   return cfg
 }

@@ -63,7 +63,7 @@ async function makeSetup({ paused = false, settleSeconds = 0, dryRun = false } =
     syncLockFile: path.join(root, "lock.json"),
     lockHeartbeatSeconds: 60,
     lockStaleSeconds: 120,
-    ntfy: { url: "", token: "" },
+    notifySuccess: true,
     folders: [
       {
         name: "camera",

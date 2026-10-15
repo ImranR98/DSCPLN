@@ -4,7 +4,7 @@ import Modal from '../Modal.jsx'
 
 // The config editor: global settings up top, then one folder editor per
 // configured folder (watched methods and snapshot copies).
-export default function SettingsDialog({ draft, updateDraft, addFolder, saveSettings, sendTestNotification, onClose }) {
+export default function SettingsDialog({ draft, updateDraft, addFolder, saveSettings, onClose }) {
   const setFolder = (index, mutator) => {
     updateDraft((next) => {
       mutator(next.folders[index])
@@ -26,21 +26,15 @@ export default function SettingsDialog({ draft, updateDraft, addFolder, saveSett
           <div className="field"><span className="field__label">Concurrency</span><input type="number" value={draft.concurrency} onChange={(event) => updateDraft((next) => { next.concurrency = event.target.value })} /></div>
           <div className="field"><span className="field__label">Trash retention (days)</span><input type="number" value={draft.trashRetentionDays} onChange={(event) => updateDraft((next) => { next.trashRetentionDays = event.target.value })} /></div>
           <div className="field"><span className="field__label">Default settle (s)</span><input type="number" value={draft.settleSeconds} onChange={(event) => updateDraft((next) => { next.settleSeconds = event.target.value })} /></div>
-          <div className="field"><span className="field__label">ntfy URL</span><input value={draft.ntfy?.url ?? ''} onChange={(event) => updateDraft((next) => { next.ntfy.url = event.target.value })} /></div>
-          <div className="field"><span className="field__label">ntfy token</span><input type="password" value={draft.ntfy?.token ?? ''} onChange={(event) => updateDraft((next) => { next.ntfy.token = event.target.value })} /></div>
         </div>
         <div className="form-grid field-grid--checks">
-          <label><input type="checkbox" checked={draft.ntfy?.notifySuccess !== false} onChange={(event) => updateDraft((next) => { next.ntfy.notifySuccess = event.target.checked })} /> Notify when files are processed successfully</label>
+          <label><input type="checkbox" checked={draft.notifySuccess !== false} onChange={(event) => updateDraft((next) => { next.notifySuccess = event.target.checked })} /> Notify when files are processed successfully</label>
         </div>
+        <p className="hint">Notifications are sent through the portal&#39;s ntfy settings. Failures always notify; each folder can opt out of success notices below.</p>
         <div className="form-grid">
           <div className="field"><span className="field__label">Staging directory</span><input value={draft.stagingDir} onChange={(event) => updateDraft((next) => { next.stagingDir = event.target.value })} /></div>
           <div className="field"><span className="field__label">Review directory</span><input value={draft.reviewDir} onChange={(event) => updateDraft((next) => { next.reviewDir = event.target.value })} /></div>
           <div className="field"><span className="field__label">Trash directory</span><input value={draft.trashDir} onChange={(event) => updateDraft((next) => { next.trashDir = event.target.value })} /></div>
-        </div>
-        <div className="form-grid">
-          <div className="field field--wide">
-            <button className="outline secondary" onClick={sendTestNotification}>Send test notification</button>
-          </div>
         </div>
 
         <h3 className="settings-section">Folders</h3>

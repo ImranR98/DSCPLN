@@ -35,7 +35,9 @@ export function defaultConfig() {
     syncLockFile: "~/.file-pipelines/lock.json",
     lockHeartbeatSeconds: 300,
     lockStaleSeconds: 900,
-    ntfy: { url: "", token: "", notifySuccess: true },
+    // Failures always notify; success notifications when true. Delivery goes
+    // through the portal relay (DSCPLN_PORTAL_URL), which owns the ntfy topic.
+    notifySuccess: true,
     folders: [],
   };
 }
@@ -45,21 +47,17 @@ function asNumber(value, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-// Sentinel the settings UI round-trips unchanged: GET masks the ntfy token,
-// PUT/ntfy-test treat this value as "keep the stored token".
-export const SECRET_MASK = "***";
-
-export function maskConfig(cfg) {
-  return { ...cfg, ntfy: { ...cfg.ntfy, token: cfg.ntfy?.token ? SECRET_MASK : "" } };
-}
-
 export function normalizeConfig(raw) {
   const cfg = {
     ...defaultConfig(),
     ...raw,
-    ntfy: { url: "", token: "", ...(raw?.ntfy ?? {}) },
+    // Notifications relay through the portal now; keep the pre-upgrade
+    // notifySuccess choice that used to live under `ntfy`.
+    notifySuccess: raw?.notifySuccess ?? raw?.ntfy?.notifySuccess ?? true,
     folders: Array.isArray(raw?.folders) ? raw.folders : [],
   };
+  delete cfg.ntfy;
+  cfg.notifySuccess = cfg.notifySuccess !== false;
   cfg.concurrency = Math.max(1, Math.floor(asNumber(cfg.concurrency, 2)));
   cfg.port = Math.max(0, Math.floor(asNumber(cfg.port, 8791)));
   if (cfg.port > 65535) cfg.port = 8791;

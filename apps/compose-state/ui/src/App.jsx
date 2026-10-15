@@ -5,6 +5,7 @@ import { Shell, formatBytes, formatDateTime, getJson, postJson, showToast } from
 const FIELDS = [
   { path: 'destination', label: 'Destination folder', help: 'Archives land here (e.g. ~/compose_state_backups).' },
   { path: 'retention', label: 'Retention (archives kept per target)', type: 'number' },
+  { path: 'notifySuccess', label: 'Notify when a run succeeds', type: 'checkbox', help: 'Failures always notify; notifications are sent through the portal’s ntfy settings.' },
 ]
 
 export default function App() {

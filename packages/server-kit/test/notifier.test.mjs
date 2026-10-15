@@ -55,8 +55,69 @@ test('missing or invalid URL is reported without throwing', async () => {
   const notifier = new Notifier({ ntfy: { url: '' } })
   assert.deepEqual(await notifier.notifyResult({ ok: false, app: 'X', summary: 'boom' }), {
     ok: false,
-    error: 'ntfy URL not configured',
+    error: 'notifications are not configured',
   })
+  const invalid = new Notifier({ ntfy: { url: 'not-a-url' } })
+  assert.deepEqual(await invalid.notify('boom', { force: true }), {
+    ok: false,
+    error: 'notification endpoint URL is invalid',
+  })
+})
+
+test('relay mode posts one JSON payload to the portal instead of ntfy', async (t) => {
+  const calls = mockFetch(t)
+  const notifier = new Notifier({
+    app: 'Contacts + Calendar',
+    relayUrl: 'http://portal:8080/',
+    notifySuccess: true,
+    click: 'https://dscpln.example/contacts',
+  })
+  const result = await notifier.notify('Exported 3 collections', {
+    title: 'D$CPLN - Contacts + Calendar OK',
+    priority: 'default',
+    tags: ['white_check_mark'],
+  })
+  assert.equal(result.ok, true)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, 'http://portal:8080/api/notify')
+  assert.equal(calls[0].init.method, 'POST')
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    app: 'Contacts + Calendar',
+    message: 'Exported 3 collections',
+    title: 'D$CPLN - Contacts + Calendar OK',
+    priority: 'default',
+    tags: ['white_check_mark'],
+    click: 'https://dscpln.example/contacts',
+  })
+})
+
+test('relay errors surface the portal response without throwing', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => ({
+    ok: false,
+    status: 502,
+    text: async () => 'ntfy returned 401',
+  }))
+  const notifier = new Notifier({ relayUrl: 'http://portal:8080' })
+  assert.deepEqual(await notifier.notify('x'), {
+    ok: false,
+    error: 'notification relay returned 502: ntfy returned 401',
+  })
+})
+
+test('relay mode still gates success notifications on notifySuccess', async (t) => {
+  const calls = mockFetch(t)
+  const quiet = new Notifier({ relayUrl: 'http://portal:8080', notifySuccess: false })
+  assert.deepEqual(await quiet.notifyResult({ ok: true, app: 'YTMusic', summary: 'Downloaded' }), {
+    ok: true,
+    skipped: true,
+  })
+  assert.equal(calls.length, 0)
+
+  await quiet.notifyResult({ ok: false, app: 'YTMusic', summary: 'Failed' })
+  assert.equal(calls.length, 1)
+  const payload = JSON.parse(calls[0].init.body)
+  assert.equal(payload.title, 'D$CPLN - YTMusic FAILED')
+  assert.deepEqual(payload.tags, ['warning'])
 })
 
 test('notifications carry a click-through to the app when configured', async (t) => {

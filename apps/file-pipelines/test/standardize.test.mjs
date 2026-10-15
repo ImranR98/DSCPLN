@@ -77,7 +77,7 @@ test("dateless files standardize to their source mtime and clean up (no duplicat
     syncLockFile: path.join(root, "lock.json"),
     lockHeartbeatSeconds: 60,
     lockStaleSeconds: 120,
-    ntfy: { url: "", token: "" },
+    notifySuccess: true,
     folders: [{ name: "photos", source: src, destination: dest, method: "standardize", settleSeconds: 0 }],
   };
   await fsp.writeFile(configPath, JSON.stringify(config, null, 2));

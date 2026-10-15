@@ -334,17 +334,7 @@ export default function App() {
     }
   }
 
-  const sendTestNotification = async () => {
-    try {
-      await postJson('api/ntfy-test', { url: settingsDraft.ntfy?.url, token: settingsDraft.ntfy?.token })
-      notify('Test notification sent.')
-    } catch (err) {
-      notify(err.message, 'error')
-    }
-  }
-
   /* ---------- render ---------- */
-
   return (
     <>
       <header className="app-header">
@@ -497,7 +487,6 @@ export default function App() {
           updateDraft={updateDraft}
           addFolder={addFolder}
           saveSettings={saveSettings}
-          sendTestNotification={sendTestNotification}
           onClose={() => setSettingsDraft(null)}
         />
       ) : null}

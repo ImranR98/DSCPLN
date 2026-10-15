@@ -19,16 +19,19 @@ const execFileAsync = promisify(execFile)
 export const DEFAULT_CONFIG = {
   musicDir: '~/Music',
   browserJson: '',
-  ntfy: { url: '', token: '', notifySuccess: false },
+  notifySuccess: false,
   schedule: { enabled: true, days: [], at: '05:00', catchUp: true },
 }
 
 export function normalizeConfig(raw) {
   const cfg = {
     ...raw,
-    ntfy: { url: '', token: '', notifySuccess: false, ...(raw.ntfy ?? {}) },
+    // Notifications relay through the portal now; keep the pre-upgrade
+    // notifySuccess choice that used to live under `ntfy`.
+    notifySuccess: Boolean(raw.notifySuccess ?? raw.ntfy?.notifySuccess ?? false),
     schedule: { enabled: true, days: [], at: '05:00', catchUp: true, ...(raw.schedule ?? {}) },
   }
+  delete cfg.ntfy
   cfg.musicDir = expandPath(cfg.musicDir)
   return cfg
 }

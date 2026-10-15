@@ -95,7 +95,7 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
   await once(server, 'listening')
   const base = `http://127.0.0.1:${server.address().port}`
   const page = await newPage()
-  for (const p of ['balance', 'media', 'watxt', 'tasks', 'contacts', 'compose', 'ytmusic']) {
+  for (const p of ['balance', 'pipelines', 'watxt', 'tasks', 'contacts', 'compose', 'ytmusic']) {
     await page.route(`**/${p}/api/health`, (route) => route.fulfill(json({ ok: true })))
   }
   await page.route('**/balance/status', (route) => route.fulfill(json({ overBudget: [] })))
@@ -172,7 +172,7 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
     syncLockFile: path.join(root, '.file-pipelines/lock.json'),
     lockHeartbeatSeconds: 300,
     lockStaleSeconds: 900,
-    ntfy: { url: '', token: '', notifySuccess: true },
+    notifySuccess: true,
     folders: [
       { name: 'Camera', source: cameraSrc, destination: path.join(root, 'media/Camera'), method: 'standardize', settleSeconds: 3600 },
       { name: 'Screenshots', source: shotsSrc, destination: path.join(root, 'media/Screenshots'), method: 'standardize', settleSeconds: 3600 },
@@ -294,7 +294,7 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
     ],
     git: { enabled: true, message: '' },
     schedule: { enabled: true, days: [0], at: '03:00', catchUp: true },
-    ntfy: { url: '', token: '', notifySuccess: true },
+    notifySuccess: true,
   }, null, 2))
   writeState(dir, { summary: 'Exported 3 collections' })
   const { createContactsApp } = await import(path.join(REPO, 'apps/contacts-calendar/server.mjs'))
@@ -330,7 +330,7 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
     ],
     destination,
     retention: 1,
-    ntfy: { url: '', token: '', notifySuccess: true },
+    notifySuccess: true,
     schedule: { enabled: true, days: [0], at: '04:00', catchUp: true },
   }, null, 2))
   writeState(dir, { summary: 'Backed up 2 targets: host-a, host-b' })
@@ -356,7 +356,7 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
     musicDir: path.join(dir, 'Music'),
     browserJson: '{"cookie":"placeholder"}',
-    ntfy: { url: '', token: '', notifySuccess: false },
+    notifySuccess: false,
     schedule: { enabled: true, days: [], at: '05:00', catchUp: true },
   }, null, 2))
   writeState(dir, { summary: 'Downloaded 3 new tracks · 12 unsorted' })

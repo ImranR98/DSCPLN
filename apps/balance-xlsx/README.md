@@ -30,11 +30,13 @@ The app reads `config.json` from its directory by default; set `DSCPLN_CONFIG` t
 | `port` | HTTP port to listen on (defaults to `3300`). |
 | `dataProvider` | The module from `/dataProviders` to use for data sourcing. Defaults to `excelDataProvider` (the only one currently available). |
 | `providers.<name>` | Provider-specific options, described below. |
-| `notifications.monthlyLimitUrl` | The ntfy.sh URL to which to send "monthly budget limit reached" notifications, or `null`. Notifications are sent per currency with a budget. |
-| `notifications.ntfyToken` | An authorization token to use when sending out notifications, or `null`. |
 | `notifications.checkIntervalMinutes` | How often, in minutes, to check for changes so that notifications can be sent out if needed (defaults to `30`). |
 | `notifications.onlyWarnOnce` | When `true`, a given currency's monthly notification is only sent the first time it goes over budget, not for subsequent increases. |
 | `api.stateFile` | The file holding the external API token and its edit-token signing secret (defaults to `./api-state.json`; created on first run, mode `0600`). Relative paths resolve against the config file's directory. |
+
+Budget notifications are relayed through the portal (`DSCPLN_PORTAL_URL`, e.g.
+`http://portal:8080` in Kubernetes), whose Settings hold the ntfy URL and
+token; without a relay configured the check is a no-op.
 
 ### `excelDataProvider` options
 

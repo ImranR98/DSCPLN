@@ -15,11 +15,7 @@
   "syncLockFile": "~/.file-pipelines/lock.json",
   "lockHeartbeatSeconds": 300,
   "lockStaleSeconds": 900,
-  "ntfy": {
-    "url": "",
-    "token": "",
-    "notifySuccess": true
-  },
+  "notifySuccess": true,
   "folders": [
     {
       "name": "Camera",

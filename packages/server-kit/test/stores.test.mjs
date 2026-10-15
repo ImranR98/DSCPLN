@@ -49,6 +49,25 @@ test('configStore: update merges one level deep', async () => {
   assert.deepEqual(store.get().schedule, { enabled: true, at: '04:00' })
 })
 
+test('configStore: dotted secret paths mask, keep and clear nested values', async () => {
+  const file = tmpFile('config.json')
+  const store = configStore(file, {
+    defaults: { ntfy: { url: '', token: '' } },
+    secrets: ['ntfy.token'],
+  })
+  await store.load()
+  await store.save({ ntfy: { url: 'http://ntfy.test/topic', token: 'tk_secret' } })
+  assert.deepEqual(store.public().ntfy, { url: 'http://ntfy.test/topic', token: '••••••••' })
+  assert.notEqual(store.get().ntfy.token, '••••••••', 'the mask must not touch the stored value')
+
+  await store.save({ ntfy: { url: 'http://ntfy.test/topic', token: '••••••••' } })
+  assert.equal(store.get().ntfy.token, 'tk_secret', 'saving the mask keeps the stored token')
+
+  await store.save({ ntfy: { url: 'http://ntfy.test/topic', token: '' } })
+  assert.equal(store.get().ntfy.token, '', 'an explicit empty string clears the token')
+  assert.equal(store.public().ntfy.token, '')
+})
+
 test('stateStore: records runs, bounds history, tracks schedule', async () => {
   const file = tmpFile('state.json')
   const store = stateStore(file, { historyLimit: 3 })

@@ -1,7 +1,9 @@
 // File Pipelines notifications: thin level-based wrapper over the shared kit
-// Notifier so titles, auth, header sanitizing and click-through stay uniform.
+// Notifier. Delivery goes through the portal relay (DSCPLN_PORTAL_URL); the
+// portal owns the ntfy URL + token and titles/auth/header sanitizing stay
+// uniform across apps.
 
-import { Notifier as KitNotifier } from "@dscpln/server-kit";
+import { clickFor, Notifier as KitNotifier } from "@dscpln/server-kit";
 
 const LEVELS = {
   error: { priority: "high", tags: ["warning"] },
@@ -12,16 +14,16 @@ const LEVELS = {
 export class Notifier {
   constructor(config, log) {
     this.log = log;
-    this.inner = new KitNotifier({}, (line) => log.log(line));
+    this.inner = new KitNotifier({ app: "File Pipelines" }, (line) => log.log(line));
     this.setConfig(config);
   }
 
   setConfig(config) {
-    this.notifySuccess = config.ntfy?.notifySuccess ?? true;
-    const origin = String(process.env.DSCPLN_ORIGIN ?? "").trim().replace(/\/+$/, "");
+    this.notifySuccess = config.notifySuccess !== false;
     this.inner.setConfig({
-      ntfy: { ...(config.ntfy ?? {}), notifySuccess: true },
-      click: /^https?:\/\//i.test(origin) ? `${origin}/media` : "",
+      app: "File Pipelines",
+      relayUrl: process.env.DSCPLN_PORTAL_URL ?? "",
+      click: clickFor(process.env.BASE_PATH ?? ""),
     });
   }
 
@@ -33,7 +35,7 @@ export class Notifier {
       priority,
       tags,
     });
-    if (!result.ok && this.inner.configured) this.log.log(`ntfy notification failed: ${result.error}`);
+    if (!result.ok && this.inner.configured) this.log.log(`notification failed: ${result.error}`);
     return result;
   }
 }

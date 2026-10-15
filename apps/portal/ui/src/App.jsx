@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Boxes,
   Contact,
@@ -6,10 +6,21 @@ import {
   MessageSquareText,
   Music,
   RefreshCw,
+  Settings,
   Workflow,
   Wrench,
 } from 'lucide-react'
-import { formatDateTime, formatTime, getJson, humanAgo, ping, ThemeToggle } from '@dscpln/ui-kit'
+import {
+  formatDateTime,
+  formatTime,
+  getJson,
+  humanAgo,
+  ping,
+  postJson,
+  putJson,
+  SettingsDialog,
+  ThemeToggle,
+} from '@dscpln/ui-kit'
 import FunctionCard from './FunctionCard.jsx'
 
 const FUNCTIONS = [
@@ -23,6 +34,21 @@ const FUNCTIONS = [
 ]
 
 const EMPTY = { loaded: false, online: true, detail: '', tone: '', next: '', nextTone: '', issue: false }
+
+const SETTINGS_FIELDS = [
+  {
+    path: 'ntfy.url',
+    label: 'ntfy URL',
+    placeholder: 'http://ntfy.example:3000/<topic>',
+    help: 'Every app sends its notifications through the portal; this URL and token are the only ones used to reach ntfy.',
+  },
+  {
+    path: 'ntfy.token',
+    label: 'ntfy token',
+    type: 'password',
+    help: 'Write-only: leave the masked value to keep the stored token.',
+  },
+]
 
 async function scheduledDetail(fn) {
   const state = await getJson(`${fn.path}/api/state`)
@@ -119,6 +145,54 @@ export default function App() {
   const [cards, setCards] = useState(emptyCards)
   const [checkedAt, setCheckedAt] = useState(null)
   const [busy, setBusy] = useState(false)
+  const settingsRef = useRef(null)
+  const [testing, setTesting] = useState(false)
+  const [testStatus, setTestStatus] = useState(null)
+
+  const openSettings = async () => {
+    const config = await getJson('api/config')
+    setTestStatus(null)
+    settingsRef.current?.show(config)
+  }
+
+  const saveSettings = async (draft) => {
+    await putJson('api/config', draft)
+  }
+
+  const testNotification = async (draft) => {
+    setTesting(true)
+    setTestStatus(null)
+    try {
+      await postJson('api/notify/test', { url: draft.ntfy?.url ?? '', token: draft.ntfy?.token ?? '' })
+      setTestStatus({ tone: 'ok', text: 'Test notification sent.' })
+    } catch (err) {
+      setTestStatus({ tone: 'error', text: err.message })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const settingsExtra = ({ draft }) => (
+    <section className="settings-section">
+      <h3>Test</h3>
+      <div className="ntfy-test">
+        <button
+          className="outline"
+          type="button"
+          disabled={testing}
+          data-testid="notify-test"
+          onClick={() => testNotification(draft)}
+        >
+          {testing ? 'Sending…' : 'Send test notification'}
+        </button>
+      </div>
+      {testStatus ? (
+        <p className={testStatus.tone === 'error' ? 'form-error' : 'hint'} data-testid="notify-test-status">
+          {testStatus.text}
+        </p>
+      ) : null}
+    </section>
+  )
 
   const refresh = async () => {
     setBusy(true)
@@ -165,6 +239,10 @@ export default function App() {
         <div className="app-header__top">
           <h1><a className="app-header__brand" href="/">D<span className="accent">$</span>CPLN</a></h1>
           <div className="app-header__actions">
+            <button className="outline secondary icon-button" type="button" aria-label="Notification settings" title="Notification settings"
+              onClick={openSettings} data-testid="settings-open">
+              <Settings size={16} strokeWidth={1.8} />
+            </button>
             <button className="outline secondary icon-button" type="button" aria-label="Refresh status" title="Refresh status"
               disabled={busy} onClick={refresh}>
               <RefreshCw size={16} strokeWidth={1.8} />
@@ -187,6 +265,15 @@ export default function App() {
           ))}
         </div>
       </main>
+
+      <SettingsDialog
+        ref={settingsRef}
+        fields={SETTINGS_FIELDS}
+        schedule={false}
+        notice="Notifications for every app are sent through the portal to the ntfy topic configured here."
+        onsave={saveSettings}
+        extra={settingsExtra}
+      />
     </>
   )
 }

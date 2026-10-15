@@ -8,6 +8,7 @@ const FIELDS = [
   { path: 'destination', label: 'Destination folder', type: 'text', help: 'Exports are written here and git-committed.' },
   { path: 'git.enabled', label: 'Git commit after export', type: 'checkbox' },
   { path: 'git.message', label: 'Custom commit message', type: 'text' },
+  { path: 'notifySuccess', label: 'Notify when a run succeeds', type: 'checkbox', help: 'Failures always notify; notifications are sent through the portal’s ntfy settings.' },
 ]
 
 export default function App() {

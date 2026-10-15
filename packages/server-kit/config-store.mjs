@@ -16,12 +16,33 @@ import { atomicWriteJson, deepMerge, readJsonFile, ValidationError } from './ato
 
 // Sentinels for write-only secret fields: GET responses replace a set secret
 // with SECRET_MASK, and saving the mask back (unchanged field) keeps the
-// stored value. An explicit empty string clears it.
+// stored value. An explicit empty string clears it. Secret names may be dotted
+// paths (`ntfy.token`) for nested config sections.
 export const SECRET_MASK = '••••••••'
 
 export function resolveSecret(value, stored) {
   if (value == null || value === '' || value === SECRET_MASK) return stored ?? ''
   return value
+}
+
+export function getPathValue(obj, path) {
+  let current = obj
+  for (const key of String(path).split('.')) {
+    if (current == null || typeof current !== 'object') return undefined
+    current = current[key]
+  }
+  return current
+}
+
+export function setPathValue(obj, path, value) {
+  const keys = String(path).split('.')
+  let current = obj
+  for (const key of keys.slice(0, -1)) {
+    if (current[key] == null || typeof current[key] !== 'object') current[key] = {}
+    current = current[key]
+  }
+  current[keys[keys.length - 1]] = value
+  return obj
 }
 
 export function configStore(file, options = {}) {
@@ -52,10 +73,10 @@ export function configStore(file, options = {}) {
   }
 
   const save = async (raw) => {
-    const prepared = { ...(raw ?? {}) }
+    const prepared = structuredClone(raw ?? {})
     for (const field of secrets) {
-      if (prepared[field] === SECRET_MASK) {
-        prepared[field] = current?.[field] ?? ''
+      if (getPathValue(prepared, field) === SECRET_MASK) {
+        setPathValue(prepared, field, getPathValue(current, field) ?? '')
       }
     }
     const next = normalizeAndValidate(prepared)
@@ -93,9 +114,9 @@ export function configStore(file, options = {}) {
     get: () => current,
     // Config for API responses: secret fields are masked when set.
     public: () => {
-      const out = { ...(current ?? {}) }
+      const out = structuredClone(current ?? {})
       for (const field of secrets) {
-        if (out[field]) out[field] = SECRET_MASK
+        if (getPathValue(out, field)) setPathValue(out, field, SECRET_MASK)
       }
       return out
     },

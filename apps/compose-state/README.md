@@ -3,7 +3,7 @@
 Scheduled backups of Docker Compose runtime state. For each target it captures
 what Compose knows about the running stack (containers, networks, volumes and
 list output) into a timestamped archive, keeps the newest `retention` archives
-per target, and notifies through ntfy on failures (and optionally successes).
+per target, and notifies through the portal on failures (and optionally successes).
 
 Targets run in one of two modes:
 
@@ -21,7 +21,7 @@ Targets run in one of two modes:
 | `destination` | where archives are written (default `~/compose_state_backups`) |
 | `retention` | archives kept per target (default 1; the old archive is removed only after the new one is written) |
 | `sshPublicKey` / `sshPrivateKey` | generated on first boot; the private half lives on the app's volume (masked in API responses) |
-| `schedule` / `ntfy` | `{enabled, days, at, catchUp}` (default Sundays 04:00) and `{url, token, notifySuccess}` |
+| `schedule` / `notifySuccess` | `{enabled, days, at, catchUp}` (default Sundays 04:00) and whether successful runs notify |
 
 A fresh install starts with no targets — add them in Settings and press Save;
 the run summary lists the target names.

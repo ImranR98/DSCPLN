@@ -41,4 +41,13 @@ test('dashboard loads under BASE_PATH with the shared kit', async (t) => {
     await page.waitForFunction(() => document.querySelector('#insightsContent')?.children.length > 0)
     assert.match(await page.title(), /Insights/)
     assert.deepEqual(errors, [])
+
+    // Amounts must render in the insights transactions list. The mock workbook
+    // ends in September 2026, so pin the range instead of using the current month.
+    await page.goto(`${baseUrl}/balance/insights?start=2026-09-01&end=2026-09-30`)
+    await page.waitForFunction(() =>
+        document.querySelectorAll('#transactionsList .expense__amount').length > 0)
+    const amount = await page.textContent('#transactionsList .expense__amount')
+    assert.match(amount, /\$/)
+    assert.deepEqual(errors, [])
 })

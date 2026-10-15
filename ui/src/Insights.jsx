@@ -83,6 +83,7 @@ export default function Insights() {
   const symbols = new Map(
     (reference?.currencies || []).filter((entry) => entry.symbol).map((entry) => [entry.code, entry.symbol]))
   const money = moneyFor((code) => fractionalCurrencies.has(code), (code) => symbols.get(code))
+  const today = startOfDay(new Date())
 
   useLayoutEffect(() => {
     document.body.classList.toggle('is-loading', !reference)
@@ -152,7 +153,6 @@ export default function Insights() {
       const chartRange = rangeArg
       const statsPlan = IM.comparisonPlan(comparisonArg, statsRange)
       const chartPlan = IM.comparisonPlan(comparisonArg, chartRange)
-      const today = startOfDay(new Date())
       let fetchStart = [...statsPlan.windows, ...chartPlan.windows].reduce((earliest, window) =>
         !earliest || window.start < earliest ? window.start : earliest, null)
       if (chartRange.start <= today && today <= chartRange.end) {
@@ -366,7 +366,7 @@ export default function Insights() {
             <span>Transactions</span>
             <span className="muted">{rangeTxCount ? formatCount(rangeTxCount) : ''}</span>
           </summary>
-          <TransactionList id="transactionsList" transactions={sortedRangeTxs} markFuture />
+          <TransactionList id="transactionsList" transactions={sortedRangeTxs} money={money} today={today} markFuture />
           <p className="muted" hidden={rangeTxCount > 0}>No transactions in this range.</p>
         </details>
 

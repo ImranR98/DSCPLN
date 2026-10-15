@@ -7,7 +7,7 @@
 #
 # The image is referenced by tag because it is an internal build input: each
 # app image still gets pinned by digest in the deployment repo.
-FROM node:24-slim
+FROM node:26-slim
 
 WORKDIR /app
 

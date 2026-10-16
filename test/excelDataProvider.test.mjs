@@ -663,6 +663,11 @@ test('writes, shrinks and clears the excluded-categories block', async () => {
     assert.equal(constants.getRow(7).getCell(9).value, 'Excluded from Budget by Default')
     assert.equal(constants.getRow(8).getCell(9).value, 'Rent')
     assert.equal(constants.getRow(9).getCell(9).value, 'Snacks')
+    // The blocks copy the table's styles: headers/labels bold like the table
+    // header, values plain like the first body row.
+    assert.equal(constants.getRow(7).getCell(9).font?.bold, true)
+    assert.equal(constants.getRow(2).getCell(9).font?.bold, true)
+    assert.equal(Boolean(constants.getRow(8).getCell(9).font?.bold), false)
 
     // Shrinking the list clears the leftover rows.
     await provider.updateDefaultExcludedCategories(['Snacks'])
@@ -733,6 +738,9 @@ test('migrates legacy settings blocks to the canonical layout on save', async ()
     assert.equal(savedConstants.getRow(7).getCell(9).value, 'Excluded from Budget by Default')
     assert.equal(savedConstants.getRow(8).getCell(9).value, 'Investment Buy')
     assert.equal(savedConstants.getRow(9).getCell(9).value, 'Investment Sell')
+    // The migrated cells adopt the table's header style (bold in the mock).
+    assert.equal(savedConstants.getRow(2).getCell(9).font?.bold, true)
+    assert.equal(savedConstants.getRow(7).getCell(9).font?.bold, true)
 })
 
 test('requires the workbook directory to be a git repository', () => {

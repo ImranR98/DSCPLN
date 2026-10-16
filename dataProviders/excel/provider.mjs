@@ -284,22 +284,43 @@ export default (config = {}, configDir = process.cwd()) => {
     const writeSettingsBlocks = (sheet, { budgets, excluded }) => {
         clearSettingsBlocks(sheet)
         let tableRight = 0
+        let tableLeft = 0
         sheet.getRow(2).eachCell({ includeEmpty: false }, (cell, column) => {
             const header = normalizeHeader(cellString(cell.value))
             if (header && !isSettingsLabel(header)) {
                 tableRight = Math.max(tableRight, column)
+                if (!tableLeft) {
+                    tableLeft = column
+                }
             }
         })
         const anchor = tableRight + 2
+        // The settings blocks adopt the table's look: label and header cells
+        // copy the table header's style, value cells the first body row's.
+        const cloneStyle = (row) => {
+            const style = tableLeft ? sheet.getRow(row).getCell(tableLeft).style : null
+            return style ? JSON.parse(JSON.stringify(style)) : {}
+        }
+        const headerStyle = cloneStyle(2)
+        const bodyStyle = cloneStyle(3)
+        const apply = (cell, style) => {
+            cell.style = JSON.parse(JSON.stringify(style))
+        }
         if (budgets.length) {
+            apply(sheet.getRow(2).getCell(anchor), headerStyle)
             sheet.getRow(2).getCell(anchor).value = BUDGETS_LABEL
             const headerRow = sheet.getRow(3)
+            for (const column of [anchor, anchor + 1, anchor + 2]) {
+                apply(headerRow.getCell(column), headerStyle)
+            }
             headerRow.getCell(anchor).value = BUDGET_CURRENCY_HEADER
             headerRow.getCell(anchor + 1).value = BUDGET_MONTHLY_LABEL
             headerRow.getCell(anchor + 2).value = BUDGET_BIAS_LABEL
-            headerRow.font = { bold: true }
             budgets.forEach((entry, index) => {
                 const row = sheet.getRow(4 + index)
+                for (const column of [anchor, anchor + 1, anchor + 2]) {
+                    apply(row.getCell(column), bodyStyle)
+                }
                 row.getCell(anchor).value = entry.currency
                 row.getCell(anchor + 1).value = entry.monthlyBudget
                 row.getCell(anchor + 1).numFmt = '#,##0.00'
@@ -309,9 +330,12 @@ export default (config = {}, configDir = process.cwd()) => {
         }
         if (excluded.length) {
             const excludedLabelRow = 4 + budgets.length + 1
+            apply(sheet.getRow(excludedLabelRow).getCell(anchor), headerStyle)
             sheet.getRow(excludedLabelRow).getCell(anchor).value = EXCLUDED_LABEL
             excluded.forEach((name, index) => {
-                sheet.getRow(excludedLabelRow + 1 + index).getCell(anchor).value = name
+                const cell = sheet.getRow(excludedLabelRow + 1 + index).getCell(anchor)
+                apply(cell, bodyStyle)
+                cell.value = name
             })
         }
         return anchor

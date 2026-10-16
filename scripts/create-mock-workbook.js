@@ -95,7 +95,9 @@ const buildWorkbook = () => {
     budgetHeader.getCell(anchor).value = 'Currency'
     budgetHeader.getCell(anchor + 1).value = 'Monthly Budget'
     budgetHeader.getCell(anchor + 2).value = 'First Day Bias'
-    budgetHeader.font = { bold: true }
+    for (const column of [anchor, anchor + 1, anchor + 2]) {
+        budgetHeader.getCell(column).font = { bold: true }
+    }
     const budgetRows = [
         ['CAD', 3000, 1500],
         ['USD', 500, 100],

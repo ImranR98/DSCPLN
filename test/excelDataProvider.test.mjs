@@ -434,6 +434,91 @@ test('validates import lines', async () => {
     await assert.rejects(provider.importTransactions('   \n\n'), ValidationError)
 })
 
+test('checks import lines against the workbook with a loose key', async () => {
+    const { provider, workbookFile } = createTestProvider()
+    const before = fs.readFileSync(workbookFile)
+    const text = [
+        '2026-09-09\tNetflix\t\t16.99\tCAD\tSubscriptions',
+        '2026-10-05\tCASH Dividend\t13816.61\t\tCAD\tInvestment Sell',
+        '2026-09-03\tJob\t2645\t\tCAD\tOther Earnings',
+    ].join('\n')
+    const result = await provider.checkImportLines(text)
+    assert.equal(result.total, 3)
+    assert.equal(result.duplicates, 2)
+    assert.equal(result.new, 1)
+    assert.deepEqual(result.lines, [
+        { line: 1, duplicate: true },
+        { line: 2, duplicate: false },
+        { line: 3, duplicate: true },
+    ])
+    // Matching is read-only: nothing to write for a check.
+    assert.deepEqual(fs.readFileSync(workbookFile), before)
+})
+
+test('duplicate checking is count-aware for identical lines', async () => {
+    const { provider } = createTestProvider()
+    const line = '2026-09-09\tNetflix\t\t16.99\tCAD\tSubscriptions'
+    const result = await provider.checkImportLines([line, line].join('\n'))
+    assert.deepEqual(result.lines, [
+        { line: 1, duplicate: true },
+        { line: 2, duplicate: false },
+    ])
+    assert.equal(result.duplicates, 1)
+    assert.equal(result.new, 1)
+})
+
+test('checks date, details, amount and currency on candidate lines', async () => {
+    const { provider } = createTestProvider()
+    const cases = [
+        ['2026-09-08\tNo amount\t\t\tCAD\tDividend', /^Check failed:\nLine 1: Fill one of Money In or Expenses/],
+        ['2026-09-08\tNo currency\t5\t\t\tDividend', /^Check failed:\nLine 1: Currency is required/],
+        ['2026-02-30\tBad date\t5\t\tCAD\tDividend', /^Check failed:\nLine 1: Date is not a valid calendar date/],
+        ['2026-09-08\t\t5\t\tCAD\tDividend', /^Check failed:\nLine 1: Details is required/],
+    ]
+    for (const [line, pattern] of cases) {
+        await assert.rejects(provider.checkImportLines(line), (e) => {
+            assert.equal(e instanceof ValidationError, true)
+            assert.match(e.message, pattern)
+            return true
+        })
+    }
+})
+
+test('skipDuplicates imports only missing lines and leaves duplicates untouched', async () => {
+    const { provider, dir } = createTestProvider()
+    const text = [
+        '2026-09-09\tNetflix\t\t16.99\tCAD\tSubscriptions',
+        '2026-09-03\tJob\t2645\t\tCAD\tJob',
+        '2026-10-05\tCASH Dividend\t13816.61\t\tCAD\tInvestment Sell',
+    ].join('\n')
+    const result = await provider.importTransactions(text, { skipDuplicates: true })
+    assert.equal(result.imported, 1)
+    assert.equal(result.skipped, 2)
+    assert.equal(result.transactions[0].details, 'CASH Dividend')
+    assert.equal(git(['log', '-1', '--format=%s'], dir).trim(), 'D$CPLN: import 1 transaction')
+
+    // Re-running the same scrape imports nothing.
+    const again = await provider.importTransactions(text, { skipDuplicates: true })
+    assert.equal(again.imported, 0)
+    assert.equal(again.skipped, 3)
+})
+
+test('skipDuplicates ignores validation on skipped lines but not on new ones', async () => {
+    const { provider } = createTestProvider()
+    // The stored Netflix row would no longer validate after a category rename;
+    // as a duplicate it must be skipped without validating.
+    const duplicate = '2026-09-09\tNetflix\t\t16.99\tCAD\tRetired Category'
+    const skipped = await provider.importTransactions(duplicate, { skipDuplicates: true })
+    assert.equal(skipped.imported, 0)
+    assert.equal(skipped.skipped, 1)
+    // Without skipDuplicates the same line still fails validation.
+    await assert.rejects(provider.importTransactions(duplicate), /Category must be one of/)
+
+    // A genuinely new line with an unknown category still fails the import.
+    const newLine = '2026-10-05\tCASH Dividend\t13816.61\t\tCAD\tRetired Category'
+    await assert.rejects(provider.importTransactions(newLine, { skipDuplicates: true }), /Category must be one of/)
+})
+
 test('returns transactions for a date range inclusive, sorted', async () => {
     const { provider } = createTestProvider()
     const month = await provider.getTransactions('2026-09-01', '2026-09-30')

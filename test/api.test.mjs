@@ -160,3 +160,54 @@ test('adds transactions with a required category', async (t) => {
     assert.equal(unknown.status, 404)
     assert.equal((await unknown.json()).error, 'Not found')
 })
+
+test('checks and imports transaction batches with duplicate skipping', async (t) => {
+    const { server, baseUrl } = await startServer()
+    t.after(() => new Promise((resolve) => server.close(resolve)))
+    const apiToken = await token(baseUrl)
+
+    const text = [
+        '2026-09-09\tNetflix\t\t16.99\tCAD\tSubscriptions',
+        '2026-10-05\tCASH Dividend\t13816.61\t\tCAD\tInvestment Sell',
+    ].join('\n')
+
+    // The routes require the token like the rest of the external API.
+    const anonymous = await fetch(`${baseUrl}/api/transactions/check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+    })
+    assert.equal(anonymous.status, 401)
+    assert.equal((await anonymous.json()).error, 'Invalid or missing API token')
+
+    let response = await postJson(baseUrl, apiToken, '/api/transactions/check', { text })
+    assert.equal(response.status, 200)
+    let body = await response.json()
+    assert.equal(body.total, 2)
+    assert.equal(body.duplicates, 1)
+    assert.equal(body.new, 1)
+    assert.deepEqual(body.lines, [
+        { line: 1, duplicate: true },
+        { line: 2, duplicate: false },
+    ])
+
+    response = await postJson(baseUrl, apiToken, '/api/transactions/import', { text, skipDuplicates: true })
+    assert.equal(response.status, 201)
+    body = await response.json()
+    assert.equal(body.imported, 1)
+    assert.equal(body.skipped, 1)
+    assert.equal(body.transactions[0].details, 'CASH Dividend')
+
+    // Re-running the same scrape is a no-op.
+    response = await postJson(baseUrl, apiToken, '/api/transactions/import', { text, skipDuplicates: true })
+    body = await response.json()
+    assert.equal(body.imported, 0)
+    assert.equal(body.skipped, 2)
+
+    // Without skipDuplicates the token import keeps the add-everything
+    // behaviour of the UI's import dialog.
+    response = await postJson(baseUrl, apiToken, '/api/transactions/import', { text })
+    body = await response.json()
+    assert.equal(body.imported, 2)
+    assert.equal(body.skipped, 0)
+})

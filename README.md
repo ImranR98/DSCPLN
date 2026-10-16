@@ -115,9 +115,13 @@ regenerate the single token; send it as `Authorization: Bearer <token>`.
 | --- | --- | --- |
 | `GET` | `/balance/api/categories?details=<text>&kind=expense\|income` | - |
 | `POST` | `/balance/api/transactions` | `{ "amount", "details", "currency", "category", "date"?, "notes"? }` |
+| `POST` | `/balance/api/transactions/check` | `{ "text" }` — the same tab-separated batch format as the UI import |
+| `POST` | `/balance/api/transactions/import` | `{ "text", "skipDuplicates"? }` — imports the batch; with `skipDuplicates: true` lines already present are skipped |
 
 - `GET /balance/api/categories` returns every category grouped as in the Constants sheet, each with `score: 0`. Adding `details` and `kind` scores every category of that kind between 0 and 1, best match first (`0` when nothing matches); `details` without `kind`, or an unknown kind, is a `400`.
 - `amount` is signed: negative is an expense (`Expenses`), positive is income (`Money In`); `0` is rejected. `date` defaults to today. `details`, `currency` and `category` are required, and the category must exist in the Constants sheet for the transaction's kind. The response is `201 { "transaction": ... }`.
+- `POST /balance/api/transactions/check` is read-only: it returns `{ "total", "duplicates", "new", "lines": [{ "line", "duplicate" }] }`. A line is a duplicate when the workbook already has a transaction with the same Date, Details, signed amount and Currency; `Type` and `Notes` are ignored, and the comparison is count-aware (two identical lines match two stored rows, not one), so a recategorized or annotated stored row still matches a freshly scraped line. `Type`/`Notes` may be empty in checked batches (the import itself still requires them).
+- `POST /balance/api/transactions/import` reuses the UI import's parsing and validation (all-or-nothing, invalid lines reject the whole batch) and responds `201 { "imported", "skipped", "transactions" }`. With `skipDuplicates: true`, lines matching the loose key above are reported in `skipped` before validation, so a since-renamed category on an already-imported row cannot block a clean import.
 
 ```sh
 # See how each expense category scores for a description

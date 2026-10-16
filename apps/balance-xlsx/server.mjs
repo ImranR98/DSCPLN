@@ -211,6 +211,21 @@ const createApp = (config) => {
                 })
                 res.status(201).send({ transaction })
             }))
+
+            // Batch import helpers for automations (same text format as the
+            // UI's import dialog): check which lines already exist in the
+            // workbook, then import only the missing ones.
+            router.post('/api/transactions/check', requireApiToken, asyncRoute(async (req, res) => {
+                requireApiMethod('checkImportLines', 'transaction imports')
+                res.send(await dataProvider.checkImportLines(req.body?.text))
+            }))
+
+            router.post('/api/transactions/import', requireApiToken, asyncRoute(async (req, res) => {
+                requireApiMethod('importTransactions', 'transaction imports')
+                res.status(201).send(await dataProvider.importTransactions(req.body?.text, {
+                    skipDuplicates: req.body?.skipDuplicates === true,
+                }))
+            }))
         },
     })
 

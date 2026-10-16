@@ -119,14 +119,58 @@ container the tools default it under `/home/seluser/.config`, which a volume
 can persist). Runs that drive the browser use a shared `serial_key` so only
 one session is active at a time.
 
+### Wealthsimple import
+
+`examples/wealthsimple-import.mjs` bridges a Wealthsimple scraper to the
+Balance XLSX app: it extracts the scraper's trailing tab-separated transaction
+lines, asks the Balance XLSX external API which ones the workbook already has,
+and imports only the missing ones. A scrape where **nothing** matched the
+workbook warns that the scrape may not reach back far enough, prints the date
+to check manually from, and (when a relay is configured) pushes that warning.
+
+```js
+{
+  name: 'Wealthsimple import',
+  state_dir: '{{maindir}}/.tasks',
+  serial_key: 'wealthsimple',
+  browser: true,
+  commands: [
+    `wealthsimpleton > "$TMPDIR/wealthsimple.txt"`,
+    `node '{{scriptroot}}/wealthsimple-import.mjs' --input "$TMPDIR/wealthsimple.txt" ` +
+      `--balance-url '{{balance_url}}' --balance-token '{{balance_token}}' --notify-url '{{portal_url}}'`,
+  ],
+  summary_last_line: true,
+}
+```
+
+- `--input` — the scraper output (a file, or `-` for stdin).
+- The tool ships with the image; reference it as
+  `'{{repo_dir}}/apps/task-runner/examples/wealthsimple-import.mjs'` unless
+  your `scriptroot` already points at the bundled `examples/` folder.
+- `--balance-url` / `--balance-token` — the Balance XLSX external API base
+  path (`/balance`) and the bearer token from its Settings page. Keep the
+  token in your gitignored `config.mjs` only.
+- `--notify-url` (optional) — the portal relay (`http://portal:8080`); the
+  zero-duplicate warning is pushed there (priority high, `warning` tag).
+- `--after <regex>` (optional) — only consider lines after the last line
+  matching the regex, e.g. `--after 'Scraped \d+ transactions'`; by default
+  every import-shaped TSV line is taken.
+- `--dry-run` — check and report without writing anything.
+
+The scraper's `Scraped N transactions` report is pre-filter (it counts
+everything it saw, not just the printed rows), so fewer extracted lines than N
+is normal; more than N fails the run. A fully-overlapping scrape reports
+"Nothing new"; a partial overlap reports the imported/skipped counts.
+
 ## Adding your own tools and tasks
 
 1. **Write the tool.** Anything executable works — bash, `python3`, `node`.
    The image already provides `bash`, `python3`, `node`, `rsync`, `git`,
    `age`, `jq`, `unzip`/`tar` and `wget`, and the app tree is writable, so a
-   task can `apt-get`/`pip`/`npm` install more at run time. Give it a shebang
+   task can    `apt-get`/`pip`/`npm` install more at run time. Give it a shebang
    and the executable bit. A bundled example lives in
-   `apps/task-runner/examples/hello-tool.sh`.
+   `apps/task-runner/examples/hello-tool.sh`; the Wealthsimple import tool
+   (`examples/wealthsimple-import.mjs`, see above) is a fuller Node one.
 
 2. **Make it visible to the app.**
    - Local runs: keep it anywhere on disk and reference it by absolute path.

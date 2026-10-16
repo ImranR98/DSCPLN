@@ -20,6 +20,13 @@ export default {
   // scriptroot: '/config-src/tools'.
   scriptroot: '{{repo_dir}}/apps/task-runner/examples',
 
+  // Balance XLSX external API (its Settings page shows the base path and the
+  // token to copy) plus the portal relay used for import warnings. Leave
+  // portal_url blank to skip the push notification.
+  balance_url: 'http://balance-xlsx:3300/balance',
+  balance_token: '',
+  portal_url: '',
+
   // Optional remote machines; pin a task with `host: 'desktop'` and run the
   // same config on several instances (BACKUPCTL_HOST names the instance).
   hosts: {
@@ -110,6 +117,31 @@ export default {
             if [ -e "$dest" ] && [ '{{overwrite}}' != 'true' ]; then echo "already exists: $dest"; exit 1; fi
             AGE_PASSPHRASE='{{passphrase}}' bash '{{lib}}' encrypt '{{manual_dir}}' "\${name}.age" {{uploads}}
           `,
+        },
+      ],
+    },
+
+    {
+      name: 'Finance',
+      defaults: { state_dir: '{{maindir}}/.tasks' },
+      tasks: [
+        // Scrape Wealthsimple, then import only the transactions the Balance
+        // XLSX workbook does not already have. When nothing matches the
+        // workbook the summary warns that the scrape may not reach back far
+        // enough (and the portal relay pushes that warning, if configured).
+        {
+          name: 'Wealthsimple import',
+          note: 'Scrape Wealthsimple and import new transactions into Balance XLSX.',
+          serial_key: 'wealthsimple',
+          browser: true,
+          commands: [
+            // Replace with your scraper invocation — its stdout is the input.
+            `wealthsimpleton > "$TMPDIR/wealthsimple.txt"`,
+            `node '{{scriptroot}}/wealthsimple-import.mjs' --input "$TMPDIR/wealthsimple.txt" ` +
+              `--balance-url '{{balance_url}}' --balance-token '{{balance_token}}' ` +
+              `--notify-url '{{portal_url}}'`,
+          ],
+          summary_last_line: true,
         },
       ],
     },

@@ -733,10 +733,81 @@ export default (config = {}, configDir = process.cwd()) => {
         return serializeTransaction(stored)
     }
 
+    // Duplicate-detection identity: date + details + signed amount + currency.
+    // Category and notes are deliberately excluded so a stored row that was
+    // recategorized (or annotated) still matches a freshly scraped line, and
+    // the multiset counting keeps two genuinely identical same-day
+    // transactions importable.
+    const looseKey = (dateIso, details, signedAmount, currency) =>
+        JSON.stringify([dateIso, details, cleanAmount(signedAmount), currency])
+
+    const keyCountsFor = (transactions) => {
+        const counts = new Map()
+        for (const transaction of transactions) {
+            const signed = transaction.moneyIn != null ? transaction.moneyIn : -(transaction.expenses ?? 0)
+            const key = looseKey(transaction.dateIso, transaction.details, signed, transaction.currency)
+            counts.set(key, (counts.get(key) ?? 0) + 1)
+        }
+        return counts
+    }
+
+    // A parsed import line reduced to what duplicate matching needs: date,
+    // details, amount and currency are required; category and notes are not.
+    const candidateKey = (input) => {
+        const date = parseDateInput(input.date)
+        const details = validateText(input.details, 'Details', true)
+        const amount = validateAmount(input.amount)
+        const currency = typeof input.currency === 'string' ? input.currency.trim() : ''
+        if (!currency) {
+            throw new ValidationError('Currency is required')
+        }
+        return looseKey(datePartsToIso(date), details, input.kind === 'income' ? amount : -amount, currency)
+    }
+
+    // Read-only duplicate check for the external API: parses import text and
+    // reports which lines already exist in the workbook. Matching is loose
+    // (see looseKey) and count-aware, so checking two identical lines against
+    // one stored row marks exactly one of them as a duplicate.
+    const checkImportLines = async (text) => {
+        const parsed = await getParsed()
+        const orderedHeaders = Object.entries(parsed.headerMap)
+            .sort((a, b) => a[1] - b[1])
+            .map(([header]) => header)
+        const lines = parseImportLines(text)
+        const counts = keyCountsFor(parsed.transactions)
+        const errors = []
+        const results = []
+        for (const line of lines) {
+            try {
+                const key = candidateKey(parseImportLine(line, orderedHeaders))
+                const remaining = counts.get(key) ?? 0
+                const duplicate = remaining > 0
+                if (duplicate) {
+                    counts.set(key, remaining - 1)
+                }
+                results.push({ line: line.number, duplicate })
+            } catch (e) {
+                if (e instanceof ValidationError) {
+                    errors.push(`Line ${line.number}: ${e.message}`)
+                    continue
+                }
+                throw e
+            }
+        }
+        if (errors.length) {
+            throw new ValidationError(`Check failed:\n${errors.join('\n')}`)
+        }
+        const duplicates = results.filter((entry) => entry.duplicate).length
+        return { total: results.length, duplicates, new: results.length - duplicates, lines: results }
+    }
+
     // Imports tab-separated rows positionally matched to the Transactions
     // sheet's header row. Every line is validated before anything is written,
-    // so an invalid line rejects the whole batch.
-    const importTransactions = async (text) => {
+    // so an invalid line rejects the whole batch. With skipDuplicates, lines
+    // already present in the workbook (loose key) are reported as skipped and
+    // never validated, so a since-renamed category on an old row cannot block
+    // an otherwise clean import.
+    const importTransactions = async (text, { skipDuplicates = false } = {}) => {
         const workbook = await loadWorkbook()
         const date1904 = Boolean(workbook.properties.date1904)
         const constants = readConstants(workbook)
@@ -747,11 +818,32 @@ export default (config = {}, configDir = process.cwd()) => {
             .map(([header]) => header)
         const lines = parseImportLines(text)
 
+        const counts = skipDuplicates ? keyCountsFor(parseWorkbook(workbook).transactions) : null
         const transactions = []
+        let skipped = 0
         const errors = []
         for (const line of lines) {
+            let input
             try {
-                transactions.push(validateTransactionInput(constants, parseImportLine(line, orderedHeaders)))
+                input = parseImportLine(line, orderedHeaders)
+            } catch (e) {
+                if (e instanceof ValidationError) {
+                    errors.push(`Line ${line.number}: ${e.message}`)
+                    continue
+                }
+                throw e
+            }
+            if (counts) {
+                const key = candidateKey(input)
+                const remaining = counts.get(key) ?? 0
+                if (remaining > 0) {
+                    counts.set(key, remaining - 1)
+                    skipped += 1
+                    continue
+                }
+            }
+            try {
+                transactions.push(validateTransactionInput(constants, input))
             } catch (e) {
                 if (e instanceof ValidationError) {
                     errors.push(`Line ${line.number}: ${e.message}`)
@@ -774,7 +866,7 @@ export default (config = {}, configDir = process.cwd()) => {
         })
         const count = stored.length
         await saveWorkbook(workbook, `D$CPLN: import ${count} transaction${count === 1 ? '' : 's'}`)
-        return { imported: count, transactions: stored.map(serializeTransaction) }
+        return { imported: count, skipped, transactions: stored.map(serializeTransaction) }
     }
 
     const updateTransaction = async (id, input) => {
@@ -913,6 +1005,7 @@ export default (config = {}, configDir = process.cwd()) => {
         getTransactions,
         updateMonthlyBudget,
         addTransaction,
+        checkImportLines,
         importTransactions,
         updateTransaction,
         deleteTransaction,

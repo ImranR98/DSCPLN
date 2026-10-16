@@ -11,6 +11,9 @@ export const BUDGETS_LABEL = 'Budgets'
 export const BUDGET_MONTHLY_LABEL = 'Monthly Budget'
 export const BUDGET_BIAS_LABEL = 'First Day Bias'
 export const BUDGET_CURRENCY_HEADER = 'Currency'
+// Categories listed under this Constants label start out unchecked (left out
+// of the totals) on the dashboard and insights pages.
+export const EXCLUDED_LABEL = 'Excluded from Budget by Default'
 
 export const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30)
 export const DATE_1904_OFFSET_DAYS = 1462

@@ -169,6 +169,38 @@ test('writes per-currency budget updates to the Constants sheet', async (t) => {
     assert.equal(response.status, 400)
 })
 
+test('serves and overrides the default excluded categories', async (t) => {
+    const { server, baseUrl } = await startServer()
+    t.after(() => new Promise((resolve) => server.close(resolve)))
+
+    const spent = (data) => data.currencies.find((entry) => entry.code === 'CAD').monthsSpend
+    const readData = async (query = '') => (await fetch(`${baseUrl}/data?date=2026-09-15${query}`)).json()
+
+    // The workbook default (Investment Buy/Sell) is surfaced and applied.
+    const defaults = await readData()
+    assert.deepEqual(defaults.defaultExcludedCategories, ['Investment Buy', 'Investment Sell'])
+
+    // Repeated ?exclude= params override it for the view.
+    const explicit = await readData('&exclude=Rent')
+    assert.ok(Math.abs((spent(defaults) - spent(explicit)) - 1275) < 1e-9)
+    const all = await readData('&exclude=')
+    assert.equal(spent(all), spent(defaults))
+
+    // The write route persists a new default list (validated, sheet-ordered).
+    let response = await jsonRequest(baseUrl, '/excluded-defaults', { categories: ['Snacks', 'Rent'] })
+    assert.equal(response.status, 200)
+    assert.deepEqual((await response.json()).defaultExcludedCategories, ['Rent', 'Snacks'])
+    const updated = await readData()
+    assert.deepEqual(updated.defaultExcludedCategories, ['Rent', 'Snacks'])
+    assert.ok(Math.abs((spent(defaults) - spent(updated)) - 1275) < 1e-9)
+
+    response = await jsonRequest(baseUrl, '/excluded-defaults', { categories: ['Nope'] })
+    assert.equal(response.status, 400)
+    assert.match(await response.text(), /Unknown category/)
+    response = await jsonRequest(baseUrl, '/excluded-defaults', {})
+    assert.equal(response.status, 400)
+})
+
 test('rejects invalid input', async (t) => {
     const { server, baseUrl } = await startServer()
     t.after(() => new Promise((resolve) => server.close(resolve)))

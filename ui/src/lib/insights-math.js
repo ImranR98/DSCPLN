@@ -357,3 +357,11 @@ export {
   comparisonPlan,
   isWholeMonthsRange,
 }
+
+// Categories unchecked by default: the conversions (tracked separately from
+// spend/income) plus the workbook's "Excluded from Budget by Default" list.
+export const defaultExcludedFor = (reference) =>
+  new Set([
+    ...(reference?.conversionCategories || []),
+    ...(reference?.defaultExcludedCategories || []),
+  ])

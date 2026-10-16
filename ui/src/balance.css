@@ -1469,3 +1469,27 @@ details.card[open] > summary::after {
     grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
     gap: var(--space-3);
 }
+
+/* Categories dialog: the insights checkbox panels laid out as a picker grid,
+   with its own scroll area and a left-aligned Reset action. */
+.categories-dialog__groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: var(--space-3) var(--space-4);
+    margin-top: var(--space-3);
+    max-height: 55vh;
+    overflow: auto;
+}
+
+.categories-dialog__group {
+    min-width: 0;
+}
+
+.categories-dialog .dialog-actions {
+    justify-content: space-between;
+}
+
+.categories-dialog__actions-right {
+    display: flex;
+    gap: var(--space-2);
+}

@@ -12,7 +12,7 @@ import * as IM from './lib/insights-math.js'
 import { moneyFor } from './lib/money.js'
 import { renderMonthly } from './lib/chart.js'
 import { sortNewestFirst, formatCount } from './lib/transactions.js'
-import { buildCompareNote, buildInsightsModel, elapsedOf } from './lib/insights-model.js'
+import { buildCompareNote, buildInsightsModel, defaultExcludedFor, elapsedOf } from './lib/insights-model.js'
 import KpiGrid from './components/KpiGrid.jsx'
 import CategoryPanel from './components/CategoryPanel.jsx'
 import MoversBlock from './components/MoversBlock.jsx'
@@ -132,7 +132,7 @@ export default function Insights() {
   const updateExcluded = (code, categories, include) => {
     setExcluded((current) => {
       const next = new Map(current)
-      const set = new Set(current.get(code) ?? new Set(reference?.conversionCategories || []))
+      const set = new Set(current.get(code) ?? defaultExcludedFor(reference))
       for (const category of categories) {
         if (include) set.delete(category)
         else set.add(category)

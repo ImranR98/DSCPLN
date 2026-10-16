@@ -75,14 +75,19 @@ Row 2 holds a header per column, and each column lists the allowed values for th
 
 - Category names and currencies are never hardcoded: edit this sheet to add, rename, or remove them.
 - `Symbols` pairs with `Currencies` by row and prefixes every amount shown for that currency (e.g. `$1,234.56`, `TSh1,234.56`). Leave it blank for currencies without a symbol; their amounts are shown as bare numbers, since the currency code is displayed elsewhere (row, section, chart lane). Two group names are special: `Money In` defines income categories, and `Conversions` marks currency-conversion categories. Conversion categories are valid for both kinds and are tracked separately from spending/earning (see below); everything not in `Money In` is an expense category.
-- Budgets live below the table, one row per currency:
+- Budgets live in the settings blocks to the right of the category table (one blank column over, starting at row 2):
   ```
-  Budgets
-  Currency   Monthly Budget   First Day Bias
-  CAD        3000             1500
-  USD        500              100
+               | Budgets
+               | Currency  | Monthly Budget | First Day Bias
+               | CAD       | 3000           | 1500
+               | USD       | 500            | 100
+               |
+               | Excluded from Budget by Default
+               | Investment Buy
+               | Investment Sell
   ```
   The first-day bias is an extra amount available on the 1st of the month. A currency with no row (or a 0 budget) simply has no budget tracking; saving a budget of 0 clears it. The app creates the table on the first save if it is missing.
+- `Excluded from Budget by Default` lists categories that start out unchecked (left out of every total) on the dashboard and insights pages. Saving a selection from the dashboard's category picker writes this list; names that are no longer categories are ignored. Both settings blocks are read from anywhere on the sheet and are moved to this position on the next settings save.
 
 ## API
 
@@ -99,6 +104,9 @@ These routes are used by the web UI (and only support what it needs).
 | `PUT` | `/transactions/:id` | `{ "kind", "amount", "details", "date", "category", "currency", "notes" }` |
 | `DELETE` | `/transactions/:id` | - |
 | `POST` | `/budget` | `{ "monthlyBudget", "firstDayBias", "currency" }` |
+| `POST` | `/excluded-defaults` | `{ "categories": ["Investment Buy", ...] }` — writes the Constants "Excluded from Budget by Default" list |
+
+`/data` accepts repeated `exclude=<category>` parameters that leave those categories out of every figure for the view (spend, budgets, trailing averages, the history chart); without the parameter the workbook's default exclusions apply, and the response carries `defaultExcludedCategories` (the workbook's list). The month's transaction list, the all-time range and the suggestion helpers always see the whole workbook.
 
 `/data` also returns `conversionCategories` (the categories in the `Conversions` group), `transactionRange` (the first and last dated transactions, used by the insights "All time" preset), and a `fractional` flag per currency (whether any amount needs sub-cent precision). Each currency also carries `firstMonth` (its earliest transaction month, so averages skip months before the data begins), `trailingMonths` (how many months the trailing averages cover), and month-to-date variants of the previous-month and trailing-average figures (`previousMonths*ToDate`, `trailing*AverageToDate`) used for same-days comparisons on the dashboard.
 
@@ -151,6 +159,11 @@ curl -X POST https://dscpln.example.com/balance/api/transactions \
 - **Transactions** lists the selected month's rows newest first — date,
   details, category, out, in, currency — with Add transaction and per-row
   Edit/Delete.
+- The header's **category picker** (slider button) chooses which categories
+  count: unchecked ones are left out of the monthly figures, budgets, trailing
+  averages and the chart. It starts from the workbook's "Excluded from Budget
+  by Default" list, and **Save as default** writes the current selection back
+  to the Constants sheet.
 
 ### Transactions
 
@@ -169,7 +182,9 @@ curl -X POST https://dscpln.example.com/balance/api/transactions \
 currency:
 
 - **Filters**: currency, start/end date pickers and quick ranges (Last
-  12 months, Year to date).
+  12 months, Year to date). Each currency section's category panels uncheck
+  excluded categories; conversions and the workbook's "Excluded from Budget by
+  Default" categories start unchecked.
 - **Totals** for the range: spent, earned, net, and the previous period's
   spend (the same-length window immediately before the range).
 - **Monthly totals** bar chart (out vs in per month) and a **cumulative

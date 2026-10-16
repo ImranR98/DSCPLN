@@ -1,7 +1,8 @@
 import { Breakable } from '@dscpln/ui-kit'
 
 // One "Spending/Earned by category" panel: the All/None controls and the
-// checkbox rows that exclude categories from the KPIs.
+// checkbox rows that exclude categories. The share/amount/delta/bar columns
+// are optional, so the same panel doubles as a plain category picker.
 export default function CategoryPanel({ title, list, onSetExcluded }) {
   if (!list) return null
   return (
@@ -24,17 +25,23 @@ export default function CategoryPanel({ title, list, onSetExcluded }) {
             <span className="category-dot" style={{ background: row.color }}></span>
             <span className="category-row__name">
               <span className="category-row__label">{row.category}</span>
-              <span className="category-row__share">{row.share}</span>
+              {row.share ? <span className="category-row__share">{row.share}</span> : null}
             </span>
-            <span className="category-row__amount-wrap">
-              <Breakable className="category-row__amount" text={row.amountText} />
-              {row.delta ? (
-                <span className={`category-row__delta ${row.delta.className}`} title={row.delta.title}>{row.delta.text}</span>
-              ) : null}
-            </span>
-            <span className="category-row__bar">
-              <span className="category-row__bar-fill" style={{ width: `${row.barPercent}%`, background: row.color }}></span>
-            </span>
+            {row.amountText || row.delta ? (
+              <span className="category-row__amount-wrap">
+                {row.amountText ? (
+                  <Breakable className="category-row__amount" text={row.amountText} />
+                ) : null}
+                {row.delta ? (
+                  <span className={`category-row__delta ${row.delta.className}`} title={row.delta.title}>{row.delta.text}</span>
+                ) : null}
+              </span>
+            ) : null}
+            {row.barPercent != null ? (
+              <span className="category-row__bar">
+                <span className="category-row__bar-fill" style={{ width: `${row.barPercent}%`, background: row.color }}></span>
+              </span>
+            ) : null}
           </label>
         ))}
       </div>

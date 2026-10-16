@@ -37,6 +37,19 @@ test('dashboard loads under BASE_PATH with the shared kit', async (t) => {
     assert.match(await page.textContent('h1'), /Balance XLSX/)
     assert.deepEqual(errors, [])
 
+    // Category picker: the workbook defaults (Investment Buy/Sell) start
+    // unchecked, and toggling one more category applies live to the page.
+    await page.click('button[title="Counted categories"]')
+    const dialog = page.locator('dialog.categories-dialog')
+    await dialog.waitFor({ state: 'visible' })
+    const sellRow = dialog.locator('.category-row', { hasText: 'Investment Sell' })
+    assert.equal(await sellRow.locator('input[type="checkbox"]').isChecked(), false)
+    await dialog.locator('.category-row', { hasText: 'Rent' }).locator('input[type="checkbox"]').uncheck()
+    await dialog.locator('.dialog-actions button', { hasText: 'Close' }).click()
+    await page.waitForFunction(() =>
+        document.querySelector('.app-header__meta-tools')?.textContent.includes('3 not counted'))
+    assert.deepEqual(errors, [])
+
     await page.click('a[href="insights"]')
     await page.waitForFunction(() => document.querySelector('#insightsContent')?.children.length > 0)
     assert.match(await page.title(), /Insights/)

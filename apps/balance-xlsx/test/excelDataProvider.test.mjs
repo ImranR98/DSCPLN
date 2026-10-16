@@ -593,12 +593,16 @@ test('writes per-currency budgets into the Constants sheet', async () => {
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.readFile(workbookFile)
     const constants = workbook.getWorksheet('Constants')
-    assert.equal(constants.getCell('A17').value, 'CAD')
-    assert.equal(constants.getCell('B17').value, 2500)
-    assert.equal(constants.getCell('C17').value, 900)
-    assert.equal(constants.getCell('A18').value, 'USD')
-    assert.equal(constants.getCell('B18').value, 700)
-    assert.equal(constants.getCell('C18').value, 50)
+    // Canonical layout: the budgets block sits to the right of the category
+    // table, one blank column over, starting at row 2.
+    assert.equal(constants.getRow(2).getCell(9).value, 'Budgets')
+    assert.equal(constants.getRow(3).getCell(9).value, 'Currency')
+    assert.equal(constants.getRow(4).getCell(9).value, 'CAD')
+    assert.equal(constants.getRow(4).getCell(10).value, 2500)
+    assert.equal(constants.getRow(4).getCell(11).value, 900)
+    assert.equal(constants.getRow(5).getCell(9).value, 'USD')
+    assert.equal(constants.getRow(5).getCell(10).value, 700)
+    assert.equal(constants.getRow(5).getCell(11).value, 50)
     const data = await provider.getData(new Date(2026, 8, 15))
     assert.equal(currencyOf(data, 'CAD').monthlyBudget, 2500)
     assert.equal(currencyOf(data, 'CAD').firstDayBias, 900)
@@ -610,6 +614,125 @@ test('writes per-currency budgets into the Constants sheet', async () => {
     await assert.rejects(provider.updateMonthlyBudget(-1, 0, 'CAD'), ValidationError)
     await assert.rejects(provider.updateMonthlyBudget(100, 0, 'EUR'), ValidationError)
     await assert.rejects(provider.updateMonthlyBudget(100, 0), ValidationError)
+})
+
+test('reads the workbook default excluded categories and applies them', async () => {
+    const { provider } = createTestProvider()
+    const reference = await provider.getData(new Date(2026, 8, 15))
+    assert.deepEqual(reference.defaultExcludedCategories, ['Investment Buy', 'Investment Sell'])
+
+    // The mock has no Investment Buy/Sell transactions, so make a default
+    // matter: Rent stops counting once it is the workbook default, while the
+    // transaction list and the all-time range stay unfiltered.
+    const spentBefore = currencyOf(reference, 'CAD').monthsSpend
+    await provider.updateDefaultExcludedCategories(['Rent'])
+    const filtered = await provider.getData(new Date(2026, 8, 15))
+    assert.deepEqual(filtered.defaultExcludedCategories, ['Rent'])
+    const spentAfter = currencyOf(filtered, 'CAD').monthsSpend
+    assert.ok(Math.abs((spentBefore - spentAfter) - 1275) < 1e-9)
+    assert.equal(filtered.transactions.some((transaction) => transaction.category === 'Rent'), true)
+    assert.equal(filtered.transactionRange.first, reference.transactionRange.first)
+})
+
+test('getData excludeCategories overrides the workbook defaults for the view', async () => {
+    const { provider } = createTestProvider()
+    const date = new Date(2026, 8, 15)
+    const reference = await provider.getData(date)
+    const explicit = await provider.getData(date, { excludeCategories: ['Rent'] })
+    const all = await provider.getData(date, { excludeCategories: [] })
+    const spent = (data) => currencyOf(data, 'CAD').monthsSpend
+    assert.equal(spent(reference), spent(all))
+    assert.ok(Math.abs((spent(all) - spent(explicit)) - 1275) < 1e-9)
+    // Unknown names are not in the workbook, so they exclude nothing.
+    const unknown = await provider.getData(date, { excludeCategories: ['Nope'] })
+    assert.equal(spent(unknown), spent(all))
+})
+
+test('writes, shrinks and clears the excluded-categories block', async () => {
+    const { provider, workbookFile } = createTestProvider()
+    // Written in the sheet's category order, not the request's.
+    const result = await provider.updateDefaultExcludedCategories(['Snacks', 'Rent'])
+    assert.deepEqual(result.defaultExcludedCategories, ['Rent', 'Snacks'])
+    assert.deepEqual((await provider.getData(new Date(2026, 8, 15))).defaultExcludedCategories, ['Rent', 'Snacks'])
+    // The budgets block is preserved alongside it.
+    assert.equal(currencyOf(await provider.getData(new Date(2026, 8, 15)), 'CAD').monthlyBudget, 3000)
+
+    let workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.readFile(workbookFile)
+    let constants = workbook.getWorksheet('Constants')
+    assert.equal(constants.getRow(7).getCell(9).value, 'Excluded from Budget by Default')
+    assert.equal(constants.getRow(8).getCell(9).value, 'Rent')
+    assert.equal(constants.getRow(9).getCell(9).value, 'Snacks')
+
+    // Shrinking the list clears the leftover rows.
+    await provider.updateDefaultExcludedCategories(['Snacks'])
+    workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.readFile(workbookFile)
+    constants = workbook.getWorksheet('Constants')
+    assert.equal(constants.getRow(8).getCell(9).value, 'Snacks')
+    assert.equal(constants.getRow(9).getCell(9).value, null)
+
+    // An empty list clears the block; duplicates are ignored.
+    await provider.updateDefaultExcludedCategories(['Snacks', 'Snacks'])
+    await provider.updateDefaultExcludedCategories([])
+    assert.deepEqual((await provider.getData(new Date(2026, 8, 15))).defaultExcludedCategories, [])
+    workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.readFile(workbookFile)
+    constants = workbook.getWorksheet('Constants')
+    assert.equal(constants.getRow(7).getCell(9).value, null)
+
+    await assert.rejects(provider.updateDefaultExcludedCategories('Snacks'), /Categories must be an array/)
+    await assert.rejects(provider.updateDefaultExcludedCategories(['Nope']), /Unknown category/)
+})
+
+test('migrates legacy settings blocks to the canonical layout on save', async () => {
+    const { provider, workbookFile } = createTestProvider()
+    // Simulate a legacy sheet: clear the canonical blocks, then write the
+    // budgets table and the excluded list lower down in column A.
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.readFile(workbookFile)
+    const constants = workbook.getWorksheet('Constants')
+    for (const [row, column] of [
+        [2, 9], [3, 9], [3, 10], [3, 11], [4, 9], [4, 10], [4, 11], [5, 9], [5, 10], [5, 11],
+        [7, 9], [8, 9], [9, 9],
+    ]) {
+        constants.getRow(row).getCell(column).value = null
+    }
+    constants.getCell('A15').value = 'Budgets'
+    constants.getRow(16).getCell(1).value = 'Currency'
+    constants.getRow(16).getCell(2).value = 'Monthly Budget'
+    constants.getRow(16).getCell(3).value = 'First Day Bias'
+    constants.getCell('A17').value = 'CAD'
+    constants.getCell('B17').value = 3000
+    constants.getCell('C17').value = 1500
+    constants.getCell('A18').value = 'USD'
+    constants.getCell('B18').value = 500
+    constants.getCell('C18').value = 100
+    constants.getCell('A20').value = 'Excluded from Budget by Default'
+    constants.getCell('A21').value = 'Investment Buy'
+    constants.getCell('A22').value = 'Investment Sell'
+    await workbook.xlsx.writeFile(workbookFile)
+
+    await provider.updateMonthlyBudget(3100, 1200, 'CAD')
+
+    const saved = new ExcelJS.Workbook()
+    await saved.xlsx.readFile(workbookFile)
+    const savedConstants = saved.getWorksheet('Constants')
+    // The legacy cells are gone and both blocks sit at the canonical spot.
+    assert.equal(savedConstants.getCell('A15').value, null)
+    assert.equal(savedConstants.getCell('A17').value, null)
+    assert.equal(savedConstants.getCell('A20').value, null)
+    assert.equal(savedConstants.getCell('A21').value, null)
+    assert.equal(savedConstants.getRow(2).getCell(9).value, 'Budgets')
+    assert.equal(savedConstants.getRow(3).getCell(9).value, 'Currency')
+    assert.equal(savedConstants.getRow(4).getCell(9).value, 'CAD')
+    assert.equal(savedConstants.getRow(4).getCell(10).value, 3100)
+    assert.equal(savedConstants.getRow(4).getCell(11).value, 1200)
+    assert.equal(savedConstants.getRow(5).getCell(9).value, 'USD')
+    assert.equal(savedConstants.getRow(5).getCell(10).value, 500)
+    assert.equal(savedConstants.getRow(7).getCell(9).value, 'Excluded from Budget by Default')
+    assert.equal(savedConstants.getRow(8).getCell(9).value, 'Investment Buy')
+    assert.equal(savedConstants.getRow(9).getCell(9).value, 'Investment Sell')
 })
 
 test('requires the workbook directory to be a git repository', () => {

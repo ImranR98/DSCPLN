@@ -309,3 +309,13 @@ test('finds the biggest category movers', () => {
     assert.deepEqual(movers.decreases[0].delta, { amount: -60, pct: -60 })
     assert.equal(movers.increases.some((entry) => entry.category === 'Transport'), false)
 })
+
+test('defaultExcludedFor combines conversions and workbook defaults', () => {
+    const set = math.defaultExcludedFor({
+        conversionCategories: ['Conversion'],
+        defaultExcludedCategories: ['Investment Buy', 'Investment Sell'],
+    })
+    assert.deepEqual([...set].sort(), ['Conversion', 'Investment Buy', 'Investment Sell'])
+    assert.equal(math.defaultExcludedFor(undefined).size, 0)
+    assert.equal(math.defaultExcludedFor({}).size, 0)
+})

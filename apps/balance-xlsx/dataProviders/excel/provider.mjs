@@ -8,7 +8,7 @@ import ExcelJS from 'exceljs';
 import { ValidationError, ConflictError } from '../../errors.mjs';
 import { suggestCategories as computeSuggestions, scoreCategories as computeCategoryScores } from '../../category-suggester.mjs';
 import { assertWorkbookRepo, commitFile } from '../../workbook-git.mjs';
-import { BUDGETS_LABEL, BUDGET_BIAS_LABEL, BUDGET_CURRENCY_HEADER, BUDGET_MONTHLY_LABEL, CONVERSION_GROUP, CURRENCIES_HEADER, CURRENCY_SYMBOLS_HEADER, INCOME_GROUP, categoriesForKind, conversionCategoriesFor, getMonthExpectedSpend, serializeTransaction } from './model.mjs';
+import { BUDGETS_LABEL, BUDGET_BIAS_LABEL, BUDGET_CURRENCY_HEADER, BUDGET_MONTHLY_LABEL, CONVERSION_GROUP, CURRENCIES_HEADER, CURRENCY_SYMBOLS_HEADER, EXCLUDED_LABEL, INCOME_GROUP, categoriesForKind, conversionCategoriesFor, getMonthExpectedSpend, serializeTransaction } from './model.mjs';
 import { cellNumber, cellString, cleanAmount, dateFromCell, datePartsToIso, datePartsToUtcDate, hasSubCentPrecision, normalizeHeader, parseDateInput, parseImportLine, parseImportLines, parseTransactionId, transactionHash, validateAmount, validateText } from './parse.mjs';
 
 export default (config = {}, configDir = process.cwd()) => {
@@ -101,37 +101,77 @@ export default (config = {}, configDir = process.cwd()) => {
         return transactions
     }
 
-    // The Budgets table sits below the category lists: a label row, a header
-    // row, then one currency per row until the first blank currency cell.
-    const budgetColumns = (sheet, budgetsLabelRow) => {
-        const columns = {}
-        sheet.getRow(budgetsLabelRow + 1).eachCell({ includeEmpty: false }, (cell, column) => {
-            const header = normalizeHeader(cellString(cell.value))
-            if (header) {
-                columns[header] = column
+    // Settings blocks (Budgets, Excluded from Budget by Default) can sit
+    // anywhere on the sheet: the first cell matching the label anchors the
+    // block, with its header row below and values below that. Reads accept any
+    // position; the writers normalise both blocks to the canonical top-right
+    // layout, so a legacy placement migrates on the next settings save.
+    const findLabelCell = (sheet, label) => {
+        let found = null
+        sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            if (found) {
+                return
             }
+            row.eachCell({ includeEmpty: false }, (cell, column) => {
+                if (!found && normalizeHeader(cellString(cell.value)) === label) {
+                    found = { row: rowNumber, column }
+                }
+            })
         })
-        const currencyColumn = columns[BUDGET_CURRENCY_HEADER] || 1
-        return {
-            currencyColumn,
-            budgetColumn: columns[BUDGET_MONTHLY_LABEL] || currencyColumn + 1,
-            biasColumn: columns[BUDGET_BIAS_LABEL] || currencyColumn + 2,
-        }
+        return found
     }
 
-    const eachBudgetRow = (sheet, budgetsLabelRow, columns, callback) => {
-        let scanning = true
-        sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-            if (!scanning || rowNumber <= budgetsLabelRow + 1) {
+    const isSettingsLabel = (header) => header === BUDGETS_LABEL || header === EXCLUDED_LABEL
+
+    const readBudgetBlock = (sheet, label) => {
+        if (!label) {
+            return { columns: null, entries: [] }
+        }
+        const headers = {}
+        sheet.getRow(label.row + 1).eachCell({ includeEmpty: false }, (cell, column) => {
+            if (column < label.column) {
                 return
             }
-            const currency = cellString(row.getCell(columns.currencyColumn).value).trim()
-            if (!currency) {
-                scanning = false
-                return
+            const header = normalizeHeader(cellString(cell.value))
+            if (header) {
+                headers[header] = column
             }
-            callback(currency, row, rowNumber)
         })
+        const currencyColumn = headers[BUDGET_CURRENCY_HEADER] || label.column
+        const columns = {
+            currencyColumn,
+            budgetColumn: headers[BUDGET_MONTHLY_LABEL] || currencyColumn + 1,
+            biasColumn: headers[BUDGET_BIAS_LABEL] || currencyColumn + 2,
+        }
+        const entries = []
+        for (let rowNumber = label.row + 2; rowNumber <= sheet.rowCount; rowNumber++) {
+            const currency = cellString(sheet.getRow(rowNumber).getCell(currencyColumn).value).trim()
+            if (!currency) {
+                break
+            }
+            entries.push({
+                row: rowNumber,
+                currency,
+                monthlyBudget: cellNumber(sheet.getRow(rowNumber).getCell(columns.budgetColumn).value) || 0,
+                firstDayBias: cellNumber(sheet.getRow(rowNumber).getCell(columns.biasColumn).value) || 0,
+            })
+        }
+        return { columns, entries }
+    }
+
+    const readExcludedBlock = (sheet, label) => {
+        if (!label) {
+            return []
+        }
+        const names = []
+        for (let rowNumber = label.row + 1; rowNumber <= sheet.rowCount; rowNumber++) {
+            const value = cellString(sheet.getRow(rowNumber).getCell(label.column).value).trim()
+            if (!value) {
+                break
+            }
+            names.push(value)
+        }
+        return names
     }
 
     const readConstants = (workbook) => {
@@ -139,12 +179,11 @@ export default (config = {}, configDir = process.cwd()) => {
         const categoryGroups = []
         const currencies = []
         const budgets = {}
-        let budgetsLabelRow = -1
 
         const columns = []
         sheet.getRow(2).eachCell({ includeEmpty: false }, (cell, column) => {
             const header = normalizeHeader(cellString(cell.value))
-            if (header) {
+            if (header && !isSettingsLabel(header)) {
                 columns.push({ header, column, values: [], stopped: false })
             }
         })
@@ -167,9 +206,6 @@ export default (config = {}, configDir = process.cwd()) => {
                     }
                     entry.values.push(value)
                 }
-            }
-            if (normalizeHeader(cellString(row.getCell(1).value)) === BUDGETS_LABEL && budgetsLabelRow < 0) {
-                budgetsLabelRow = rowNumber
             }
             previousRow = rowNumber
         })
@@ -194,16 +230,91 @@ export default (config = {}, configDir = process.cwd()) => {
             })
         }
 
-        if (budgetsLabelRow > 0) {
-            const columns = budgetColumns(sheet, budgetsLabelRow)
-            eachBudgetRow(sheet, budgetsLabelRow, columns, (currency, row) => {
-                budgets[currency] = {
-                    monthlyBudget: cellNumber(row.getCell(columns.budgetColumn).value) || 0,
-                    firstDayBias: cellNumber(row.getCell(columns.biasColumn).value) || 0,
+        const budgetBlock = readBudgetBlock(sheet, findLabelCell(sheet, BUDGETS_LABEL))
+        for (const entry of budgetBlock.entries) {
+            budgets[entry.currency] = { monthlyBudget: entry.monthlyBudget, firstDayBias: entry.firstDayBias }
+        }
+
+        // Names that no longer exist as categories are ignored, so renaming or
+        // removing a category in the sheet can't leave a dangling default.
+        const knownCategories = new Set(categoryGroups.flatMap((entry) => entry.categories))
+        const defaultExcludedCategories = []
+        for (const name of readExcludedBlock(sheet, findLabelCell(sheet, EXCLUDED_LABEL))) {
+            if (knownCategories.has(name) && !defaultExcludedCategories.includes(name)) {
+                defaultExcludedCategories.push(name)
+            }
+        }
+        return { categoryGroups, currencies, currencySymbols, budgets, defaultExcludedCategories }
+    }
+
+    // Canonical layout: one blank column right of the category table, starting
+    // at the top — the Budgets label (row 2), its header row (row 3) and
+    // currency rows (row 4+), then the excluded-categories label below them.
+    // Both blocks are cleared wherever they currently are and rewritten here.
+    const clearSettingsBlocks = (sheet) => {
+        const budgetLabel = findLabelCell(sheet, BUDGETS_LABEL)
+        if (budgetLabel) {
+            const { columns, entries } = readBudgetBlock(sheet, budgetLabel)
+            sheet.getRow(budgetLabel.row).getCell(budgetLabel.column).value = null
+            const columnsToClear = Object.values(columns)
+            const headerRow = sheet.getRow(budgetLabel.row + 1)
+            for (const column of columnsToClear) {
+                headerRow.getCell(column).value = null
+            }
+            for (const entry of entries) {
+                const row = sheet.getRow(entry.row)
+                for (const column of columnsToClear) {
+                    row.getCell(column).value = null
                 }
+            }
+        }
+        const excludedLabel = findLabelCell(sheet, EXCLUDED_LABEL)
+        if (excludedLabel) {
+            sheet.getRow(excludedLabel.row).getCell(excludedLabel.column).value = null
+            for (let rowNumber = excludedLabel.row + 1; rowNumber <= sheet.rowCount; rowNumber++) {
+                const cell = sheet.getRow(rowNumber).getCell(excludedLabel.column)
+                if (!cellString(cell.value).trim()) {
+                    break
+                }
+                cell.value = null
+            }
+        }
+    }
+
+    const writeSettingsBlocks = (sheet, { budgets, excluded }) => {
+        clearSettingsBlocks(sheet)
+        let tableRight = 0
+        sheet.getRow(2).eachCell({ includeEmpty: false }, (cell, column) => {
+            const header = normalizeHeader(cellString(cell.value))
+            if (header && !isSettingsLabel(header)) {
+                tableRight = Math.max(tableRight, column)
+            }
+        })
+        const anchor = tableRight + 2
+        if (budgets.length) {
+            sheet.getRow(2).getCell(anchor).value = BUDGETS_LABEL
+            const headerRow = sheet.getRow(3)
+            headerRow.getCell(anchor).value = BUDGET_CURRENCY_HEADER
+            headerRow.getCell(anchor + 1).value = BUDGET_MONTHLY_LABEL
+            headerRow.getCell(anchor + 2).value = BUDGET_BIAS_LABEL
+            headerRow.font = { bold: true }
+            budgets.forEach((entry, index) => {
+                const row = sheet.getRow(4 + index)
+                row.getCell(anchor).value = entry.currency
+                row.getCell(anchor + 1).value = entry.monthlyBudget
+                row.getCell(anchor + 1).numFmt = '#,##0.00'
+                row.getCell(anchor + 2).value = entry.firstDayBias
+                row.getCell(anchor + 2).numFmt = '#,##0.00'
             })
         }
-        return { categoryGroups, currencies, currencySymbols, budgets }
+        if (excluded.length) {
+            const excludedLabelRow = 4 + budgets.length + 1
+            sheet.getRow(excludedLabelRow).getCell(anchor).value = EXCLUDED_LABEL
+            excluded.forEach((name, index) => {
+                sheet.getRow(excludedLabelRow + 1 + index).getCell(anchor).value = name
+            })
+        }
+        return anchor
     }
 
     const getBudgetForCurrency = (constants, currency) =>
@@ -270,7 +381,6 @@ export default (config = {}, configDir = process.cwd()) => {
             headerMap,
             constants,
             transactions,
-            monthly: buildMonthlyTotals(transactions, conversionCategories),
             conversionCategories,
             transactionRange: buildTransactionRange(transactions),
             samplesByKind: {
@@ -598,9 +708,19 @@ export default (config = {}, configDir = process.cwd()) => {
         return history
     }
 
-    const getData = async (date = new Date()) => {
+    // `excludeCategories` unset means the workbook's "Excluded from Budget by
+    // Default" list; an explicit list (even empty) overrides it for this view.
+    // Excluded categories are left out of every aggregate (spend, income,
+    // conversions, budgets, trailing averages, history) but the transaction
+    // list, range and suggestions still see the whole workbook.
+    const getData = async (date = new Date(), { excludeCategories } = {}) => {
         const parsed = await getParsed()
-        const { constants, transactions, monthly, headerMap, conversionCategories, transactionRange } = parsed
+        const { constants, transactions, headerMap, conversionCategories, transactionRange } = parsed
+        const excludedSet = new Set(excludeCategories === undefined ? constants.defaultExcludedCategories : excludeCategories)
+        const counted = excludedSet.size ?
+            transactions.filter((transaction) => !excludedSet.has(transaction.category)) :
+            transactions
+        const monthly = buildMonthlyTotals(counted, conversionCategories)
         const year = date.getFullYear()
         const month = date.getMonth() + 1
         const day = date.getDate()
@@ -616,8 +736,8 @@ export default (config = {}, configDir = process.cwd()) => {
                 fractional.add(transaction.currency)
             }
         }
-        const toDate = buildToDateTotals(transactions, day, conversionCategories)
-        const firstMonths = buildFirstMonths(transactions)
+        const toDate = buildToDateTotals(counted, day, conversionCategories)
+        const firstMonths = buildFirstMonths(counted)
         const currencies = buildCurrencyStats(constants, monthly, toDate, firstMonths, date, daysInMonth)
             .map((entry) => ({ ...entry, fractional: fractional.has(entry.code) }))
         const history = buildHistory(constants, monthly, toDate, date, daysInMonth)
@@ -625,6 +745,7 @@ export default (config = {}, configDir = process.cwd()) => {
             currencies,
             categories: constants.categoryGroups,
             conversionCategories: [...conversionCategories],
+            defaultExcludedCategories: constants.defaultExcludedCategories,
             transactionRange,
             transactionColumns: Object.entries(headerMap)
                 .sort((a, b) => a[1] - b[1])
@@ -656,6 +777,8 @@ export default (config = {}, configDir = process.cwd()) => {
         }
     }
 
+    // Rewrites the Budgets block from the full entry list at the canonical
+    // position, preserving the excluded list. Any legacy placement migrates.
     const updateMonthlyBudget = async (monthlyBudget, firstDayBias, currency) => {
         const budget = Number.parseFloat(monthlyBudget)
         const bias = Number.parseFloat(firstDayBias)
@@ -672,49 +795,49 @@ export default (config = {}, configDir = process.cwd()) => {
             throw new ValidationError('Unknown currency')
         }
         const sheet = getSheet(workbook, constantsSheetName, 'constants')
-
-        let budgetsLabelRow = -1
-        let lastUsedRow = 1
-        sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-            lastUsedRow = Math.max(lastUsedRow, rowNumber)
-            if (normalizeHeader(cellString(row.getCell(1).value)) === BUDGETS_LABEL && budgetsLabelRow < 0) {
-                budgetsLabelRow = rowNumber
-            }
-        })
-
-        let columns
-        let targetRow
-        if (budgetsLabelRow < 0) {
-            budgetsLabelRow = lastUsedRow + 2
-            columns = { currencyColumn: 1, budgetColumn: 2, biasColumn: 3 }
-            sheet.getRow(budgetsLabelRow).getCell(1).value = BUDGETS_LABEL
-            const headerRow = sheet.getRow(budgetsLabelRow + 1)
-            headerRow.getCell(columns.currencyColumn).value = BUDGET_CURRENCY_HEADER
-            headerRow.getCell(columns.budgetColumn).value = BUDGET_MONTHLY_LABEL
-            headerRow.getCell(columns.biasColumn).value = BUDGET_BIAS_LABEL
-            headerRow.font = { bold: true }
-            targetRow = budgetsLabelRow + 2
+        const excluded = readExcludedBlock(sheet, findLabelCell(sheet, EXCLUDED_LABEL))
+        const budgets = readBudgetBlock(sheet, findLabelCell(sheet, BUDGETS_LABEL)).entries
+            .map((entry) => ({ currency: entry.currency, monthlyBudget: entry.monthlyBudget, firstDayBias: entry.firstDayBias }))
+        const entry = { currency: currencyCode, monthlyBudget: budget, firstDayBias: bias }
+        const index = budgets.findIndex((existing) => existing.currency === currencyCode)
+        if (index >= 0) {
+            budgets[index] = entry
         } else {
-            columns = budgetColumns(sheet, budgetsLabelRow)
-            targetRow = -1
-            let lastBudgetRow = budgetsLabelRow + 1
-            eachBudgetRow(sheet, budgetsLabelRow, columns, (value, row, rowNumber) => {
-                lastBudgetRow = rowNumber
-                if (value === currencyCode && targetRow < 0) {
-                    targetRow = rowNumber
-                }
-            })
-            if (targetRow < 0) {
-                targetRow = lastBudgetRow + 1
+            budgets.push(entry)
+        }
+        writeSettingsBlocks(sheet, { budgets, excluded })
+        await saveWorkbook(workbook, `D$CPLN: update ${currencyCode} budget`)
+    }
+
+    // Writes the "Excluded from Budget by Default" list into the Constants
+    // sheet (creating or repositioning the block) so toggles can be persisted
+    // as the default without touching any other setting.
+    const updateDefaultExcludedCategories = async (categories) => {
+        if (!Array.isArray(categories)) {
+            throw new ValidationError('Categories must be an array')
+        }
+        const workbook = await loadWorkbook()
+        const constants = readConstants(workbook)
+        const known = constants.categoryGroups.flatMap((entry) => entry.categories)
+        const knownSet = new Set(known)
+        const requested = []
+        for (const value of categories) {
+            const name = typeof value === 'string' ? value.trim() : ''
+            if (!name || !knownSet.has(name)) {
+                throw new ValidationError(`Unknown category: ${JSON.stringify(value) ?? String(value)}`)
+            }
+            if (!requested.includes(name)) {
+                requested.push(name)
             }
         }
-        const row = sheet.getRow(targetRow)
-        row.getCell(columns.currencyColumn).value = currencyCode
-        row.getCell(columns.budgetColumn).value = budget
-        row.getCell(columns.budgetColumn).numFmt = '#,##0.00'
-        row.getCell(columns.biasColumn).value = bias
-        row.getCell(columns.biasColumn).numFmt = '#,##0.00'
-        await saveWorkbook(workbook, `D$CPLN: update ${currencyCode} budget`)
+        // Write in the sheet's category order so the list stays tidy.
+        const ordered = known.filter((name) => requested.includes(name))
+        const sheet = getSheet(workbook, constantsSheetName, 'constants')
+        const budgets = readBudgetBlock(sheet, findLabelCell(sheet, BUDGETS_LABEL)).entries
+            .map((entry) => ({ currency: entry.currency, monthlyBudget: entry.monthlyBudget, firstDayBias: entry.firstDayBias }))
+        writeSettingsBlocks(sheet, { budgets, excluded: ordered })
+        await saveWorkbook(workbook, 'D$CPLN: update default excluded categories')
+        return { defaultExcludedCategories: ordered }
     }
 
     const addTransaction = async (input) => {
@@ -1004,6 +1127,7 @@ export default (config = {}, configDir = process.cwd()) => {
         getData,
         getTransactions,
         updateMonthlyBudget,
+        updateDefaultExcludedCategories,
         addTransaction,
         checkImportLines,
         importTransactions,

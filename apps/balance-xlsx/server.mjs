@@ -106,7 +106,15 @@ const createApp = (config) => {
         healthExtra: () => ({ provider: config.dataProvider }),
         routes: (router) => {
             router.get('/data', asyncRoute(async (req, res) => {
-                res.send(await dataProvider.getData(parseDateQuery(req.query['date'])))
+                // Repeated ?exclude=Category params override the workbook's
+                // "Excluded from Budget by Default" list for this view; when
+                // the param is absent the workbook defaults apply.
+                const excludeParam = req.query['exclude']
+                const excludeCategories = excludeParam === undefined ? undefined :
+                    (Array.isArray(excludeParam) ? excludeParam : [excludeParam])
+                        .map((value) => String(value).trim())
+                        .filter(Boolean)
+                res.send(await dataProvider.getData(parseDateQuery(req.query['date']), { excludeCategories }))
             }))
 
             // Compact budget status for the portal tile. Memoized briefly so the
@@ -136,6 +144,12 @@ const createApp = (config) => {
             router.post('/budget', asyncRoute(async (req, res) => {
                 await dataProvider.updateMonthlyBudget(req.body?.monthlyBudget, req.body?.firstDayBias ?? 0, req.body?.currency)
                 res.send()
+            }))
+
+            // Persists the current dashboard selection as the workbook default
+            // ("Excluded from Budget by Default" in the Constants sheet).
+            router.post('/excluded-defaults', requireProviderMethod('updateDefaultExcludedCategories', 'default excluded categories'), asyncRoute(async (req, res) => {
+                res.send(await dataProvider.updateDefaultExcludedCategories(req.body?.categories))
             }))
 
             router.get('/transactions', requireProviderMethod('getTransactions'), asyncRoute(async (req, res) => {

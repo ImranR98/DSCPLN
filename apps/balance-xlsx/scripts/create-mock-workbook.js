@@ -86,20 +86,32 @@ const buildWorkbook = () => {
             constants.getRow(3 + rowIndex).getCell(column).value = value
         })
     })
-    constants.getCell('A15').value = 'Budgets'
-    constants.getRow(16).getCell(1).value = 'Currency'
-    constants.getRow(16).getCell(2).value = 'Monthly Budget'
-    constants.getRow(16).getCell(3).value = 'First Day Bias'
-    constants.getRow(16).font = { bold: true }
-    constants.getCell('A17').value = 'CAD'
-    constants.getCell('B17').value = 3000
-    constants.getCell('C17').value = 1500
-    constants.getCell('A18').value = 'USD'
-    constants.getCell('B18').value = 500
-    constants.getCell('C18').value = 100
-    for (const ref of ['B17', 'C17', 'B18', 'C18']) {
-        constants.getCell(ref).numFmt = '#,##0.00'
-    }
+    // Settings blocks sit to the right of the category table at the top of the
+    // sheet (the canonical layout the app writes): the Budgets table first,
+    // then the list of categories excluded from the totals by default.
+    const anchor = CATEGORY_GROUPS.length + 2
+    constants.getRow(2).getCell(anchor).value = 'Budgets'
+    const budgetHeader = constants.getRow(3)
+    budgetHeader.getCell(anchor).value = 'Currency'
+    budgetHeader.getCell(anchor + 1).value = 'Monthly Budget'
+    budgetHeader.getCell(anchor + 2).value = 'First Day Bias'
+    budgetHeader.font = { bold: true }
+    const budgetRows = [
+        ['CAD', 3000, 1500],
+        ['USD', 500, 100],
+    ]
+    budgetRows.forEach(([currency, monthlyBudget, firstDayBias], index) => {
+        const row = constants.getRow(4 + index)
+        row.getCell(anchor).value = currency
+        row.getCell(anchor + 1).value = monthlyBudget
+        row.getCell(anchor + 1).numFmt = '#,##0.00'
+        row.getCell(anchor + 2).value = firstDayBias
+        row.getCell(anchor + 2).numFmt = '#,##0.00'
+    })
+    const excludedLabelRow = 4 + budgetRows.length + 1
+    constants.getRow(excludedLabelRow).getCell(anchor).value = 'Excluded from Budget by Default'
+    constants.getRow(excludedLabelRow + 1).getCell(anchor).value = 'Investment Buy'
+    constants.getRow(excludedLabelRow + 2).getCell(anchor).value = 'Investment Sell'
 
     return workbook
 }

@@ -12,6 +12,8 @@ const CATEGORY_PALETTE = ['#2f6fed', '#16a34a', '#d97706', '#8b5cf6', '#0891b2',
 
 export const categoryColor = (name) => colorFrom(CATEGORY_PALETTE, String(name || ''))
 
+export { defaultExcludedFor } from './insights-math.js'
+
 export const formatDateRange = (start, end) =>
   `${formats.dayMonth.format(start)} ${formats.year.format(start)} – ${formats.dayMonth.format(end)} ${formats.year.format(end)}`
 
@@ -203,7 +205,7 @@ export function buildCategoryList(all, kind, comparisonMap, excludedSet, code, p
 // chart data, forecast and movers). `ctx` carries the page-level inputs.
 function buildSection(code, rangeTxs, ctx) {
   const { reference, range, comparison, comparisonData, transactions, excluded, symbols, money, daysElapsed } = ctx
-  const excludedSet = excluded.get(code) ?? new Set(reference?.conversionCategories || [])
+  const excludedSet = excluded.get(code) ?? IM.defaultExcludedFor(reference)
 
   const included = rangeTxs.filter((transaction) => !excludedSet.has(transaction.category))
   const plans = sectionPlans(code, { comparison, comparisonData })

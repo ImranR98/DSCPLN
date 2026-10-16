@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ChartNoAxesColumn, RefreshCw, Wrench } from 'lucide-react'
-import { formats, getJson, startOfDay, toIso, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
+import { ChartNoAxesColumn, RefreshCw, SlidersHorizontal, Wrench } from 'lucide-react'
+import { formats, getJson, postJson, startOfDay, toIso, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
 import { moneyFor } from './lib/money.js'
 import { renderMonthly } from './lib/chart.js'
 import { sortNewestFirst, formatCount } from './lib/transactions.js'
@@ -10,6 +10,7 @@ import ExpensesPanel from './components/ExpensesPanel.jsx'
 import HeroCard from './components/HeroCard.jsx'
 import HistoryCard from './components/HistoryCard.jsx'
 import BudgetDialog from './BudgetDialog.jsx'
+import CategoriesDialog from './CategoriesDialog.jsx'
 import TransactionDialog from './TransactionDialog.jsx'
 import ImportDialog from './ImportDialog.jsx'
 import DeleteDialog from './DeleteDialog.jsx'
@@ -23,14 +24,17 @@ export default function Dashboard() {
   const [spinning, setSpinning] = useState(false)
   const [historyHidden, setHistoryHidden] = useState(true)
   const [historyRange, setHistoryRange] = useState('')
+  const [excluded, setExcluded] = useState(null)
 
   const historyHostRef = useRef(null)
   const historyTooltipRef = useRef(null)
   const budgetDialogRef = useRef(null)
+  const categoriesDialogRef = useRef(null)
   const transactionDialogRef = useRef(null)
   const importDialogRef = useRef(null)
   const deleteDialogRef = useRef(null)
   const fetchSequence = useRef(0)
+  const excludedRef = useRef(null)
 
   /* ---------- derived ---------- */
 
@@ -51,6 +55,7 @@ export default function Dashboard() {
 
   const contextLabel = `Today · ${formats.weekday.format(today)}`
   const updatedLabel = lastFetchAt ? `Updated ${formats.time.format(new Date(lastFetchAt))}` : ''
+  const excludedCount = excluded ? excluded.size : 0
 
   useLayoutEffect(() => {
     document.body.classList.toggle('is-loading', !data)
@@ -58,13 +63,26 @@ export default function Dashboard() {
 
   /* ---------- data ---------- */
 
-  const fetchData = async () => {
+  const fetchData = async (excludedOverride) => {
     const sequence = ++fetchSequence.current
     setToday(startOfDay(new Date()))
     try {
+      const active = excludedOverride !== undefined ? excludedOverride : excludedRef.current
       const params = new URLSearchParams({ date: toIso(startOfDay(new Date())) })
+      if (active !== null) {
+        for (const category of active) {
+          params.append('exclude', category)
+        }
+      }
       const result = await getJson(`/data?${params}`)
       if (sequence !== fetchSequence.current) return
+      // The first response carries the workbook defaults; later fetches send
+      // the current selection explicitly.
+      if (excludedRef.current === null) {
+        const initial = new Set(result.defaultExcludedCategories || [])
+        excludedRef.current = initial
+        setExcluded(initial)
+      }
       setData(result)
       setLastFetchAt(Date.now())
     } catch (e) {
@@ -73,6 +91,28 @@ export default function Dashboard() {
         showToast('Could not load data. Check the server logs.', 'error')
       }
     }
+  }
+
+  const applyExcluded = (next) => {
+    excludedRef.current = next
+    setExcluded(new Set(next))
+    fetchData(next)
+  }
+
+  const toggleCategories = (categories, include) => {
+    const next = new Set(excludedRef.current || [])
+    for (const category of categories) {
+      if (include) next.delete(category)
+      else next.add(category)
+    }
+    applyExcluded(next)
+  }
+
+  const resetCategories = () => applyExcluded(new Set(data?.defaultExcludedCategories || []))
+
+  const saveDefaults = async () => {
+    await postJson('/excluded-defaults', { categories: [...(excludedRef.current || [])] })
+    await fetchData()
   }
 
   const refreshNow = () => {
@@ -129,6 +169,9 @@ export default function Dashboard() {
             <a role="button" className="outline secondary icon-button" href="settings" title="API settings" aria-label="API settings">
               <Wrench size={16} strokeWidth={1.8} />
             </a>
+            <button className="outline secondary icon-button" title="Counted categories" aria-label="Counted categories" disabled={!data} onClick={() => categoriesDialogRef.current.show()}>
+              <SlidersHorizontal size={16} strokeWidth={1.8} />
+            </button>
             <button className={`outline secondary icon-button${spinning ? ' is-spinning' : ''}`} title="Refresh" aria-label="Refresh data" onClick={refreshNow}>
               <RefreshCw size={16} strokeWidth={1.8} />
             </button>
@@ -138,7 +181,7 @@ export default function Dashboard() {
         <div className="app-header__meta">
           <span>{contextLabel}</span>
           <span className="app-header__meta-tools">
-            <span className="muted">{updatedLabel}</span>
+            <span className="muted">{[updatedLabel, excludedCount ? `${excludedCount} not counted` : ''].filter(Boolean).join(' · ')}</span>
           </span>
         </div>
       </header>
@@ -170,6 +213,15 @@ export default function Dashboard() {
       </main>
 
       <BudgetDialog ref={budgetDialogRef} data={data} onrefresh={() => fetchData()} />
+      <CategoriesDialog
+        ref={categoriesDialogRef}
+        data={data}
+        excluded={excluded || new Set()}
+        defaults={data?.defaultExcludedCategories}
+        onToggle={toggleCategories}
+        onReset={resetCategories}
+        onSave={saveDefaults}
+      />
       <TransactionDialog ref={transactionDialogRef} data={data} today={today} onrefresh={() => fetchData()} />
       <ImportDialog ref={importDialogRef} data={data} today={today} onrefresh={() => fetchData()} />
       <DeleteDialog ref={deleteDialogRef} money={money} onrefresh={() => fetchData()} />

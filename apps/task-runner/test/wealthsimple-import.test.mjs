@@ -74,7 +74,18 @@ test('parseArgs requires values and rejects unknown flags', () => {
 test('imports the missing lines and reports the normal summary', async () => {
   const logs = [];
   const stub = await startStub({
-    'POST /api/transactions/check': () => ({ json: { total: 3, duplicates: 1, new: 2, lines: [] } }),
+    'POST /api/transactions/check': () => ({
+      json: {
+        total: 3,
+        duplicates: 1,
+        new: 2,
+        lines: [
+          { line: 1, duplicate: true },
+          { line: 2, duplicate: false },
+          { line: 3, duplicate: false },
+        ],
+      },
+    }),
     'POST /api/transactions/import': () => ({ status: 201, json: { imported: 2, skipped: 1, transactions: [] } }),
   });
   try {
@@ -86,11 +97,52 @@ test('imports the missing lines and reports the normal summary', async () => {
     });
     assert.equal(code, 0);
     assert.equal(logs.at(-1), 'Imported 2 new transactions; 1 already in the workbook.');
+    assert.deepEqual(logs.slice(2, 5), [
+      'Skipped (already in workbook): 2026-09-01  REDACTED  +19.22 CAD  (Interest)',
+      'Imported: 2026-09-01  REDACTED  -500 CAD  (Investment Buy)',
+      'Imported: 2026-10-05  REDACTED  +13816.61 CAD  (Investment Sell)',
+    ]);
     assert.equal(stub.requests.length, 2);
     assert.equal(stub.requests[0].headers.authorization, 'Bearer tok-123');
     assert.equal(stub.requests[1].body.skipDuplicates, true);
     assert.match(stub.requests[1].body.text, /^2026-09-01\tREDACTED\t19\.22/);
     assert.equal(stub.requests[1].body.text.split('\n').length, 3);
+  } finally {
+    await stub.close();
+  }
+});
+
+test('preserves the Notes column in the check and import payloads', async () => {
+  const logs = [];
+  const stub = await startStub({
+    'POST /api/transactions/check': () => ({
+      json: {
+        total: 2,
+        duplicates: 1,
+        new: 1,
+        lines: [
+          { line: 1, duplicate: true },
+          { line: 2, duplicate: false },
+        ],
+      },
+    }),
+    'POST /api/transactions/import': () => ({ status: 201, json: { imported: 1, skipped: 1, transactions: [] } }),
+  });
+  try {
+    const text = [
+      '2026-09-01\tOld\t1\t\tCAD\tInterest\t',
+      '2026-09-02\tSalary\t1234.56\t\tCAD\tJob\tImported from Wealthsimple',
+    ].join('\n');
+    const code = await run({
+      input: writeInput(text),
+      balanceUrl: stub.base,
+      balanceToken: 't',
+      log: (line) => logs.push(line),
+    });
+    assert.equal(code, 0);
+    assert.match(stub.requests[0].body.text, /Imported from Wealthsimple$/m);
+    assert.match(stub.requests[1].body.text, /Imported from Wealthsimple$/m);
+    assert.equal(logs.at(-1), 'Imported 1 new transaction; 1 already in the workbook.');
   } finally {
     await stub.close();
   }
@@ -175,7 +227,18 @@ test('reports a fully-overlapping scrape without warning', async () => {
 test('--dry-run checks but never imports', async () => {
   const logs = [];
   const stub = await startStub({
-    'POST /api/transactions/check': () => ({ json: { total: 3, duplicates: 1, new: 2, lines: [] } }),
+    'POST /api/transactions/check': () => ({
+      json: {
+        total: 3,
+        duplicates: 1,
+        new: 2,
+        lines: [
+          { line: 1, duplicate: true },
+          { line: 2, duplicate: false },
+          { line: 3, duplicate: false },
+        ],
+      },
+    }),
   });
   try {
     const code = await run({
@@ -188,6 +251,8 @@ test('--dry-run checks but never imports', async () => {
     assert.equal(code, 0);
     assert.equal(stub.requests.length, 1);
     assert.equal(logs.at(-1), 'Dry run — nothing was imported. 2 transaction(s) would be imported.');
+    assert.equal(logs.some((line) => line.startsWith('Skipped (already in workbook):')), true);
+    assert.equal(logs.filter((line) => line.startsWith('Would import:')).length, 2);
   } finally {
     await stub.close();
   }

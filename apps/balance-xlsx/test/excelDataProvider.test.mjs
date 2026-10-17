@@ -385,6 +385,74 @@ test('imports tab-separated transactions positionally', async () => {
     assert.equal(git(['log', '-1', '--format=%s'], dir).trim(), 'D$CPLN: import 3 transactions')
 })
 
+test('sorts transactions by date when an import inserts back-dated rows', async () => {
+    const { dir, workbookFile: file } = createWorkbookRepo()
+    await createCustomWorkbook(file, [
+        { year: 2026, month: 9, day: 1, details: 'First', expenses: 10, category: 'Rent' },
+        { year: 2026, month: 9, day: 20, details: 'Last', expenses: 20, category: 'Rent' },
+    ])
+    const provider = createProvider({ workbookFile: file }, dir)
+    const result = await provider.importTransactions([
+        '2026-09-25\tNewest\t\t25\tCAD\tRent\t',
+        '2026-09-10\tMiddle\t\t15\tCAD\tRent\t',
+        '2026-09-05\tEarlier\t\t5\tCAD\tRent\t',
+    ].join('\n'))
+    assert.equal(result.imported, 3)
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.readFile(file)
+    const sheet = workbook.getWorksheet('Transactions')
+    const rows = []
+    sheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1 && row.getCell(2).value) {
+            rows.push({
+                row: rowNumber,
+                details: row.getCell(2).value,
+                date: row.getCell(1).value.toISOString().slice(0, 10),
+            })
+        }
+    })
+    assert.deepEqual(rows.map((entry) => entry.details), ['First', 'Earlier', 'Middle', 'Last', 'Newest'])
+    assert.deepEqual(rows.map((entry) => entry.date), [
+        '2026-09-01', '2026-09-05', '2026-09-10', '2026-09-20', '2026-09-25',
+    ])
+    // The response stays in input order but points at the final rows.
+    assert.deepEqual(result.transactions.map((transaction) => transaction.details), ['Newest', 'Middle', 'Earlier'])
+    for (const transaction of result.transactions) {
+        assert.equal(sheet.getRow(transaction.row).getCell(2).value, transaction.details)
+    }
+})
+
+test('re-sorts rows on add and update and returns the final row id', async () => {
+    const { dir, workbookFile: file } = createWorkbookRepo()
+    await createCustomWorkbook(file, [
+        { year: 2026, month: 9, day: 1, details: 'First', expenses: 10, category: 'Rent' },
+        { year: 2026, month: 9, day: 20, details: 'Last', expenses: 20, category: 'Rent' },
+    ])
+    const provider = createProvider({ workbookFile: file }, dir)
+    const created = await provider.addTransaction({
+        kind: 'expense', amount: 15, details: 'Middle', date: '2026-09-10',
+        category: 'Rent', currency: 'CAD', notes: '',
+    })
+    assert.equal(created.row, 3)
+    assert.equal(created.date, '2026-09-10')
+    let workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.readFile(file)
+    let sheet = workbook.getWorksheet('Transactions')
+    assert.equal(sheet.getRow(3).getCell(2).value, 'Middle')
+    assert.equal(sheet.getRow(4).getCell(2).value, 'Last')
+
+    const updated = await provider.updateTransaction(created.id, {
+        kind: 'expense', amount: 15, details: 'Middle', date: '2026-09-25',
+        category: 'Rent', currency: 'CAD', notes: '',
+    })
+    assert.equal(updated.row, 4)
+    workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.readFile(file)
+    sheet = workbook.getWorksheet('Transactions')
+    assert.equal(sheet.getRow(3).getCell(2).value, 'Last')
+    assert.equal(sheet.getRow(4).getCell(2).value, 'Middle')
+})
+
 test('imports notes and comma-grouped amounts', async () => {
     const { provider } = createTestProvider()
     const result = await provider.importTransactions('2026-09-11\tSalary\t1,234.56\t\tCAD\tJob\tSeptember pay\n')

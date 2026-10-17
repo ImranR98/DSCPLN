@@ -109,6 +109,14 @@ export function reportedTransactions(text) {
   return matches.length ? Number(matches[matches.length - 1][1]) : null;
 }
 
+// Human-readable form of an import line (Date, Details, Money In/Expenses,
+// Currency, Type; Notes is ignored).
+const describeLine = (line) => {
+  const [date, details, moneyIn, expenses, currency, type] = line.split('\t').map((value) => value.trim());
+  const amount = moneyIn ? `+${moneyIn}` : `-${expenses}`;
+  return `${date}  ${details}  ${amount} ${currency}  (${type})`;
+};
+
 const readInput = (input) => {
   if (!input) {
     throw new Error('--input is required (a file path, or - to read stdin)');
@@ -183,7 +191,23 @@ export async function run(options) {
   const check = await postJson(`${baseUrl}/api/transactions/check`, { text: batch }, token, 'Balance check');
   log(`Balance check: ${check.duplicates} already in the workbook, ${check.new} new.`);
 
+  const statuses = Array.isArray(check.lines) && check.lines.length ? check.lines : null;
+  const logStatuses = (imported) => {
+    if (!statuses) {
+      return;
+    }
+    for (const entry of statuses) {
+      const line = candidates[entry.line - 1];
+      if (!line) {
+        continue;
+      }
+      const state = entry.duplicate ? 'Skipped (already in workbook)' : imported ? 'Imported' : 'Would import';
+      log(`${state}: ${describeLine(line)}`);
+    }
+  };
+
   if (options.dryRun) {
+    logStatuses(false);
     log(`Dry run — nothing was imported. ${check.new} transaction(s) would be imported.`);
     return 0;
   }
@@ -194,6 +218,7 @@ export async function run(options) {
     token,
     'Balance import',
   );
+  logStatuses(true);
 
   let summary;
   if (check.duplicates === 0) {

@@ -451,7 +451,80 @@ export default (config = {}, configDir = process.cwd()) => {
         }
     }
 
+    // Keep the transaction table in date order even when an import inserts
+    // back-dated rows at the bottom. Only the transaction-table columns move;
+    // the Constants sheet (budgets/excluded categories) is untouched.
+    // Returns old row -> new row so callers can report the final row/id.
+    const sortTransactionRows = (workbook) => {
+        const date1904 = Boolean(workbook.properties.date1904)
+        const sheet = getSheet(workbook, transactionsSheetName, 'transactions')
+        const map = readHeaderMap(sheet)
+        const headers = Object.keys(map)
+        const hasContent = (row) => ['Date', 'Details', 'Money In', 'Expenses'].some((header) => {
+            const value = row.getCell(map[header]).value
+            return value != null && value !== ''
+        })
+        let lastRow = 1
+        sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            if (rowNumber > 1 && rowNumber > lastRow && hasContent(row)) {
+                lastRow = rowNumber
+            }
+        })
+        const entries = []
+        for (let rowNumber = 2; rowNumber <= lastRow; rowNumber++) {
+            const row = sheet.getRow(rowNumber)
+            if (!hasContent(row)) {
+                continue
+            }
+            const date = dateFromCell(row.getCell(map['Date']).value, date1904)
+            const cells = {}
+            for (const header of headers) {
+                const cell = row.getCell(map[header])
+                cells[header] = {
+                    value: cell.value,
+                    style: cell.style ? JSON.parse(JSON.stringify(cell.style)) : {},
+                    numFmt: cell.numFmt,
+                }
+            }
+            entries.push({
+                source: rowNumber,
+                dateIso: date ? datePartsToIso(date) : '9999-12-31',
+                height: row.height,
+                cells,
+            })
+        }
+        const ordered = entries.slice().sort((a, b) =>
+            a.dateIso === b.dateIso ? a.source - b.source : a.dateIso < b.dateIso ? -1 : 1)
+        const targets = entries.map((entry) => entry.source)
+        const mapping = new Map(entries.map((entry) => [entry.source, entry.source]))
+        if (ordered.every((entry, index) => entry.source === targets[index])) {
+            return mapping
+        }
+        ordered.forEach((entry, index) => {
+            const target = targets[index]
+            mapping.set(entry.source, target)
+            if (entry.source === target) {
+                return
+            }
+            const row = sheet.getRow(target)
+            if (entry.height !== undefined) {
+                row.height = entry.height
+            }
+            for (const header of headers) {
+                const cell = row.getCell(map[header])
+                const snapshot = entry.cells[header]
+                cell.value = snapshot.value
+                cell.style = JSON.parse(JSON.stringify(snapshot.style))
+                if (snapshot.numFmt !== undefined) {
+                    cell.numFmt = snapshot.numFmt
+                }
+            }
+        })
+        return mapping
+    }
+
     const saveWorkbook = async (workbook, commitMessage) => {
+        const mapping = sortTransactionRows(workbook)
         const tempFile = `${workbookFile}.tmp`
         await workbook.xlsx.writeFile(tempFile)
         if (fs.existsSync(workbookFile)) {
@@ -464,6 +537,7 @@ export default (config = {}, configDir = process.cwd()) => {
         } catch (e) {
             console.error(`Failed to commit workbook changes: ${e.message}`)
         }
+        return mapping
     }
 
     const validateTransactionInput = (constants, input = {}) => {
@@ -875,8 +949,9 @@ export default (config = {}, configDir = process.cwd()) => {
         const template = findTemplateStyles(sheet, map)
         const row = lastRow + 1
         writeTransaction(sheet, map, { ...transaction, row }, template)
-        await saveWorkbook(workbook, 'D$CPLN: add transaction')
-        const stored = parseTransactionRow(sheet.getRow(row), map, row, date1904)
+        const mapping = await saveWorkbook(workbook, 'D$CPLN: add transaction')
+        const storedRow = mapping.get(row) ?? row
+        const stored = parseTransactionRow(sheet.getRow(storedRow), map, storedRow, date1904)
         return serializeTransaction(stored)
     }
 
@@ -1005,14 +1080,18 @@ export default (config = {}, configDir = process.cwd()) => {
 
         const lastRow = findLastDataRow(sheet, map)
         const template = findTemplateStyles(sheet, map)
-        const stored = []
+        const writtenRows = []
         transactions.forEach((transaction, index) => {
             const row = lastRow + 1 + index
             writeTransaction(sheet, map, { ...transaction, row }, template)
-            stored.push(parseTransactionRow(sheet.getRow(row), map, row, date1904))
+            writtenRows.push(row)
+        })
+        const mapping = await saveWorkbook(workbook, `D$CPLN: import ${transactions.length} transaction${transactions.length === 1 ? '' : 's'}`)
+        const stored = writtenRows.map((row) => {
+            const storedRow = mapping.get(row) ?? row
+            return parseTransactionRow(sheet.getRow(storedRow), map, storedRow, date1904)
         })
         const count = stored.length
-        await saveWorkbook(workbook, `D$CPLN: import ${count} transaction${count === 1 ? '' : 's'}`)
         return { imported: count, skipped, transactions: stored.map(serializeTransaction) }
     }
 
@@ -1026,8 +1105,9 @@ export default (config = {}, configDir = process.cwd()) => {
         const map = readHeaderMap(sheet)
         findTransactionRow(sheet, map, rowNumber, date1904, id)
         writeTransaction(sheet, map, { ...transaction, row: rowNumber }, null)
-        await saveWorkbook(workbook, 'D$CPLN: update transaction')
-        const stored = parseTransactionRow(sheet.getRow(rowNumber), map, rowNumber, date1904)
+        const mapping = await saveWorkbook(workbook, 'D$CPLN: update transaction')
+        const storedRow = mapping.get(rowNumber) ?? rowNumber
+        const stored = parseTransactionRow(sheet.getRow(storedRow), map, storedRow, date1904)
         return serializeTransaction(stored)
     }
 

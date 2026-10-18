@@ -20,6 +20,7 @@
     "ui": "npm run build:ui --workspaces --if-present",
     "balance-xlsx": "npm start --workspace dscpln-balance-xlsx",
     "compose-state": "npm start --workspace dscpln-compose",
+    "state-backup": "npm start --workspace dscpln-state-backup",
     "contacts-calendar": "npm start --workspace dscpln-contacts",
     "file-pipelines": "npm start --workspace dscpln-file-pipelines",
     "portal": "npm start --workspace dscpln-portal",

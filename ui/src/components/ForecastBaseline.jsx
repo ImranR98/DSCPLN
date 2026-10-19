@@ -28,7 +28,8 @@ export default function ForecastBaseline({ model, money, scenario, onOverride, o
   }).filter((group) => group.rows.length > 0), [baselineGroups, overridesOnly, query])
 
   const toggleGroup = (group, event) => {
-    setOpenGroups((current) => ({ ...current, [group]: event.currentTarget.open }))
+    const open = event.currentTarget.open
+    setOpenGroups((current) => ({ ...current, [group]: open }))
   }
 
   return (
@@ -48,6 +49,28 @@ export default function ForecastBaseline({ model, money, scenario, onOverride, o
         Auto = variable estimate + recurring monthly equivalent; the badge shows how the variable part was estimated.
         An override replaces the category total, including recurring items. Uncheck a category to leave it out.
       </p>
+
+      <details className="forecast-baseline__legend">
+        <summary>What do confidence and outlier mean?</summary>
+        <dl>
+          <div>
+            <dt>High confidence</dt>
+            <dd>At least 4 active months in a 6+ month window, stable amounts, and at most one unusually large month.</dd>
+          </div>
+          <div>
+            <dt>Medium confidence</dt>
+            <dd>Some history or more variable amounts; usable, but worth reviewing if the category matters.</dd>
+          </div>
+          <div>
+            <dt>Low confidence</dt>
+            <dd>Sparse or highly variable history. Consider a category override if you know the real amount.</dd>
+          </div>
+          <div>
+            <dt>Outlier</dt>
+            <dd>A month far above the category's normal range. Robust estimates exclude it; a Simple average still includes it.</dd>
+          </div>
+        </dl>
+      </details>
 
       <div className="forecast-baseline__tools">
         <label className="field forecast-baseline__search">
@@ -137,7 +160,10 @@ export default function ForecastBaseline({ model, money, scenario, onOverride, o
                       row.outlierText ? `Large months: ${row.outlierText}` : '',
                     ].filter(Boolean).join(' · ')}>
                       <span className="forecast-baseline__method-label">{row.method}</span>
-                      <span className={`forecast-baseline__confidence ${row.confidenceClass}`}>{row.confidence}</span>
+                      <span
+                        className={`forecast-baseline__confidence ${row.confidenceClass}`}
+                        title={`${row.confidence} confidence · ${row.activeMonths} of ${row.monthCount} active months`}
+                      >{row.confidence}</span>
                       {row.outlierText ? <span className="forecast-baseline__outlier" title={`Large months: ${row.outlierText}`}>outlier</span> : null}
                     </span>
                   </span>

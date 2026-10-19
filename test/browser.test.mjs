@@ -94,6 +94,12 @@ test('forecasts preview live and save scenario sheets', async (t) => {
     assert.match(await page.textContent('h1'), /Balance XLSX/)
     assert.equal(await page.locator('[data-testid="forecast-chart-card"] svg').count(), 1)
 
+    // Opening a category-baseline group must not detach the details event.
+    const firstGroup = page.locator('.forecast-baseline__group').first()
+    await firstGroup.locator('summary').click()
+    await page.waitForFunction(() => document.querySelectorAll('.forecast-baseline__row').length > 0)
+    assert.ok(await page.locator('.forecast-baseline__row').count() > 0)
+
     // Editing is a live preview: the KPI changes without a workbook write.
     await page.fill('[data-testid="account-balance-0"]', '12000')
     await page.waitForFunction(() => {

@@ -205,7 +205,7 @@ is normal; more than N fails the run. A fully-overlapping scrape reports
 
 1. **Write the tool.** Anything executable works — bash, `python3`, `node`.
    The image already provides `bash`, `python3`, `node`, `rsync`, `git`,
-   `age`, `jq`, `unzip`/`tar` and `wget`, and the app tree is writable, so a
+   `age`, `jq`, `unzip`/`tar`, `wget`, `restic` and `kubectl`, and the app tree is writable, so a
    task can    `apt-get`/`pip`/`npm` install more at run time. Give it a shebang
    and the executable bit. A bundled example lives in
    `apps/task-runner/examples/hello-tool.sh`; the Balance import tool

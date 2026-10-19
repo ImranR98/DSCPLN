@@ -126,10 +126,10 @@ test('forecasts preview live and save scenario sheets', async (t) => {
     assert.equal(await page.inputValue('[data-testid="forecast-asof"]'), '')
 
     const forecast = await (await fetch(`${baseUrl}/balance/forecast`)).json()
-    assert.equal(forecast.scenarios.length, 1)
-    assert.equal(forecast.scenarios[0].sheetName, 'Scenario - Base plan')
-    assert.equal(forecast.scenarios[0].revision, 1)
-    assert.equal(forecast.scenarios[0].asOf, null)
+    assert.ok(forecast.scenario)
+    assert.equal(forecast.scenario.sheetName, 'Scenario - Base plan')
+    assert.equal(forecast.scenario.revision, 1)
+    assert.equal(forecast.scenario.asOf, null)
     assert.deepEqual(errors, [])
 })
 
@@ -174,10 +174,10 @@ test('forecast recurring adjustments and scheduled changes round-trip', async (t
     await page.waitForFunction(() => document.querySelector('.app-header__meta-tools')?.textContent.includes('Saved'))
 
     const forecast = await (await fetch(`${baseUrl}/balance/forecast`)).json()
-    assert.equal(forecast.scenarios.length, 1)
-    assert.equal(forecast.scenarios[0].recurringAdjustments.length, 2)
-    assert.equal(forecast.scenarios[0].changes.length, 1)
-    assert.equal(forecast.scenarios[0].changes[0].from, '2027-01')
+    assert.ok(forecast.scenario)
+    assert.equal(forecast.scenario.recurringAdjustments.length, 2)
+    assert.equal(forecast.scenario.changes.length, 1)
+    assert.equal(forecast.scenario.changes[0].from, '2027-01')
     assert.deepEqual(errors, [])
 
     await page.reload()
@@ -246,14 +246,14 @@ test('forecast reset restores defaults and keeps one Base plan sheet', async (t)
     await page.waitForFunction(() => document.querySelector('.app-header__meta-tools')?.textContent.includes('Saved'))
 
     const forecast = await (await fetch(`${baseUrl}/balance/forecast`)).json()
-    assert.equal(forecast.scenarios.length, 1)
-    assert.equal(forecast.scenarios[0].sheetName, 'Scenario - Base plan')
-    assert.equal(forecast.scenarios[0].name, 'Base plan')
-    assert.equal(forecast.scenarios[0].asOf, null)
-    assert.equal(forecast.scenarios[0].revision, 1)
-    assert.equal(forecast.scenarios[0].accounts[0].name, 'Main account')
-    assert.equal(forecast.scenarios[0].accounts[0].balance, 0)
-    assert.equal(forecast.scenarios[0].target.amount, null)
+    assert.ok(forecast.scenario)
+    assert.equal(forecast.scenario.sheetName, 'Scenario - Base plan')
+    assert.equal(forecast.scenario.name, 'Base plan')
+    assert.equal(forecast.scenario.asOf, null)
+    assert.equal(forecast.scenario.revision, 1)
+    assert.equal(forecast.scenario.accounts[0].name, 'Main account')
+    assert.equal(forecast.scenario.accounts[0].balance, 0)
+    assert.equal(forecast.scenario.target.amount, null)
 
     // Resetting an existing sheet must update it in place, not create a duplicate.
     await page.fill('[data-testid="account-balance-0"]', '2500')
@@ -273,9 +273,43 @@ test('forecast reset restores defaults and keeps one Base plan sheet', async (t)
     await page.waitForFunction(() => document.querySelector('.app-header__meta-tools')?.textContent.includes('Saved'))
 
     const afterSecondSave = await (await fetch(`${baseUrl}/balance/forecast`)).json()
-    assert.equal(afterSecondSave.scenarios.length, 1)
-    assert.equal(afterSecondSave.scenarios[0].sheetName, 'Scenario - Base plan')
-    assert.equal(afterSecondSave.scenarios[0].revision, 2)
-    assert.equal(afterSecondSave.scenarios[0].accounts[0].balance, 0)
+    assert.ok(afterSecondSave.scenario)
+    assert.equal(afterSecondSave.scenario.sheetName, 'Scenario - Base plan')
+    assert.equal(afterSecondSave.scenario.revision, 2)
+    assert.equal(afterSecondSave.scenario.accounts[0].balance, 0)
+    assert.deepEqual(errors, [])
+})
+
+test('recovers an unsaved local draft after reload', async (t) => {
+    const browser = await launchBrowser()
+    if (!browser) {
+        t.skip('chromium not available (playwright browsers missing)')
+        return
+    }
+    t.after(() => browser.close())
+
+    const { server, baseUrl } = await startServer({ basePath: '/balance' })
+    t.after(() => new Promise((resolve) => server.close(resolve)))
+
+    const page = await browser.newPage()
+    const errors = []
+    page.on('pageerror', (err) => errors.push(err.message))
+    page.on('console', (msg) => {
+        if (msg.type() === 'error') errors.push(msg.text())
+    })
+    page.on('dialog', (dialog) => dialog.accept())
+
+    await page.goto(`${baseUrl}/balance/forecasts`)
+    await page.waitForSelector('[data-testid="forecast-asof"]')
+    await page.fill('[data-testid="account-balance-0"]', '12345')
+    await page.waitForFunction(() => document.querySelector('.forecast-save-status')?.textContent.includes('Unsaved'))
+    await page.waitForFunction(() => localStorage.getItem('dscpln-balance-forecast-draft-v1'))
+
+    await page.reload()
+    await page.waitForSelector('.forecast-recovered')
+    assert.match(await page.textContent('.forecast-recovered'), /Unsaved draft found/)
+    await page.getByRole('button', { name: 'Restore draft' }).click()
+    assert.equal(await page.inputValue('[data-testid="account-balance-0"]'), '12345')
+    assert.equal(await page.locator('[data-testid="forecast-save"]').isEnabled(), true)
     assert.deepEqual(errors, [])
 })

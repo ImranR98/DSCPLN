@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChartNoAxesColumn, LayoutDashboard, RefreshCw, RotateCcw, Save, Undo2, Wrench } from 'lucide-react'
+import { ChartNoAxesColumn, LayoutDashboard, RefreshCw, Wrench } from 'lucide-react'
 import {
   formats,
   getJson,
@@ -20,6 +20,7 @@ import {
 } from './lib/forecast-model.js'
 import KpiGrid from './components/KpiGrid.jsx'
 import ForecastChart from './components/ForecastChart.jsx'
+import ForecastDrivers from './components/ForecastDrivers.jsx'
 import ForecastAssumptions from './components/ForecastAssumptions.jsx'
 import ForecastBaseline from './components/ForecastBaseline.jsx'
 import ForecastEvents from './components/ForecastEvents.jsx'
@@ -27,6 +28,8 @@ import ForecastRecurring from './components/ForecastRecurring.jsx'
 import ForecastChanges from './components/ForecastChanges.jsx'
 import ForecastQuality from './components/ForecastQuality.jsx'
 import ForecastTable from './components/ForecastTable.jsx'
+import ForecastToolbar from './components/ForecastToolbar.jsx'
+import ForecastSaveBar from './components/ForecastSaveBar.jsx'
 import EventDialog from './EventDialog.jsx'
 import ChangeDialog from './ChangeDialog.jsx'
 import ConfirmDialog from './ConfirmDialog.jsx'
@@ -56,12 +59,6 @@ const validateScenario = (scenario) => {
   return errors
 }
 
-const chooseScenario = (scenarios) => (
-  scenarios.find((scenario) => scenario.name === 'Base plan' || scenario.sheetName === 'Scenario - Base plan') ||
-  scenarios[0] ||
-  null
-)
-
 const resetFields = (scenario, currency) => {
   const defaults = createScenario({ currency: currency || scenario?.currency || '' })
   return {
@@ -73,18 +70,40 @@ const resetFields = (scenario, currency) => {
   }
 }
 
+
+const DRAFT_KEY = 'dscpln-balance-forecast-draft-v1'
+
+const readDraft = () => {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (!raw) return null
+    const draft = JSON.parse(raw)
+    return draft?.scenario ? draft : null
+  } catch {
+    return null
+  }
+}
+
+const clearDraft = () => {
+  try {
+    localStorage.removeItem(DRAFT_KEY)
+  } catch {
+    // Ignore storage failures; the workbook remains the source of truth.
+  }
+}
+
 export default function Forecasts() {
   const [reference, setReference] = useState(null)
   const [transactions, setTransactions] = useState([])
   const [scenario, setScenario] = useState(null)
   const [errors, setErrors] = useState([])
   const [validationErrors, setValidationErrors] = useState([])
-  const [deletedSheets, setDeletedSheets] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [conflict, setConflict] = useState(null)
+  const [recoveredDraft, setRecoveredDraft] = useState(null)
 
   const eventDialogRef = useRef(null)
   const changeDialogRef = useRef(null)
@@ -93,7 +112,7 @@ export default function Forecasts() {
 
   const currencies = useMemo(() => reference?.currencies || [], [reference])
   const primaryCurrency = currencies.find((entry) => entry.primary) || currencies[0] || null
-  const hasChanges = Boolean(scenario?.dirty) || deletedSheets.length > 0
+  const hasChanges = Boolean(scenario?.dirty)
   const effectiveAsOf = scenario ? resolveScenarioAsOf(scenario) : ''
 
   const fractionalCurrencies = useMemo(() => new Set(
@@ -139,6 +158,15 @@ export default function Forecasts() {
     return () => window.removeEventListener('beforeunload', handler)
   }, [hasChanges])
 
+  useEffect(() => {
+    if (!scenario?.dirty) return
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ scenario, savedAt: Date.now() }))
+    } catch {
+      // Draft recovery is best effort; saving the workbook is unaffected.
+    }
+  }, [scenario])
+
   const load = async () => {
     setLoading(true)
     setLoadError(null)
@@ -156,16 +184,23 @@ export default function Forecasts() {
       }
       setReference(referenceResult)
       setTransactions(transactionResult.transactions || [])
-      const loaded = (forecastResult.scenarios || []).map(attachScenarioDefaults)
-      const chosen = chooseScenario(loaded)
+      const loaded = forecastResult.scenario ? attachScenarioDefaults(forecastResult.scenario) : null
+      const pending = readDraft()
+      const sameSheet = (pending?.scenario?.sheetName || null) === (loaded?.sheetName || null)
+      const sameRevision = Number(pending?.scenario?.revision || 0) === Number(loaded?.revision || 0)
+      if (pending && sameSheet && sameRevision) {
+        setRecoveredDraft(pending)
+      } else {
+        if (pending) clearDraft()
+        setRecoveredDraft(null)
+      }
       const main = (referenceResult.currencies || []).find((entry) => entry.primary) ||
         (referenceResult.currencies || [])[0]
-      setScenario(chosen || createScenario({ currency: main?.code || '' }))
+      setScenario(loaded || createScenario({ currency: main?.code || '' }))
       setErrors(forecastResult.errors || [])
       setValidationErrors([])
-      setDeletedSheets([])
       setConflict(null)
-      setLastSavedAt(chosen?.updatedAt ? Date.parse(chosen.updatedAt) || null : null)
+      setLastSavedAt(loaded?.updatedAt ? Date.parse(loaded.updatedAt) || null : null)
     } catch (error) {
       console.error(error)
       setLoadError(error.message || 'Could not load forecasts. Check the server logs.')
@@ -181,31 +216,11 @@ export default function Forecasts() {
 
   const patchScenario = (patch) => {
     setValidationErrors([])
+    setRecoveredDraft(null)
     setScenario((current) => {
       if (!current) return current
       const update = typeof patch === 'function' ? patch(current) : patch
       return { ...current, ...update, dirty: true }
-    })
-  }
-
-  const addDeletedSheet = (sheetName) => {
-    if (!sheetName) return
-    setDeletedSheets((current) => current.some((entry) => entry.sheetName === sheetName) ? current : [
-      ...current,
-      { sheetName, revision: null },
-    ])
-  }
-
-  const removeErrorSheet = (sheetName) => {
-    confirmRef.current?.show({
-      title: 'Delete invalid scenario sheet',
-      message: `Delete the invalid scenario sheet "${sheetName}"? It will be removed from the workbook on Save.`,
-      confirmLabel: 'Delete on save',
-      danger: true,
-      onConfirm: () => {
-        addDeletedSheet(sheetName)
-        setErrors((current) => current.filter((entry) => entry.sheetName !== sheetName))
-      },
     })
   }
 
@@ -216,7 +231,11 @@ export default function Forecasts() {
       message: 'Discard all unsaved changes and reload from the workbook?',
       confirmLabel: 'Discard and reload',
       danger: true,
-      onConfirm: load,
+      onConfirm: () => {
+        clearDraft()
+        setRecoveredDraft(null)
+        load()
+      },
     })
   }
 
@@ -231,7 +250,11 @@ export default function Forecasts() {
       message: 'Discard unsaved changes and reload from the workbook?',
       confirmLabel: 'Discard and reload',
       danger: true,
-      onConfirm: load,
+      onConfirm: () => {
+        clearDraft()
+        setRecoveredDraft(null)
+        load()
+      },
     })
   }
 
@@ -243,27 +266,28 @@ export default function Forecasts() {
       confirmLabel: 'Reset',
       danger: true,
       onConfirm: () => {
+        setRecoveredDraft(null)
         setScenario(resetFields(scenario, primaryCurrency?.code))
         setValidationErrors([])
       },
     })
   }
 
-  const performSave = async (upserts, deletes) => {
+  const performSave = async () => {
     if (!scenario) return
     setSaving(true)
     try {
-      const result = await putJson('/forecast', { upserts, deletes })
-      const saved = (result.scenarios || []).map(attachScenarioDefaults)
-      const chosen = chooseScenario(saved) || createScenario({
+      const result = await putJson('/forecast', { scenario: scenarioPayload(scenario) })
+      const saved = result.scenario ? attachScenarioDefaults(result.scenario) : createScenario({
         currency: primaryCurrency?.code || scenario.currency || '',
       })
-      setScenario({ ...chosen, dirty: false, sheetName: chosen.sheetName || null })
+      clearDraft()
+      setRecoveredDraft(null)
+      setScenario({ ...saved, dirty: false })
       setErrors(result.errors || [])
-      setDeletedSheets([])
       setValidationErrors([])
       setConflict(null)
-      setLastSavedAt(chosen.sheetName ? Date.now() : null)
+      setLastSavedAt(saved.sheetName ? Date.now() : null)
       if (result.commitWarning) {
         showToast(`Saved, but the git commit failed: ${result.commitWarning}`, 'error')
       } else {
@@ -284,25 +308,16 @@ export default function Forecasts() {
   const requestSave = () => {
     if (!hasChanges || saving || !scenario) return
     if (document.querySelector('dialog[open]')) return
-    if (scenario.dirty) {
-      const problems = validateScenario(scenario)
-      if (problems.length > 0) {
-        setValidationErrors(problems)
-        return
-      }
+    const problems = validateScenario(scenario)
+    if (problems.length > 0) {
+      setValidationErrors(problems)
+      return
     }
-    const upserts = scenario.dirty ? [scenarioPayload(scenario)] : []
-    const deletes = [...deletedSheets]
-    if (upserts.length === 0 && deletes.length === 0) return
-    const details = [
-      ...(scenario.dirty ? [scenario.name || 'Base plan'] : []),
-      ...deletedSheets.map((entry) => `delete ${entry.sheetName}`),
-    ].join(', ')
     confirmRef.current?.show({
       title: 'Save forecast',
-      message: `Save ${details}? This rewrites the workbook; close it in Excel first.`,
+      message: `Save changes to ${scenario.name || 'Base plan'}? This rewrites the workbook; close it in Excel first.`,
       confirmLabel: 'Save',
-      onConfirm: () => performSave(upserts, deletes),
+      onConfirm: performSave,
     })
   }
 
@@ -402,6 +417,18 @@ export default function Forecasts() {
     changes: (current.changes || []).filter((_, position) => position !== index),
   }))
 
+  const restoreDraft = () => {
+    if (!recoveredDraft?.scenario) return
+    setScenario({ ...attachScenarioDefaults(recoveredDraft.scenario), dirty: true })
+    setRecoveredDraft(null)
+    setValidationErrors([])
+  }
+
+  const dismissDraft = () => {
+    clearDraft()
+    setRecoveredDraft(null)
+  }
+
   const statusText = saving ? 'Saving…'
     : hasChanges ? 'Unsaved changes'
       : lastSavedAt ? `Saved ${formats.time.format(new Date(lastSavedAt))}` : ''
@@ -453,31 +480,29 @@ export default function Forecasts() {
           <section className="card"><p className="muted">Could not load the workbook data.</p></section>
         ) : (
           <>
-            <section className="card forecast-toolbar" aria-label="Scenario controls">
-              <div className="forecast-toolbar__row">
-                <div className="forecast-toolbar__scenario">
-                  <span className="field__label">Scenario</span>
-                  <strong className="forecast-toolbar__name">{scenario?.name || 'Base plan'}</strong>
-                </div>
-                <div className="forecast-toolbar__save">
-                  <span className={`forecast-save-status${hasChanges ? ' forecast-save-status--dirty' : ''}`} role="status" aria-live="polite">{statusText}</span>
-                  <button className="outline secondary" type="button" data-testid="forecast-reset" disabled={saving} title="Reset Base plan to defaults" aria-label="Reset Base plan to defaults" onClick={resetScenario}>
-                    <RotateCcw size={14} strokeWidth={1.8} /> <span className="forecast-label-wide">Reset defaults</span><span className="forecast-label-narrow">Reset</span>
-                  </button>
-                  <button className="outline secondary" type="button" disabled={!hasChanges || saving} title="Discard unsaved changes and reload the last saved version" aria-label="Discard unsaved changes and reload the last saved version" onClick={discard}>
-                    <Undo2 size={14} strokeWidth={1.8} /> <span className="forecast-label-wide">Discard changes</span><span className="forecast-label-narrow">Discard</span>
-                  </button>
-                  <button type="button" data-testid="forecast-save" disabled={!hasChanges || saving} onClick={requestSave}><Save size={14} strokeWidth={1.8} /> {saving ? 'Saving…' : 'Save'}</button>
-                </div>
-              </div>
-              {scenario && !scenario.sheetName ? (
-                <p className="hint forecast-toolbar__draft">
-                  {scenario.dirty
-                    ? 'Local draft — press Save to create its scenario sheet.'
-                    : 'Local draft — edit a field and press Save to create its scenario sheet.'}
+            <ForecastToolbar
+              scenario={scenario}
+              statusText={statusText}
+              hasChanges={hasChanges}
+              saving={saving}
+              onReset={resetScenario}
+              onDiscard={discard}
+              onSave={requestSave}
+            />
+
+            {recoveredDraft ? (
+              <section className="card form-warning forecast-recovered">
+                <div className="card__header"><h2>Unsaved draft found</h2></div>
+                <p>
+                  A local draft from {formats.dayMonth.format(new Date(recoveredDraft.savedAt))} at{' '}
+                  {formats.time.format(new Date(recoveredDraft.savedAt))} was not saved to the workbook.
                 </p>
-              ) : null}
-            </section>
+                <div className="dialog-actions">
+                  <button className="outline secondary" type="button" onClick={dismissDraft}>Dismiss draft</button>
+                  <button type="button" onClick={restoreDraft}>Restore draft</button>
+                </div>
+              </section>
+            ) : null}
 
             {conflict ? (
               <section className="card form-warning forecast-conflict">
@@ -507,9 +532,9 @@ export default function Forecasts() {
                       <strong>{entry.sheetName}</strong>
                       <p className="muted">{entry.error}</p>
                     </div>
-                    <button className="outline secondary danger" type="button" onClick={() => removeErrorSheet(entry.sheetName)}>Delete sheet</button>
                   </div>
                 ))}
+                <p className="hint">Fix or remove the invalid sheet in the workbook, then reload.</p>
               </section>
             ) : null}
 
@@ -553,6 +578,8 @@ export default function Forecasts() {
                     </div>
                   ) : null}
                 </section>
+
+                <ForecastDrivers forecast={activeModel.forecast} money={money} code={scenario.currency} />
 
                 <div className="forecast-grid">
                   <ForecastAssumptions
@@ -618,18 +645,13 @@ export default function Forecasts() {
       </main>
 
       {hasChanges ? (
-        <div className="forecast-savebar" role="region" aria-label="Unsaved forecast changes">
-          <span className="forecast-savebar__status" role="status" aria-live="polite">{statusText || 'Unsaved changes'}</span>
-          <div className="forecast-savebar__actions">
-            <button className="outline secondary" type="button" data-testid="forecast-reset-sticky" disabled={saving} title="Reset Base plan to defaults" aria-label="Reset Base plan to defaults" onClick={resetScenario}>
-              <span className="forecast-label-wide">Reset defaults</span><span className="forecast-label-narrow">Reset</span>
-            </button>
-            <button className="outline secondary" type="button" disabled={saving} title="Discard unsaved changes and reload the last saved version" aria-label="Discard unsaved changes and reload the last saved version" onClick={discard}>
-              <span className="forecast-label-wide">Discard changes</span><span className="forecast-label-narrow">Discard</span>
-            </button>
-            <button type="button" disabled={saving} onClick={requestSave} data-testid="forecast-save-sticky"><Save size={14} strokeWidth={1.8} /> {saving ? 'Saving…' : 'Save'}</button>
-          </div>
-        </div>
+        <ForecastSaveBar
+          statusText={statusText}
+          saving={saving}
+          onReset={resetScenario}
+          onDiscard={discard}
+          onSave={requestSave}
+        />
       ) : null}
 
       <EventDialog ref={eventDialogRef} asOf={effectiveAsOf} onSave={saveEvent} />

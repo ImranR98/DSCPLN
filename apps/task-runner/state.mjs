@@ -8,6 +8,7 @@ import { expand, resolve } from './template.mjs';
 
 export const STATE_DIR = process.env.BACKUPCTL_STATE_DIR ?? path.join(os.homedir(), '.backupctl');
 const RUNNING_FILE = path.join(STATE_DIR, 'running.json');
+const SCHEDULE_DIR = path.join(STATE_DIR, 'schedules');
 
 export function slugify(name) {
   return String(name).replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -86,4 +87,53 @@ export function stagingDir(taskName) {
  * not a small/quota'd /tmp tmpfs. Each run's subdir is wiped when it ends. */
 export function tmpRoot() {
   return process.env.BACKUPCTL_TMP_DIR ?? path.join(os.homedir(), 'Downloads', 'backupctl-tmp');
+}
+
+/* Schedule bookkeeping lives beside the running marker, not in a task's
+ * state_dir: state_dir may be a read-only or git-tracked tree, and the
+ * scheduler must still persist its catch-up marker. */
+function scheduleFileFor(taskName) {
+  return path.join(SCHEDULE_DIR, `${slugify(taskName)}.json`);
+}
+
+export function loadScheduleState(taskName) {
+  const file = scheduleFileFor(taskName);
+  if (!fs.existsSync(file)) return { lastScheduledRun: null, missed: 0 };
+  try {
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return {
+      lastScheduledRun: data.lastScheduledRun == null ? null : Number(data.lastScheduledRun),
+      missed: Math.max(0, Number(data.missed) || 0),
+    };
+  } catch {
+    return { lastScheduledRun: null, missed: 0 };
+  }
+}
+
+export function saveScheduleState(taskName, state) {
+  const file = scheduleFileFor(taskName);
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const data = {
+    lastScheduledRun: state.lastScheduledRun == null ? null : Number(state.lastScheduledRun),
+    missed: Math.max(0, Number(state.missed) || 0),
+  };
+  const tmp = file + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 1), { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}
+
+/* Adapter for the server-kit Scheduler. */
+export function scheduleStore(taskName) {
+  let current = loadScheduleState(taskName);
+  return {
+    lastScheduledRun: () => current.lastScheduledRun,
+    async setLastScheduledRun(ts) {
+      current = { ...current, lastScheduledRun: ts == null ? null : Number(ts) };
+      saveScheduleState(taskName, current);
+    },
+    async markMissed() {
+      current = { ...current, missed: (current.missed ?? 0) + 1 };
+      saveScheduleState(taskName, current);
+    },
+  };
 }

@@ -15,7 +15,7 @@
 ## Impact (what a bump can reach)
 
 - **Shipped runtime** — anything in a workspace's `dependencies`, including
-  `packages/server-kit` (all 8 apps run through it; it owns express for them).
+  `packages/server-kit` (all 7 apps run through it; it owns express for them).
   These end up in the app images.
 - **Build-time** — devDeps used by the UI build (`vite`, `react`,
   `@vitejs/plugin-react`, `@dscpln/ui-kit`): they change the UIs that ship in
@@ -97,7 +97,7 @@
 ## Repo-specific couplings and gotchas
 
 - `packages/server-kit` is express for every app; a server-kit dependency bump
-  reaches all 8 apps, and balance-xlsx / task-runner / whatsapp-txt also carry
+  reaches all 7 apps, and balance-xlsx / task-runner / whatsapp-txt also carry
   their own express dependency.
 - All apps share `vite`/`react`/`@vitejs/plugin-react` versions from their
   devDeps — bump them uniformly.

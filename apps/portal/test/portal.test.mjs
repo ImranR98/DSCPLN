@@ -5,7 +5,7 @@ import http from 'node:http'
 import { once } from 'node:events'
 import { createPortalApp } from '../server.mjs'
 
-const EXPECTED_LINKS = ['/balance', '/pipelines', '/watxt', '/tasks', '/contacts', '/state-backup', '/ytmusic']
+const EXPECTED_LINKS = ['/balance', '/pipelines', '/watxt', '/tasks', '/contacts', '/ytmusic']
 
 async function portalFixture(t) {
   const portal = createPortalApp({ dataDir: tempDir('portal-test-'), log: () => {} })
@@ -243,7 +243,7 @@ test('portal tiles show per-app detail lines', async (t) => {
   const { base } = await portalFixture(t)
   const page = await browser.newPage()
   const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
-  for (const path of ['balance', 'pipelines', 'watxt', 'tasks', 'contacts', 'state-backup', 'ytmusic']) {
+  for (const path of ['balance', 'pipelines', 'watxt', 'tasks', 'contacts', 'ytmusic']) {
     await page.route(`**/${path}/api/health`, (route) => route.fulfill(json({ ok: true })))
     await page.route(`**/${path}/api/state`, (route) => route.fulfill(json({ paused: false })))
   }
@@ -275,4 +275,22 @@ test('portal tiles show per-app detail lines', async (t) => {
 
   const next = await page.$eval('[data-testid="next-contacts"]', (node) => node.textContent)
   assert.match(next, /1 missed/)
+})
+
+test('portal functions are config-driven', async (t) => {
+  const portal = await portalFixture(t)
+  const initial = await (await fetch(`${portal.base}/api/functions`)).json()
+  assert.ok(initial.functions.some((fn) => fn.path === 'tasks'))
+  const next = {
+    ntfy: { url: '', token: '' },
+    functions: [{ path: 'tasks', icon: 'wrench', name: 'Only Tasks', description: 'test', kind: 'tasks' }],
+  }
+  const saved = await fetch(`${portal.base}/api/config`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(next),
+  })
+  assert.equal(saved.status, 200)
+  const after = await (await fetch(`${portal.base}/api/functions`)).json()
+  assert.deepEqual(after.functions.map((fn) => fn.path), ['tasks'])
 })

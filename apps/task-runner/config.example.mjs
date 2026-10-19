@@ -4,6 +4,10 @@
 // machine-specific details stay in one place. Groups and their tasks render in
 // array order; a group's `defaults` merge under every task in it.
 //
+// Optional per-task fields beyond the examples below: `schedule` (unattended
+// cron-like runs), `secrets` (config tokens to redact from logs) and `env`
+// (environment variables for the command, e.g. tokens/non-argv secrets).
+//
 //   cp config.example.mjs config.mjs
 //
 // See README.md for the full field reference.
@@ -125,23 +129,37 @@ export default {
       name: 'Finance',
       defaults: { state_dir: '{{maindir}}/.tasks' },
       tasks: [
-        // Scrape Wealthsimple, then import only the transactions the Balance
-        // XLSX workbook does not already have. When nothing matches the
-        // workbook the summary warns that the scrape may not reach back far
-        // enough (and the portal relay pushes that warning, if configured).
+        // Scrape a bank/credit-card site, then import only the transactions
+        // the Balance XLSX workbook does not already have. When nothing
+        // matches the workbook the summary warns that the scrape may not
+        // reach back far enough (and the portal relay pushes that warning,
+        // if configured).
         {
-          name: 'Wealthsimple import',
-          note: 'Scrape Wealthsimple and import new transactions into Balance XLSX.',
-          serial_key: 'wealthsimple',
+          name: 'Balance import',
+          note: 'Run your scraper and import new transactions into Balance XLSX.',
+          serial_key: 'balance-import',
           browser: true,
+          // `secrets` keeps config values out of the logged command/output.
+          secrets: ['balance_token'],
+          env: { BALANCE_TOKEN: '{{balance_token}}' },
           commands: [
             // Replace with your scraper invocation — its stdout is the input.
-            `wealthsimpleton > "$TMPDIR/wealthsimple.txt"`,
-            `node '{{scriptroot}}/wealthsimple-import.mjs' --input "$TMPDIR/wealthsimple.txt" ` +
-              `--balance-url '{{balance_url}}' --balance-token '{{balance_token}}' ` +
+            `your-scraper > "$TMPDIR/transactions.txt"`,
+            `node '{{scriptroot}}/balance-import.mjs' --input "$TMPDIR/transactions.txt" ` +
+              `--balance-url '{{balance_url}}' --balance-token "$BALANCE_TOKEN" ` +
               `--notify-url '{{portal_url}}'`,
           ],
           summary_last_line: true,
+        },
+        // Scheduled tasks run unattended with the same bash engine. They may
+        // not use uploads/prompts/browser/commit_dir; see README.md.
+        {
+          name: 'Nightly disk usage',
+          state_dir: '{{maindir}}/.tasks',
+          schedule: { enabled: false, days: [], at: '02:00', catchUp: true },
+          commands: [`df -h > '{{maindir}}/disk-usage.txt'`, 'echo "wrote disk-usage.txt"'],
+          summary_last_line: true,
+          notify: 'errors',
         },
       ],
     },

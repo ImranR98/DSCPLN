@@ -1,8 +1,10 @@
-# D$CPLN
+# Balance XLSX
 
 A simple web app that shows whether you've gone over your budget this month, and sends push notifications when a limit is reached.
 
 It reads your expenses from an Excel workbook (the source of truth) and writes changes straight back to it. The dashboard covers the current month and adding transactions; the insights page is a historical viewer with date ranges and comparisons; the forecasts page is a live projection planner.
+
+Configuration can also be mounted from a private `dscpln-config` repo: set `DSCPLN_CONFIG` to its `apps/balance-xlsx/config.json`; run state stays on the app volume (`DSCPLN_STATE_FILE` for scheduled apps). See `config-template/README.md`.
 
 ## Setup
 

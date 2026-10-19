@@ -10,6 +10,8 @@ Auth is a pasted `browser.json` (the headers from a logged-in
 confirm. It is stored on the app's volume, masked in API responses, and
 rewritten before every run.
 
+Configuration can also be mounted from a private `dscpln-config` repo: set `DSCPLN_CONFIG_FILE` to its `apps/ytmusic/config.json`; run state stays on the app volume (`DSCPLN_STATE_FILE` for scheduled apps). See `config-template/README.md`.
+
 ## Configuration
 
 | Field | Meaning |

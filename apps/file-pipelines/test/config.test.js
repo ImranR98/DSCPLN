@@ -49,12 +49,12 @@ test("config: snapshot copies carry sources, runner and schedule", () => {
         name: "wine",
         method: "copy",
         snapshot: true,
-        sources: ["/home/imranr/Games/Installs/Synced", "/home/imranr/Games/Installs/Unsynced"],
-        destination: "/home/imranr/Main/Backups/Game Save Files",
+        sources: ["/home/user/Games/Installs/Synced", "/home/user/Games/Installs/Unsynced"],
+        destination: "/home/user/Main/Backups/Game Save Files",
         subdir: "drive_c/users/steamuser",
         nameSuffix: " (Wine prefix home dir)",
         touch: "lastBackedUp.txt",
-        runner: { node: "bigpc" },
+        runner: { node: "desktop" },
         schedule: { enabled: true, days: [1, 3], at: "4:30" },
       },
     ],
@@ -64,15 +64,15 @@ test("config: snapshot copies carry sources, runner and schedule", () => {
   assert.equal(folder.method, "copy");
   assert.equal(folder.snapshot, true);
   assert.deepEqual(folder.sources, [
-    "/home/imranr/Games/Installs/Synced",
-    "/home/imranr/Games/Installs/Unsynced",
+    "/home/user/Games/Installs/Synced",
+    "/home/user/Games/Installs/Unsynced",
   ]);
-  assert.equal(folder.source, "/home/imranr/Games/Installs/Synced");
+  assert.equal(folder.source, "/home/user/Games/Installs/Synced");
   assert.equal(folder.subdir, "drive_c/users/steamuser");
   assert.equal(folder.nameSuffix, " (Wine prefix home dir)");
   assert.equal(folder.touch, "lastBackedUp.txt");
   assert.equal(folder.cleanup, false);
-  assert.deepEqual(folder.runner, { node: "bigpc" });
+  assert.deepEqual(folder.runner, { node: "desktop" });
   assert.deepEqual(folder.schedule, { enabled: true, days: [1, 3], at: "04:30", catchUp: true });
   assert.equal(cfg.pipelineStagingClaim, "file-pipelines-staging");
   assert.ok(cfg.pipelineStagingDir.endsWith(".file-pipelines/pipeline-staging"));
@@ -102,7 +102,7 @@ test("config: legacy command folders migrate to snapshot copies", () => {
 test("config: snapshot fields are validated", () => {
   const base = (folder) => ({ ...defaultConfig(), folders: [folder] });
   assert.throws(
-    () => validateConfig(base({ name: "a", source: "/s", destination: "/d", method: "copy", runner: { node: "bigpc" } })),
+    () => validateConfig(base({ name: "a", source: "/s", destination: "/d", method: "copy", runner: { node: "desktop" } })),
     /only supported for snapshot copies/,
   );
   assert.throws(

@@ -10,6 +10,8 @@ subdirectory of each) from one or more sources. A snapshot can run locally or
 as a Kubernetes Job on another node — e.g. archiving Wine-prefix game saves
 from a gaming PC — alongside the watched media folders.
 
+Configuration can also be mounted from a private `dscpln-config` repo: set `--config` to its `apps/file-pipelines/config.json`; run state stays on the app volume (`DSCPLN_STATE_FILE` for scheduled apps). See `config-template/README.md`.
+
 ## Methods
 
 | method        | what it does |
@@ -34,7 +36,7 @@ from a gaming PC — alongside the watched media folders.
   "subdir": "drive_c/users/steamuser",          // optional: copy only this path within each entry
   "nameSuffix": " (Wine prefix home dir)",      // optional: destination naming
   "touch": "lastBackedUp.txt",                  // optional: write the run date here
-  "runner": { "node": "bigpc" },                // null = this server
+  "runner": { "node": "desktop" },                // null = this server
   "schedule": { "enabled": true, "days": [0], "at": "04:00", "catchUp": true }
 }
 ```

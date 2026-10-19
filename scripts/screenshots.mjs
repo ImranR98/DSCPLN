@@ -104,7 +104,7 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
   await once(server, 'listening')
   const base = `http://127.0.0.1:${server.address().port}`
   const page = await newPage()
-  for (const p of ['balance', 'pipelines', 'watxt', 'tasks', 'contacts', 'compose', 'ytmusic']) {
+  for (const p of ['balance', 'pipelines', 'watxt', 'tasks', 'contacts', 'ytmusic']) {
     await page.route(`**/${p}/api/health`, (route) => route.fulfill(json({ ok: true })))
   }
   await page.route('**/balance/status', (route) => route.fulfill(json({ overBudget: [] })))
@@ -112,7 +112,6 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
   await page.route('**/watxt/api/state', (route) => route.fulfill(json({ conversations: 12, messages: 8421 })))
   await page.route('**/tasks/api/tasks', (route) => route.fulfill(json({ groups: [{ tasks: [{ state: { ok: true } }, { state: { ok: true } }, { state: { ok: true } }] }] })))
   await page.route('**/contacts/api/state', (route) => route.fulfill(json({ paused: false, lastRun: { endedAt: ago(120), ok: true }, nextRun: Date.now() + 5 * 86400_000, missed: 0 })))
-  await page.route('**/compose/api/state', (route) => route.fulfill(json({ paused: false, lastRun: { endedAt: ago(90), ok: true }, nextRun: Date.now() + 2 * 86400_000, missed: 0 })))
   await page.route('**/ytmusic/api/state', (route) => route.fulfill(json({ paused: false, lastRun: { endedAt: ago(400), ok: true }, nextRun: Date.now() + 15 * 3600_000, missed: 0 })))
   await page.goto(`${base}/`)
   await page.waitForSelector('[data-testid="detail-balance"]')
@@ -360,40 +359,6 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
   await page.waitForSelector('dialog[open] .collection-row', { timeout: 10000 })
   await page.locator('dialog[open]').screenshot({ path: path.join(OUT, 'contacts-settings.png') })
   console.log('shot contacts-settings')
-  await page.close()
-  await new Promise((resolve) => server.close(resolve))
-}
-
-/* ---------------- compose state ---------------- */
-{
-  const dir = tmp('shot-compose-')
-  const destination = path.join(dir, 'compose_state_backups')
-  fs.mkdirSync(destination, { recursive: true })
-  for (const name of ['host-a-backup-20260105_040000.tar', 'host-b-backup-20260105_040100.tar']) {
-    fs.writeFileSync(path.join(destination, name), Buffer.alloc(2048, 3))
-  }
-  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
-    targets: [
-      { name: 'host-a', mode: 'local', host: '', user: '', path: '~/Infra/compose_live_state' },
-      { name: 'host-b', mode: 'ssh', host: 'host-b.example.com', user: 'root', path: '/srv/compose_live_state' },
-    ],
-    destination,
-    retention: 1,
-    notifySuccess: true,
-    schedule: { enabled: true, days: [0], at: '04:00', catchUp: true },
-  }, null, 2))
-  writeState(dir, { summary: 'Backed up 2 targets: host-a, host-b' })
-  const { createComposeApp } = await import(path.join(REPO, 'apps/compose-state/server.mjs'))
-  const app = createComposeApp({ dataDir: dir })
-  await app.start()
-  const server = app.app.listen(0, '127.0.0.1')
-  await once(server, 'listening')
-  const base = `http://127.0.0.1:${server.address().port}`
-  const page = await newPage()
-  await page.goto(base)
-  await page.waitForSelector('[data-testid="run-now"]')
-  await page.waitForTimeout(600)
-  await shoot(page, 'compose')
   await page.close()
   await new Promise((resolve) => server.close(resolve))
 }

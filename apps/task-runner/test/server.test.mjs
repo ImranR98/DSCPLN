@@ -225,15 +225,15 @@ test('resolve: nested lookup, typed values, loops, tildes', () => {
     repo_dir: bctl.REPO_DIR,
     maindir: '~/Main',
     scriptroot: '{{repo_dir}}/scripts',
-    hosts: { bigpc: { user: 'user', port: 22 } },
+    hosts: { desktop: { user: 'user', port: 22 } },
     list: [1, 2],
   };
   assert.equal(bctl.resolve('{{maindir}}/Backups', local), `${os.homedir()}/Main/Backups`);
   assert.equal(bctl.resolve('{{scriptroot}}', local), `${bctl.REPO_DIR}/scripts`); // loops to stable
-  assert.equal(bctl.resolve('{{hosts.bigpc.user}}', local), 'user');
-  assert.equal(bctl.resolve('{{hosts.bigpc.port}}', local), 22); // typed value
-  assert.equal(bctl.resolve('port={{hosts.bigpc.port}}', local), 'port=22'); // embedded: stringified
-  assert.deepEqual(bctl.resolve('{{hosts.bigpc}}', local), local.hosts.bigpc); // typed
+  assert.equal(bctl.resolve('{{hosts.desktop.user}}', local), 'user');
+  assert.equal(bctl.resolve('{{hosts.desktop.port}}', local), 22); // typed value
+  assert.equal(bctl.resolve('port={{hosts.desktop.port}}', local), 'port=22'); // embedded: stringified
+  assert.deepEqual(bctl.resolve('{{hosts.desktop}}', local), local.hosts.desktop); // typed
   assert.deepEqual(bctl.resolve('{{list}}', local), [1, 2]); // typed
   assert.equal(bctl.resolve('{{missing}}', local), '{{missing}}'); // unresolved literal
   assert.equal(bctl.resolve('{{missing}}/x', local), '{{missing}}/x');
@@ -1163,4 +1163,77 @@ test('browser proxy: HTTP and WebSocket bridge to the sidecar viewer', async () 
     await new Promise((resolve) => srv.close(resolve));
     await new Promise((resolve) => upstream.close(resolve));
   }
+});
+
+test('schedule: normalized defaults and unattended-only validation', async () => {
+  const configPath = makeConfig([
+    task('Scheduled', {
+      commands: 'true',
+      schedule: { enabled: true, days: [1], at: '2:30' },
+    }),
+  ]);
+  await bootWith(configPath);
+  const scheduled = bctl.TASK_LIST.find((entry) => entry.name === 'Scheduled');
+  assert.deepEqual(scheduled.schedule, { enabled: true, days: [1], at: '02:30', catchUp: true });
+  assert.equal(scheduled.notify, 'errors');
+
+  await assert.rejects(
+    bctl.loadConfig(makeConfig([
+      task('Bad', {
+        commands: 'true',
+        uploads: true,
+        schedule: { enabled: true, at: '02:00' },
+      }),
+    ])),
+    /scheduled tasks cannot use 'uploads'/,
+  );
+  await assert.rejects(
+    bctl.loadConfig(makeConfig([
+      task('Bad2', { commands: 'true', schedule: { enabled: true, at: '25:00' } }),
+    ])),
+    /valid time/,
+  );
+});
+
+test('schedule state: persists the catch-up marker and missed count', async () => {
+  const store = bctl.scheduleStore('ScheduledStateTest');
+  await store.setLastScheduledRun(123456);
+  await store.markMissed();
+  await store.markMissed();
+  assert.deepEqual(bctl.loadScheduleState('ScheduledStateTest'), {
+    lastScheduledRun: 123456,
+    missed: 2,
+  });
+});
+
+test('API: scheduled tasks expose the next run and missed count', async () => {
+  const configPath = makeConfig([
+    task('Future', {
+      commands: 'true',
+      schedule: { enabled: true, days: [], at: '23:59', catchUp: true },
+    }),
+  ]);
+  const [, tasks] = await bctl.loadConfig(configPath);
+  await bootWith(configPath);
+  const json = bctl.taskJson(tasks[0]);
+  assert.equal(json.schedule.enabled, true);
+  assert.ok(json.next_run > Date.now());
+  assert.equal(json.schedule_missed, 0);
+});
+
+test('redaction: config-level secrets are masked in command and output', async () => {
+  const configPath = makeConfig(
+    [task('SecretTask', {
+      commands: `echo '{{api_token}}'`,
+      secrets: ['api_token'],
+    })],
+    { api_token: 'super-secret-value' },
+  );
+  const [local, tasks] = await bctl.loadConfig(configPath);
+  const lines = [];
+  const [ok] = await bctl.runTask(tasks[0], local, [], (line) => lines.push(line));
+  assert.equal(ok, true);
+  const text = lines.join('\n');
+  assert.ok(!text.includes('super-secret-value'), text);
+  assert.match(text, /\*\*\*/);
 });

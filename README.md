@@ -10,9 +10,8 @@ small always-on Node apps — one per function — served behind a single host
 | [Balance XLSX](apps/balance-xlsx/README.md) | `/balance` | Budget dashboard, insights and a live forecast planner backed by an Excel workbook (external, token-protected API at `/balance/api`) |
 | [File Pipelines](apps/file-pipelines/README.md) | `/pipelines` | Watches device folders, standardizes media, queues review/trash |
 | [WhatsApp TXT](apps/whatsapp-txt/README.md) | `/watxt` | Browses, imports and merges WhatsApp chat exports |
-| [Task Runner](apps/task-runner/README.md) | `/tasks` | Config-driven backup/export workflows (bash tasks, drop zones, prompts) |
+| [Task Runner](apps/task-runner/README.md) | `/tasks` | Config-driven workflows: scheduled and on-demand bash tasks, drop zones, prompts |
 | [Contacts + Calendar](apps/contacts-calendar/README.md) | `/contacts` | Scheduled Nextcloud contacts/calendar exports |
-| [Infra Compose State](apps/compose-state/README.md) | `/compose` | Scheduled Docker Compose runtime-state backups |
 | [YTMusic Downloads](apps/ytmusic/README.md) | `/ytmusic` | Scheduled YouTube Music library downloads |
 
 Each app's README covers its configuration fields, defaults and container
@@ -22,6 +21,23 @@ and the base-path contract.
 Every app is configured at runtime — through its own Settings UI or a mounted
 config file — so nothing user-specific is baked into the apps or their images.
 Run one app or all of them; each is an independent container.
+
+## Keep your configuration in one repo
+
+The apps work with their built-in defaults. For a multi-app deployment, put
+your paths, tasks, schedules and app settings in a private `dscpln-config`
+repository and mount it into the containers. A starter lives in
+[`config-template/`](config-template/README.md):
+
+```sh
+npm run init-config -- ~/dscpln-config
+# edit config.mjs, apps/*/config.json and secrets.json
+```
+
+The starter documents the per-app environment variables (`DSCPLN_CONFIG_FILE`,
+`DSCPLN_CONFIG`, `BACKUPCTL_CONFIG_FILE`, `DSCPLN_STATE_FILE`) and a Docker
+Compose mount example. Keep the repo private if it contains credentials, and
+never commit `secrets.json`.
 
 ## Screenshots
 
@@ -33,15 +49,14 @@ All images use synthetic demo data — regenerate them with
 | ![D$CPLN portal](docs/screenshots/portal.png) | ![Balance dashboard](docs/screenshots/balance-dashboard.png) |
 | ![File Pipelines](docs/screenshots/file-pipelines.png) | ![WhatsApp TXT](docs/screenshots/whatsapp.png) |
 | ![Task Runner](docs/screenshots/task-runner.png) | ![Contacts + Calendar settings](docs/screenshots/contacts-settings.png) |
-| ![Infra Compose State](docs/screenshots/compose.png) | ![YTMusic Downloads](docs/screenshots/ytmusic.png) |
-| ![Balance insights](docs/screenshots/balance-insights.png) | ![Balance forecasts](docs/screenshots/balance-forecasts.png) |
-| ![Contacts + Calendar](docs/screenshots/contacts.png) | |
+| ![YTMusic Downloads](docs/screenshots/ytmusic.png) | ![Balance insights](docs/screenshots/balance-insights.png) |
+| ![Balance forecasts](docs/screenshots/balance-forecasts.png) | ![Contacts + Calendar](docs/screenshots/contacts.png) |
 
 ## Run with Docker
 
 Images are published as `imranrdev/dscpln-<app>` (portal, balance, file-pipelines,
-watxt, task-runner, contacts, compose, ytmusic). `docker-compose.example.yaml`
-shows the expected volumes and ports for a few of them:
+watxt, task-runner, contacts, ytmusic). `docker-compose.example.yaml` shows the
+expected volumes and ports for a few of them:
 
 ```sh
 docker run -p 8080:8080 imranrdev/dscpln-portal:latest

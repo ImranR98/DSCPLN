@@ -4,10 +4,10 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { extractTransactions, parseArgs, reportedTransactions, run } from '../examples/wealthsimple-import.mjs';
+import { extractTransactions, parseArgs, reportedTransactions, run } from '../examples/balance-import.mjs';
 
 const SAMPLE = [
-  '02:16:20 Logging in to Wealthsimple',
+  '02:16:20 Logging in to the source',
   '<a bunch of other output that should not be relevant>',
   '02:16:28 Cutoff 2026-08-31 reached, stopping',
   '02:16:28 Scraped 117 transactions',
@@ -131,7 +131,7 @@ test('preserves the Notes column in the check and import payloads', async () => 
   try {
     const text = [
       '2026-09-01\tOld\t1\t\tCAD\tInterest\t',
-      '2026-09-02\tSalary\t1234.56\t\tCAD\tJob\tImported from Wealthsimple',
+      '2026-09-02\tSalary\t1234.56\t\tCAD\tJob\tImported from scraper',
     ].join('\n');
     const code = await run({
       input: writeInput(text),
@@ -140,8 +140,8 @@ test('preserves the Notes column in the check and import payloads', async () => 
       log: (line) => logs.push(line),
     });
     assert.equal(code, 0);
-    assert.match(stub.requests[0].body.text, /Imported from Wealthsimple$/m);
-    assert.match(stub.requests[1].body.text, /Imported from Wealthsimple$/m);
+    assert.match(stub.requests[0].body.text, /Imported from scraper$/m);
+    assert.match(stub.requests[1].body.text, /Imported from scraper$/m);
     assert.equal(logs.at(-1), 'Imported 1 new transaction; 1 already in the workbook.');
   } finally {
     await stub.close();

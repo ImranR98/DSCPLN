@@ -23,14 +23,23 @@ import {
 } from '@dscpln/ui-kit'
 import FunctionCard from './FunctionCard.jsx'
 
-const FUNCTIONS = [
-  { path: 'balance', icon: DollarSign, name: 'Balance XLSX', description: 'Budget dashboard backed by the live workbook', kind: 'balance' },
-  { path: 'pipelines', icon: Workflow, name: 'File Pipelines', description: 'Scheduled folder pipelines: standardize, copy, archive', kind: 'pipelines' },
-  { path: 'watxt', icon: MessageSquareText, name: 'WhatsApp TXT', description: 'Browse, import and merge WhatsApp exports', kind: 'watxt' },
-  { path: 'tasks', icon: Wrench, name: 'Task Runner', description: 'Config-driven backup and export workflows', kind: 'tasks' },
-  { path: 'contacts', icon: Contact, name: 'Contacts + Calendar', description: 'Scheduled Nextcloud exports', kind: 'scheduled' },
-  { path: 'state-backup', icon: Boxes, name: 'State Backups', description: 'Scheduled restic backups of app data and Compose state', kind: 'scheduled' },
-  { path: 'ytmusic', icon: Music, name: 'YTMusic Downloads', description: 'Scheduled YouTube Music library downloads', kind: 'scheduled' },
+const ICONS = {
+  boxes: Boxes,
+  contact: Contact,
+  dollar: DollarSign,
+  message: MessageSquareText,
+  music: Music,
+  workflow: Workflow,
+  wrench: Wrench,
+}
+
+const DEFAULT_FUNCTIONS = [
+  { path: 'balance', icon: 'dollar', name: 'Balance XLSX', description: 'Budget dashboard backed by the live workbook', kind: 'balance' },
+  { path: 'pipelines', icon: 'workflow', name: 'File Pipelines', description: 'Scheduled folder pipelines: standardize, copy, archive', kind: 'pipelines' },
+  { path: 'watxt', icon: 'message', name: 'WhatsApp TXT', description: 'Browse, import and merge WhatsApp exports', kind: 'watxt' },
+  { path: 'tasks', icon: 'wrench', name: 'Task Runner', description: 'Config-driven scheduled and on-demand workflows', kind: 'tasks' },
+  { path: 'contacts', icon: 'contact', name: 'Contacts + Calendar', description: 'Scheduled Nextcloud exports', kind: 'scheduled' },
+  { path: 'ytmusic', icon: 'music', name: 'YTMusic Downloads', description: 'Scheduled YouTube Music library downloads', kind: 'scheduled' },
 ]
 
 const EMPTY = { loaded: false, online: true, detail: '', tone: '', next: '', nextTone: '', issue: false }
@@ -139,10 +148,12 @@ const DETAILS = {
   balance: balanceDetail,
 }
 
-const emptyCards = () => Object.fromEntries(FUNCTIONS.map((fn) => [fn.path, { ...EMPTY }]))
+const withIcons = (list) => list.map((fn) => ({ ...fn, icon: ICONS[fn.icon] ?? Boxes }))
+const emptyCards = (list = DEFAULT_FUNCTIONS) => Object.fromEntries(list.map((fn) => [fn.path, { ...EMPTY }]))
 
 export default function App() {
-  const [cards, setCards] = useState(emptyCards)
+  const [functions, setFunctions] = useState(() => withIcons(DEFAULT_FUNCTIONS))
+  const [cards, setCards] = useState(() => emptyCards())
   const [checkedAt, setCheckedAt] = useState(null)
   const [busy, setBusy] = useState(false)
   const settingsRef = useRef(null)
@@ -194,17 +205,17 @@ export default function App() {
     </section>
   )
 
-  const refresh = async () => {
+  const refresh = async (list = functions) => {
     setBusy(true)
     const next = {}
     await Promise.all(
-      FUNCTIONS.map(async (fn) => {
+      list.map(async (fn) => {
         const online = await ping(`${fn.path}/api/health`)
         const previous = cards[fn.path]
         let card = { ...EMPTY, loaded: true, online }
         if (online) {
           try {
-            card = { ...card, ...(await DETAILS[fn.kind](fn)) }
+            card = { ...card, ...(await (DETAILS[fn.kind] ?? scheduledDetail)(fn)) }
           } catch {
             // detail is best-effort; the card still links to the app
           }
@@ -227,9 +238,28 @@ export default function App() {
   }
 
   useEffect(() => {
-    refresh()
-    const timer = setInterval(refresh, 60_000)
-    return () => clearInterval(timer)
+    let cancelled = false
+    let currentList = withIcons(DEFAULT_FUNCTIONS)
+    const loadFunctions = async () => {
+      let list = DEFAULT_FUNCTIONS
+      try {
+        const data = await getJson('api/functions')
+        if (Array.isArray(data.functions) && data.functions.length) list = data.functions
+      } catch {
+        // Keep the built-in list when the portal has no config yet.
+      }
+      if (cancelled) return
+      currentList = withIcons(list)
+      setFunctions(currentList)
+      setCards(emptyCards(currentList))
+      refresh(currentList)
+    }
+    loadFunctions()
+    const timer = setInterval(() => refresh(currentList), 60_000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -260,7 +290,7 @@ export default function App() {
 
       <main>
         <div className="portal-grid">
-          {FUNCTIONS.map((fn) => (
+          {functions.map((fn) => (
             <FunctionCard key={fn.path} fn={fn} card={cards[fn.path]} />
           ))}
         </div>

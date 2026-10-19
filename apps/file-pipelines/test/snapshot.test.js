@@ -93,7 +93,7 @@ test("snapshot: the generated command copies entries with subdir/suffix/marker",
 test("snapshot: several sources become one Job with per-source mounts", () => {
   const manifest = buildJobManifest({
     name: "fp-wine-sync-abc",
-    node: "bigpc",
+    node: "desktop",
     image: "img:latest",
     sourcePaths: ["/srv/synced", "/srv/unsynced"],
     command: buildSnapshotCommand(snapshotFolder(), { sourcePaths: ["/source-0", "/source-1"], destination: "/staging/out" }),
@@ -113,7 +113,7 @@ test("snapshot: several sources become one Job with per-source mounts", () => {
 test("snapshot: single source still mounts at /source and a command override wins", () => {
   const manifest = buildJobManifest({
     name: "fp-abc",
-    node: "bigpc",
+    node: "desktop",
     image: "img",
     sourcePath: "/srv/games",
     command: "bash /source/run.sh",
@@ -165,7 +165,7 @@ test("snapshot: guard rails (dry run, unknown folder, non-snapshot)", async () =
 test("buildJobManifest: optional SELinux options land on the Job pod", () => {
   const manifest = buildJobManifest({
     name: "fp-wine-sync-abc",
-    node: "bigpc",
+    node: "desktop",
     image: "img",
     sourcePath: "/home/me/Games/Synced",
     command: "true",
@@ -185,11 +185,11 @@ test("copyTree: merges over an existing tree and preserves symlinks", async () =
   await fsp.mkdir(path.join(dst, "Prefix"), { recursive: true });
   await fsp.writeFile(path.join(src, "Prefix", "save.dat"), "new");
   await fsp.writeFile(path.join(dst, "Prefix", "old.dat"), "keep");
-  await fsp.symlink("/home/imranr/Music", path.join(src, "Prefix", "Music"));
-  await fsp.symlink("/home/imranr/Music", path.join(dst, "Prefix", "Music"));
+  await fsp.symlink("/home/user/Music", path.join(src, "Prefix", "Music"));
+  await fsp.symlink("/home/user/Music", path.join(dst, "Prefix", "Music"));
   await copyTree(src, dst);
   assert.equal(await fsp.readFile(path.join(dst, "Prefix", "save.dat"), "utf8"), "new");
   assert.equal(await fsp.readFile(path.join(dst, "Prefix", "old.dat"), "utf8"), "keep");
-  assert.equal(await fsp.readlink(path.join(dst, "Prefix", "Music")), "/home/imranr/Music");
+  assert.equal(await fsp.readlink(path.join(dst, "Prefix", "Music")), "/home/user/Music");
   await fsp.rm(root, { recursive: true, force: true });
 });

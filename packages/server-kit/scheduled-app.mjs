@@ -61,8 +61,10 @@ export function scheduledApp(options) {
     host = process.env.HOST ?? '0.0.0.0',
   } = options
 
-  const configFile = path.join(dataDir, 'config.json')
-  const stateFile = path.join(dataDir, 'state.json')
+  // Config and state may live apart: a mounted config repo can hold the
+  // declarative config while the app's private volume keeps run state/logs.
+  const configFile = options.configFile ?? process.env.DSCPLN_CONFIG_FILE ?? path.join(dataDir, 'config.json')
+  const stateFile = options.stateFile ?? process.env.DSCPLN_STATE_FILE ?? path.join(dataDir, 'state.json')
 
   const config = configStore(configFile, { defaults, normalize, validate, secrets })
   const state = stateStore(stateFile)

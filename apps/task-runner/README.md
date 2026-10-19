@@ -51,11 +51,45 @@ Any number of tasks run in parallel; tasks sharing a `serial_key` are queued
 and run one at a time. Runs interrupted by a server crash show as
 "Interrupted" instead of a false success.
 
+## Scheduled tasks
+
+Add `schedule: {enabled, days, at, catchUp}` to a task and the Task Runner
+becomes its scheduler: `days` uses JS weekdays (0 = Sunday, empty = daily),
+`at` is local `HH:MM`, and `catchUp` runs an occurrence missed while the
+instance was down. Schedules persist their last handled occurrence and missed
+count under `BACKUPCTL_STATE_DIR/schedules/`; the card shows the next run and
+the portal sees the task through `/api/tasks`.
+
+Scheduled runs are unattended, so the loader rejects `uploads`, `prompts`,
+`require`, `browser` and `commit_dir` on scheduled tasks. A task that is
+already running, unavailable (host/root/check), or blocked by its `serial_key`
+is counted as missed rather than queued. Set `BACKUPCTL_SCHEDULES=0` on a
+second instance so only one machine fires shared schedules. Notifications go
+through the portal (`DSCPLN_PORTAL_URL`) with `notify: never|errors|always`
+(default `errors` for scheduled tasks) and `notify_name` for the title.
+
+Secrets belong in `env` or in config tokens listed under `secrets`; both are
+redacted from the logged command and output. Prefer `env` over argv:
+
+```js
+{
+  name: 'Nightly export',
+  state_dir: '{{maindir}}/.tasks',
+  schedule: { enabled: true, days: [], at: '02:00', catchUp: true },
+  secrets: ['api_token'],
+  env: { API_TOKEN: '{{api_token}}' },
+  commands: [`backup-tool --token "$API_TOKEN" '{{maindir}}/export'`],
+  summary_last_line: true,
+  notify: 'errors',
+}
+```
+
 ## Configuration
 
 Copy `config.example.mjs` to `config.mjs` (gitignored) and edit it. It exports
 machine values plus a `groups:` array; groups and tasks render in array order
-and a group's `defaults` merge under its tasks.
+and a group's `defaults` merge under its tasks. `secrets` is a top-level list
+of config tokens that should never appear in a logged command/output.
 
 `{{token}}` placeholders are resolved from the file's values at run time
 (values may reference other tokens; resolution loops until stable). Built-in
@@ -71,7 +105,8 @@ mount them into the container and reference them from the config (for example
 
 Common: `name`, `note` (help text in the drop zone), `state_dir` (required),
 `serial_key` (tasks sharing a key run one at a time), `host` (`any`, or the
-instance name), `prompts`, `export_url`.
+instance name), `prompts`, `export_url`, `schedule`, `env`, `secrets`,
+`notify` (`never|errors|always`) and `notify_name`.
 
 Runner: exactly one of `commands` (bash string or list), `script:`, `move:`,
 or `ingest:`. Optional: `cwd`, `uploads: true` + `glob` (drop zone; a string
@@ -119,25 +154,27 @@ container the tools default it under `/home/seluser/.config`, which a volume
 can persist). Runs that drive the browser use a shared `serial_key` so only
 one session is active at a time.
 
-### Wealthsimple import
+### Balance import
 
-`examples/wealthsimple-import.mjs` bridges a Wealthsimple scraper to the
-Balance XLSX app: it extracts the scraper's trailing tab-separated transaction
-lines, asks the Balance XLSX external API which ones the workbook already has,
-and imports only the missing ones. A scrape where **nothing** matched the
-workbook warns that the scrape may not reach back far enough, prints the date
-to check manually from, and (when a relay is configured) pushes that warning.
+`examples/balance-import.mjs` bridges any scraper that prints tab-separated
+transaction rows to the Balance XLSX app: it extracts the trailing rows, asks
+the Balance XLSX external API which ones the workbook already has, and imports
+only the missing ones. A scrape where **nothing** matched the workbook warns
+that the scrape may not reach back far enough, prints the date to check
+manually from, and (when a relay is configured) pushes that warning.
 
 ```js
 {
-  name: 'Wealthsimple import',
+  name: 'Balance import',
   state_dir: '{{maindir}}/.tasks',
-  serial_key: 'wealthsimple',
+  serial_key: 'balance-import',
   browser: true,
+  secrets: ['balance_token'],
+  env: { BALANCE_TOKEN: '{{balance_token}}' },
   commands: [
-    `wealthsimpleton > "$TMPDIR/wealthsimple.txt"`,
-    `node '{{scriptroot}}/wealthsimple-import.mjs' --input "$TMPDIR/wealthsimple.txt" ` +
-      `--balance-url '{{balance_url}}' --balance-token '{{balance_token}}' --notify-url '{{portal_url}}'`,
+    `your-scraper > "$TMPDIR/transactions.txt"`,
+    `node '{{scriptroot}}/balance-import.mjs' --input "$TMPDIR/transactions.txt" ` +
+      `--balance-url '{{balance_url}}' --balance-token "$BALANCE_TOKEN" --notify-url '{{portal_url}}'`,
   ],
   summary_last_line: true,
 }
@@ -145,19 +182,21 @@ to check manually from, and (when a relay is configured) pushes that warning.
 
 - `--input` — the scraper output (a file, or `-` for stdin).
 - The tool ships with the image; reference it as
-  `'{{repo_dir}}/apps/task-runner/examples/wealthsimple-import.mjs'` unless
-  your `scriptroot` already points at the bundled `examples/` folder.
+  `'{{repo_dir}}/apps/task-runner/examples/balance-import.mjs'` unless your
+  `scriptroot` already points at the bundled `examples/` folder.
 - `--balance-url` / `--balance-token` — the Balance XLSX external API base
-  path (`/balance`) and the bearer token from its Settings page. Keep the
-  token in your gitignored `config.mjs` only.
-- `--notify-url` (optional) — the portal relay (`http://portal:8080`); the
-  zero-duplicate warning is pushed there (priority high, `warning` tag).
+  path (`/balance`) and the bearer token from its Settings page. Pass it via
+  `env` (or the `BALANCE_TOKEN` variable) and list it in `secrets` so it is
+  redacted from logs, rather than putting it directly in `commands`.
+- `--notify-url` (optional) — the portal relay (`http://portal:8080`) or
+  `DSCPLN_PORTAL_URL`; the zero-duplicate warning is pushed there (priority
+  high, `warning` tag).
 - `--after <regex>` (optional) — only consider lines after the last line
   matching the regex, e.g. `--after 'Scraped \d+ transactions'`; by default
   every import-shaped TSV line is taken.
 - `--dry-run` — check and report without writing anything.
 
-The scraper's `Scraped N transactions` report is pre-filter (it counts
+The scraper's optional `Scraped N transactions` report is pre-filter (it counts
 everything it saw, not just the printed rows), so fewer extracted lines than N
 is normal; more than N fails the run. A fully-overlapping scrape reports
 "Nothing new"; a partial overlap reports the imported/skipped counts.
@@ -169,8 +208,8 @@ is normal; more than N fails the run. A fully-overlapping scrape reports
    `age`, `jq`, `unzip`/`tar` and `wget`, and the app tree is writable, so a
    task can    `apt-get`/`pip`/`npm` install more at run time. Give it a shebang
    and the executable bit. A bundled example lives in
-   `apps/task-runner/examples/hello-tool.sh`; the Wealthsimple import tool
-   (`examples/wealthsimple-import.mjs`, see above) is a fuller Node one.
+   `apps/task-runner/examples/hello-tool.sh`; the Balance import tool
+   (`examples/balance-import.mjs`, see above) is a fuller Node one.
 
 2. **Make it visible to the app.**
    - Local runs: keep it anywhere on disk and reference it by absolute path.
@@ -244,7 +283,8 @@ Config loading/tokens live in `config-loader.mjs`/`template.mjs`, run state in
 orchestration in `server.mjs` (config loads once at boot; restart to reload).
 
 **API**: `GET /api/tasks` (groups in config order, availability + reason,
-last-run state or *Interrupted*, `running`/`live`/`pill`, `missing_config`);
+last-run state or *Interrupted*, `running`/`live`/`pill`, `schedule`,
+`next_run`, `schedule_missed`, `last_scheduled_run`, `missing_config`);
 `POST /api/detect?name=` (most-specific pattern wins; ties are `ambiguous`);
 `POST /api/upload/{task}?name=` (body streamed to a `.part` file, renamed on
 completion after glob validation); `POST /api/run/{task}` (JSON `extra`; 409
@@ -275,6 +315,8 @@ only) gives tools that refuse non-TTY stdin a pseudo-terminal when
   state files never churn backup repos.
 - `running.json` (in `BACKUPCTL_STATE_DIR`, default `~/.backupctl`) marks an
   in-flight task; after a crash it shows as `Interrupted`.
+- `schedules/<task>.json` (same directory) stores the last scheduled occurrence
+  and missed count for catch-up across restarts.
 - `staging/<task>/` is transient scratch space, cleared when a run ends; run
   commands get a per-run `TMPDIR` (under `BACKUPCTL_TMP_DIR`, default
   `~/Downloads/backupctl-tmp`) so large extractions don't fill `/tmp`.
@@ -303,7 +345,8 @@ root); `npm test` builds first.
 
 - Node.js 22+ (npm dependency: `express` only)
 - System tools tasks commonly use: `bash`, `rsync`, `ssh`, `unzip`/`tar`,
-  `git`, `age`, `jq`, `wget`, ImageMagick — whatever your tasks need
+  `git`, `age`, `jq`, `wget`, `restic`, `kubectl`, ImageMagick — whatever your
+  tasks need. The image ships restic and kubectl for scheduled backup tasks.
 - `python3` (stdlib only) for `lib.sh encrypt` via `pty_runner.py`
 
 ## Structure

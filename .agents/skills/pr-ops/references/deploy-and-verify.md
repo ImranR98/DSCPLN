@@ -10,13 +10,13 @@ Determine impact from `gh pr diff <n> --name-only`, not from the lockfile alone:
 
 | Changed | Rebuild |
 |---|---|
-| `docker/base.Dockerfile`, `packages/*` (`server-kit`, `ui-kit`, `test-kit`) | all 8 apps (`scripts/build-all.sh` with no app args) |
+| `docker/base.Dockerfile`, `packages/*` (`server-kit`, `ui-kit`, `test-kit`) | all 7 apps (`scripts/build-all.sh` with no app args) |
 | `apps/<app>/package.json` (deps or devDeps), `apps/<app>/ui/**`, `apps/<app>/Dockerfile` | that app |
 | `package-lock.json` | follow the manifest that changed (the rows above) |
 | root `package.json` devDeps only (eslint, playwright-core, …), `scripts/`, `docs/`, `.github/`, tests | nothing — never ships |
 
 Apps: `portal balance-xlsx file-pipelines whatsapp-txt task-runner
-contacts-calendar compose-state ytmusic` (`scripts/images.sh`).
+contacts-calendar ytmusic` (`scripts/images.sh`).
 
 ## Rebuild & pin
 

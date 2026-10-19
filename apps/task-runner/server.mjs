@@ -15,7 +15,16 @@ import { spawn, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import express from 'express';
-import { authFromEnv, createApp as createKitApp, isAuthorized } from '@dscpln/server-kit';
+import {
+  authFromEnv,
+  clickFor,
+  createApp as createKitApp,
+  isAuthorized,
+  Notifier,
+  normalizeSpec,
+  occurrenceAfter,
+  Scheduler,
+} from '@dscpln/server-kit';
 import {
   ConfigError,
   ConfigMissingError,
@@ -34,10 +43,12 @@ import {
 export { attachBrowserWebSocket };
 import {
   clearRunning,
+  loadScheduleState,
   loadTaskState,
   markRunning,
   runningMarker,
   saveTaskState,
+  scheduleStore,
   slugify,
   stagingDir,
   tmpRoot,
@@ -54,6 +65,32 @@ export * from './util.mjs';
 export * from './runner.mjs';
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024 * 1024;
+
+// Schedules are off by default on a second instance
+// (BACKUPCTL_SCHEDULES=0); the instance that owns the cron-like work sets 1.
+const SCHEDULES_ENABLED = process.env.BACKUPCTL_SCHEDULES !== '0';
+const SCHEDULERS = new Map();
+const NOTIFY_RELAY = String(process.env.DSCPLN_PORTAL_URL ?? '').trim();
+
+async function notifyTask(task, ok, summary) {
+  const mode = task.notify ?? 'never';
+  if (mode === 'never' || !NOTIFY_RELAY) return;
+  if (ok && mode !== 'always') return;
+  try {
+    const notifier = new Notifier(
+      {
+        app: task.notify_name ?? task.name,
+        relayUrl: NOTIFY_RELAY,
+        notifySuccess: true,
+        click: clickFor(process.env.BASE_PATH ?? ''),
+      },
+      (line) => console.error(line),
+    );
+    await notifier.notifyResult({ ok, app: task.notify_name ?? task.name, summary });
+  } catch (err) {
+    console.error(`notification failed: ${err.message}`);
+  }
+}
 
 function clearStaging(ctx) {
   const d = stagingDir(ctx.task.name);
@@ -79,11 +116,21 @@ export async function runCommands(ctx) {
     uploads: shellSafe(ctx.files.map((f) => shellQuote(String(f))).join(' ')),
     ...Object.fromEntries(Object.entries(ctx.extra).map(([k, v]) => [k, String(v)])),
   };
-  const redact = Object.values(ctx.extra).filter((v) => v).map(String);
+  const secretKeys = [...(ctx.local?.secrets ?? []), ...(task.secrets ?? [])];
+  const secretValues = secretKeys
+    .map((key) => resolve(`{{${key}}}`, ctx.local ?? {}))
+    .filter((value) => value !== undefined && !/^\{\{[^}]+\}\}$/.test(String(value)))
+    .map(String);
+  const redact = [...new Set([...Object.values(ctx.extra).filter((v) => v).map(String), ...secretValues])];
   const output = [];
   const cwd = expand(resolve(task.cwd ?? '.', ctx.local));
   const groups = ctx.groups ?? new Set();
   const env = { TMPDIR: ctx.tmpdir };
+  // Per-task environment values are config tokens (not prompt inputs). Keep
+  // secrets in the environment instead of argv so the logged command is clean.
+  for (const [key, value] of Object.entries(task.env ?? {})) {
+    env[key] = String(resolve(value, ctx.local ?? {}));
+  }
   const cmds = Array.isArray(task.commands) ? task.commands : [task.commands];
   for (const cmd of cmds) {
     const resolved = resolve(cmd, ctx.local, extra);
@@ -272,7 +319,7 @@ export function isQueued(taskName, serialKey) {
   return Boolean(serialKey && (SERIAL_QUEUES.get(serialKey) ?? []).some((q) => q.taskName === taskName));
 }
 
-function startRun(taskName, payload = {}) {
+function startRun(taskName, payload = {}, trigger = 'manual') {
   const task = TASK_MAP.get(taskName);
   const staging = stagingDir(taskName);
   const files = fs
@@ -286,6 +333,7 @@ function startRun(taskName, payload = {}) {
     read: 0,
     cancelled: false,
     groups: new Set(),
+    trigger,
     ts: Date.now() / 1000,
     tmpdir: path.join(tmpRoot(), `${slugify(taskName)}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`),
   };
@@ -304,10 +352,56 @@ function startRun(taskName, payload = {}) {
     } finally {
       RUNS.delete(taskName);
       clearRunning(taskName);
-      DONE.push({ task: taskName, ok, summary, paste: Boolean(task.capture) });
+      DONE.push({ task: taskName, ok, summary, paste: Boolean(task.capture), trigger });
       drainSerialQueue(task.serial_key);
+      notifyTask(task, ok, summary).catch((err) => console.error(`notification failed: ${err.message}`));
     }
   })().catch((e) => console.error('worker error:', e));
+}
+
+/* Scheduler-side entry point: never queues behind a serial key, and never
+ * throws into the Scheduler tick. A busy/unavailable task counts as missed. */
+function runScheduledTask(task) {
+  if (RUNS.has(task.name) || isQueued(task.name, task.serial_key) || serialKeyHeld(task.serial_key)) {
+    console.warn(`[schedule] ${task.name} skipped: already running`);
+    return;
+  }
+  const [avail, reason] = availability(task, LOCAL);
+  if (!avail) {
+    console.warn(`[schedule] ${task.name} skipped: ${reason}`);
+    scheduleStore(task.name).markMissed();
+    return;
+  }
+  startRun(task.name, {}, 'schedule');
+}
+
+export function startSchedulers() {
+  if (!SCHEDULES_ENABLED) return [];
+  const started = [];
+  for (const task of TASK_LIST) {
+    const schedule = task.schedule ? normalizeSpec(task.schedule) : null;
+    if (!schedule?.enabled) continue;
+    if (task.host !== 'any' && task.host !== instanceHost()) continue;
+    const store = scheduleStore(task.name);
+    const scheduler = new Scheduler({
+      getSpec: () => task.schedule,
+      onDue: () => runScheduledTask(task),
+      isBusy: () => RUNS.has(task.name) || isQueued(task.name, task.serial_key) || serialKeyHeld(task.serial_key),
+      onMissed: () => store.markMissed(),
+      store,
+      log: (line) => console.log(`[schedule] ${task.name}: ${line}`),
+    });
+    scheduler.start();
+    SCHEDULERS.set(task.name, scheduler);
+    started.push(task.name);
+  }
+  if (started.length) console.log(`Schedules enabled: ${started.join(', ')}`);
+  return started;
+}
+
+export function stopSchedulers() {
+  for (const scheduler of SCHEDULERS.values()) scheduler.stop();
+  SCHEDULERS.clear();
 }
 
 export function taskJson(t) {
@@ -344,6 +438,8 @@ export function taskJson(t) {
   const run = RUNS.get(t.name);
   const running = Boolean(run);
   const queued = isQueued(t.name, t.serial_key);
+  const schedule = t.schedule ? normalizeSpec(t.schedule) : null;
+  const scheduleState = schedule ? loadScheduleState(t.name) : null;
   return {
     name: t.name,
     group: t.group,
@@ -361,6 +457,11 @@ export function taskJson(t) {
     running,
     started: running ? run.ts : null,
     live: running && run.log.length ? run.log.at(-1).slice(0, 120) : '',
+    schedule,
+    next_run: schedule?.enabled ? occurrenceAfter(schedule, new Date()) : null,
+    schedule_missed: scheduleState?.missed ?? 0,
+    last_scheduled_run: scheduleState?.lastScheduledRun ?? null,
+    notify: t.notify ?? 'never',
   };
 }
 
@@ -372,7 +473,13 @@ export function createApp(options = {}) {
     basePath,
     staticDir: path.join(REPO_DIR, 'static'),
     jsonBody: false, // /api/upload streams raw bytes, JSON-typed uploads included
-    healthExtra: () => ({ tasks: TASK_LIST.length, missingConfig: MISSING_CONFIG, browser: Boolean(browserRemote) }),
+    healthExtra: () => ({
+      tasks: TASK_LIST.length,
+      missingConfig: MISSING_CONFIG,
+      browser: Boolean(browserRemote),
+      schedules: SCHEDULERS.size,
+      schedulesEnabled: SCHEDULES_ENABLED,
+    }),
     routes: (router) => {
       // Login-browser viewer (the Selenium sidecar's noVNC) on the same origin.
       // The kit mounts this router at basePath, so the path is base-relative;
@@ -568,5 +675,6 @@ export function main() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   await boot();
+  startSchedulers();
   main();
 }

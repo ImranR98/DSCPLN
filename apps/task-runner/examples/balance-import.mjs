@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Wealthsimple scrape → Balance XLSX import.
+// Scraper output → Balance XLSX import.
 //
 // Extracts the tab-separated transaction lines a scraper prints at the end of
 // its output, asks the Balance XLSX external API which of them are already in
@@ -7,17 +7,18 @@
 // when none of the scraped lines matched, the scrape probably did not reach
 // back far enough to overlap with what was imported last time, so the summary
 // says which date to check manually from. That warning is also pushed over
-// the portal relay (ntfy) when --notify-url is given.
+// the portal relay (ntfy) when --notify-url (or DSCPLN_PORTAL_URL) is set.
 //
-//   node wealthsimple-import.mjs --input scrape.txt \
+//   node balance-import.mjs --input scrape.txt \
 //     --balance-url http://balance-xlsx:3300/balance \
-//     --balance-token <token> \
+//     --balance-token "$BALANCE_TOKEN" \
 //     [--after <regex>] [--pattern <regex>] [--notify-url <portal>] \
 //     [--click <url>] [--dry-run]
 //
-// The scraper's "Scraped N transactions" report is pre-filter (it counts
-// everything it saw, not just the lines it prints), so extracted lines may be
-// fewer than N; more than N is treated as a parsing failure.
+// The token may also come from BALANCE_TOKEN. The scraper's optional
+// "Scraped N transactions" report is pre-filter (it counts everything it saw,
+// not just the lines it prints), so extracted lines may be fewer than N;
+// more than N is treated as a parsing failure.
 
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -25,15 +26,15 @@ import { pathToFileURL } from 'node:url';
 const DEFAULT_PATTERN = '^\\d{4}-\\d{2}-\\d{2}\\t';
 const COUNT_PATTERN = /Scraped\s+(\d+)\s+transactions?\b/gi;
 
-const USAGE = `Usage: wealthsimple-import.mjs --input <file|-> --balance-url <url> --balance-token <token>
+const USAGE = `Usage: balance-import.mjs --input <file|-> --balance-url <url> --balance-token <token>
          [--after <regex>] [--pattern <regex>] [--notify-url <portal-url>] [--click <url>] [--dry-run]
 
   --input          scraper output file, or - for stdin (required)
   --balance-url    Balance XLSX base URL, e.g. http://balance-xlsx:3300/balance (required)
-  --balance-token  external API token from the Balance XLSX settings page (required)
+  --balance-token  external API token from Balance XLSX Settings, or set BALANCE_TOKEN
   --after          only consider lines after the last line matching this regex
   --pattern        transaction-line regex (default ${DEFAULT_PATTERN})
-  --notify-url     portal relay base URL; a zero-duplicate warning is pushed there
+  --notify-url     portal relay base URL, or DSCPLN_PORTAL_URL; a zero-duplicate warning is pushed there
   --click          URL opened by the notification (optional)
   --dry-run        report what would be imported without writing anything
 
@@ -150,10 +151,10 @@ const sendNotification = async (options, message) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message,
-        title: 'D$CPLN - Wealthsimple import needs a check',
+        title: 'D$CPLN - Balance import needs a check',
         priority: 'high',
         tags: ['warning'],
-        app: 'Wealthsimple Import',
+        app: 'Balance Import',
         click: /^https?:\/\//i.test(options.click ?? '') ? options.click : undefined,
       }),
       signal: AbortSignal.timeout(10_000),
@@ -170,10 +171,11 @@ export async function run(options) {
   if (!/^https?:\/\//i.test(baseUrl)) {
     throw new Error('--balance-url must start with http:// or https://');
   }
-  const token = String(options.balanceToken ?? '');
+  const token = String(options.balanceToken ?? process.env.BALANCE_TOKEN ?? '');
   if (!token) {
-    throw new Error('--balance-token is required');
+    throw new Error('--balance-token (or BALANCE_TOKEN) is required');
   }
+  options.notifyUrl ??= process.env.DSCPLN_PORTAL_URL;
 
   const text = readInput(options.input);
   const candidates = extractTransactions(text, { after: options.after, pattern: options.pattern });

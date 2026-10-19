@@ -4,6 +4,8 @@ Scheduled exports of Nextcloud CalDAV calendars and CardDAV address books.
 Each enabled collection is written to its own file (`.ics` / `.vcf`) in a
 destination folder, optionally committed to git, and replaced atomically.
 
+Configuration can also be mounted from a private `dscpln-config` repo: set `DSCPLN_CONFIG_FILE` to its `apps/contacts-calendar/config.json`; run state stays on the app volume (`DSCPLN_STATE_FILE` for scheduled apps). See `config-template/README.md`.
+
 ## Configuration
 
 | Field | Meaning |

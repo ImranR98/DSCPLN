@@ -11,6 +11,12 @@ const formatElapsed = (seconds) => {
 
 const browserSrc = './browser/?autoconnect=1&resize=scale&reconnect=1&path=websockify'
 
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const scheduleText = (schedule) => {
+  const days = schedule?.days?.length ? schedule.days.map((day) => DAY_NAMES[day] ?? day).join(', ') : 'daily'
+  return `${days} at ${schedule?.at ?? '—'}`
+}
+
 export default function TaskCard({
   task,
   now,
@@ -51,6 +57,14 @@ export default function TaskCard({
 
       {running && task.live ? (
         <div className="card-live">{task.live}</div>
+      ) : null}
+
+      {task.schedule?.enabled ? (
+        <div className="card-note">
+          Scheduled {scheduleText(task.schedule)}
+          {task.next_run ? ` · next ${new Date(task.next_run).toLocaleString()}` : ''}
+          {task.schedule_missed ? ` · ${task.schedule_missed} missed` : ''}
+        </div>
       ) : null}
 
       {isUploading ? (

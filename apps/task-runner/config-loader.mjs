@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { normalizeSpec, specValid } from '@dscpln/server-kit';
 import { shellQuote } from './util.mjs';
 
 export const REPO_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -58,6 +59,51 @@ function shorthandCommands(t) {
   return null;
 }
 
+const NOTIFY_MODES = new Set(['never', 'errors', 'always']);
+
+function validateSecrets(value, label) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((key) => typeof key !== 'string' || !key.trim())) {
+    throw new ConfigError(`${label} must be a list of token names`);
+  }
+  return value.map((key) => key.trim());
+}
+
+function validateEnv(value, label) {
+  if (value === undefined) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ConfigError(`${label} must be an object of environment variables`);
+  }
+  for (const [key, entry] of Object.entries(value)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      throw new ConfigError(`${label}.${key} is not a valid environment variable name`);
+    }
+    if (entry == null || (typeof entry !== 'string' && typeof entry !== 'number' && typeof entry !== 'boolean')) {
+      throw new ConfigError(`${label}.${key} must be a string, number or boolean`);
+    }
+  }
+  return value;
+}
+
+function validateSchedule(task, schedule) {
+  if (schedule === undefined || schedule === null) return null;
+  if (typeof schedule !== 'object' || Array.isArray(schedule)) {
+    throw new ConfigError(`Task '${task.name}': schedule must be an object`);
+  }
+  const normalized = normalizeSpec(schedule);
+  if (!specValid(normalized)) {
+    throw new ConfigError(`Task '${task.name}': schedule needs a valid time (HH:MM)`);
+  }
+  // Scheduled runs are unattended: anything that needs a person at the
+  // keyboard is rejected at load time instead of failing at 04:00.
+  for (const field of ['uploads', 'prompts', 'require', 'browser', 'commit_dir']) {
+    if (task[field]) {
+      throw new ConfigError(`Task '${task.name}': scheduled tasks cannot use '${field}'`);
+    }
+  }
+  return normalized;
+}
+
 export async function loadConfig(configPath = CONFIG_FILE) {
   const p = configPath instanceof URL ? configPath : path.resolve(configPath);
   if (!fs.existsSync(p)) {
@@ -77,6 +123,7 @@ export async function loadConfig(configPath = CONFIG_FILE) {
   delete local.groups;
   local.repo_dir ??= process.env.BACKUPCTL_REPO_DIR ?? findRepoRoot(REPO_DIR);
   local.lib ??= LIB_PATH;
+  local.secrets = validateSecrets(local.secrets, "Config 'secrets'");
   if (!Array.isArray(groups)) throw new ConfigError("Config needs a 'groups' array");
   const tasks = [];
   const groupSeen = new Set();
@@ -102,6 +149,14 @@ export async function loadConfig(configPath = CONFIG_FILE) {
         throw new ConfigError(`Task '${merged.name}': host must be a machine name`);
       }
       merged.host ??= 'any';
+      merged.env = validateEnv(merged.env, `Task '${merged.name}': env`);
+      merged.secrets = validateSecrets(merged.secrets, `Task '${merged.name}': secrets`);
+      merged.notify = merged.notify ?? (merged.schedule ? 'errors' : 'never');
+      if (!NOTIFY_MODES.has(merged.notify)) {
+        throw new ConfigError(`Task '${merged.name}': notify must be never, errors or always`);
+      }
+      merged.notify_name ??= merged.name;
+      merged.schedule = validateSchedule(merged, merged.schedule);
       tasks.push(merged);
     }
   }

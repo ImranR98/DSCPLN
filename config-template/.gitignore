@@ -1,0 +1,2 @@
+# Copy secrets.example.json to secrets.json and keep the real values out of git.
+secrets.json

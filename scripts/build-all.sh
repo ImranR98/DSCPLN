@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # Build and push every D$CPLN app image (or the ones given), print a digest
-# table, and optionally pin the digests into the Infra templates.
+# table, and optionally pin the digests into a deployment repo's templates.
 #
 #   scripts/build-all.sh                 # build all
 #   scripts/build-all.sh ytmusic portal  # build a subset
-#   scripts/build-all.sh --pin           # build all + rewrite Infra templates
+#   scripts/build-all.sh --pin           # build all + rewrite deployment templates
 #
-# REGISTRY/IMAGE_ORG choose where images are pushed (default docker.io/imranrdev);
-# --pin rewrites a deployment repo via INFRA_DIR and refuses a dirty checkout.
+# REGISTRY/IMAGE_ORG choose where images are pushed (default docker.io/imranrdev).
+# --pin needs DEPLOY_DIR (or the legacy INFRA_DIR) and TEMPLATES_DIR (default
+# targets/srv0/k3s-apps/templates) and refuses a dirty checkout.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-INFRA_DIR="${INFRA_DIR:-}"
+DEPLOY_DIR="${DEPLOY_DIR:-${INFRA_DIR:-}}"
+TEMPLATES_DIR="${TEMPLATES_DIR:-targets/srv0/k3s-apps/templates}"
 
 source "$ROOT/scripts/images.sh"
 
@@ -28,12 +30,12 @@ if [ "${#APPS[@]}" -eq 0 ]; then
     APPS=("${ALL_APPS[@]}")
 fi
 
-if [ "$PIN" = 1 ] && [ -z "$INFRA_DIR" ]; then
-    echo "Error: --pin needs INFRA_DIR pointing at your deployment repo" >&2
+if [ "$PIN" = 1 ] && [ -z "$DEPLOY_DIR" ]; then
+    echo "Error: --pin needs DEPLOY_DIR (or INFRA_DIR) pointing at your deployment repo" >&2
     exit 1
 fi
-if [ "$PIN" = 1 ] && [ -n "$(git -C "$INFRA_DIR" status --porcelain 2>/dev/null)" ]; then
-    echo "Error: $INFRA_DIR has uncommitted changes; commit or stash before --pin" >&2
+if [ "$PIN" = 1 ] && [ -n "$(git -C "$DEPLOY_DIR" status --porcelain 2>/dev/null)" ]; then
+    echo "Error: $DEPLOY_DIR has uncommitted changes; commit or stash before --pin" >&2
     exit 1
 fi
 
@@ -58,9 +60,9 @@ done
 
 if [ "$PIN" = 1 ]; then
     echo
-    echo "==> Pinning digests in $INFRA_DIR"
+    echo "==> Pinning digests in $DEPLOY_DIR"
     for app in "${APPS[@]}"; do
-        template="$INFRA_DIR/targets/srv0/k3s-apps/templates/${TEMPLATES[$app]:-}"
+        template="$DEPLOY_DIR/$TEMPLATES_DIR/${TEMPLATES[$app]:-}"
         [ -n "${TEMPLATES[$app]:-}" ] && [ -f "$template" ] || { echo "Error: no template for $app" >&2; exit 1; }
         APP="$app" DIGEST="${DIGESTS[$app]#sha256:}" TEMPLATE="$template" node -e '
             const fs = require("fs");
@@ -76,5 +78,5 @@ if [ "$PIN" = 1 ]; then
             console.log(`pinned ${process.env.APP} -> ${file}`);
         '
     done
-    echo "==> Review and commit the digest changes in $INFRA_DIR, then deploy as usual."
+    echo "==> Review and commit the digest changes in $DEPLOY_DIR, then deploy as usual."
 fi

@@ -1,8 +1,11 @@
 FROM imranrdev/dscpln-base:latest
 
-# Build the UI, then drop the build-time dependencies from the shared base
-# image's workspace install.
-RUN npm run build:ui --workspace dscpln-portal \
+WORKDIR /app
+# The shared base image contains the rest of the monorepo. Add the current
+# portal source so a source/UI change is actually reflected in the image.
+COPY apps/portal ./apps/portal
+RUN npm install --no-audit --no-fund \
+    && npm run build:ui --workspace dscpln-portal \
     && npm prune --omit=dev
 
 ENV NODE_ENV=production

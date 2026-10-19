@@ -5,7 +5,7 @@ import http from 'node:http'
 import { once } from 'node:events'
 import { createPortalApp } from '../server.mjs'
 
-const EXPECTED_LINKS = ['/balance', '/pipelines', '/watxt', '/tasks', '/contacts', '/compose', '/ytmusic']
+const EXPECTED_LINKS = ['/balance', '/pipelines', '/watxt', '/tasks', '/contacts', '/state-backup', '/ytmusic']
 
 async function portalFixture(t) {
   const portal = createPortalApp({ dataDir: tempDir('portal-test-'), log: () => {} })
@@ -243,7 +243,7 @@ test('portal tiles show per-app detail lines', async (t) => {
   const { base } = await portalFixture(t)
   const page = await browser.newPage()
   const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
-  for (const path of ['balance', 'pipelines', 'watxt', 'tasks', 'contacts', 'compose', 'ytmusic']) {
+  for (const path of ['balance', 'pipelines', 'watxt', 'tasks', 'contacts', 'state-backup', 'ytmusic']) {
     await page.route(`**/${path}/api/health`, (route) => route.fulfill(json({ ok: true })))
     await page.route(`**/${path}/api/state`, (route) => route.fulfill(json({ paused: false })))
   }

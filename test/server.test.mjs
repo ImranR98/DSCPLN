@@ -127,6 +127,51 @@ test('serves transactions for a date range and the insights page', async (t) => 
     assert.match(await response.text(), /<title>D\$CPLN ⋅ Balance XLSX — Insights<\/title>/)
 })
 
+test('serves and saves forecast scenario sheets', async (t) => {
+    const { server, baseUrl } = await startServer()
+    t.after(() => new Promise((resolve) => server.close(resolve)))
+
+    let response = await fetch(`${baseUrl}/forecast`)
+    assert.equal(response.status, 200)
+    assert.deepEqual(await response.json(), { scenarios: [], errors: [] })
+
+    const scenario = {
+        name: 'Base plan',
+        currency: 'CAD',
+        asOf: '2026-09-15',
+        horizonMonths: 24,
+        baselineMonths: 6,
+        notes: '',
+        target: { label: 'Savings target', amount: 100000, date: null },
+        accounts: [{ name: 'Chequing', balance: 12000, include: true }],
+        events: [{ date: '2027-01-15', details: 'Plane tickets', kind: 'expense', amount: 2500, notes: '' }],
+        overrides: { income: { Job: 5000 }, expense: {} },
+        excludedCategories: [],
+    }
+    response = await jsonRequest(baseUrl, '/forecast', {
+        upserts: [{ sheetName: null, revision: 0, ...scenario }],
+        deletes: [],
+    }, 'PUT')
+    assert.equal(response.status, 200)
+    const saved = await response.json()
+    assert.equal(saved.scenarios.length, 1)
+    assert.equal(saved.scenarios[0].sheetName, 'Scenario - Base plan')
+    assert.equal(saved.scenarios[0].revision, 1)
+
+    const stale = await jsonRequest(baseUrl, '/forecast', {
+        upserts: [{ ...saved.scenarios[0], sheetName: saved.scenarios[0].sheetName, revision: 0 }],
+        deletes: [],
+    }, 'PUT')
+    assert.equal(stale.status, 409)
+
+    response = await fetch(`${baseUrl}/forecast`)
+    assert.equal((await response.json()).scenarios.length, 1)
+
+    response = await fetch(`${baseUrl}/forecasts`)
+    assert.equal(response.status, 200)
+    assert.match(await response.text(), /<title>D\$CPLN ⋅ Balance XLSX — Forecasts<\/title>/)
+})
+
 test('imports transactions and rejects invalid batches atomically', async (t) => {
     const { server, baseUrl } = await startServer()
     t.after(() => new Promise((resolve) => server.close(resolve)))

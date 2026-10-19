@@ -1,7 +1,7 @@
 {
   "name": "dscpln-balance-xlsx",
   "version": "1.0.0",
-  "description": "Balance XLSX: budget tracker backed by an Excel workbook, with a dashboard, insights, and push notifications",
+  "description": "Balance XLSX: budget tracker backed by an Excel workbook, with a dashboard, insights, forecast scenarios, and push notifications",
   "main": "server.js",
   "workspaces": [],
   "scripts": {

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ChartNoAxesColumn, RefreshCw, SlidersHorizontal, Wrench } from 'lucide-react'
+import { ChartNoAxesColumn, RefreshCw, SlidersHorizontal, TrendingUp, Wrench } from 'lucide-react'
 import { formats, getJson, postJson, startOfDay, toIso, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
 import { moneyFor } from './lib/money.js'
 import { renderMonthly } from './lib/chart.js'
@@ -163,6 +163,9 @@ export default function Dashboard() {
         <div className="app-header__top">
           <h1><a className="app-header__brand" href="/">D<span className="accent">$</span>CPLN</a> <span className="app-header__app">⋅ Balance XLSX</span></h1>
           <div className="app-header__actions">
+            <a role="button" className="outline secondary icon-button" href="forecasts" title="Forecasts" aria-label="Forecasts">
+              <TrendingUp size={16} strokeWidth={1.8} />
+            </a>
             <a role="button" className="outline secondary icon-button" href="insights" title="Insights" aria-label="Insights">
               <ChartNoAxesColumn size={16} strokeWidth={1.8} />
             </a>

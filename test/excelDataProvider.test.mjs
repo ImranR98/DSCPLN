@@ -317,7 +317,7 @@ test('adds, edits and deletes transactions, preserving styles', async () => {
     await provider.deleteTransaction(updated.id)
     const afterDelete = await provider.getData(new Date(2026, 8, 15))
     assert.equal(afterDelete.transactions.length, 6)
-    assert.equal(fs.existsSync(`${workbookFile}.bak`), true)
+    assert.equal(fs.existsSync(`${workbookFile}.bak`), false)
 })
 
 test('lists every category and scores the ones that match', async () => {

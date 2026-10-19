@@ -81,6 +81,7 @@ export async function handleReview(ctx, method, pathname) {
     const result = await action(daemon.ctx, folder, {
       chat: String(body.chat ?? ""),
       date: String(body.date ?? ""),
+      file: body.file == null ? undefined : String(body.file),
     });
     if (result?.ok === false && result.busy) {
       json(res, 409, result);

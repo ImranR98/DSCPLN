@@ -36,7 +36,8 @@ export function folderStats(folder) {
 
 export function folderContext(folder) {
   if (folder.method === 'voicenotes') {
-    const parts = ['approval only', `settle ${formatDuration(folder.settleSeconds)}`]
+    const grouped = folder.concat !== false && Boolean(folder.datePattern)
+    const parts = ['approval only', grouped ? 'grouped by date' : 'per-file standardize', `settle ${formatDuration(folder.settleSeconds)}`]
     if (folder.datePattern) parts.push(folder.datePattern)
     return parts.join(' · ')
   }
@@ -66,6 +67,18 @@ export function sortedFiles(folder) {
 // Groups pending/errored voicenote clips per chat and day, mirroring the
 // server's grouping so the review dialog can offer "Process selected".
 export function reviewGroups(folder) {
+  if (folder.method === 'voicenotes' && (folder.concat === false || !folder.datePattern)) {
+    return folder.files
+      .filter((file) => file.status === 'pending' || file.status === 'error')
+      .map((file) => ({
+        key: `file\u0000${file.name}`,
+        file: file.name,
+        chat: null,
+        date: null,
+        files: [file.name],
+        bytes: file.size || 0,
+      }))
+  }
   const groups = new Map()
   for (const file of folder.files) {
     if (file.status !== 'pending' && file.status !== 'error') continue

@@ -29,6 +29,12 @@ function makeVoiceNote(file) {
   ]);
 }
 
+function makePhoto(file) {
+  execFileSync("mkdir", ["-p", path.dirname(file)]);
+  execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=green:s=48x48:d=1", "-frames:v", "1", file]);
+  execFileSync("exiftool", ["-m", "-q", "-overwrite_original", "-DateTimeOriginal=2019:04:02 10:20:30", "-CreateDate=2019:04:02 10:20:30", file]);
+}
+
 async function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -42,7 +48,7 @@ async function waitFor(fn, timeoutMs = 60_000, intervalMs = 250) {
   return false;
 }
 
-async function makeVoiceSetup({ settleSeconds = 0, dryRun = false } = {}) {
+async function makeVoiceSetup({ settleSeconds = 0, dryRun = false, datePattern = "-(\\d{8})-", concat } = {}) {
   const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-voice-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
@@ -72,7 +78,8 @@ async function makeVoiceSetup({ settleSeconds = 0, dryRun = false } = {}) {
       source: src,
       destination: dest,
       method: "voicenotes",
-      datePattern: "-(\\d{8})-",
+      ...(datePattern ? { datePattern } : {}),
+      ...(concat === undefined ? {} : { concat }),
       settleSeconds,
     }],
   }, null, 2));
@@ -234,6 +241,66 @@ test("voicenotes: dry-run reports the plan without writing or trashing", { skip:
     assert.equal(result.dryRun, true);
     assert.deepEqual(await fsp.readdir(dest), []);
     assert.equal(await fsp.stat(path.join(src, "chat", "PTT-20190529-WA0001.opus")).then(() => true).catch(() => false), true);
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("voicenotes per-file: each file is approved by standardizing and moving it", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, daemon } = await makeVoiceSetup({ datePattern: null });
+  try {
+    makePhoto(path.join(src, "audio", "recording.jpg"));
+    await daemon.store.scanFolder("voicenotes");
+    const folder = daemon.store.getFolder("voicenotes");
+    const groups = await listVoiceNoteGroups(daemon.ctx);
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].file, "audio/recording.jpg");
+    assert.equal(groups[0].count, 1);
+
+    const result = await approveVoiceNoteGroup(daemon.ctx, folder, { file: "audio/recording.jpg" });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.destName, "2019-04-02-10-20-30-(recording).jpg");
+    assert.deepEqual(await fsp.readdir(dest), [result.destName]);
+    assert.deepEqual(await fsp.readdir(path.join(src, "audio")), []);
+    assert.deepEqual(await listVoiceNoteGroups(daemon.ctx), []);
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("voicenotes per-file: datePattern + concat:false standardizes OPUS by filename date", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, daemon } = await makeVoiceSetup({ datePattern: "-(\\d{8})-", concat: false });
+  try {
+    makeVoiceNote(path.join(src, "audio", "AUD-20240101-WA0001.opus"));
+    await daemon.store.scanFolder("voicenotes");
+    const folder = daemon.store.getFolder("voicenotes");
+    const groups = await listVoiceNoteGroups(daemon.ctx);
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].file, "audio/AUD-20240101-WA0001.opus");
+    const result = await approveVoiceNoteGroup(daemon.ctx, folder, { file: "audio/AUD-20240101-WA0001.opus" });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.destName, "2024-01-01-00-00-00-(AUD-20240101-WA0001).opus");
+    assert.deepEqual(await fsp.readdir(dest), [result.destName]);
+    assert.deepEqual(await fsp.readdir(path.join(src, "audio")), []);
+  } finally {
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("voicenotes per-file: delete trashes the file and writes nothing", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, daemon } = await makeVoiceSetup({ datePattern: null });
+  try {
+    makeVoiceNote(path.join(src, "audio", "PTT-20240101-WA0001.opus"));
+    await daemon.store.scanFolder("voicenotes");
+    const folder = daemon.store.getFolder("voicenotes");
+    const result = await deleteVoiceNoteGroup(daemon.ctx, folder, { file: "audio/PTT-20240101-WA0001.opus" });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.deleted, ["audio/PTT-20240101-WA0001.opus"]);
+    assert.deepEqual(await fsp.readdir(path.join(src, "audio")), []);
+    assert.deepEqual(await fsp.readdir(dest), []);
   } finally {
     await daemon.stop();
     await fsp.rm(root, { recursive: true, force: true });

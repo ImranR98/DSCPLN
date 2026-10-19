@@ -187,15 +187,17 @@ export default function App() {
     }
   }
 
+  const voiceGroupKey = (group) => group.file
+    ? `${group.folder}\u0000file\u0000${group.file}`
+    : `${group.folder}\u0000${group.chat}\u0000${group.date}`
+
   const approveVoiceNote = async (group) => {
-    const key = `${group.folder}\u0000${group.chat}\u0000${group.date}`
+    const key = voiceGroupKey(group)
     setReviewBusy(key)
     try {
-      const result = await postJson('api/review/voicenotes/approve', {
-        folder: group.folder,
-        chat: group.chat,
-        date: group.date,
-      })
+      const result = await postJson('api/review/voicenotes/approve', group.file
+        ? { folder: group.folder, file: group.file }
+        : { folder: group.folder, chat: group.chat, date: group.date })
       notify(result?.alreadyPlaced ? 'Already merged; source clips moved to trash.' : 'Merged and moved to the destination.')
       await openReview()
       refresh()
@@ -210,14 +212,12 @@ export default function App() {
   const deleteVoiceNote = async (group) => {
     const label = `${group.chat || '(root)'} / ${group.date}`
     if (!(await askConfirm('Confirm', `Move ${group.count} voice note clip(s) for ${label} to trash?`, 'Delete'))) return
-    const key = `${group.folder}\u0000${group.chat}\u0000${group.date}`
+    const key = voiceGroupKey(group)
     setReviewBusy(key)
     try {
-      await postJson('api/review/voicenotes/delete', {
-        folder: group.folder,
-        chat: group.chat,
-        date: group.date,
-      })
+      await postJson('api/review/voicenotes/delete', group.file
+        ? { folder: group.folder, file: group.file }
+        : { folder: group.folder, chat: group.chat, date: group.date })
       notify('Voice note clips moved to trash.')
       await openReview()
       refresh()

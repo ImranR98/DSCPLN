@@ -107,7 +107,9 @@ export default function SettingsDialog({ draft, updateDraft, addFolder, saveSett
                   <label><input type="checkbox" checked={folder.cleanup !== false} onChange={(event) => setFolder(index, (f) => { f.cleanup = event.target.checked })} /> Allow cleanup of processed originals</label>
                   <label><input type="checkbox" checked={folder.autoProcess === true} onChange={(event) => setFolder(index, (f) => { f.autoProcess = event.target.checked })} /> Prepare new files automatically (manual review)</label>
                 </>
-              ) : null}
+              ) : (
+                <label><input type="checkbox" checked={folder.concat !== false} onChange={(event) => setFolder(index, (f) => { f.concat = event.target.checked })} /> Concatenate same-day clips (uncheck to standardize each file)</label>
+              )}
             </div>
             {folder.snapshot ? (
               <>
@@ -167,7 +169,11 @@ export default function SettingsDialog({ draft, updateDraft, addFolder, saveSett
                 </select>
               </div>
               {folder.method === 'voicenotes' || folder.datePattern ? (
-                <div className="field" hidden={folder.snapshot}><span className="field__label">Date pattern (voicenotes)</span><input value={folder.datePattern ?? ''} onChange={(event) => setFolder(index, (f) => { f.datePattern = event.target.value })} /></div>
+                <div className="field" hidden={folder.snapshot}>
+                  <span className="field__label">Date pattern (optional for voicenotes)</span>
+                  <input value={folder.datePattern ?? ''} placeholder="-(\d{8})- (leave blank for per-file standardize)" onChange={(event) => setFolder(index, (f) => { f.datePattern = event.target.value })} />
+                  <p className="hint">With a date pattern, clips are grouped by chat/day and merged. Leave it blank to standardize and review each file individually.</p>
+                </div>
               ) : null}
             </div>
           </div>

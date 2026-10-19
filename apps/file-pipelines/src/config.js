@@ -94,6 +94,7 @@ export function normalizeConfig(raw) {
       snapshot,
       filePattern: folder.filePattern || null,
       datePattern: method === "voicenotes" ? String(folder.datePattern ?? "").trim() || null : null,
+      concat: method === "voicenotes" ? folder.concat !== false : true,
       settleSeconds: folder.settleSeconds === undefined ? cfg.settleSeconds : Math.max(0, asNumber(folder.settleSeconds, cfg.settleSeconds)),
       groupWindowSeconds: Math.max(1, asNumber(folder.groupWindowSeconds, 15)),
       // Copy folders can mirror whole trees; voice notes always need subdirs.
@@ -143,15 +144,11 @@ export function validateConfig(cfg) {
       if (folder.nameSuffix) errors.push(`folder ${folder.name}: nameSuffix is only supported for snapshot copies`);
       if (folder.touch) errors.push(`folder ${folder.name}: touch is only supported for snapshot copies`);
     }
-    if (folder.method === "voicenotes") {
-      if (!folder.datePattern) {
-        errors.push(`folder ${folder.name}: voicenotes requires datePattern (a regex matching the clip date)`);
-      } else {
-        try {
-          new RegExp(folder.datePattern);
-        } catch (err) {
-          errors.push(`folder ${folder.name}: invalid datePattern: ${err.message}`);
-        }
+    if (folder.method === "voicenotes" && folder.datePattern) {
+      try {
+        new RegExp(folder.datePattern);
+      } catch (err) {
+        errors.push(`folder ${folder.name}: invalid datePattern: ${err.message}`);
       }
     }
     if (folder.placement === "manual" && !MANUAL_PLACEMENT_METHODS.has(folder.method)) {

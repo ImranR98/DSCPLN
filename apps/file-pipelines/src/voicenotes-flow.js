@@ -24,8 +24,9 @@ import { trashFile } from "./cleanup.js";
 import { STATUS } from "./store.js";
 import { uniqueSuffix } from "./util.js";
 import { parseSnapInputs, statSize } from "./verify.js";
-import { sanitizeChat, voiceNoteDestName, voiceNoteGroupOf } from "./voicenotes.js";
+import { sanitizeChat, voiceNoteDateOf, voiceNoteDestName, voiceNoteGroupOf } from "./voicenotes.js";
 import { DestExistsError, moveIntoPlace } from "./processors/place.js";
+import { processStandardize } from "./processors/standardize.js";
 
 function httpError(statusCode, message) {
   const err = new Error(message);
@@ -33,12 +34,21 @@ function httpError(statusCode, message) {
   return err;
 }
 
-function groupFiles(folder, chat, date) {
+function perFile(folder) {
+  return folder.def.concat === false || !folder.def.datePattern;
+}
+
+function groupFiles(folder, { chat, date, file }) {
+  if (perFile(folder)) {
+    const state = folder.files.get(file);
+    if (!state || state.status === STATUS.IGNORED || state.status === STATUS.CLEANED) return [];
+    return [file];
+  }
   const names = [];
-  for (const file of folder.files.values()) {
-    if (file.status === STATUS.IGNORED || file.status === STATUS.CLEANED) continue;
-    const group = voiceNoteGroupOf(file.name, folder.def.datePattern);
-    if (group && group.chat === chat && group.date === date) names.push(file.name);
+  for (const item of folder.files.values()) {
+    if (item.status === STATUS.IGNORED || item.status === STATUS.CLEANED) continue;
+    const group = voiceNoteGroupOf(item.name, folder.def.datePattern);
+    if (group && group.chat === chat && group.date === date) names.push(item.name);
   }
   return names.sort();
 }
@@ -60,6 +70,24 @@ export async function listVoiceNoteGroups(ctx) {
   const groups = [];
   for (const folder of store.listFolders()) {
     if (folder.def.method !== "voicenotes" || !folder.exists) continue;
+    if (perFile(folder)) {
+      for (const file of folder.files.values()) {
+        if (file.status === STATUS.IGNORED || file.status === STATUS.CLEANED) continue;
+        groups.push({
+          folder: folder.def.name,
+          file: file.name,
+          chat: null,
+          date: null,
+          files: [file.name],
+          count: 1,
+          bytes: file.size ?? 0,
+          settling: !store.isSettled(folder, file, now),
+          destName: null,
+          destExists: false,
+        });
+      }
+      continue;
+    }
     const byKey = new Map();
     for (const file of folder.files.values()) {
       if (file.status === STATUS.IGNORED || file.status === STATUS.CLEANED) continue;
@@ -183,10 +211,46 @@ async function trashInputs(ctx, folder, inputs, destName) {
   return { trashed, failed };
 }
 
-export async function approveVoiceNoteGroup(ctx, folder, { chat, date }) {
+async function approveStandardizeFile(ctx, folder, file) {
+  const state = ctx.store.fileFor(folder.def.name, file);
+  if (!state) throw httpError(404, "file is no longer present");
+  let forcedDate = null;
+  if (folder.def.datePattern) {
+    const raw = voiceNoteDateOf(path.basename(file), folder.def.datePattern);
+    if (!raw) throw httpError(409, "the file name does not match datePattern");
+    forcedDate = `${raw.slice(0, 4)}:${raw.slice(4, 6)}:${raw.slice(6, 8)} 00:00:00`;
+  }
+  const autoFolder = { ...folder, def: { ...folder.def, placement: "auto" } };
+  const result = await processStandardize(ctx, autoFolder, state, { forcedDate, bestEffortDates: true });
+  if (result.status === "done") {
+    const trash = await trashInputs(ctx, folder, [file], result.destName);
+    ctx.notify.notify("info", `${folder.def.name}: standardized ${file} → ${result.destName}`);
+    if (trash.failed.length) {
+      ctx.notify.notify("warn", `${folder.def.name}: standardized, but ${trash.failed.length} source file(s) could not be moved to trash`);
+    }
+    return { ok: true, file, destName: result.destName, ...trash };
+  }
+  if (result.status === "duplicate") {
+    throw httpError(409, `destination already has a standardized file named ${result.destName}; move or delete it first`);
+  }
+  if (result.status === "conflict") {
+    throw httpError(409, result.message || "destination already has a conflicting file");
+  }
+  throw httpError(409, result.message || "could not standardize this file");
+}
+
+export async function approveVoiceNoteGroup(ctx, folder, { chat, date, file }) {
   if (folder.def.method !== "voicenotes") throw httpError(400, "not a voicenotes folder");
   return ctx.queue.runExclusive(folder.def.name, async () => {
-    const inputs = groupFiles(folder, chat, date);
+    if (perFile(folder)) {
+      if (!file) throw httpError(400, "file is required");
+      const state = ctx.store.fileFor(folder.def.name, file);
+      if (!state) throw httpError(404, "file is no longer present");
+      await requireSettled(ctx.store, folder, [file]);
+      if (ctx.config.dryRun) return { ok: true, dryRun: true, file };
+      return approveStandardizeFile(ctx, folder, file);
+    }
+    const inputs = groupFiles(folder, { chat, date });
     if (!inputs.length) throw httpError(404, "no clips in this group");
     await requireSettled(ctx.store, folder, inputs);
 
@@ -239,10 +303,24 @@ export async function approveVoiceNoteGroup(ctx, folder, { chat, date }) {
   });
 }
 
-export async function deleteVoiceNoteGroup(ctx, folder, { chat, date }) {
+export async function deleteVoiceNoteGroup(ctx, folder, { chat, date, file }) {
   if (folder.def.method !== "voicenotes") throw httpError(400, "not a voicenotes folder");
   return ctx.queue.runExclusive(folder.def.name, async () => {
-    const inputs = groupFiles(folder, chat, date);
+    if (perFile(folder)) {
+      if (!file) throw httpError(400, "file is required");
+      const state = ctx.store.fileFor(folder.def.name, file);
+      if (!state) throw httpError(404, "file is no longer present");
+      await requireSettled(ctx.store, folder, [file]);
+      if (ctx.config.dryRun) return { ok: true, dryRun: true, deleted: [file] };
+      const result = await trashInputs(ctx, folder, [file], null);
+      ctx.log(`deleted ${result.trashed.length} file(s) from ${folder.def.name} into trash`);
+      ctx.notify.notify("info", `${folder.def.name}: deleted ${result.trashed.length} file(s) into trash`);
+      if (result.failed.length) {
+        ctx.notify.notify("warn", `${folder.def.name}: ${result.failed.length} file(s) could not be moved to trash`);
+      }
+      return { ok: true, deleted: result.trashed, ...result };
+    }
+    const inputs = groupFiles(folder, { chat, date });
     if (!inputs.length) throw httpError(404, "no clips in this group");
     await requireSettled(ctx.store, folder, inputs);
     if (ctx.config.dryRun) {

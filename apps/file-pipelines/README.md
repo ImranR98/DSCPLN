@@ -19,7 +19,7 @@ Configuration can also be mounted from a private `dscpln-config` repo: set `--co
 | `standardize` | Picks a date (`DateTimeOriginal`, else the oldest date-like tag), writes all date tags, renames to `YYYY-MM-DD-HH-MM-SS-(<original-name>).ext`, and copies into the destination. |
 | `snapchat`    | Waits until the folder has been quiet for `settleSeconds` (default 30 min), groups `Snapchat-*.mp4` clips whose timestamps are within `groupWindowSeconds` (default 15s), concatenates + re-encodes each group, standardizes the output, and records the input list in a custom `XMP-media-sync:Inputs` tag on the output. |
 | `copy`        | Byte-verified copy, original name preserved (call recordings). Add `recursive: true` to mirror a whole tree (WhatsApp AllMedia archives) and `onChanged` to control what happens when a same-name source changes. Add `snapshot: true` to run on demand/schedule instead of watching (see below). |
-| `voicenotes`  | Approval-only: groups same-day clips from the same folder, then on your approval concatenates them into one MP4 (a 0.1s tone between clips), standardizes/moves it, and trashes the source clips. Delete moves the group to trash instead. The clip-date scheme is **user-defined** per folder via `datePattern` (e.g. WhatsApp push-to-talk `PTT-YYYYMMDD-WA####.opus` uses `-(\d{8})-`); see Voicenotes below. |
+| `voicenotes`  | Approval-only audio. With `datePattern` + `concat: true` (default), groups same-day clips and merges them into one MP4 on approval (a 0.1s tone between clips). With `concat: false` or no `datePattern`, standardizes and moves each file individually. Delete trashes the source instead. See Voicenotes below. |
 
 ## Snapshot copies
 
@@ -79,9 +79,27 @@ the merge is accepted as already done when its XMP input list matches; otherwise
 approval is refused until that destination file is moved or deleted. A clip
 that arrives after approval appears as a new group.
 
-`datePattern` is required. `settleSeconds` delays a group until its clips have
-been quiet that long. `placement`, `autoProcess` and cleanup are not used for
-voicenotes.
+`settleSeconds` delays a group until its clips have been quiet that long.
+`placement`, `autoProcess` and cleanup are not used for voicenotes.
+
+To standardize and copy **individual files** instead of merging them, omit
+`datePattern` or set `concat: false`:
+
+```json
+{
+  "name": "WhatsApp Audio",
+  "source": "/source/Media/WhatsApp Audio",
+  "destination": "/destination/Media/Recordings",
+  "method": "voicenotes",
+  "datePattern": "-(\\d{8})-",
+  "concat": false,
+  "settleSeconds": 60
+}
+```
+
+With `concat: false`, `datePattern` is still used to extract the file date for
+the standardized name; leave it out to let the normal date metadata/file mtime
+decide. Each file appears in Review with **Standardize & move** and **Delete**.
 
 ## Manual placement (standardize / snapchat)
 
@@ -174,7 +192,8 @@ Paths accept `~` and environment variables. Key fields:
 | `folders[].notify` | `all` (default) notifies on every success; `errors` only notifies failures (use for bulk archives) |
 | `folders[].placement` | `auto` (default) or `manual` — park processed files for review (standardize/snapchat only) |
 | `folders[].autoProcess` | `placement: manual` only (standardize/snapchat): process new items automatically instead of on demand |
-| `folders[].datePattern` | `voicenotes` only (required): regex extracting the clip date; capture groups are joined, non-digits stripped, result must be `YYYYMMDD` |
+| `folders[].datePattern` | `voicenotes` only (optional): regex extracting the clip/file date; capture groups are joined, non-digits stripped, result must be `YYYYMMDD` |
+| `folders[].concat` | `voicenotes` only (default `true`): group by chat/day and merge. `false` (or no `datePattern`) standardizes each file individually |
 | `folders[].snapshot` | `copy` only: run on demand/schedule instead of watching; enables `sources`, `subdir`, `nameSuffix`, `touch`, `runner`, `schedule`, `command` |
 | `folders[].runner` | snapshot only: Kubernetes node to run the Job on (`null` = this server) |
 | `folders[].schedule` | snapshot only: `{enabled, days, at, catchUp}` |

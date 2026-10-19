@@ -162,7 +162,9 @@ export class Store extends EventEmitter {
     if (!folder) return;
     const base = path.basename(name);
     const patternOk = matchesPattern(base, folder.def.filePattern);
-    const dateOk = folder.def.method !== "voicenotes" || voiceNoteGroupOf(name, folder.def.datePattern) !== null;
+    const dateOk = folder.def.method !== "voicenotes"
+      || !folder.def.datePattern
+      || voiceNoteGroupOf(name, folder.def.datePattern) !== null;
     const matches = patternOk && dateOk;
     const mismatchMessage = !patternOk
       ? `does not match ${folder.def.filePattern}`
@@ -415,6 +417,7 @@ export class Store extends EventEmitter {
         touch: folder.def.touch ?? null,
         filePattern: folder.def.filePattern,
         datePattern: folder.def.datePattern,
+        concat: folder.def.concat !== false,
         settleSeconds: folder.def.settleSeconds,
         groupWindowSeconds: folder.def.groupWindowSeconds,
         recursive: folder.def.recursive,

@@ -26,7 +26,7 @@ async function waitFor(fn, timeoutMs = 30_000, intervalMs = 200) {
   return false;
 }
 
-async function makeSetup() {
+async function makeSetup({ datePattern = "(\\d{4})-(\\d{2})-(\\d{2})" } = {}) {
   const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-ui-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
@@ -62,7 +62,7 @@ async function makeSetup() {
         source: src,
         destination: dest,
         method: "voicenotes",
-        datePattern: "(\\d{4})-(\\d{2})-(\\d{2})",
+        ...(datePattern ? { datePattern } : {}),
         placement: "manual",
         settleSeconds: 0,
       },
@@ -96,6 +96,29 @@ test("ui: review a voicenote group and merge it into the destination", { skip: !
     const destName = "2019-05-29-00-00-00-(20190529-merged-201301).mp4";
     const placed = await waitFor(() => fsp.stat(path.join(dest, destName)).then(() => true).catch(() => false));
     assert.equal(placed, true, "the approved merge must land in the destination");
+  } finally {
+    await browser.close();
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ui: per-file voicenote review standardizes and moves one file", { skip: !CAN_RUN }, async () => {
+  const { root, daemon, dest, base } = await makeSetup({ datePattern: null });
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.goto(base);
+    const card = page.locator(".folder-card", { hasText: "voicenotes" }).first();
+    await card.getByRole("button", { name: /^Review/ }).click();
+    const dialog = page.locator('[data-testid="review-dialog"]');
+    const row = dialog.locator(".review-row", { hasText: "voice 2019-05-29 take1.opus" }).first();
+    await row.waitFor({ state: "visible", timeout: 30_000 });
+    await row.getByRole("button", { name: "Standardize & move" }).click();
+
+    const placed = await waitFor(async () => (await fsp.readdir(dest)).length === 1);
+    assert.equal(placed, true, "the standardized file must land in the destination");
+    assert.deepEqual(await fsp.readdir(path.join(root, "src", "201301")), []);
   } finally {
     await browser.close();
     await daemon.stop();

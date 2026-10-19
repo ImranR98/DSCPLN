@@ -1,7 +1,9 @@
 import { apiUrl, formatBytes } from '@dscpln/ui-kit'
 import Modal from '../Modal.jsx'
 
-const groupKey = (group) => `${group.folder}\u0000${group.chat}\u0000${group.date}`
+const groupKey = (group) => group.file
+  ? `${group.folder}\u0000file\u0000${group.file}`
+  : `${group.folder}\u0000${group.chat}\u0000${group.date}`
 
 export default function ReviewDialog({
   entries,
@@ -35,15 +37,15 @@ export default function ReviewDialog({
               {voicenotes.map((group) => {
                 const key = groupKey(group)
                 const disabled = group.settling || busy === key
+                const label = group.file || `${group.chat || '(root)'} · ${group.date}`
+                const meta = group.file
+                  ? `${formatBytes(group.bytes)}${group.settling ? ' · settling…' : ''}`
+                  : `${group.count} clip${group.count === 1 ? '' : 's'} · ${formatBytes(group.bytes)}${group.destExists ? ' · destination merge exists' : ''}${group.settling ? ' · settling…' : ''}`
                 return (
-                  <div className="review-row" key={key} data-testid={`voice-group-${group.folder}-${group.date}`}>
+                  <div className="review-row" key={key} data-testid={`voice-group-${group.folder}-${group.date || encodeURIComponent(group.file)}`}>
                     <div className="review-row__main">
-                      <span className="checklist__main">{group.chat || '(root)'} · {group.date}</span>
-                      <span className="checklist__meta">
-                        {group.count} clip{group.count === 1 ? '' : 's'} · {formatBytes(group.bytes)}
-                        {group.destExists ? ' · destination merge exists' : ''}
-                        {group.settling ? ' · settling…' : ''}
-                      </span>
+                      <span className="checklist__main">{label}</span>
+                      <span className="checklist__meta">{meta}</span>
                     </div>
                     <div className="review-row__actions">
                       <button
@@ -51,7 +53,7 @@ export default function ReviewDialog({
                         onClick={() => onApproveVoiceNote(group)}
                         title={group.destExists ? 'A merge already exists for this chat/day; delete or move it first' : undefined}
                       >
-                        {busy === key ? 'Working…' : 'Merge & move'}
+                        {busy === key ? 'Working…' : group.file ? 'Standardize & move' : 'Merge & move'}
                       </button>
                       <button
                         className="outline secondary"

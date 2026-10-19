@@ -146,10 +146,11 @@ test("config normalization applies safe defaults for the new folder options", ()
     folders: [
       { name: "copy", source: "/tmp/a", destination: "/tmp/b", method: "copy" },
       { name: "vn", source: "/tmp/c", destination: "/tmp/d", method: "voicenotes", datePattern: "-(\\d{8})-" },
+      { name: "vnFile", source: "/tmp/g", destination: "/tmp/h", method: "voicenotes" },
       { name: "std", source: "/tmp/e", destination: "/tmp/f", method: "standardize", placement: "manual" },
     ],
   });
-  const [copy, vn, std] = cfg.folders;
+  const [copy, vn, vnFile, std] = cfg.folders;
   assert.equal(copy.recursive, false);
   assert.equal(copy.includeHidden, false);
   assert.equal(copy.onChanged, "overwrite");
@@ -163,6 +164,9 @@ test("config normalization applies safe defaults for the new folder options", ()
   assert.equal(vn.placement, "manual", "voicenotes are approval-only");
   assert.equal(vn.cleanup, false, "voicenote clips are trashed by approval/delete");
   assert.equal(vn.autoProcess, false);
+  assert.equal(vn.concat, true, "voicenotes concatenate by default");
+  assert.equal(vnFile.datePattern, null, "voicenotes without a datePattern standardize per file");
+  assert.equal(vnFile.cleanup, false);
   assert.equal(std.placement, "manual");
   const conflict = normalizeConfig({
     stagingDir: "/tmp/s",
@@ -176,11 +180,10 @@ test("config normalization applies safe defaults for the new folder options", ()
   assert.equal(conflict.folders[0].notify, "errors");
 });
 
-test("config validation requires a usable datePattern for voicenotes folders", () => {
+test("config validation allows voicenotes without a datePattern but rejects a bad one", () => {
   const base = { stagingDir: "/tmp/s", reviewDir: "/tmp/r", trashDir: "/tmp/t", logDir: "/tmp/l" };
-  assert.throws(
+  assert.doesNotThrow(
     () => validateConfig(normalizeConfig({ ...base, folders: [{ name: "vn", source: "/tmp/c", destination: "/tmp/d", method: "voicenotes" }] })),
-    /datePattern/,
   );
   assert.throws(
     () => validateConfig(normalizeConfig({ ...base, folders: [{ name: "vn", source: "/tmp/c", destination: "/tmp/d", method: "voicenotes", datePattern: "([unclosed" }] })),

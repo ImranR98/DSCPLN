@@ -149,7 +149,8 @@ The scaffolding is deliberately uniform and mostly generated:
 - **Pods are hardened**: every app drops ALL capabilities, runs with
   `seccompProfile: RuntimeDefault` and `readOnlyRootFilesystem: true` plus a
   memory-backed `/tmp`; Task Runner is the exception (its tasks provision tools
-  into the image tree at runtime, so its root stays writable).
+  into the image tree at runtime, so its root stays writable; the deployment
+  that runs the State Backups task also runs as root to read PVC data).
 - **UI consistency**: every app builds its `ui/` (React + Pico via
   `@dscpln/ui-kit`), uses the `D$CPLN ⋅ <Function>` header, and keeps custom
   CSS to a few app-specific rules — Pico and the kit supply the rest. Tests use
@@ -164,9 +165,9 @@ reverse proxy works — the apps only need `BASE_PATH` set per subpath.
 
 | App | Path | Deployment | Config/state | Schedule |
 |---|---|---|---|---|
-| Portal | `/` | `portal` | config PVC → `/data/config.json` (ntfy settings; notification relay) | — |
+| Portal | `/` | `portal` | mounted `config.json` (ntfy settings, function list; notification relay) | — |
 | Balance XLSX | `/balance` | `balance-xlsx` | mounted `config.json`; API state next to the workbook | — (limit checks every 30 min) |
-| File Pipelines | `/pipelines` | `file-pipelines` | config PVC → `/config/config.json` | daemon + snapshot scheduler (Jobs on remote nodes) |
+| File Pipelines | `/pipelines` | `file-pipelines` | mounted `config.json`; state on `/appdata` | daemon + snapshot scheduler (Jobs on remote nodes) |
 | WhatsApp TXT | `/watxt` | `whatsapp-txt` | data PVC → `/data` (conversations) | — |
 | Task Runner | `/tasks` | `task-runner` | mounted config file, state in `~/.backupctl` | per-task `schedule` or manual |
 | Contacts + Calendar | `/contacts` | `contacts-calendar` | config file + `/data/state.json` | Sun 03:00 |

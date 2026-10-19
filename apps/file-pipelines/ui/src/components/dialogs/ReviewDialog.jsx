@@ -1,13 +1,15 @@
 import { apiUrl, formatBytes } from '@dscpln/ui-kit'
-import { reviewGroups } from '../../lib/view.js'
 import Modal from '../Modal.jsx'
+
+const groupKey = (group) => `${group.folder}\u0000${group.chat}\u0000${group.date}`
 
 export default function ReviewDialog({
   entries,
   reviewFolders,
-  selectedGroups,
-  onToggleGroup,
-  onProcessSelected,
+  voicenotes,
+  busy,
+  onApproveVoiceNote,
+  onDeleteVoiceNote,
   onReviewAction,
   onReviewActionAll,
   onClose,
@@ -21,33 +23,57 @@ export default function ReviewDialog({
             <button className="outline secondary icon-button" aria-label="Close" onClick={onClose}>&times;</button>
           </span>
         </header>
-        <p className="hint">Manual folders prepare files here without writing to the destination. Place the ones you want to keep, or discard the rest — nothing is written until you place it.</p>
-        {!reviewFolders.length ? (
-          <p className="muted">Nothing awaiting review.</p>
+        <p className="hint">
+          Voicenotes are approved per chat/day: merge and move the group, or move its clips to trash.
+          Nothing is written or deleted until you choose.
+        </p>
+
+        {voicenotes.length ? (
+          <section className="review-section">
+            <h3>Voice notes</h3>
+            <div className="review-groups">
+              {voicenotes.map((group) => {
+                const key = groupKey(group)
+                const disabled = group.settling || busy === key
+                return (
+                  <div className="review-row" key={key} data-testid={`voice-group-${group.folder}-${group.date}`}>
+                    <div className="review-row__main">
+                      <span className="checklist__main">{group.chat || '(root)'} · {group.date}</span>
+                      <span className="checklist__meta">
+                        {group.count} clip{group.count === 1 ? '' : 's'} · {formatBytes(group.bytes)}
+                        {group.destExists ? ' · destination merge exists' : ''}
+                        {group.settling ? ' · settling…' : ''}
+                      </span>
+                    </div>
+                    <div className="review-row__actions">
+                      <button
+                        disabled={disabled}
+                        onClick={() => onApproveVoiceNote(group)}
+                        title={group.destExists ? 'A merge already exists for this chat/day; delete or move it first' : undefined}
+                      >
+                        {busy === key ? 'Working…' : 'Merge & move'}
+                      </button>
+                      <button
+                        className="outline secondary"
+                        disabled={disabled}
+                        onClick={() => onDeleteVoiceNote(group)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
         ) : null}
+
         {reviewFolders.map((folder) => {
           const parked = entries.filter((entry) => entry.folder === folder.name)
-          const groups = folder.method === 'voicenotes' ? reviewGroups(folder) : []
-          if (!parked.length && !groups.length) return null
+          if (!parked.length) return null
           return (
             <section className="review-section" key={folder.name}>
               <h3>{folder.name}</h3>
-              {groups.length ? (
-                <>
-                  <div className="review-groups">
-                    {groups.map((group) => (
-                      <label className="checklist__row" key={group.key}>
-                        <input type="checkbox" checked={selectedGroups.has(group.key)} onChange={(event) => onToggleGroup(group.key, event.target.checked)} />
-                        <span className="checklist__main">{group.chat || '(root)'} · {group.date} · {group.files.length} clip{group.files.length === 1 ? '' : 's'}</span>
-                        <span className="checklist__meta">{formatBytes(group.bytes)}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="folder-card__actions">
-                    <button onClick={() => onProcessSelected(folder)}>Process selected</button>
-                  </div>
-                </>
-              ) : null}
               {parked.map((entry) => (
                 <div className="review-row" key={entry.id}>
                   <div className="review-row__main">
@@ -72,6 +98,11 @@ export default function ReviewDialog({
             </section>
           )
         })}
+
+        {!voicenotes.length && !entries.length ? (
+          <p className="muted">Nothing awaiting review.</p>
+        ) : null}
+
         <div className="dialog-actions">
           <button className="outline secondary" onClick={onClose}>Close</button>
         </div>

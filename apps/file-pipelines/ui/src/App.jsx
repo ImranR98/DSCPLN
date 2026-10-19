@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { FlaskConical, Pause, Play, RefreshCw, Settings } from 'lucide-react'
 import { formatTime, getJson, postJson, putJson, showToast, ThemeToggle, Toasts, usePolling } from '@dscpln/ui-kit'
-import { reviewGroups } from './lib/view.js'
 import ActivityCard from './components/ActivityCard.jsx'
 import FolderCard from './components/FolderCard.jsx'
 import OverviewCard from './components/OverviewCard.jsx'
@@ -28,6 +27,7 @@ export default function App() {
   const [setDateDialog, setSetDateDialog] = useState(null)
   const [restoreDialog, setRestoreDialog] = useState(null)
   const [reviewDialog, setReviewDialog] = useState(null)
+  const [reviewBusy, setReviewBusy] = useState('')
   const [settingsDraft, setSettingsDraft] = useState(null)
 
   const notify = (message, tone = 'success') => showToast(message, tone)
@@ -176,41 +176,57 @@ export default function App() {
 
   /* ---------- review ---------- */
 
-  const reviewFolders = (state?.folders ?? []).filter((folder) => folder.placement === 'manual' || (folder.counts.review ?? 0) > 0)
+  const reviewFolders = (state?.folders ?? []).filter((folder) => folder.method === 'voicenotes' ? (folder.counts.review ?? 0) > 0 : (folder.placement === 'manual' || (folder.counts.review ?? 0) > 0))
 
   const openReview = async () => {
     try {
-      const { entries } = await getJson('api/review')
-      const selectedGroups = new Set()
-      for (const folder of state?.folders ?? []) {
-        if (folder.method === 'voicenotes') {
-          for (const group of reviewGroups(folder)) selectedGroups.add(group.key)
-        }
-      }
-      setReviewDialog({ entries, selectedGroups })
+      const { entries, voicenotes } = await getJson('api/review')
+      setReviewDialog({ entries, voicenotes })
     } catch (err) {
       notify(err.message, 'error')
     }
   }
 
-  const toggleGroup = (key, checked) => {
-    setReviewDialog((current) => {
-      const next = new Set(current.selectedGroups)
-      if (checked) next.add(key)
-      else next.delete(key)
-      return { ...current, selectedGroups: next }
-    })
+  const approveVoiceNote = async (group) => {
+    const key = `${group.folder}\u0000${group.chat}\u0000${group.date}`
+    setReviewBusy(key)
+    try {
+      const result = await postJson('api/review/voicenotes/approve', {
+        folder: group.folder,
+        chat: group.chat,
+        date: group.date,
+      })
+      notify(result?.alreadyPlaced ? 'Already merged; source clips moved to trash.' : 'Merged and moved to the destination.')
+      await openReview()
+      refresh()
+      refreshTrash()
+    } catch (err) {
+      notify(`Approve failed: ${err.message}`, 'error')
+    } finally {
+      setReviewBusy('')
+    }
   }
 
-  const processSelectedGroups = async (folder) => {
-    const groups = reviewGroups(folder).filter((group) => reviewDialog.selectedGroups.has(group.key))
-    if (!groups.length) {
-      notify('No groups selected.', 'error')
-      return
+  const deleteVoiceNote = async (group) => {
+    const label = `${group.chat || '(root)'} / ${group.date}`
+    if (!(await askConfirm('Confirm', `Move ${group.count} voice note clip(s) for ${label} to trash?`, 'Delete'))) return
+    const key = `${group.folder}\u0000${group.chat}\u0000${group.date}`
+    setReviewBusy(key)
+    try {
+      await postJson('api/review/voicenotes/delete', {
+        folder: group.folder,
+        chat: group.chat,
+        date: group.date,
+      })
+      notify('Voice note clips moved to trash.')
+      await openReview()
+      refresh()
+      refreshTrash()
+    } catch (err) {
+      notify(`Delete failed: ${err.message}`, 'error')
+    } finally {
+      setReviewBusy('')
     }
-    await processNow(folder.name, groups.flatMap((group) => group.files))
-    const { entries } = await getJson('api/review')
-    setReviewDialog((current) => ({ ...current, entries }))
   }
 
   const reviewAction = async (folder, id, place) => {
@@ -472,9 +488,10 @@ export default function App() {
         <ReviewDialog
           entries={reviewDialog.entries}
           reviewFolders={reviewFolders}
-          selectedGroups={reviewDialog.selectedGroups}
-          onToggleGroup={toggleGroup}
-          onProcessSelected={processSelectedGroups}
+          voicenotes={reviewDialog.voicenotes ?? []}
+          busy={reviewBusy}
+          onApproveVoiceNote={approveVoiceNote}
+          onDeleteVoiceNote={deleteVoiceNote}
           onReviewAction={reviewAction}
           onReviewActionAll={reviewActionAll}
           onClose={() => setReviewDialog(null)}

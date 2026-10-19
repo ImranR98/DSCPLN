@@ -160,7 +160,9 @@ test("config normalization applies safe defaults for the new folder options", ()
   assert.equal(vn.recursive, true, "voicenotes folders are always recursive");
   assert.equal(vn.filePattern, null, "no source-format assumptions are baked in");
   assert.equal(vn.datePattern, "-(\\d{8})-");
-  assert.equal(vn.placement, "auto");
+  assert.equal(vn.placement, "manual", "voicenotes are approval-only");
+  assert.equal(vn.cleanup, false, "voicenote clips are trashed by approval/delete");
+  assert.equal(vn.autoProcess, false);
   assert.equal(std.placement, "manual");
   const conflict = normalizeConfig({
     stagingDir: "/tmp/s",

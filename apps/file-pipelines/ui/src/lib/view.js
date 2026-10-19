@@ -35,6 +35,11 @@ export function folderStats(folder) {
 }
 
 export function folderContext(folder) {
+  if (folder.method === 'voicenotes') {
+    const parts = ['approval only', `settle ${formatDuration(folder.settleSeconds)}`]
+    if (folder.datePattern) parts.push(folder.datePattern)
+    return parts.join(' · ')
+  }
   if (isSnapshot(folder)) {
     return ['snapshot copy', folder.runner?.node ? `node ${folder.runner.node}` : 'this server', scheduleLabel(folder.schedule)].join(' · ')
   }

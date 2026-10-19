@@ -58,6 +58,7 @@ export class Daemon {
     await this.lock.acquire({ force: this.options.force });
 
     this.queue = new Queue(this.ctx);
+    this.ctx.queue = this.queue;
     this.snapshot = new SnapshotRunner(this.ctx);
     this.ctx.snapshot = this.snapshot;
     this.ctx.snapshotChanged = () => this.store.emit("update");

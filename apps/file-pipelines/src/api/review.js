@@ -6,6 +6,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { parkPathFor } from "../park.js";
 import { discardAllReview, discardReview, listReview, placeAllReview, placeReview } from "../review.js";
+import { approveVoiceNoteGroup, deleteVoiceNoteGroup, listVoiceNoteGroups } from "../voicenotes-flow.js";
 import { json, readBody } from "./http.js";
 
 function contentTypeFor(filePath) {
@@ -20,7 +21,8 @@ export async function handleReview(ctx, method, pathname) {
 
   if (method === "GET" && pathname === "/review") {
     const entries = await listReview(daemon.ctx);
-    json(res, 200, { entries });
+    const voicenotes = await listVoiceNoteGroups(daemon.ctx);
+    json(res, 200, { entries, voicenotes });
     return true;
   }
 
@@ -65,6 +67,26 @@ export async function handleReview(ctx, method, pathname) {
       "Cache-Control": "no-store",
     });
     fs.createReadStream(filePath, { start, end }).on("error", () => res.end()).pipe(res);
+    return true;
+  }
+
+  if (method === "POST" && (pathname === "/review/voicenotes/approve" || pathname === "/review/voicenotes/delete")) {
+    const body = await readBody(req);
+    const folder = daemon.store.getFolder(String(body.folder ?? ""));
+    if (!folder) {
+      json(res, 404, { error: "unknown folder" });
+      return true;
+    }
+    const action = pathname.endsWith("/approve") ? approveVoiceNoteGroup : deleteVoiceNoteGroup;
+    const result = await action(daemon.ctx, folder, {
+      chat: String(body.chat ?? ""),
+      date: String(body.date ?? ""),
+    });
+    if (result?.ok === false && result.busy) {
+      json(res, 409, result);
+      return true;
+    }
+    json(res, 200, result);
     return true;
   }
 

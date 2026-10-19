@@ -2,8 +2,7 @@ import { EventEmitter } from "node:events";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { findRealExifDate, standardNameFor } from "./exif.js";
-import { listParked } from "./park.js";
-import { voiceNoteGroupOf, voiceNoteDestName } from "./voicenotes.js";
+import { voiceNoteGroupOf } from "./voicenotes.js";
 import { DirCache, classifyDestMatch, findExpectedDestName, mapSnapInputs, readSnapOutputs, statSize } from "./verify.js";
 import { shouldSkipName, isSyncConflictName, matchesPattern, statOrNull } from "./util.js";
 import { isSnapshotFolder } from "./snapshot.js";
@@ -286,7 +285,8 @@ export class Store extends EventEmitter {
       return;
     }
     if (def.method === "voicenotes") {
-      await this.deriveVoiceNotesProcessed(folder);
+      // Approval-only: the source files are the queue, so there is no derived
+      // processed/duplicate state to recompute.
       return;
     }
     const names = await this.cache.list(def.destination).catch(() => []);
@@ -340,34 +340,6 @@ export class Store extends EventEmitter {
         file.destName = file.name;
         file.message = "destination exists with a different size or timestamp — review";
       }
-      file.updatedAt = Date.now();
-    }
-    this.emit("update");
-  }
-
-  async deriveVoiceNotesProcessed(folder) {
-    const { def } = folder;
-    const parked = await listParked(this.config, def.name).catch(() => []);
-    for (const entry of parked) {
-      for (const input of entry.inputs) {
-        const file = folder.files.get(input);
-        if (!file) continue;
-        file.status = STATUS.REVIEW;
-        file.destName = entry.destName;
-        file.message = "awaiting review";
-        file.updatedAt = Date.now();
-      }
-    }
-    for (const file of folder.files.values()) {
-      if (file.status !== STATUS.PENDING) continue;
-      const group = voiceNoteGroupOf(file.name, def.datePattern);
-      if (!group) continue;
-      const destName = voiceNoteDestName(group.chat, group.date);
-      const stat = await fsp.stat(path.join(def.destination, destName)).catch(() => null);
-      if (!stat || !stat.isFile() || stat.size === 0) continue;
-      file.status = STATUS.DUPLICATE;
-      file.destName = destName;
-      file.message = "already merged and placed";
       file.updatedAt = Date.now();
     }
     this.emit("update");

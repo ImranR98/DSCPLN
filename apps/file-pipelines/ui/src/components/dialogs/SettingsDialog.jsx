@@ -94,14 +94,20 @@ export default function SettingsDialog({ draft, updateDraft, addFolder, saveSett
                 </>
               ) : null}
               <div className="field" hidden={folder.snapshot}><span className="field__label">Settle (s)</span><input type="number" value={folder.settleSeconds ?? 60} onChange={(event) => setFolder(index, (f) => { f.settleSeconds = event.target.value })} /></div>
-              <div className="field" hidden={folder.snapshot}><span className="field__label">Group window (s)</span><input type="number" value={folder.groupWindowSeconds ?? 15} onChange={(event) => setFolder(index, (f) => { f.groupWindowSeconds = event.target.value })} /></div>
+              {folder.method === 'snapchat' ? (
+                <div className="field" hidden={folder.snapshot}><span className="field__label">Group window (s)</span><input type="number" value={folder.groupWindowSeconds ?? 15} onChange={(event) => setFolder(index, (f) => { f.groupWindowSeconds = event.target.value })} /></div>
+              ) : null}
               <div className="field" hidden={folder.snapshot}><span className="field__label">File pattern</span><input value={folder.filePattern ?? ''} onChange={(event) => setFolder(index, (f) => { f.filePattern = event.target.value })} /></div>
             </div>
             <div className="form-grid field-grid--checks" hidden={folder.snapshot}>
-              <label><input type="checkbox" checked={folder.recursive === true} onChange={(event) => setFolder(index, (f) => { f.recursive = event.target.checked })} /> Recursive (mirror subdirectories)</label>
+              <label><input type="checkbox" checked={folder.recursive === true || folder.method === 'voicenotes'} disabled={folder.method === 'voicenotes'} onChange={(event) => setFolder(index, (f) => { f.recursive = event.target.checked })} /> Recursive (mirror subdirectories)</label>
               <label><input type="checkbox" checked={folder.includeHidden === true} onChange={(event) => setFolder(index, (f) => { f.includeHidden = event.target.checked })} /> Include hidden files</label>
-              <label><input type="checkbox" checked={folder.cleanup !== false} onChange={(event) => setFolder(index, (f) => { f.cleanup = event.target.checked })} /> Allow cleanup of processed originals</label>
-              <label><input type="checkbox" checked={folder.autoProcess === true} onChange={(event) => setFolder(index, (f) => { f.autoProcess = event.target.checked })} /> Prepare new files automatically (manual review)</label>
+              {folder.method !== 'voicenotes' ? (
+                <>
+                  <label><input type="checkbox" checked={folder.cleanup !== false} onChange={(event) => setFolder(index, (f) => { f.cleanup = event.target.checked })} /> Allow cleanup of processed originals</label>
+                  <label><input type="checkbox" checked={folder.autoProcess === true} onChange={(event) => setFolder(index, (f) => { f.autoProcess = event.target.checked })} /> Prepare new files automatically (manual review)</label>
+                </>
+              ) : null}
             </div>
             {folder.snapshot ? (
               <>
@@ -142,11 +148,14 @@ export default function SettingsDialog({ draft, updateDraft, addFolder, saveSett
               </>
             ) : null}
             <div className="form-grid" hidden={folder.snapshot}>
-              <div className="field"><span className="field__label">Placement</span>
+              <div className="field" hidden={folder.method === 'voicenotes'}><span className="field__label">Placement</span>
                 <select value={folder.placement ?? 'auto'} onChange={(event) => setFolder(index, (f) => { f.placement = event.target.value })}>
                   <option value="auto">auto</option><option value="manual">manual</option>
                 </select>
               </div>
+              {folder.method === 'voicenotes' ? (
+                <p className="hint">Voice notes are always approved per chat/day in the Review dialog: merge &amp; move, or delete to trash.</p>
+              ) : null}
               <div className="field"><span className="field__label">On change</span>
                 <select value={folder.onChanged ?? 'overwrite'} onChange={(event) => setFolder(index, (f) => { f.onChanged = event.target.value })}>
                   <option value="overwrite">overwrite</option><option value="conflict">conflict</option>
@@ -157,7 +166,9 @@ export default function SettingsDialog({ draft, updateDraft, addFolder, saveSett
                   <option value="all">all</option><option value="errors">errors</option>
                 </select>
               </div>
-              <div className="field" hidden={folder.snapshot}><span className="field__label">Date pattern (voicenotes)</span><input value={folder.datePattern ?? ''} onChange={(event) => setFolder(index, (f) => { f.datePattern = event.target.value })} /></div>
+              {folder.method === 'voicenotes' || folder.datePattern ? (
+                <div className="field" hidden={folder.snapshot}><span className="field__label">Date pattern (voicenotes)</span><input value={folder.datePattern ?? ''} onChange={(event) => setFolder(index, (f) => { f.datePattern = event.target.value })} /></div>
+              ) : null}
             </div>
           </div>
         ))}

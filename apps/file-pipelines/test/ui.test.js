@@ -75,7 +75,7 @@ async function makeSetup() {
   return { root, daemon, dest, base: `http://127.0.0.1:${port}` };
 }
 
-test("ui: review a parked voice note from the browser and place it", { skip: !CAN_RUN }, async () => {
+test("ui: review a voicenote group and merge it into the destination", { skip: !CAN_RUN }, async () => {
   const { root, daemon, dest, base } = await makeSetup();
   const browser = await launchBrowser();
   try {
@@ -88,22 +88,14 @@ test("ui: review a parked voice note from the browser and place it", { skip: !CA
     await reviewButton.click();
 
     const dialog = page.locator('[data-testid="review-dialog"]');
-    await dialog.locator(".review-groups input[type=checkbox]").first().waitFor({ state: "visible", timeout: 30_000 });
-    await dialog.getByRole("button", { name: "Process selected" }).click();
+    const group = dialog.locator('[data-testid="voice-group-voicenotes-20190529"]');
+    await group.waitFor({ state: "visible", timeout: 30_000 });
+    assert.match(await group.textContent(), /201301 · 20190529/);
+    await group.getByRole("button", { name: "Merge & move" }).click();
 
-    const entry = dialog.locator(".review-row").first();
-    await entry.waitFor({ state: "visible", timeout: 60_000 });
-    assert.match(await entry.textContent(), /2019-05-29-00-00-00-\(20190529-merged-201301\)\.mp4/);
-
-    // Preview stream is reachable and range-capable.
-    const audioSrc = await entry.locator("audio").getAttribute("src");
-    const preview = await page.request.get(new URL(audioSrc, base).toString());
-    assert.equal(preview.status(), 200);
-
-    await entry.getByRole("button", { name: "Place" }).click();
     const destName = "2019-05-29-00-00-00-(20190529-merged-201301).mp4";
     const placed = await waitFor(() => fsp.stat(path.join(dest, destName)).then(() => true).catch(() => false));
-    assert.equal(placed, true, "the placed file must land in the destination");
+    assert.equal(placed, true, "the approved merge must land in the destination");
   } finally {
     await browser.close();
     await daemon.stop();
@@ -155,7 +147,7 @@ test("ui: settings editor round-trips the new folder options", { skip: !CAN_RUN 
   }
 });
 
-test("ui: discard requires confirmation and leaves the destination untouched", { skip: !CAN_RUN }, async () => {
+test("ui: delete requires confirmation and moves the source clips to trash", { skip: !CAN_RUN }, async () => {
   const { root, daemon, dest, base } = await makeSetup();
   const browser = await launchBrowser();
   try {
@@ -164,23 +156,21 @@ test("ui: discard requires confirmation and leaves the destination untouched", {
     const card = page.locator(".folder-card", { hasText: "voicenotes" }).first();
     await card.getByRole("button", { name: /^Review/ }).click();
     const dialog = page.locator('[data-testid="review-dialog"]');
-    await dialog.locator(".review-groups input[type=checkbox]").first().waitFor({ state: "visible", timeout: 30_000 });
-    await dialog.getByRole("button", { name: "Process selected" }).click();
-    const entry = dialog.locator(".review-row").first();
-    await entry.waitFor({ state: "visible", timeout: 60_000 });
+    const group = dialog.locator('[data-testid="voice-group-voicenotes-20190529"]');
+    await group.waitFor({ state: "visible", timeout: 30_000 });
 
-    await entry.getByRole("button", { name: "Discard" }).click();
+    await group.getByRole("button", { name: "Delete" }).click();
     const confirm = page.locator('[data-testid="confirm-dialog"]');
     await confirm.waitFor({ state: "visible" });
-    await confirm.getByRole("button", { name: "Discard" }).click();
+    await confirm.getByRole("button", { name: "Delete" }).click();
 
-    const discarded = await waitFor(async () => {
-      const state = await (await fetch(`${base}/api/state`)).json();
-      return state.folders[0].counts.discarded === 1;
+    const gone = await waitFor(async () => {
+      const files = await fsp.readdir(path.join(root, "src", "201301"));
+      const review = await (await fetch(`${base}/api/review`)).json();
+      return files.length === 0 && review.voicenotes.length === 0;
     });
-    assert.equal(discarded, true, "the clip must be marked discarded");
-    assert.deepEqual(await fsp.readdir(dest), [], "discard must never write to the destination");
-    assert.deepEqual((await (await fetch(`${base}/api/review`)).json()).entries, []);
+    assert.equal(gone, true, "the source clips must be moved to trash");
+    assert.deepEqual(await fsp.readdir(dest), [], "delete must never write to the destination");
   } finally {
     await browser.close();
     await daemon.stop();

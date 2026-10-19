@@ -100,9 +100,11 @@ export function normalizeConfig(raw) {
       recursive: Boolean(folder.recursive) || method === "voicenotes",
       includeHidden: Boolean(folder.includeHidden),
       onChanged: folder.onChanged === "conflict" ? "conflict" : "overwrite",
-      cleanup: snapshot ? false : folder.cleanup !== false,
-      placement: folder.placement === "manual" ? "manual" : "auto",
-      autoProcess: Boolean(folder.autoProcess),
+      // Voicenotes are approval-only: the source clips are the queue, so the
+      // normal cleanup/manual-parking flags do not apply.
+      cleanup: snapshot || method === "voicenotes" ? false : folder.cleanup !== false,
+      placement: method === "voicenotes" ? "manual" : folder.placement === "manual" ? "manual" : "auto",
+      autoProcess: method === "voicenotes" ? false : Boolean(folder.autoProcess),
       notify: folder.notify === "errors" ? "errors" : "all",
       // Snapshot copies: optional generated-script override, selective copy
       // of a subdirectory, destination naming/marker, a remote runner node and

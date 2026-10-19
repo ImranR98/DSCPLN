@@ -19,7 +19,7 @@ Configuration can also be mounted from a private `dscpln-config` repo: set `--co
 | `standardize` | Picks a date (`DateTimeOriginal`, else the oldest date-like tag), writes all date tags, renames to `YYYY-MM-DD-HH-MM-SS-(<original-name>).ext`, and copies into the destination. |
 | `snapchat`    | Waits until the folder has been quiet for `settleSeconds` (default 30 min), groups `Snapchat-*.mp4` clips whose timestamps are within `groupWindowSeconds` (default 15s), concatenates + re-encodes each group, standardizes the output, and records the input list in a custom `XMP-media-sync:Inputs` tag on the output. |
 | `copy`        | Byte-verified copy, original name preserved (call recordings). Add `recursive: true` to mirror a whole tree (WhatsApp AllMedia archives) and `onChanged` to control what happens when a same-name source changes. Add `snapshot: true` to run on demand/schedule instead of watching (see below). |
-| `voicenotes`  | Concatenates same-day clips from the same folder into one MP4 (a 0.1s tone between clips), standardizes it, and records inputs in XMP. The clip-date scheme is **user-defined** per folder via `datePattern` (e.g. WhatsApp push-to-talk `PTT-YYYYMMDD-WA####.opus` uses `-(\d{8})-`); see Manual placement below. |
+| `voicenotes`  | Approval-only: groups same-day clips from the same folder, then on your approval concatenates them into one MP4 (a 0.1s tone between clips), standardizes/moves it, and trashes the source clips. Delete moves the group to trash instead. The clip-date scheme is **user-defined** per folder via `datePattern` (e.g. WhatsApp push-to-talk `PTT-YYYYMMDD-WA####.opus` uses `-(\d{8})-`); see Voicenotes below. |
 
 ## Snapshot copies
 
@@ -63,18 +63,35 @@ read (e.g. `user_home_t`). Set `PIPELINES_SELINUX_TYPE=spc_t` (with
 host) to have the Job run with that label instead of relabeling the source
 folders.
 
-## Manual placement (review before writing)
+## Voicenotes (approval only)
 
-Any `standardize`, `snapchat` or `voicenotes` folder can set
-`placement: "manual"`: the daemon still processes items, but instead of writing
-to the destination it **parks** the finished file under `reviewDir` and waits.
-The web UI's Review dialog lists pending clip groups (with a per-group Process
-action) and parked outputs (with audio preview, Place and Discard). Placing is
-an atomic rename with the same never-overwrite rules as automatic placement —
-a destination file with the same name and different content is refused, not
-clobbered. Discarded clips are skipped until the source changes or you
-explicitly process them again. `autoProcess: true` prepares new items
-continuously instead of only when you press Process.
+Voicenotes never process automatically. The source folder is the queue: a group
+is every clip currently present for one chat directory + clip date. Open
+**Review** and choose one action per group:
+
+- **Merge & move** — concatenate the group, standardize the output, move it to
+  the destination, then move the source clips to trash.
+- **Delete** — move the source clips to trash; no destination file is written.
+
+This is a single transaction per group, so a discarded group cannot come back
+after a restart. If a destination merge already exists for the same chat/day,
+the merge is accepted as already done when its XMP input list matches; otherwise
+approval is refused until that destination file is moved or deleted. A clip
+that arrives after approval appears as a new group.
+
+`datePattern` is required. `settleSeconds` delays a group until its clips have
+been quiet that long. `placement`, `autoProcess` and cleanup are not used for
+voicenotes.
+
+## Manual placement (standardize / snapchat)
+
+`standardize` and `snapchat` folders can set `placement: "manual"`: the daemon
+processes items, but instead of writing to the destination it **parks** the
+finished file under `reviewDir` and waits. The Review dialog lists parked
+outputs with audio preview, Place and Discard. Placing is an atomic rename with
+the same never-overwrite rules as automatic placement — a destination file with
+the same name and different content is refused, not clobbered. `autoProcess:
+true` prepares new items continuously instead of only when you press Process.
 
 Parked entries survive restarts (a manifest next to each file), and a group
 whose source clips were deleted after parking stays placeable — the parked
@@ -82,7 +99,7 @@ merge may be the only copy.
 
 ## Safety model
 
-- Source files are only ever **read** until you press Cleanup.
+- Source files are only ever **read** until you press Cleanup, or — for voicenotes — until you approve/delete a group in Review.
 - Placements are same-filesystem atomic renames from a staging area; the
   destination never sees partial files. Replacing a changed file (`copy`
   overwrite mode) is also atomic: temp file + rename in the destination
@@ -113,7 +130,8 @@ merge may be the only copy.
 | `src/daemon.js` | wires the store, queue, watcher, scheduler, snapshot runner and API |
 | `src/config.js` / `src/schedule.js` | config shape/normalization/validation; run schedules |
 | `src/store.js` | per-folder file state (scan, dedupe/conflict detection, cleanup previews) |
-| `src/queue.js` / `src/processors/` | the work queue and the four processing methods |
+| `src/queue.js` / `src/processors/` | the work queue and the standardize/snapchat/copy processors |
+| `src/voicenotes-flow.js` | approval-only voicenote group listing, merge/move and delete |
 | `src/watchers.js` | chokidar watchers for watched folders (snapshots are skipped) |
 | `src/snapshot.js` | snapshot copies: generated commands + remote Kubernetes Jobs |
 | `src/scheduler.js` | fires snapshot folders on their schedule |
@@ -152,10 +170,10 @@ Paths accept `~` and environment variables. Key fields:
 | `folders[].recursive` | mirror subdirectories (implied by `voicenotes`); `copy` uses it for whole-tree archives |
 | `folders[].includeHidden` | also ingest dot-files (`copy` archives); sync internals (`.stfolder`, `!sync`, `*.tmp`, `.file-pipelines*`) are always skipped |
 | `folders[].onChanged` | `copy` only: `overwrite` (default) replaces a changed destination copy atomically; `conflict` flags it |
-| `folders[].cleanup` | `false` hides and refuses cleanup (forever archives) |
+| `folders[].cleanup` | `false` hides and refuses cleanup (forever archives); always false for voicenotes |
 | `folders[].notify` | `all` (default) notifies on every success; `errors` only notifies failures (use for bulk archives) |
-| `folders[].placement` | `auto` (default) or `manual` — park processed files for review (not valid for `copy`) |
-| `folders[].autoProcess` | `placement: manual` only: process new items automatically instead of on demand |
+| `folders[].placement` | `auto` (default) or `manual` — park processed files for review (standardize/snapchat only) |
+| `folders[].autoProcess` | `placement: manual` only (standardize/snapchat): process new items automatically instead of on demand |
 | `folders[].datePattern` | `voicenotes` only (required): regex extracting the clip date; capture groups are joined, non-digits stripped, result must be `YYYYMMDD` |
 | `folders[].snapshot` | `copy` only: run on demand/schedule instead of watching; enables `sources`, `subdir`, `nameSuffix`, `touch`, `runner`, `schedule`, `command` |
 | `folders[].runner` | snapshot only: Kubernetes node to run the Job on (`null` = this server) |

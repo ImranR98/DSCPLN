@@ -17,6 +17,12 @@ import { expandPath } from '@dscpln/server-kit'
 // secret; leave the field blank to keep using this value.
 export const DEFAULT_RESTIC_PASSWORD = 'dscpln-state-backups-default-2026'
 
+// The restic repository is replicated by Syncthing, which runs as this GID.
+// Keeping the repo root setgid on that group makes every directory and file
+// restic creates below it inherit the group automatically.
+const DEFAULT_RESTIC_GID = 1000
+const REPO_TOP_LEVEL = ['data', 'index', 'keys', 'locks', 'snapshots', 'config']
+
 const quote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`
 
 export const safeTargetName = (name) =>
@@ -38,9 +44,44 @@ function run(cmd, args, options = {}) {
   })
 }
 
+function repoGid() {
+  const value = Number(process.env.RESTIC_GID ?? DEFAULT_RESTIC_GID)
+  return Number.isInteger(value) && value >= 0 ? value : DEFAULT_RESTIC_GID
+}
+
+// The container runs as root so it can read the Postgres/Redis-owned PVC data.
+// The repo root therefore has to be group-owned by the Syncthing GID; the
+// setgid bit then propagates that group to everything restic creates.
+export function ensureRepoOwnership(repoPath, log = console.log, gid = repoGid()) {
+  const repo = expandPath(repoPath)
+  fs.mkdirSync(repo, { recursive: true })
+
+  const root = fs.statSync(repo)
+  if (root.gid !== gid) {
+    fs.chownSync(repo, root.uid, gid)
+  }
+  if ((root.mode & 0o2000) === 0) {
+    fs.chmodSync(repo, (root.mode & 0o7777) | 0o2000)
+  }
+
+  // Existing inodes keep the group they were created with. Migrate them once;
+  // after that, setgid inheritance keeps every new entry on the same GID.
+  const paths = [repo, ...REPO_TOP_LEVEL.map((name) => path.join(repo, name))]
+  const stale = paths
+    .filter((candidate) => fs.existsSync(candidate))
+    .some((candidate) => fs.statSync(candidate).gid !== gid)
+
+  if (stale) {
+    log(`Migrating restic repository group to ${gid}`)
+    run('chgrp', ['-R', String(gid), repo], { inherit: true })
+    const migrated = fs.statSync(repo)
+    fs.chmodSync(repo, (migrated.mode & 0o7777) | 0o2000)
+  }
+}
+
 function ensureRepository(config, dataDir, log) {
   const repo = expandPath(config.destination)
-  fs.mkdirSync(repo, { recursive: true })
+  ensureRepoOwnership(repo, log)
   const env = resticEnv(config, dataDir)
   if (!fs.existsSync(path.join(repo, 'config'))) {
     log(`Initializing restic repository at ${repo}`)

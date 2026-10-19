@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChartNoAxesColumn, LayoutDashboard } from 'lucide-react'
+import { ChartNoAxesColumn, LayoutDashboard, TrendingUp } from 'lucide-react'
 import { getJson, postJson, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
 
 
@@ -125,6 +125,9 @@ export default function Settings() {
           <div className="app-header__actions">
             <a role="button" className="outline secondary icon-button" href="./" title="Dashboard" aria-label="Dashboard">
               <LayoutDashboard size={16} strokeWidth={1.8} />
+            </a>
+            <a role="button" className="outline secondary icon-button" href="forecasts" title="Forecasts" aria-label="Forecasts">
+              <TrendingUp size={16} strokeWidth={1.8} />
             </a>
             <a role="button" className="outline secondary icon-button" href="insights" title="Insights" aria-label="Insights">
               <ChartNoAxesColumn size={16} strokeWidth={1.8} />

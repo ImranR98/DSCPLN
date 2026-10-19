@@ -11,6 +11,729 @@ import { assertWorkbookRepo, commitFile } from '../../workbook-git.mjs';
 import { BUDGETS_LABEL, BUDGET_BIAS_LABEL, BUDGET_CURRENCY_HEADER, BUDGET_MONTHLY_LABEL, CONVERSION_GROUP, CURRENCIES_HEADER, CURRENCY_SYMBOLS_HEADER, EXCLUDED_LABEL, INCOME_GROUP, categoriesForKind, conversionCategoriesFor, getMonthExpectedSpend, serializeTransaction } from './model.mjs';
 import { cellNumber, cellString, cleanAmount, dateFromCell, datePartsToIso, datePartsToUtcDate, hasSubCentPrecision, normalizeHeader, parseDateInput, parseImportLine, parseImportLines, parseTransactionId, transactionHash, validateAmount, validateText } from './parse.mjs';
 
+// Scenario sheets are plain inputs: the Forecasts page computes every figure
+// live. They are identified by the marker rather than the filename so a renamed
+// tab is still a scenario, and the old date-named forecast sheets are ignored.
+const SCENARIO_MARKER = 'D$CPLN Scenario v1';
+const SCENARIO_PREFIX = 'Scenario - ';
+const SCENARIO_MAX_SHEET_NAME = 31;
+const SCENARIO_SECTION_LABELS = ['Target', 'Accounts', 'One-time events', 'Recurring adjustments', 'Scheduled changes', 'Category inputs'];
+const SCENARIO_ACCOUNT_HEADERS = ['Account', 'Balance', 'Include'];
+const SCENARIO_EVENT_HEADERS = ['Date', 'Details', 'Kind', 'Amount', 'Notes'];
+const SCENARIO_RECURRING_HEADERS = ['Kind', 'Category', 'Details', 'Label', 'Include', 'Amount', 'Cadence', 'Next date'];
+const SCENARIO_CHANGE_HEADERS = ['From', 'Kind', 'Category', 'Amount'];
+const SCENARIO_CATEGORY_HEADERS = ['Kind', 'Category', 'Override', 'Include'];
+const SCENARIO_CADENCES = new Set(['weekly', 'biweekly', 'semimonthly', 'monthly', 'quarterly', 'annual']);
+const SCENARIO_BASELINE_METHODS = new Set(['auto', 'simple', 'robust']);
+const SCENARIO_MAX_ACCOUNTS = 20;
+const SCENARIO_MAX_EVENTS = 200;
+const SCENARIO_MAX_SCENARIOS = 50;
+const SCENARIO_MAX_ADJUSTMENTS = 100;
+const SCENARIO_MAX_CHANGES = 100;
+
+const isScenarioSheet = (sheet) =>
+    normalizeHeader(cellString(sheet.getCell('A1').value)) === SCENARIO_MARKER;
+
+const findScenarioLabelRow = (sheet, label, fromRow = 1, column = 1) => {
+    for (let rowNumber = fromRow; rowNumber <= sheet.rowCount; rowNumber++) {
+        if (normalizeHeader(cellString(sheet.getRow(rowNumber).getCell(column).value)) === label) {
+            return rowNumber;
+        }
+    }
+    return null;
+};
+
+const parseScenarioDate = (value, date1904, label) => {
+    if (value == null || cellString(value).trim() === '') {
+        return null;
+    }
+    const parts = dateFromCell(value, date1904);
+    if (!parts) {
+        throw new ValidationError(`${label} is not a valid date`);
+    }
+    return datePartsToIso(parts);
+};
+
+const parseScenarioKind = (value) => {
+    const text = cellString(value).trim().toLowerCase();
+    if (text === 'income' || text === 'in') {
+        return 'income';
+    }
+    if (text === 'expense' || text === 'out') {
+        return 'expense';
+    }
+    throw new ValidationError('Scenario kind must be Income or Expense');
+};
+
+const scenarioBoolean = (value, fallback = true) => {
+    if (typeof value === 'boolean') return value;
+    const text = String(value == null ? '' : value).trim().toLowerCase();
+    if (['off', 'no', 'false', '0', 'n'].includes(text)) return false;
+    if (['on', 'yes', 'true', '1', 'y'].includes(text)) return true;
+    return fallback;
+};
+
+const parseScenarioInclude = (value, label) => {
+    const text = cellString(value).trim().toLowerCase();
+    if (text === '' || text === 'yes' || text === 'true' || text === 'y' || text === '1' || text === 'on') {
+        return true;
+    }
+    if (text === 'no' || text === 'false' || text === 'n' || text === '0' || text === 'off') {
+        return false;
+    }
+    throw new ValidationError(`${label} must be Yes or No`);
+};
+
+const scenarioNumber = (value, label, { allowNegative = false, allowZero = true } = {}) => {
+    if (value == null || cellString(value).trim() === '') {
+        return null;
+    }
+    const number = cellNumber(value);
+    if (number == null || !Number.isFinite(number)) {
+        throw new ValidationError(`${label} must be a number`);
+    }
+    if (!allowNegative && number < 0) {
+        throw new ValidationError(`${label} must be 0 or greater`);
+    }
+    if (!allowZero && number === 0) {
+        throw new ValidationError(`${label} must be greater than 0`);
+    }
+    const scaled = number * 1e12;
+    const tolerance = Math.max(1e-6, Math.abs(scaled) * Number.EPSILON * 4);
+    if (Math.abs(scaled - Math.round(scaled)) > tolerance) {
+        throw new ValidationError(`${label} can have at most 12 decimal places`);
+    }
+    return Number.parseFloat(number.toFixed(12));
+};
+
+const scenarioSheetName = (name, existingNames, currentName = null) => {
+    const cleaned = String(name || 'Scenario')
+        .replace(/[\\/?*[\]:]/g, '-')
+        .replace(/\s+/g, ' ')
+        .trim() || 'Scenario';
+    const base = `${SCENARIO_PREFIX}${cleaned}`.slice(0, SCENARIO_MAX_SHEET_NAME).trim();
+    const taken = new Set((existingNames || [])
+        .filter((entry) => String(entry).toLowerCase() !== String(currentName || '').toLowerCase())
+        .map((entry) => String(entry).toLowerCase()));
+    let candidate = base;
+    let counter = 2;
+    while (taken.has(candidate.toLowerCase())) {
+        const suffix = ` (${counter})`;
+        candidate = `${base.slice(0, SCENARIO_MAX_SHEET_NAME - suffix.length)}${suffix}`;
+        counter += 1;
+    }
+    return candidate;
+};
+
+const normalizeScenario = (input = {}, constants = {}, meta = {}) => {
+    const source = input && typeof input === 'object' ? input : {};
+    const name = typeof source.name === 'string' ? source.name.trim() : '';
+    if (!name) {
+        throw new ValidationError('Scenario name is required');
+    }
+    if (name.length > 80) {
+        throw new ValidationError('Scenario name is too long (max 80 characters)');
+    }
+    if (/[\r\n]/.test(name)) {
+        throw new ValidationError('Scenario name must be a single line');
+    }
+    const currency = typeof source.currency === 'string' ? source.currency.trim() : '';
+    if (!currency) {
+        throw new ValidationError('Currency is required');
+    }
+    if (constants.currencies && constants.currencies.length && !constants.currencies.includes(currency)) {
+        throw new ValidationError(`Currency must be one of: ${constants.currencies.join(', ')}`);
+    }
+    const asOf = source.asOf ? datePartsToIso(parseDateInput(source.asOf)) : null;
+    const horizonMonths = Number(source.horizonMonths);
+    if (!Number.isInteger(horizonMonths) || horizonMonths < 1 || horizonMonths > 120) {
+        throw new ValidationError('Horizon must be between 1 and 120 months');
+    }
+    const baselineMonths = Number(source.baselineMonths);
+    if (!Number.isInteger(baselineMonths) || baselineMonths < 1 || baselineMonths > 24) {
+        throw new ValidationError('Baseline must be between 1 and 24 months');
+    }
+    const baselineMethodRaw = String(source.baselineMethod || 'auto').trim().toLowerCase();
+    const baselineMethod = SCENARIO_BASELINE_METHODS.has(baselineMethodRaw) ? baselineMethodRaw : 'auto';
+    const recurringDetection = scenarioBoolean(source.recurringDetection, true);
+    const uncertainty = scenarioBoolean(source.uncertainty, true);
+    const notes = typeof source.notes === 'string' ? source.notes.trim() : '';
+    if (notes.length > 2000) {
+        throw new ValidationError('Scenario notes are too long (max 2000 characters)');
+    }
+
+    const targetSource = source.target && typeof source.target === 'object' ? source.target : {};
+    const targetLabel = typeof targetSource.label === 'string' && targetSource.label.trim() ?
+        targetSource.label.trim() : 'Savings target';
+    if (targetLabel.length > 80) {
+        throw new ValidationError('Target label is too long (max 80 characters)');
+    }
+    if (/[\r\n]/.test(targetLabel)) {
+        throw new ValidationError('Target label must be a single line');
+    }
+    const targetAmount = scenarioNumber(targetSource.amount, 'Target amount');
+    const targetDate = targetSource.date ? datePartsToIso(parseDateInput(targetSource.date)) : null;
+    if (targetDate && !(targetAmount > 0)) {
+        throw new ValidationError('Target amount is required when a target date is set');
+    }
+
+    const accounts = (Array.isArray(source.accounts) ? source.accounts : [])
+        .slice(0, SCENARIO_MAX_ACCOUNTS)
+        .map((entry) => {
+            const entryName = typeof entry?.name === 'string' ? entry.name.trim() : '';
+            if (!entryName) {
+                throw new ValidationError('Account name is required');
+            }
+            if (entryName.length > 80) {
+                throw new ValidationError('Account name is too long (max 80 characters)');
+            }
+            if (/[\r\n]/.test(entryName)) {
+                throw new ValidationError('Account name must be a single line');
+            }
+            const include = entry.include === false ||
+                String(entry.include ?? '').trim().toLowerCase() === 'no';
+            return {
+                name: entryName,
+                balance: scenarioNumber(entry.balance, `Balance for ${entryName}`, { allowNegative: true }) ?? 0,
+                include: !include,
+            };
+        });
+
+    const events = (Array.isArray(source.events) ? source.events : [])
+        .slice(0, SCENARIO_MAX_EVENTS)
+        .map((entry) => {
+            const date = datePartsToIso(parseDateInput(entry?.date));
+            const details = validateText(entry?.details, 'Event details', true);
+            if (details.length > 200) {
+                throw new ValidationError('Event details are too long (max 200 characters)');
+            }
+            if (entry?.kind !== 'income' && entry?.kind !== 'expense') {
+                throw new ValidationError('Event kind must be income or expense');
+            }
+            const amount = scenarioNumber(entry.amount, `Amount for ${details}`, { allowZero: false });
+            const eventNotes = validateText(entry.notes, 'Event notes', false);
+            if (eventNotes.length > 500) {
+                throw new ValidationError('Event notes are too long (max 500 characters)');
+            }
+            return { date, details, kind: entry.kind, amount, notes: eventNotes };
+        });
+
+    const knownCategories = new Set((constants.categoryGroups || []).flatMap((entry) => entry.categories));
+    const overrides = { income: {}, expense: {} };
+    const rawOverrides = source.overrides && typeof source.overrides === 'object' ? source.overrides : {};
+    for (const kind of ['income', 'expense']) {
+        const allowed = new Set(categoriesForKind(constants, kind));
+        const list = rawOverrides[kind] && typeof rawOverrides[kind] === 'object' ? rawOverrides[kind] : {};
+        for (const [rawCategory, value] of Object.entries(list)) {
+            const category = String(rawCategory).trim();
+            if (!category || !allowed.has(category)) {
+                continue;
+            }
+            const amount = scenarioNumber(value, `${category} override`);
+            if (amount != null) {
+                overrides[kind][category] = amount;
+            }
+        }
+    }
+
+    const excludedCategories = [];
+    for (const value of Array.isArray(source.excludedCategories) ? source.excludedCategories : []) {
+        const category = typeof value === 'string' ? value.trim() : '';
+        if (category && knownCategories.has(category) && !excludedCategories.includes(category)) {
+            excludedCategories.push(category);
+        }
+    }
+
+    const recurringAdjustments = [];
+    const seenAdjustments = new Set();
+    for (const entry of (Array.isArray(source.recurringAdjustments) ? source.recurringAdjustments : [])
+        .slice(0, SCENARIO_MAX_ADJUSTMENTS)) {
+        if (entry?.kind !== 'income' && entry?.kind !== 'expense') {
+            throw new ValidationError('Recurring adjustment kind must be income or expense');
+        }
+        const category = typeof entry.category === 'string' ? entry.category.trim() : '';
+        if (!category || !categoriesForKind(constants, entry.kind).includes(category)) {
+            throw new ValidationError(`Unknown recurring adjustment category: ${JSON.stringify(entry.category ?? '')}`);
+        }
+        const details = typeof entry.details === 'string' && entry.details.trim() ?
+            entry.details.trim() : category;
+        if (details.length > 200) {
+            throw new ValidationError('Recurring adjustment details are too long (max 200 characters)');
+        }
+        const label = typeof entry.label === 'string' ? entry.label.trim() : '';
+        if (label.length > 200) {
+            throw new ValidationError('Recurring adjustment label is too long (max 200 characters)');
+        }
+        const cadenceRaw = typeof entry.cadence === 'string' ? entry.cadence.trim().toLowerCase() : '';
+        if (cadenceRaw && !SCENARIO_CADENCES.has(cadenceRaw)) {
+            throw new ValidationError(`Unknown recurring cadence: ${entry.cadence}`);
+        }
+        const amount = scenarioNumber(entry.amount, `Recurring amount for ${label || details}`);
+        const nextDate = entry.nextDate ? datePartsToIso(parseDateInput(entry.nextDate)) : null;
+        const key = `${entry.kind}|${category}|${details.toLowerCase()}`;
+        if (seenAdjustments.has(key)) {
+            throw new ValidationError(`Duplicate recurring adjustment for ${label || details}`);
+        }
+        seenAdjustments.add(key);
+        recurringAdjustments.push({
+            kind: entry.kind,
+            category,
+            details,
+            label,
+            include: scenarioBoolean(entry.include, true),
+            amount,
+            cadence: cadenceRaw || null,
+            nextDate,
+        });
+    }
+
+    const changes = [];
+    const seenChanges = new Set();
+    for (const entry of (Array.isArray(source.changes) ? source.changes : []).slice(0, SCENARIO_MAX_CHANGES)) {
+        const from = typeof entry?.from === 'string' ? entry.from.trim() : '';
+        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(from)) {
+            throw new ValidationError('Scheduled change month must be YYYY-MM');
+        }
+        if (entry?.kind !== 'income' && entry?.kind !== 'expense') {
+            throw new ValidationError('Scheduled change kind must be income or expense');
+        }
+        const category = typeof entry.category === 'string' ? entry.category.trim() : '';
+        if (!category || !categoriesForKind(constants, entry.kind).includes(category)) {
+            throw new ValidationError(`Unknown scheduled change category: ${JSON.stringify(entry.category ?? '')}`);
+        }
+        const amount = scenarioNumber(entry.amount, `Scheduled ${category} amount`);
+        if (amount == null) {
+            throw new ValidationError('Scheduled change amount is required');
+        }
+        const key = `${from}|${entry.kind}|${category}`;
+        if (seenChanges.has(key)) {
+            throw new ValidationError(`Duplicate scheduled change for ${category} in ${from}`);
+        }
+        seenChanges.add(key);
+        changes.push({ from, kind: entry.kind, category, amount });
+    }
+
+    return {
+        sheetName: meta.sheetName ?? null,
+        revision: Number.isInteger(meta.revision) ? meta.revision : 0,
+        updatedAt: meta.updatedAt ?? null,
+        name,
+        currency,
+        asOf,
+        horizonMonths,
+        baselineMonths,
+        baselineMethod,
+        recurringDetection,
+        uncertainty,
+        notes,
+        target: { label: targetLabel, amount: targetAmount, date: targetDate },
+        accounts,
+        events,
+        overrides,
+        excludedCategories,
+        recurringAdjustments,
+        changes,
+    };
+};
+
+const readScenarioTable = (sheet, sectionLabel, headers) => {
+    const sectionRow = findScenarioLabelRow(sheet, sectionLabel);
+    if (!sectionRow) {
+        return [];
+    }
+    let headerRow = null;
+    for (let rowNumber = sectionRow + 1; rowNumber <= Math.min(sectionRow + 4, sheet.rowCount); rowNumber++) {
+        if (normalizeHeader(cellString(sheet.getRow(rowNumber).getCell(1).value)) === headers[0]) {
+            headerRow = rowNumber;
+            break;
+        }
+    }
+    if (!headerRow) {
+        return [];
+    }
+    const columns = {};
+    sheet.getRow(headerRow).eachCell({ includeEmpty: false }, (cell, column) => {
+        const header = normalizeHeader(cellString(cell.value));
+        if (headers.includes(header)) {
+            columns[header] = column;
+        }
+    });
+    if (!headers.every((header) => columns[header])) {
+        return [];
+    }
+    const rows = [];
+    for (let rowNumber = headerRow + 1; rowNumber <= sheet.rowCount; rowNumber++) {
+        const row = sheet.getRow(rowNumber);
+        const values = {};
+        let hasValue = false;
+        for (const header of headers) {
+            values[header] = row.getCell(columns[header]).value;
+            if (cellString(values[header]).trim() !== '') {
+                hasValue = true;
+            }
+        }
+        if (!hasValue) {
+            break;
+        }
+        if (SCENARIO_SECTION_LABELS.includes(normalizeHeader(cellString(row.getCell(1).value)))) {
+            break;
+        }
+        rows.push(values);
+    }
+    return rows;
+};
+
+const parseScenarioSheet = (sheet, constants, date1904) => {
+    if (!isScenarioSheet(sheet)) {
+        return null;
+    }
+    const readSetting = (label) => {
+        const row = findScenarioLabelRow(sheet, label);
+        return row ? sheet.getRow(row).getCell(2).value : null;
+    };
+    const readSettingAt = (label, column, valueColumn) => {
+        const row = findScenarioLabelRow(sheet, label, 1, column);
+        return row ? sheet.getRow(row).getCell(valueColumn).value : null;
+    };
+    const revision = cellNumber(readSetting('Revision'));
+    const baselineMethodRaw = cellString(readSettingAt('Baseline method', 4, 5)).trim().toLowerCase();
+    const recurringDetectionRaw = readSettingAt('Recurring detection', 4, 5);
+    const uncertaintyRaw = readSettingAt('Uncertainty', 4, 5);
+    const source = {
+        name: cellString(readSetting('Scenario name')).trim(),
+        currency: cellString(readSetting('Currency')).trim(),
+        asOf: parseScenarioDate(readSetting('As of'), date1904, 'As of'),
+        horizonMonths: cellNumber(readSetting('Horizon (months)')),
+        baselineMonths: cellNumber(readSetting('Baseline (months)')),
+        baselineMethod: SCENARIO_BASELINE_METHODS.has(baselineMethodRaw) ? baselineMethodRaw : 'auto',
+        recurringDetection: cellString(recurringDetectionRaw).trim() === '' ?
+            true : parseScenarioInclude(recurringDetectionRaw, 'Recurring detection'),
+        uncertainty: cellString(uncertaintyRaw).trim() === '' ?
+            true : parseScenarioInclude(uncertaintyRaw, 'Uncertainty'),
+        notes: cellString(readSetting('Notes')),
+        target: {},
+        accounts: [],
+        events: [],
+        overrides: { income: {}, expense: {} },
+        excludedCategories: [],
+        recurringAdjustments: [],
+        changes: [],
+    };
+
+    const targetRow = findScenarioLabelRow(sheet, 'Target');
+    if (targetRow) {
+        const readTarget = (label) => {
+            for (let rowNumber = targetRow + 1; rowNumber <= targetRow + 6; rowNumber++) {
+                if (normalizeHeader(cellString(sheet.getRow(rowNumber).getCell(1).value)) === label) {
+                    return sheet.getRow(rowNumber).getCell(2).value;
+                }
+            }
+            return null;
+        };
+        source.target = {
+            label: cellString(readTarget('Label')).trim(),
+            amount: readTarget('Amount'),
+            date: parseScenarioDate(readTarget('Date'), date1904, 'Target date'),
+        };
+    }
+
+    for (const row of readScenarioTable(sheet, 'Accounts', SCENARIO_ACCOUNT_HEADERS)) {
+        const accountName = cellString(row['Account']).trim();
+        if (!accountName) {
+            continue;
+        }
+        source.accounts.push({
+            name: accountName,
+            balance: row['Balance'],
+            include: parseScenarioInclude(row['Include'], `Include for ${accountName}`),
+        });
+    }
+
+    for (const row of readScenarioTable(sheet, 'One-time events', SCENARIO_EVENT_HEADERS)) {
+        const details = cellString(row['Details']).trim();
+        const date = parseScenarioDate(row['Date'], date1904, 'Event date');
+        if (!details && !date) {
+            continue;
+        }
+        source.events.push({
+            date,
+            details,
+            kind: parseScenarioKind(row['Kind']),
+            amount: row['Amount'],
+            notes: cellString(row['Notes']).trim(),
+        });
+    }
+
+    for (const row of readScenarioTable(sheet, 'Recurring adjustments', SCENARIO_RECURRING_HEADERS)) {
+        const category = cellString(row['Category']).trim();
+        if (!category) {
+            continue;
+        }
+        const cadenceRaw = cellString(row['Cadence']).trim().toLowerCase();
+        source.recurringAdjustments.push({
+            kind: parseScenarioKind(row['Kind']),
+            category,
+            details: cellString(row['Details']).trim(),
+            label: cellString(row['Label']).trim(),
+            include: parseScenarioInclude(row['Include'], `Include for recurring ${category}`),
+            amount: row['Amount'],
+            cadence: SCENARIO_CADENCES.has(cadenceRaw) ? cadenceRaw : null,
+            nextDate: parseScenarioDate(row['Next date'], date1904, 'Recurring next date'),
+        });
+    }
+
+    for (const row of readScenarioTable(sheet, 'Scheduled changes', SCENARIO_CHANGE_HEADERS)) {
+        const fromRaw = cellString(row['From']).trim();
+        const from = /^\d{4}-\d{2}/.test(fromRaw) ? fromRaw.slice(0, 7) : fromRaw;
+        if (!from) {
+            continue;
+        }
+        source.changes.push({
+            from,
+            kind: parseScenarioKind(row['Kind']),
+            category: cellString(row['Category']).trim(),
+            amount: row['Amount'],
+        });
+    }
+
+    for (const row of readScenarioTable(sheet, 'Category inputs', SCENARIO_CATEGORY_HEADERS)) {
+        const kind = parseScenarioKind(row['Kind']);
+        const category = cellString(row['Category']).trim();
+        if (!category) {
+            continue;
+        }
+        const override = scenarioNumber(row['Override'], `${category} override`);
+        if (override != null) {
+            source.overrides[kind][category] = override;
+        }
+        if (!parseScenarioInclude(row['Include'], `Include for ${category}`) &&
+            !source.excludedCategories.includes(category)) {
+            source.excludedCategories.push(category);
+        }
+    }
+
+    return normalizeScenario(source, constants, {
+        sheetName: sheet.name,
+        revision: Number.isInteger(revision) ? revision : 0,
+        updatedAt: cellString(readSetting('Updated')).trim() || null,
+    });
+};
+
+const scenarioSheetEntries = (workbook, constants, date1904) => {
+    const entries = [];
+    for (const sheet of workbook.worksheets) {
+        if (!isScenarioSheet(sheet)) {
+            continue;
+        }
+        try {
+            const scenario = parseScenarioSheet(sheet, constants, date1904);
+            if (scenario) {
+                entries.push({ sheet, sheetName: sheet.name, scenario, error: null });
+            }
+        } catch (e) {
+            entries.push({
+                sheet,
+                sheetName: sheet.name,
+                scenario: null,
+                error: e instanceof ValidationError ? e.message : 'Could not read this scenario sheet',
+            });
+        }
+    }
+    return entries;
+};
+
+const scenarioCategoryRows = (constants, scenario) => {
+    const rows = [];
+    for (const group of constants.categoryGroups || []) {
+        const kinds = group.group === INCOME_GROUP ? ['income'] :
+            group.group === CONVERSION_GROUP ? ['income', 'expense'] : ['expense'];
+        for (const category of group.categories) {
+            for (const kind of kinds) {
+                rows.push({
+                    kind,
+                    category,
+                    override: scenario.overrides[kind]?.[category] ?? null,
+                    include: !scenario.excludedCategories.includes(category),
+                });
+            }
+        }
+    }
+    return rows;
+};
+
+const writeScenarioSheet = (sheet, scenario, constants) => {
+    if (sheet.rowCount > 0) {
+        sheet.spliceRows(1, sheet.rowCount);
+    }
+    [26, 34, 22, 26, 18, 14, 14, 14].forEach((width, index) => {
+        sheet.getColumn(index + 1).width = width;
+    });
+
+    const inputStyle = { font: { color: { argb: 'FF1D4ED8' } } };
+    const labelStyle = { font: { bold: true } };
+    const headerStyle = {
+        font: { bold: true },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF9' } },
+    };
+    const sectionStyle = {
+        font: { bold: true },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCE6F5' } },
+    };
+    const set = (rowNumber, column, value, style) => {
+        const cell = sheet.getRow(rowNumber).getCell(column);
+        cell.value = value == null ? null : value;
+        if (style) {
+            cell.style = style;
+        }
+        return cell;
+    };
+    const input = (rowNumber, column, value) => set(rowNumber, column, value, inputStyle);
+    const label = (rowNumber, column, value) => set(rowNumber, column, value, labelStyle);
+    const header = (rowNumber, column, value) => set(rowNumber, column, value, headerStyle);
+    const section = (rowNumber, column, value) => set(rowNumber, column, value, sectionStyle);
+    const moneyCell = (cell) => {
+        cell.numFmt = '#,##0.00############';
+        return cell;
+    };
+    const dateCell = (cell) => {
+        cell.numFmt = 'yyyy/mm/dd';
+        return cell;
+    };
+
+    set(1, 1, SCENARIO_MARKER, { font: { bold: true } });
+
+    const settings = [
+        ['Scenario name', scenario.name, true],
+        ['Currency', scenario.currency, true],
+        ['As of', scenario.asOf, true],
+        ['Horizon (months)', scenario.horizonMonths, true],
+        ['Baseline (months)', scenario.baselineMonths, true],
+        ['Revision', scenario.revision, false],
+        ['Updated', scenario.updatedAt || '', false],
+        ['Notes', scenario.notes || '', true],
+    ];
+    settings.forEach(([labelText, value, editable], index) => {
+        const rowNumber = 3 + index;
+        label(rowNumber, 1, labelText);
+        const cell = editable ? input(rowNumber, 2, value) : set(rowNumber, 2, value);
+        if (labelText === 'As of') {
+            dateCell(cell);
+            cell.value = scenario.asOf ? datePartsToUtcDate(parseDateInput(scenario.asOf)) : null;
+        } else if (labelText === 'Notes') {
+            cell.alignment = { wrapText: true, vertical: 'top' };
+        }
+    });
+    sheet.getRow(10).height = 45;
+
+    const modelSettings = [
+        ['Baseline method', scenario.baselineMethod === 'simple' ? 'Simple' :
+            scenario.baselineMethod === 'robust' ? 'Robust' : 'Auto'],
+        ['Recurring detection', scenario.recurringDetection === false ? 'Off' : 'On'],
+        ['Uncertainty', scenario.uncertainty === false ? 'Off' : 'On'],
+    ];
+    modelSettings.forEach(([labelText, value], index) => {
+        const rowNumber = 3 + index;
+        label(rowNumber, 4, labelText);
+        input(rowNumber, 5, value);
+    });
+
+    section(12, 1, 'Target');
+    label(13, 1, 'Label');
+    input(13, 2, scenario.target.label);
+    label(14, 1, 'Amount');
+    moneyCell(input(14, 2, scenario.target.amount));
+    label(15, 1, 'Date');
+    dateCell(input(15, 2, scenario.target.date ? datePartsToUtcDate(parseDateInput(scenario.target.date)) : null));
+
+    let rowNumber = 17;
+    section(rowNumber, 1, 'Accounts');
+    rowNumber += 1;
+    SCENARIO_ACCOUNT_HEADERS.forEach((headerText, index) => header(rowNumber, index + 1, headerText));
+    rowNumber += 1;
+    for (const account of scenario.accounts) {
+        input(rowNumber, 1, account.name);
+        moneyCell(input(rowNumber, 2, account.balance));
+        input(rowNumber, 3, account.include ? 'Yes' : 'No');
+        rowNumber += 1;
+    }
+
+    rowNumber += 2;
+    section(rowNumber, 1, 'One-time events');
+    rowNumber += 1;
+    SCENARIO_EVENT_HEADERS.forEach((headerText, index) => header(rowNumber, index + 1, headerText));
+    rowNumber += 1;
+    for (const event of scenario.events) {
+        dateCell(input(rowNumber, 1, datePartsToUtcDate(parseDateInput(event.date))));
+        input(rowNumber, 2, event.details);
+        input(rowNumber, 3, event.kind === 'income' ? 'Income' : 'Expense');
+        moneyCell(input(rowNumber, 4, event.amount));
+        input(rowNumber, 5, event.notes || '');
+        rowNumber += 1;
+    }
+
+    rowNumber += 2;
+    section(rowNumber, 1, 'Recurring adjustments');
+    rowNumber += 1;
+    SCENARIO_RECURRING_HEADERS.forEach((headerText, index) => header(rowNumber, index + 1, headerText));
+    rowNumber += 1;
+    const cadenceLabels = {
+        weekly: 'Weekly',
+        biweekly: 'Biweekly',
+        semimonthly: 'Semimonthly',
+        monthly: 'Monthly',
+        quarterly: 'Quarterly',
+        annual: 'Annual',
+    };
+    for (const adjustment of scenario.recurringAdjustments || []) {
+        input(rowNumber, 1, adjustment.kind === 'income' ? 'Income' : 'Expense');
+        input(rowNumber, 2, adjustment.category);
+        input(rowNumber, 3, adjustment.details);
+        input(rowNumber, 4, adjustment.label || '');
+        input(rowNumber, 5, adjustment.include === false ? 'No' : 'Yes');
+        if (adjustment.amount != null) {
+            moneyCell(input(rowNumber, 6, adjustment.amount));
+        } else {
+            input(rowNumber, 6, null);
+        }
+        input(rowNumber, 7, adjustment.cadence ? cadenceLabels[adjustment.cadence] || adjustment.cadence : '');
+        dateCell(input(rowNumber, 8, adjustment.nextDate ? datePartsToUtcDate(parseDateInput(adjustment.nextDate)) : null));
+        rowNumber += 1;
+    }
+
+    rowNumber += 2;
+    section(rowNumber, 1, 'Scheduled changes');
+    rowNumber += 1;
+    SCENARIO_CHANGE_HEADERS.forEach((headerText, index) => header(rowNumber, index + 1, headerText));
+    rowNumber += 1;
+    for (const change of scenario.changes || []) {
+        input(rowNumber, 1, change.from);
+        input(rowNumber, 2, change.kind === 'income' ? 'Income' : 'Expense');
+        input(rowNumber, 3, change.category);
+        moneyCell(input(rowNumber, 4, change.amount));
+        rowNumber += 1;
+    }
+
+    rowNumber += 2;
+    section(rowNumber, 1, 'Category inputs');
+    rowNumber += 1;
+    SCENARIO_CATEGORY_HEADERS.forEach((headerText, index) => header(rowNumber, index + 1, headerText));
+    rowNumber += 1;
+    for (const row of scenarioCategoryRows(constants, scenario)) {
+        set(rowNumber, 1, row.kind === 'income' ? 'Income' : 'Expense');
+        set(rowNumber, 2, row.category);
+        if (row.override != null) {
+            moneyCell(input(rowNumber, 3, row.override));
+        } else {
+            input(rowNumber, 3, null);
+        }
+        input(rowNumber, 4, row.include ? 'Yes' : 'No');
+        rowNumber += 1;
+    }
+
+    sheet.state = 'visible';
+    sheet.properties.tabColor = { argb: 'FF2F6FED' };
+};
+
 export default (config = {}, configDir = process.cwd()) => {
     const resolvePath = (value, fallback) =>
         path.resolve(configDir, typeof value === 'string' && value.trim() !== '' ? value : fallback)
@@ -400,6 +1123,7 @@ export default (config = {}, configDir = process.cwd()) => {
         const headerMap = readHeaderMap(sheet)
         const transactions = readTransactions(sheet, headerMap, date1904)
         const conversionCategories = conversionCategoriesFor(constants)
+        const scenarioEntries = scenarioSheetEntries(workbook, constants, date1904)
         return {
             date1904,
             headerMap,
@@ -411,6 +1135,9 @@ export default (config = {}, configDir = process.cwd()) => {
                 expense: buildSamples(transactions, constants, 'expense'),
                 income: buildSamples(transactions, constants, 'income'),
             },
+            scenarios: scenarioEntries.filter((entry) => entry.scenario).map((entry) => entry.scenario),
+            scenarioErrors: scenarioEntries.filter((entry) => entry.error)
+                .map((entry) => ({ sheetName: entry.sheetName, error: entry.error })),
         }
     }
 
@@ -523,21 +1250,24 @@ export default (config = {}, configDir = process.cwd()) => {
         return mapping
     }
 
+    // The temp-file + atomic rename keeps a failed write from corrupting the
+    // workbook. There is deliberately no .bak copy: the workbook's git repo is
+    // the recovery path. A commit failure still leaves the saved workbook in
+    // place; callers can surface the warning.
     const saveWorkbook = async (workbook, commitMessage) => {
         const mapping = sortTransactionRows(workbook)
         const tempFile = `${workbookFile}.tmp`
         await workbook.xlsx.writeFile(tempFile)
-        if (fs.existsSync(workbookFile)) {
-            fs.copyFileSync(workbookFile, `${workbookFile}.bak`)
-        }
         fs.renameSync(tempFile, workbookFile)
         cacheFromWorkbook(workbook)
+        let commitWarning = null
         try {
             commitFile(workbookFile, commitMessage)
         } catch (e) {
+            commitWarning = e.message
             console.error(`Failed to commit workbook changes: ${e.message}`)
         }
-        return mapping
+        return { mapping, commitWarning }
     }
 
     const validateTransactionInput = (constants, input = {}) => {
@@ -875,6 +1605,147 @@ export default (config = {}, configDir = process.cwd()) => {
         }
     }
 
+    // The Forecasts page reads every scenario sheet at once. Scenario sheets
+    // are pure inputs; all projection math lives in the UI.
+    const getForecast = async () => {
+        const parsed = await getParsed()
+        return {
+            scenarios: parsed.scenarios,
+            errors: parsed.scenarioErrors,
+        }
+    }
+
+    // Applies a batch of scenario upserts/deletes in one workbook write. The
+    // whole batch is validated before anything is written, so a stale revision
+    // or invalid scenario cannot leave the workbook half-updated.
+    const saveForecast = async (input = {}) => {
+        const upserts = Array.isArray(input.upserts) ? input.upserts : [];
+        const deletes = [];
+        const seenDeletes = new Set();
+        for (const value of Array.isArray(input.deletes) ? input.deletes : []) {
+            const entry = typeof value === 'string' ? { sheetName: value } : value;
+            const sheetName = typeof entry?.sheetName === 'string' ? entry.sheetName.trim() : '';
+            if (!sheetName) continue;
+            if (seenDeletes.has(sheetName)) {
+                throw new ValidationError('The same scenario was deleted twice');
+            }
+            seenDeletes.add(sheetName);
+            deletes.push({
+                sheetName,
+                revision: Number.isInteger(entry?.revision) ? entry.revision : null,
+            });
+        }
+        if (upserts.length === 0 && deletes.length === 0) {
+            throw new ValidationError('Nothing to save');
+        }
+        if (upserts.length > SCENARIO_MAX_SCENARIOS) {
+            throw new ValidationError(`At most ${SCENARIO_MAX_SCENARIOS} scenarios can be saved at once`);
+        }
+
+        const workbook = await loadWorkbook();
+        const date1904 = Boolean(workbook.properties.date1904);
+        const constants = readConstants(workbook);
+        const entries = scenarioSheetEntries(workbook, constants, date1904);
+        const byName = new Map(entries.map((entry) => [entry.sheetName, entry]));
+
+        for (const deletion of deletes) {
+            const entry = byName.get(deletion.sheetName);
+            if (!entry) {
+                throw new ConflictError(`Scenario sheet "${deletion.sheetName}" no longer exists. Refresh and try again.`);
+            }
+            if (deletion.revision != null && entry.scenario && entry.scenario.revision !== deletion.revision) {
+                throw new ConflictError(`Scenario "${entry.scenario.name}" changed on disk. Refresh and try again.`);
+            }
+        }
+
+        const toWrite = [];
+        const seen = new Set();
+        const now = new Date().toISOString();
+        for (const item of upserts) {
+            if (!item || typeof item !== 'object') {
+                throw new ValidationError('Invalid scenario');
+            }
+            const sheetName = typeof item.sheetName === 'string' && item.sheetName.trim() ?
+                item.sheetName.trim() : null;
+            const revision = Number.isInteger(item.revision) ? item.revision : 0;
+            if (sheetName) {
+                if (seen.has(sheetName)) {
+                    throw new ValidationError('The same scenario was sent twice');
+                }
+                seen.add(sheetName);
+                if (seenDeletes.has(sheetName)) {
+                    throw new ValidationError('A scenario cannot be saved and deleted in the same request');
+                }
+                const entry = byName.get(sheetName);
+                if (!entry) {
+                    throw new ConflictError(`Scenario sheet "${sheetName}" no longer exists. Refresh and try again.`);
+                }
+                if (!entry.scenario) {
+                    throw new ValidationError(`Scenario sheet "${sheetName}" is invalid: ${entry.error}`);
+                }
+                if (entry.scenario.revision !== revision) {
+                    throw new ConflictError(`Scenario "${entry.scenario.name}" changed on disk. Refresh and try again.`);
+                }
+                toWrite.push({
+                    existing: entry,
+                    scenario: normalizeScenario(item, constants, {
+                        sheetName,
+                        revision: entry.scenario.revision + 1,
+                        updatedAt: now,
+                    }),
+                });
+            } else {
+                toWrite.push({
+                    existing: null,
+                    scenario: normalizeScenario(item, constants, {
+                        sheetName: null,
+                        revision: 1,
+                        updatedAt: now,
+                    }),
+                });
+            }
+        }
+
+        for (const deletion of deletes) {
+            const entry = byName.get(deletion.sheetName);
+            if (entry) {
+                workbook.removeWorksheet(entry.sheet.id);
+            }
+        }
+
+        for (const { existing, scenario } of toWrite) {
+            let sheet;
+            let sheetName;
+            if (existing) {
+                sheet = existing.sheet;
+                const otherNames = workbook.worksheets
+                    .filter((candidate) => candidate.id !== sheet.id)
+                    .map((candidate) => candidate.name);
+                sheetName = scenarioSheetName(scenario.name, otherNames, sheet.name);
+                if (sheet.name !== sheetName) {
+                    sheet.name = sheetName;
+                }
+            } else {
+                sheetName = scenarioSheetName(scenario.name, workbook.worksheets.map((candidate) => candidate.name));
+                sheet = workbook.addWorksheet(sheetName);
+            }
+            scenario.sheetName = sheetName;
+            writeScenarioSheet(sheet, scenario, constants);
+        }
+
+        const names = toWrite.map(({ scenario }) => scenario.name);
+        const deletedNames = deletes.length ? `; deleted ${deletes.map((entry) => entry.sheetName).join(', ')}` : '';
+        const commitMessage = `D$CPLN: update forecast scenarios${names.length ? ` (${names.join(', ').slice(0, 160)})` : ''}${deletedNames}`.slice(0, 240);
+        const { commitWarning } = await saveWorkbook(workbook, commitMessage);
+        const savedEntries = scenarioSheetEntries(workbook, constants, date1904);
+        return {
+            scenarios: savedEntries.filter((entry) => entry.scenario).map((entry) => entry.scenario),
+            errors: savedEntries.filter((entry) => entry.error)
+                .map((entry) => ({ sheetName: entry.sheetName, error: entry.error })),
+            commitWarning,
+        };
+    }
+
     // Rewrites the Budgets block from the full entry list at the canonical
     // position, preserving the excluded list. Any legacy placement migrates.
     const updateMonthlyBudget = async (monthlyBudget, firstDayBias, currency) => {
@@ -949,7 +1820,7 @@ export default (config = {}, configDir = process.cwd()) => {
         const template = findTemplateStyles(sheet, map)
         const row = lastRow + 1
         writeTransaction(sheet, map, { ...transaction, row }, template)
-        const mapping = await saveWorkbook(workbook, 'D$CPLN: add transaction')
+        const { mapping } = await saveWorkbook(workbook, 'D$CPLN: add transaction')
         const storedRow = mapping.get(row) ?? row
         const stored = parseTransactionRow(sheet.getRow(storedRow), map, storedRow, date1904)
         return serializeTransaction(stored)
@@ -1086,7 +1957,7 @@ export default (config = {}, configDir = process.cwd()) => {
             writeTransaction(sheet, map, { ...transaction, row }, template)
             writtenRows.push(row)
         })
-        const mapping = await saveWorkbook(workbook, `D$CPLN: import ${transactions.length} transaction${transactions.length === 1 ? '' : 's'}`)
+        const { mapping } = await saveWorkbook(workbook, `D$CPLN: import ${transactions.length} transaction${transactions.length === 1 ? '' : 's'}`)
         const stored = writtenRows.map((row) => {
             const storedRow = mapping.get(row) ?? row
             return parseTransactionRow(sheet.getRow(storedRow), map, storedRow, date1904)
@@ -1105,7 +1976,7 @@ export default (config = {}, configDir = process.cwd()) => {
         const map = readHeaderMap(sheet)
         findTransactionRow(sheet, map, rowNumber, date1904, id)
         writeTransaction(sheet, map, { ...transaction, row: rowNumber }, null)
-        const mapping = await saveWorkbook(workbook, 'D$CPLN: update transaction')
+        const { mapping } = await saveWorkbook(workbook, 'D$CPLN: update transaction')
         const storedRow = mapping.get(rowNumber) ?? rowNumber
         const stored = parseTransactionRow(sheet.getRow(storedRow), map, storedRow, date1904)
         return serializeTransaction(stored)
@@ -1230,6 +2101,8 @@ export default (config = {}, configDir = process.cwd()) => {
     return {
         getData,
         getTransactions,
+        getForecast,
+        saveForecast,
         updateMonthlyBudget,
         updateDefaultExcludedCategories,
         addTransaction,

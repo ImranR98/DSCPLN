@@ -2,7 +2,7 @@
 
 A simple web app that shows whether you've gone over your budget this month, and sends push notifications when a limit is reached.
 
-It reads your expenses from an Excel workbook (the source of truth) and writes changes straight back to it. The dashboard covers the current month and adding transactions; the insights page is a historical viewer with date ranges and comparisons.
+It reads your expenses from an Excel workbook (the source of truth) and writes changes straight back to it. The dashboard covers the current month and adding transactions; the insights page is a historical viewer with date ranges and comparisons; the forecasts page is a live projection planner.
 
 ## Setup
 
@@ -89,6 +89,22 @@ Row 2 holds a header per column, and each column lists the allowed values for th
   The first-day bias is an extra amount available on the 1st of the month. A currency with no row (or a 0 budget) simply has no budget tracking; saving a budget of 0 clears it. The app creates the table on the first save if it is missing.
 - `Excluded from Budget by Default` lists categories that start out unchecked (left out of every total) on the dashboard and insights pages. Saving a selection from the dashboard's category picker writes this list; names that are no longer categories are ignored. Both settings blocks are read from anywhere on the sheet and are moved to this position on the next settings save.
 
+### Scenario sheets (Forecasts page)
+
+The forecasts page persists one visible worksheet named `Scenario - Base plan`. The sheet is **inputs only**: the page computes the baseline, target date, runway and projection live, and nothing computed is written back. A marker in `A1` (`D$CPLN Scenario v1`) identifies the sheet; the old date-named forecast snapshots, `Stats`, `Transactions` and `Constants` are never treated as scenarios. If multiple valid scenario sheets already exist, the app uses Base plan (or the first valid sheet) and leaves the others untouched.
+
+| Section | Contents |
+| --- | --- |
+| Settings | Scenario name, currency, as-of date (blank = today), horizon, baseline window, notes; model settings (`Baseline method` Auto/Simple/Robust, `Recurring detection` On/Off, `Uncertainty` On/Off); revision and updated timestamp |
+| Target | Label, amount, optional date |
+| Accounts | Account, balance, include (`Yes`/`No`) |
+| One-time events | Date, details, kind (`Income`/`Expense`), amount, notes |
+| Recurring adjustments | Kind, category, normalized details, label, include, amount override, cadence, next date. Only user changes are written |
+| Scheduled changes | From month (`YYYY-MM`), kind, category, monthly amount. Applies from the first day of that month |
+| Category inputs | Kind, category, monthly override (replaces the category total, including recurring items), include (`Yes`/`No`) |
+
+Input cells are blue, matching the old manual sheets' convention; metadata is black. The app creates or updates the Base plan sheet on Save. Detected recurring items, chosen methods, outliers, backtests and projections are computed live and are not persisted. Reset restores the default inputs; Save persists the reset, and Discard returns to the last saved sheet. `GET/PUT /forecast` use per-sheet revisions, so a stale edit or deletion is rejected with `409` before anything is written.
+
 ## API
 
 These routes are used by the web UI (and only support what it needs).
@@ -105,6 +121,10 @@ These routes are used by the web UI (and only support what it needs).
 | `DELETE` | `/transactions/:id` | - |
 | `POST` | `/budget` | `{ "monthlyBudget", "firstDayBias", "currency" }` |
 | `POST` | `/excluded-defaults` | `{ "categories": ["Investment Buy", ...] }` — writes the Constants "Excluded from Budget by Default" list |
+| `GET` | `/forecast` | - — returns `{ "scenarios", "errors" }` from the scenario sheets |
+| `PUT` | `/forecast` | `{ "upserts": [{ "sheetName"?, "revision", ...scenario }], "deletes": [{ "sheetName", "revision" }] }` — all-or-nothing, one workbook write. String delete names are accepted for backwards compatibility, but clients should send revisions. |
+
+Forecast scenario objects carry the model settings (`baselineMethod`, `recurringDetection`, `uncertainty`), `recurringAdjustments` and `changes` alongside the accounts/events/target. Updating a scenario sends the same object back in `upserts`; the app validates it and writes the input-only scenario sheet.
 
 `/data` accepts repeated `exclude=<category>` parameters that leave those categories out of every figure for the view (spend, budgets, trailing averages, the history chart); without the parameter the workbook's default exclusions apply, and the response carries `defaultExcludedCategories` (the workbook's list). The month's transaction list, the all-time range and the suggestion helpers always see the whole workbook.
 
@@ -192,14 +212,31 @@ currency:
 - **Biggest category moves** vs the previous period, ranked by absolute
   change.
 
+## Forecasts
+
+`/forecasts` (linked from every page) builds a forward-looking cash-flow projection from the transaction history plus your inputs. The page is a live editor: nothing is written to the workbook until you press **Save**, so changing an account, target, category override, event or window immediately updates the KPIs, chart and projection table.
+
+- **Base plan** is the single scenario, stored in `Scenario - Base plan` (see the schema above). Edit it freely; **Save** writes the inputs in one workbook rewrite/commit. **Discard** returns to the last saved workbook state, and `Ctrl/Cmd+S` saves. A sticky bar keeps Reset, Discard and Save reachable while editing.
+- **Reset** restores the default inputs after confirmation: Base plan, primary currency, blank As-of (today), 24-month horizon, 6-month baseline, Auto model, recurring detection and uncertainty on, no target, one `Main account` with a 0 balance, all categories included, and no events, overrides, adjustments, changes or notes. Reset is a local change until you press Save.
+- **Recurring detection**: groups transactions by normalized details, infers weekly/biweekly/semi-monthly/monthly/quarterly/annual cadences, and schedules the next occurrences. Detected items show confidence and amount; **Adjust** reveals amount, cadence and next-date controls, which stay automatic until you override them. Unchecking an item removes it from the forecast entirely rather than folding its history back into the baseline. Recurring detection can be turned off in **Advanced model**.
+- **Baseline**: a robust variable baseline over the trailing 3/6/12/24 complete months. Intermittent categories use a zero-inflated frequency × severity estimate, continuous categories use recency-weighted/trimmed estimates, sparse categories are shrunk and low-confidence, and MAD outliers are highlighted. `Auto` compares Simple vs Robust on a rolling variable-layer backtest and prefers Simple unless Robust is meaningfully better; **Advanced model** exposes the manual methods. Every category is included by default (cash-flow view, including investments and conversions); uncheck a category or type an override to change it. An override replaces the category **total**, including recurring items; use the **Auto** action on an overridden row to clear it.
+- **Scheduled changes**: a dated category total from a chosen month onward, for rent increases, salary changes, etc. It suppresses recurring items in that category from that month.
+- **As of** is optional: blank means today. The header shows `Today`, and the saved sheet keeps the As-of cell blank so reopening it always means the current day. A non-empty date is preserved.
+- **Accounts** supply the starting balance; include only the accounts that should count. Negative balances are allowed. A starting balance of **0 is treated as unknown**: the projection still runs, but balances are relative to $0 and the page shows a disclaimer plus the projected low point instead of a cash-out runway. Add your real balances for absolute figures.
+- **One-time events** are dated income/expenses applied on their exact date. Events after the chart horizon are marked as such; they still feed the long-run target/runway calculation.
+- **Projection**: recurring items land on their dates, variable spending is spread through each month, the rest of the as-of month is prorated, and events are applied on their dates. Category overrides/scheduled changes are monthly amounts. The page shows target date, balance at the horizon, runway/cash-out and savings rate; the monthly table and model-quality details are collapsed by default.
+- **Target**: one **target balance** and an optional date. The target date is the first date the projected balance reaches the amount; the long-run simulation looks beyond the chart horizon so a far-away target still gets a date.
+- **Uncertainty**: when enabled and enough backtest history exists, a seeded residual bootstrap produces P10/P50/P90 balance bands, a target-date range, probability of reaching the target by a date/horizon and cash-out probability. The band represents historical variable income/spending; recurring items and one-time events are deterministic.
+- The workbook's old date-named sheets are legacy snapshots; the Forecasts page does not read or modify them.
+
 ## Operations
 
 ### Backups and version control
 
 - The workbook is required to live in a git repository. Every write is committed automatically to that repository as `D$CPLN <dscpln@localhost>`, with signing disabled (any configured git user, email, or signing key is not used).
-- Every write first copies the current workbook to `<workbookFile>.bak`, then writes a temp file and atomically renames it over the original. Add `*.xlsx.bak` and `*.xlsx.tmp` to the repository's `.gitignore`.
+- Every write goes to a temp file and is atomically renamed over the original; there is deliberately no `.bak` copy because the workbook repository's git history is the recovery path. Add `*.xlsx.tmp` to the repository's `.gitignore`.
 - Close the workbook in Excel/LibreOffice while the app is editing it; otherwise the app's save or the spreadsheet app's save can overwrite the other.
-- Writing recalculates formulas only when the workbook is next opened; cached formula values are not preserved by the writer.
+- Writing recalculates formulas only when the workbook is next opened; cached formula values are not preserved by the writer. Saving the Base plan therefore rewrites the workbook.
 
 ### Docker
 
@@ -227,8 +264,14 @@ the API; the workbook stays the source of truth.
 | --- | --- |
 | `ui/src/Dashboard.jsx` | Month dashboard; hero/currency cards are components in `ui/src/components/`. |
 | `ui/src/Insights.jsx` | Range analysis, charts and category movers (math in `ui/src/lib/insights-model.js`). |
+| `ui/src/Forecasts.jsx` | Live scenario editor, KPIs, projection chart/table and save flow. |
 | `ui/src/Settings.jsx` | Data-source info and the external API token. |
 | `ui/src/lib/insights-math.js` | Pure aggregation/comparison helpers (also imported by the Node tests). |
+| `ui/src/lib/forecast-recurring.js` | Recurring detection, adjustments and occurrence generation. |
+| `ui/src/lib/forecast-baseline.js` | Robust/zero-inflated variable baseline, outliers and backtest. |
+| `ui/src/lib/forecast-uncertainty.js` | Seeded residual bootstrap, bands and probabilities. |
+| `ui/src/lib/forecast-math.js` | Projection orchestration, recurring/dated plan, target/runway (also imported by the Node tests). |
+| `ui/src/lib/forecast-model.js` | Display model and scenario helpers for the Forecasts page. |
 | `ui/src/lib/chart.js` | Chart.js setup shared by both pages. |
 | `ui/src/lib/money.js` | Money formatting and stable per-currency colors. |
 | `server.mjs` | Routes and error handling; `notifications.mjs` sends budget-limit pushes. |

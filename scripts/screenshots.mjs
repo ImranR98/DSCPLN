@@ -24,7 +24,9 @@ fs.mkdirSync(OUT, { recursive: true })
 
 const requireFromRoot = createRequire(path.join(REPO, 'package.json'))
 const { chromium } = requireFromRoot('playwright-core')
-const browser = await chromium.launch()
+const browser = await chromium.launch(process.env.CHROMIUM_PATH
+  ? { executablePath: process.env.CHROMIUM_PATH, args: ['--no-sandbox'] }
+  : {})
 
 const DEMO_ROOT = '/tmp/dscpln-demo'
 fs.rmSync(DEMO_ROOT, { recursive: true, force: true })
@@ -65,6 +67,13 @@ async function shoot(page, name) {
   if (page.viewportSize().height !== viewport.height) {
     await page.setViewportSize(viewport)
   }
+  console.log('shot', name)
+}
+
+async function shootViewport(page, name) {
+  // Some pages are intentionally very tall; keep their README image at the
+  // standard 1280×800 viewport rather than a full-document capture.
+  await page.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: false })
   console.log('shot', name)
 }
 
@@ -112,11 +121,48 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
   await new Promise((resolve) => server.close(resolve))
 }
 
-/* ---------------- balance (dashboard + insights) ---------------- */
+/* ---------------- balance (dashboard + insights + forecasts) ---------------- */
 {
   const dir = tmp('shot-balance-')
   fs.copyFileSync(path.join(REPO, 'apps/balance-xlsx/mock-data.xlsx'), path.join(dir, 'Balance.xlsx'))
   execFileSync('git', ['init', '-q'], { cwd: dir })
+  const { default: createProvider } = await import(path.join(REPO, 'apps/balance-xlsx/dataProviders/excelDataProvider.mjs'))
+  const provider = createProvider({ workbookFile: path.join(dir, 'Balance.xlsx') }, dir)
+  await provider.saveForecast({
+    upserts: [{
+      sheetName: null,
+      revision: 0,
+      name: 'Base plan',
+      currency: 'CAD',
+      asOf: '',
+      horizonMonths: 24,
+      baselineMonths: 6,
+      notes: 'Demo scenario for the README screenshot.',
+      target: { label: 'Savings target', amount: 50000, date: null },
+      accounts: [
+        { name: 'Chequing', balance: 12000, include: true },
+        { name: 'Savings', balance: 8000, include: true },
+      ],
+      events: [
+        { date: '2027-01-15', details: 'Plane tickets', kind: 'expense', amount: 2500, notes: '' },
+        { date: '2027-04-01', details: 'Tax refund', kind: 'income', amount: 1200, notes: '' },
+      ],
+      overrides: { income: {}, expense: {} },
+      excludedCategories: ['Investment Buy', 'Investment Sell'],
+      recurringAdjustments: [{
+        kind: 'expense',
+        category: 'Food Weekly',
+        details: 'groceries',
+        label: 'Groceries',
+        include: true,
+        amount: 150,
+        cadence: null,
+        nextDate: null,
+      }],
+      changes: [{ from: '2027-01', kind: 'expense', category: 'Rent', amount: 1500 }],
+    }],
+    deletes: [],
+  })
   const config = {
     port: 0,
     dataProvider: 'excelDataProvider',
@@ -137,6 +183,10 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
   await page.waitForFunction(() => document.querySelector('#insightsContent')?.children.length > 0)
   await page.waitForTimeout(800)
   await shoot(page, 'balance-insights')
+  await page.goto(`${base}/forecasts`)
+  await page.waitForSelector('[data-testid="forecast-asof"]')
+  await page.waitForFunction(() => document.querySelector('[data-testid="forecast-chart-card"] svg'))
+  await shootViewport(page, 'balance-forecasts')
   await page.close()
   await new Promise((resolve) => server.close(resolve))
 }

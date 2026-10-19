@@ -95,8 +95,8 @@ Every app has `apps/<app>/ui/` (Vite + React + Pico) that builds into
 `<base href>` for `BASE_PATH`; the shared `appViteConfig` uses `base: './'` so
 the build works under any prefix. `npm run build:ui --workspace <pkg>` builds
 (or `npm run ui` for all); `npm test` builds first; the Dockerfile builds the
-UI in its layer and prunes dev deps. Balance builds three pages from one Vite
-config (`index`/`insights`/`settings`).
+UI in its layer and prunes dev deps. Balance builds four pages from one Vite
+config (`index`/`insights`/`forecasts`/`settings`).
 
 The scaffolding is deliberately uniform and mostly generated:
 

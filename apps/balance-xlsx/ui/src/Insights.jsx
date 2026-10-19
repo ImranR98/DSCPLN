@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { LayoutDashboard, Wrench } from 'lucide-react'
+import { LayoutDashboard, TrendingUp, Wrench } from 'lucide-react'
 import {
   formats,
   getJson,
@@ -310,6 +310,9 @@ export default function Insights() {
           <div className="app-header__actions">
             <a role="button" className="outline secondary icon-button" href="./" title="Dashboard" aria-label="Dashboard">
               <LayoutDashboard size={16} strokeWidth={1.8} />
+            </a>
+            <a role="button" className="outline secondary icon-button" href="forecasts" title="Forecasts" aria-label="Forecasts">
+              <TrendingUp size={16} strokeWidth={1.8} />
             </a>
             <a role="button" className="outline secondary icon-button" href="settings" title="API settings" aria-label="API settings">
               <Wrench size={16} strokeWidth={1.8} />

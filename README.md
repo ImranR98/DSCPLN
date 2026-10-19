@@ -7,7 +7,7 @@ small always-on Node apps — one per function — served behind a single host
 | Function | Path | Description |
 |---|---|---|
 | [Portal](apps/portal/README.md) | `/` | Landing page linking every function with live status |
-| [Balance XLSX](apps/balance-xlsx/README.md) | `/balance` | Budget dashboard backed by an Excel workbook (external, token-protected API at `/balance/api`) |
+| [Balance XLSX](apps/balance-xlsx/README.md) | `/balance` | Budget dashboard, insights and a live forecast planner backed by an Excel workbook (external, token-protected API at `/balance/api`) |
 | [File Pipelines](apps/file-pipelines/README.md) | `/pipelines` | Watches device folders, standardizes media, queues review/trash |
 | [WhatsApp TXT](apps/whatsapp-txt/README.md) | `/watxt` | Browses, imports and merges WhatsApp chat exports |
 | [Task Runner](apps/task-runner/README.md) | `/tasks` | Config-driven backup/export workflows (bash tasks, drop zones, prompts) |
@@ -34,7 +34,8 @@ All images use synthetic demo data — regenerate them with
 | ![File Pipelines](docs/screenshots/file-pipelines.png) | ![WhatsApp TXT](docs/screenshots/whatsapp.png) |
 | ![Task Runner](docs/screenshots/task-runner.png) | ![Contacts + Calendar settings](docs/screenshots/contacts-settings.png) |
 | ![Infra Compose State](docs/screenshots/compose.png) | ![YTMusic Downloads](docs/screenshots/ytmusic.png) |
-| ![Balance insights](docs/screenshots/balance-insights.png) | ![Contacts + Calendar](docs/screenshots/contacts.png) |
+| ![Balance insights](docs/screenshots/balance-insights.png) | ![Balance forecasts](docs/screenshots/balance-forecasts.png) |
+| ![Contacts + Calendar](docs/screenshots/contacts.png) | |
 
 ## Run with Docker
 

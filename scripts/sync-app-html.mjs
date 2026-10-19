@@ -19,6 +19,7 @@ const PAGES = {
   'apps/portal/ui/index.html': { title: 'D$CPLN', description: 'D$CPLN portal', entry: 'main.jsx' },
   'apps/balance-xlsx/ui/index.html': { title: 'D$CPLN ⋅ Balance XLSX', description: 'D$CPLN Balance XLSX', entry: 'index.jsx' },
   'apps/balance-xlsx/ui/insights.html': { title: 'D$CPLN ⋅ Balance XLSX — Insights', description: 'D$CPLN Balance XLSX', entry: 'insights.jsx' },
+  'apps/balance-xlsx/ui/forecasts.html': { title: 'D$CPLN ⋅ Balance XLSX — Forecasts', description: 'D$CPLN Balance XLSX', entry: 'forecasts.jsx' },
   'apps/balance-xlsx/ui/settings.html': { title: 'D$CPLN ⋅ Balance XLSX — Settings', description: 'D$CPLN Balance XLSX', entry: 'settings.jsx' },
   'apps/compose-state/ui/index.html': { title: 'D$CPLN ⋅ Infra Compose State', description: 'D$CPLN Infra Compose State', entry: 'main.jsx' },
   'apps/contacts-calendar/ui/index.html': { title: 'D$CPLN ⋅ Contacts + Calendar', description: 'D$CPLN Contacts + Calendar', entry: 'main.jsx' },

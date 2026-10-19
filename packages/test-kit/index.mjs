@@ -45,6 +45,8 @@ export async function waitFor(probe, predicate = (value) => Boolean(value), { ti
 }
 
 // Launches Chromium, or returns null when Playwright/Chromium is unavailable.
+// Playwright's bundled browser is preferred; a system Chromium is a useful
+// fallback in CI images where the browser payload has not been installed.
 export async function launchBrowser(options = { headless: true }) {
   let chromium
   try {
@@ -52,11 +54,19 @@ export async function launchBrowser(options = { headless: true }) {
   } catch {
     return null
   }
-  try {
-    return await chromium.launch(options)
-  } catch {
-    return null
+  const args = [...(options.args || [])]
+  if (!args.includes('--no-sandbox')) args.push('--no-sandbox')
+  const attempts = options.executablePath
+    ? [options.executablePath]
+    : [undefined, process.env.CHROMIUM_PATH, '/usr/bin/chromium-browser', '/usr/bin/chromium', '/usr/bin/google-chrome'].filter(Boolean)
+  for (const executablePath of attempts) {
+    try {
+      return await chromium.launch({ ...options, args, ...(executablePath ? { executablePath } : {}) })
+    } catch {
+      // Try the next candidate.
+    }
   }
+  return null
 }
 
 // True when a browser can be launched (used for `{ skip: !CAN_RUN }`).

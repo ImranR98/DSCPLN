@@ -263,7 +263,13 @@ export async function runTask(task, local, files, log = null, extra = null, opts
     [ok, summary] = [false, String(e.message ?? e)];
   } finally {
     if (task.uploads) clearStaging(ctx);
-    fs.rmSync(tmpdir, { recursive: true, force: true });
+    // The per-run temp dir may still be held by a child process or a network
+    // filesystem; failing to delete it must not lose the run result.
+    try {
+      fs.rmSync(tmpdir, { recursive: true, force: true });
+    } catch (err) {
+      collectLog(`WARNING: could not remove per-run temp dir ${tmpdir}: ${err.message}`);
+    }
   }
   saveTaskState(task, local, ok, summary, lines.join('\n'));
   return [ok, summary];

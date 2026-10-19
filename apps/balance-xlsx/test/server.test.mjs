@@ -133,7 +133,7 @@ test('serves and saves forecast scenario sheets', async (t) => {
 
     let response = await fetch(`${baseUrl}/forecast`)
     assert.equal(response.status, 200)
-    assert.deepEqual(await response.json(), { scenarios: [], errors: [] })
+    assert.deepEqual(await response.json(), { scenario: null, errors: [] })
 
     const scenario = {
         name: 'Base plan',
@@ -149,23 +149,20 @@ test('serves and saves forecast scenario sheets', async (t) => {
         excludedCategories: [],
     }
     response = await jsonRequest(baseUrl, '/forecast', {
-        upserts: [{ sheetName: null, revision: 0, ...scenario }],
-        deletes: [],
+        scenario: { sheetName: null, revision: 0, ...scenario },
     }, 'PUT')
     assert.equal(response.status, 200)
     const saved = await response.json()
-    assert.equal(saved.scenarios.length, 1)
-    assert.equal(saved.scenarios[0].sheetName, 'Scenario - Base plan')
-    assert.equal(saved.scenarios[0].revision, 1)
+    assert.equal(saved.scenario.sheetName, 'Scenario - Base plan')
+    assert.equal(saved.scenario.revision, 1)
 
     const stale = await jsonRequest(baseUrl, '/forecast', {
-        upserts: [{ ...saved.scenarios[0], sheetName: saved.scenarios[0].sheetName, revision: 0 }],
-        deletes: [],
+        scenario: { ...saved.scenario, revision: 0 },
     }, 'PUT')
     assert.equal(stale.status, 409)
 
     response = await fetch(`${baseUrl}/forecast`)
-    assert.equal((await response.json()).scenarios.length, 1)
+    assert.equal((await response.json()).scenario.sheetName, 'Scenario - Base plan')
 
     response = await fetch(`${baseUrl}/forecasts`)
     assert.equal(response.status, 200)

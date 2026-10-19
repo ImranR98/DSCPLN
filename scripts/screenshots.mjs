@@ -129,7 +129,7 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
   const { default: createProvider } = await import(path.join(REPO, 'apps/balance-xlsx/dataProviders/excelDataProvider.mjs'))
   const provider = createProvider({ workbookFile: path.join(dir, 'Balance.xlsx') }, dir)
   await provider.saveForecast({
-    upserts: [{
+    scenario: {
       sheetName: null,
       revision: 0,
       name: 'Base plan',
@@ -160,8 +160,7 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
         nextDate: null,
       }],
       changes: [{ from: '2027-01', kind: 'expense', category: 'Rent', amount: 1500 }],
-    }],
-    deletes: [],
+    },
   })
   const config = {
     port: 0,

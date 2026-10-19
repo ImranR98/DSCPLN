@@ -23,8 +23,11 @@ const scenario = (overrides = {}) => ({
 })
 
 const saveNew = (provider, overrides = {}) => provider.saveForecast({
-    upserts: [{ sheetName: null, revision: 0, ...scenario(overrides) }],
-    deletes: [],
+    scenario: { sheetName: null, revision: 0, ...scenario(overrides) },
+})
+
+const saveCurrent = (provider, current, overrides = {}) => provider.saveForecast({
+    scenario: { ...current, ...overrides },
 })
 
 const readSheet = async (workbookFile, name) => {
@@ -33,9 +36,9 @@ const readSheet = async (workbookFile, name) => {
     return workbook.getWorksheet(name)
 }
 
-test('starts with no scenario sheets', async () => {
+test('starts with no scenario sheet', async () => {
     const { provider } = createTestProvider()
-    assert.deepEqual(await provider.getForecast(), { scenarios: [], errors: [] })
+    assert.deepEqual(await provider.getForecast(), { scenario: null, errors: [] })
 })
 
 test('creates an inputs-only scenario sheet and reads it back', async () => {
@@ -52,8 +55,7 @@ test('creates an inputs-only scenario sheet and reads it back', async () => {
         overrides: { income: { Job: 5000 }, expense: { Rent: 1400 } },
         excludedCategories: ['Investment Buy', 'Snacks'],
     })
-    assert.equal(saved.scenarios.length, 1)
-    const stored = saved.scenarios[0]
+    const stored = saved.scenario
     assert.equal(stored.sheetName, 'Scenario - Base plan')
     assert.equal(stored.revision, 1)
     assert.equal(stored.name, 'Base plan')
@@ -85,75 +87,47 @@ test('creates an inputs-only scenario sheet and reads it back', async () => {
     assert.equal(fs.existsSync(`${workbookFile}.bak`), false)
 })
 
-test('round-trips multiple scenarios, renames and deletes', async () => {
-    const { provider, dir } = createTestProvider()
-    const first = await saveNew(provider, { name: 'Base plan' })
-    const second = await provider.saveForecast({
-        upserts: [{
-            sheetName: null,
-            revision: 0,
-            ...scenario({ name: 'Base plan', baselineMonths: 12 }),
-        }],
-        deletes: [],
+test('updates the single scenario in place and increments its revision', async () => {
+    const { provider } = createTestProvider()
+    const first = await saveNew(provider)
+    const updated = await saveCurrent(provider, first.scenario, {
+        baselineMonths: 12,
+        accounts: [{ name: 'Main account', balance: 5000, include: true }],
     })
-    assert.equal(first.scenarios.length, 1)
-    assert.equal(second.scenarios.length, 2)
-    assert.deepEqual(second.scenarios.map((entry) => entry.sheetName), ['Scenario - Base plan', 'Scenario - Base plan (2)'])
+    assert.equal(updated.scenario.revision, first.scenario.revision + 1)
+    assert.equal(updated.scenario.sheetName, 'Scenario - Base plan')
+    assert.equal(updated.scenario.baselineMonths, 12)
+    assert.equal(updated.scenario.accounts[0].balance, 5000)
 
-    const original = second.scenarios[0]
-    const renamed = await provider.saveForecast({
-        upserts: [{ ...original, sheetName: original.sheetName, revision: original.revision, name: 'Renamed plan' }],
-        deletes: [],
-    })
-    assert.deepEqual(renamed.scenarios.map((entry) => entry.sheetName), ['Scenario - Renamed plan', 'Scenario - Base plan (2)'])
-    assert.equal(renamed.scenarios[0].revision, original.revision + 1)
-
-    const deleted = await provider.saveForecast({
-        upserts: [],
-        deletes: ['Scenario - Base plan (2)'],
-    })
-    assert.deepEqual(deleted.scenarios.map((entry) => entry.sheetName), ['Scenario - Renamed plan'])
-    const commits = git(['log', '--format=%s', '-5'], dir)
-    assert.match(commits, /update forecast scenarios/)
+    const reread = await provider.getForecast()
+    assert.equal(reread.scenario.revision, 2)
+    assert.equal(reread.scenario.baselineMonths, 12)
 })
 
-test('rejects stale revisions without writing any other scenario', async () => {
+test('rejects a stale revision without writing', async () => {
     const { provider } = createTestProvider()
-    const first = await saveNew(provider, { name: 'Base plan' })
-    const current = first.scenarios[0]
+    const first = await saveNew(provider)
+    const current = first.scenario
     await assert.rejects(
         provider.saveForecast({
-            upserts: [
-                { ...current, sheetName: current.sheetName, revision: 0, name: 'Stale edit' },
-                { sheetName: null, revision: 0, ...scenario({ name: 'Should not exist' }) },
-            ],
-            deletes: [],
+            scenario: { ...current, revision: 0, accounts: [{ name: 'Stale', balance: 1, include: true }] },
         }),
         (error) => error instanceof ConflictError && error.statusCode === 409,
     )
     const after = await provider.getForecast()
-    assert.deepEqual(after.scenarios.map((entry) => entry.name), ['Base plan'])
+    assert.equal(after.scenario.accounts[0].name, 'Chequing')
+    assert.equal(after.scenario.revision, 1)
 })
 
-test('rejects a stale delete without removing the newer scenario', async () => {
+test('refuses to create a second scenario when one already exists', async () => {
     const { provider } = createTestProvider()
-    const first = await saveNew(provider, { name: 'Base plan' })
-    const original = first.scenarios[0]
-    const updated = await provider.saveForecast({
-        upserts: [{ ...original, sheetName: original.sheetName, revision: original.revision, name: 'Updated plan' }],
-        deletes: [],
-    })
-    assert.equal(updated.scenarios[0].revision, original.revision + 1)
-
+    await saveNew(provider)
     await assert.rejects(
-        provider.saveForecast({
-            upserts: [],
-            deletes: [{ sheetName: original.sheetName, revision: original.revision }],
-        }),
+        saveNew(provider, { name: 'Second plan' }),
         (error) => error instanceof ConflictError && error.statusCode === 409,
     )
     const after = await provider.getForecast()
-    assert.deepEqual(after.scenarios.map((entry) => entry.name), ['Updated plan'])
+    assert.equal(after.scenario.name, 'Base plan')
 })
 
 test('validates scenario input', async () => {
@@ -163,10 +137,10 @@ test('validates scenario input', async () => {
     await assert.rejects(saveNew(provider, { events: [{ date: '2027-01-01', details: '', kind: 'expense', amount: 10 }] }), ValidationError)
     await assert.rejects(saveNew(provider, { events: [{ date: '2027-01-01', details: 'Bad', kind: 'expense', amount: 0 }] }), ValidationError)
     await assert.rejects(saveNew(provider, { target: { amount: 10, label: 'T', date: 'not-a-date' } }), ValidationError)
-    assert.deepEqual((await provider.getForecast()).scenarios, [])
+    assert.equal((await provider.getForecast()).scenario, null)
 })
 
-test('ignores non-scenario sheets and never deletes them', async () => {
+test('ignores non-scenario sheets', async () => {
     const { provider, workbookFile } = createTestProvider()
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.readFile(workbookFile)
@@ -174,14 +148,12 @@ test('ignores non-scenario sheets and never deletes them', async () => {
     manual.getCell('A1').value = 'Just a normal sheet'
     await workbook.xlsx.writeFile(workbookFile)
 
-    assert.deepEqual((await provider.getForecast()).scenarios, [])
-    await assert.rejects(
-        provider.saveForecast({ upserts: [], deletes: ['Scenario - Manual'] }),
-        ConflictError,
-    )
+    assert.equal((await provider.getForecast()).scenario, null)
+    const saved = await saveNew(provider)
+    assert.equal(saved.scenario.sheetName, 'Scenario - Base plan')
 })
 
-test('reports malformed scenario sheets and can delete them', async () => {
+test('reports malformed scenario sheets without treating them as active', async () => {
     const { provider, workbookFile } = createTestProvider()
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.readFile(workbookFile)
@@ -193,24 +165,9 @@ test('reports malformed scenario sheets and can delete them', async () => {
     await workbook.xlsx.writeFile(workbookFile)
 
     const result = await provider.getForecast()
-    assert.equal(result.scenarios.length, 0)
+    assert.equal(result.scenario, null)
     assert.equal(result.errors.length, 1)
     assert.equal(result.errors[0].sheetName, 'Scenario - Broken')
-
-    const deleted = await provider.saveForecast({ upserts: [], deletes: ['Scenario - Broken'] })
-    assert.deepEqual(deleted.errors, [])
-    assert.deepEqual(deleted.scenarios, [])
-})
-
-test('truncates and uniquifies sheet names', async () => {
-    const { provider } = createTestProvider()
-    const longName = 'A very long scenario name that will not fit in a sheet tab'
-    const first = await saveNew(provider, { name: longName })
-    const second = await saveNew(provider, { name: longName })
-    assert.ok(first.scenarios[0].sheetName.length <= 31)
-    assert.ok(first.scenarios[0].sheetName.startsWith('Scenario - '))
-    assert.notEqual(first.scenarios[0].sheetName, second.scenarios[1].sheetName)
-    assert.ok(second.scenarios[1].sheetName.length <= 31)
 })
 
 test('round-trips model settings, recurring adjustments and scheduled changes', async () => {
@@ -231,7 +188,7 @@ test('round-trips model settings, recurring adjustments and scheduled changes', 
         }],
         changes: [{ from: '2027-01', kind: 'expense', category: 'Rent', amount: 1600 }],
     })
-    const stored = saved.scenarios[0]
+    const stored = saved.scenario
     assert.equal(stored.baselineMethod, 'robust')
     assert.equal(stored.recurringDetection, false)
     assert.equal(stored.uncertainty, false)
@@ -284,18 +241,18 @@ test('commits scenario changes and creates no backup file', async () => {
     await saveNew(provider)
     assert.equal(fs.existsSync(`${workbookFile}.bak`), false)
     const log = git(['log', '-1', '--format=%s'], dir)
-    assert.match(log, /update forecast scenarios/)
+    assert.match(log, /update forecast/)
 })
 
 test('round-trips a blank as-of date as today', async () => {
     const { provider, workbookFile } = createTestProvider()
     const saved = await saveNew(provider, { asOf: null })
-    assert.equal(saved.scenarios[0].asOf, null)
-    assert.equal(saved.scenarios[0].sheetName, 'Scenario - Base plan')
+    assert.equal(saved.scenario.asOf, null)
+    assert.equal(saved.scenario.sheetName, 'Scenario - Base plan')
 
-    const sheet = await readSheet(workbookFile, saved.scenarios[0].sheetName)
+    const sheet = await readSheet(workbookFile, saved.scenario.sheetName)
     assert.equal(sheet.getCell('B5').value, null)
 
     const reread = await provider.getForecast()
-    assert.equal(reread.scenarios[0].asOf, null)
+    assert.equal(reread.scenario.asOf, null)
 })

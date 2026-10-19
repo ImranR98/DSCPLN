@@ -152,11 +152,11 @@ const createApp = (config) => {
                 res.send(await dataProvider.updateDefaultExcludedCategories(req.body?.categories))
             }))
 
-            router.get('/forecast', requireProviderMethod('getForecast', 'forecast scenarios'), asyncRoute(async (req, res) => {
+            router.get('/forecast', requireProviderMethod('getForecast', 'forecast scenario'), asyncRoute(async (req, res) => {
                 res.send(await dataProvider.getForecast())
             }))
 
-            router.put('/forecast', requireProviderMethod('saveForecast', 'forecast scenarios'), asyncRoute(async (req, res) => {
+            router.put('/forecast', requireProviderMethod('saveForecast', 'forecast scenario'), asyncRoute(async (req, res) => {
                 res.send(await dataProvider.saveForecast(req.body || {}))
             }))
 

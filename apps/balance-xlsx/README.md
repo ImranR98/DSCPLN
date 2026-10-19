@@ -103,7 +103,7 @@ The forecasts page persists one visible worksheet named `Scenario - Base plan`. 
 | Scheduled changes | From month (`YYYY-MM`), kind, category, monthly amount. Applies from the first day of that month |
 | Category inputs | Kind, category, monthly override (replaces the category total, including recurring items), include (`Yes`/`No`) |
 
-Input cells are blue, matching the old manual sheets' convention; metadata is black. The app creates or updates the Base plan sheet on Save. Detected recurring items, chosen methods, outliers, backtests and projections are computed live and are not persisted. Reset restores the default inputs; Save persists the reset, and Discard returns to the last saved sheet. `GET/PUT /forecast` use per-sheet revisions, so a stale edit or deletion is rejected with `409` before anything is written.
+Input cells are blue, matching the old manual sheets' convention; metadata is black. The app creates or updates the Base plan sheet on Save. Detected recurring items, chosen methods, outliers, backtests and projections are computed live and are not persisted. Reset restores the default inputs; Save persists the reset, and Discard returns to the last saved sheet. `GET/PUT /forecast` use the sheet revision, so a stale edit is rejected with `409` before anything is written.
 
 ## API
 
@@ -121,10 +121,10 @@ These routes are used by the web UI (and only support what it needs).
 | `DELETE` | `/transactions/:id` | - |
 | `POST` | `/budget` | `{ "monthlyBudget", "firstDayBias", "currency" }` |
 | `POST` | `/excluded-defaults` | `{ "categories": ["Investment Buy", ...] }` — writes the Constants "Excluded from Budget by Default" list |
-| `GET` | `/forecast` | - — returns `{ "scenarios", "errors" }` from the scenario sheets |
-| `PUT` | `/forecast` | `{ "upserts": [{ "sheetName"?, "revision", ...scenario }], "deletes": [{ "sheetName", "revision" }] }` — all-or-nothing, one workbook write. String delete names are accepted for backwards compatibility, but clients should send revisions. |
+| `GET` | `/forecast` | - — returns `{ "scenario", "errors" }` for the active Base plan sheet |
+| `PUT` | `/forecast` | `{ "scenario": { "sheetName"?, "revision", ...inputs } }` — updates the one active sheet in a single workbook write. A stale revision is rejected with `409`. |
 
-Forecast scenario objects carry the model settings (`baselineMethod`, `recurringDetection`, `uncertainty`), `recurringAdjustments` and `changes` alongside the accounts/events/target. Updating a scenario sends the same object back in `upserts`; the app validates it and writes the input-only scenario sheet.
+The forecast scenario object carries the model settings (`baselineMethod`, `recurringDetection`, `uncertainty`), `recurringAdjustments` and `changes` alongside the accounts/events/target. Updating it sends the same object back as `scenario`; the app validates it and writes the input-only sheet.
 
 `/data` accepts repeated `exclude=<category>` parameters that leave those categories out of every figure for the view (spend, budgets, trailing averages, the history chart); without the parameter the workbook's default exclusions apply, and the response carries `defaultExcludedCategories` (the workbook's list). The month's transaction list, the all-time range and the suggestion helpers always see the whole workbook.
 
@@ -225,6 +225,8 @@ currency:
 - **Accounts** supply the starting balance; include only the accounts that should count. Negative balances are allowed. A starting balance of **0 is treated as unknown**: the projection still runs, but balances are relative to $0 and the page shows a disclaimer plus the projected low point instead of a cash-out runway. Add your real balances for absolute figures.
 - **One-time events** are dated income/expenses applied on their exact date. Events after the chart horizon are marked as such; they still feed the long-run target/runway calculation.
 - **Projection**: recurring items land on their dates, variable spending is spread through each month, the rest of the as-of month is prorated, and events are applied on their dates. Category overrides/scheduled changes are monthly amounts. The page shows target date, balance at the horizon, runway/cash-out and savings rate; the monthly table and model-quality details are collapsed by default.
+- **Forecast drivers**: a collapsed card explains the monthly shape (recurring vs variable/changes), one-time events in the horizon, and the largest income/expense categories.
+- **Draft recovery**: unsaved edits are kept locally in the browser. If the tab closes or reloads before Save, the next visit offers to restore or dismiss the draft. The workbook remains the source of truth; drafts never write automatically.
 - **Target**: one **target balance** and an optional date. The target date is the first date the projected balance reaches the amount; the long-run simulation looks beyond the chart horizon so a far-away target still gets a date.
 - **Uncertainty**: when enabled and enough backtest history exists, a seeded residual bootstrap produces P10/P50/P90 balance bands, a target-date range, probability of reaching the target by a date/horizon and cash-out probability. The band represents historical variable income/spending; recurring items and one-time events are deterministic.
 - The workbook's old date-named sheets are legacy snapshots; the Forecasts page does not read or modify them.
@@ -264,7 +266,7 @@ the API; the workbook stays the source of truth.
 | --- | --- |
 | `ui/src/Dashboard.jsx` | Month dashboard; hero/currency cards are components in `ui/src/components/`. |
 | `ui/src/Insights.jsx` | Range analysis, charts and category movers (math in `ui/src/lib/insights-model.js`). |
-| `ui/src/Forecasts.jsx` | Live scenario editor, KPIs, projection chart/table and save flow. |
+| `ui/src/Forecasts.jsx` | Single Base plan editor, reset/save flow, KPIs, projection chart/table and draft recovery. |
 | `ui/src/Settings.jsx` | Data-source info and the external API token. |
 | `ui/src/lib/insights-math.js` | Pure aggregation/comparison helpers (also imported by the Node tests). |
 | `ui/src/lib/forecast-recurring.js` | Recurring detection, adjustments and occurrence generation. |
@@ -272,6 +274,9 @@ the API; the workbook stays the source of truth.
 | `ui/src/lib/forecast-uncertainty.js` | Seeded residual bootstrap, bands and probabilities. |
 | `ui/src/lib/forecast-math.js` | Projection orchestration, recurring/dated plan, target/runway (also imported by the Node tests). |
 | `ui/src/lib/forecast-model.js` | Display model and scenario helpers for the Forecasts page. |
+| `ui/src/components/ForecastToolbar.jsx` | Base plan header and reset/discard/save controls. |
+| `ui/src/components/ForecastSaveBar.jsx` | Sticky unsaved-changes actions. |
+| `ui/src/components/ForecastDrivers.jsx` | Monthly composition and largest income/expense explanation. |
 | `ui/src/lib/chart.js` | Chart.js setup shared by both pages. |
 | `ui/src/lib/money.js` | Money formatting and stable per-currency colors. |
 | `server.mjs` | Routes and error handling; `notifications.mjs` sends budget-limit pushes. |

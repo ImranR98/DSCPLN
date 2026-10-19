@@ -27,7 +27,6 @@ const SCENARIO_CADENCES = new Set(['weekly', 'biweekly', 'semimonthly', 'monthly
 const SCENARIO_BASELINE_METHODS = new Set(['auto', 'simple', 'robust']);
 const SCENARIO_MAX_ACCOUNTS = 20;
 const SCENARIO_MAX_EVENTS = 200;
-const SCENARIO_MAX_SCENARIOS = 50;
 const SCENARIO_MAX_ADJUSTMENTS = 100;
 const SCENARIO_MAX_CHANGES = 100;
 
@@ -124,6 +123,11 @@ const scenarioSheetName = (name, existingNames, currentName = null) => {
     }
     return candidate;
 };
+
+const preferredScenario = (scenarios = []) =>
+    scenarios.find((scenario) => scenario.name === 'Base plan' || scenario.sheetName === 'Scenario - Base plan') ||
+    scenarios[0] ||
+    null;
 
 const normalizeScenario = (input = {}, constants = {}, meta = {}) => {
     const source = input && typeof input === 'object' ? input : {};
@@ -1605,41 +1609,25 @@ export default (config = {}, configDir = process.cwd()) => {
         }
     }
 
-    // The Forecasts page reads every scenario sheet at once. Scenario sheets
-    // are pure inputs; all projection math lives in the UI.
+    // The Forecasts page manages one workbook scenario at a time. Scenario
+    // sheets are pure inputs; all projection math lives in the UI.
     const getForecast = async () => {
-        const parsed = await getParsed()
+        const parsed = await getParsed();
         return {
-            scenarios: parsed.scenarios,
+            scenario: preferredScenario(parsed.scenarios),
             errors: parsed.scenarioErrors,
-        }
+        };
     }
 
-    // Applies a batch of scenario upserts/deletes in one workbook write. The
-    // whole batch is validated before anything is written, so a stale revision
-    // or invalid scenario cannot leave the workbook half-updated.
+    // Updates the one active scenario sheet in a single workbook write. A
+    // requested sheet name and revision identify an existing sheet; without
+    // one, the workbook must not already contain a valid scenario.
     const saveForecast = async (input = {}) => {
-        const upserts = Array.isArray(input.upserts) ? input.upserts : [];
-        const deletes = [];
-        const seenDeletes = new Set();
-        for (const value of Array.isArray(input.deletes) ? input.deletes : []) {
-            const entry = typeof value === 'string' ? { sheetName: value } : value;
-            const sheetName = typeof entry?.sheetName === 'string' ? entry.sheetName.trim() : '';
-            if (!sheetName) continue;
-            if (seenDeletes.has(sheetName)) {
-                throw new ValidationError('The same scenario was deleted twice');
-            }
-            seenDeletes.add(sheetName);
-            deletes.push({
-                sheetName,
-                revision: Number.isInteger(entry?.revision) ? entry.revision : null,
-            });
-        }
-        if (upserts.length === 0 && deletes.length === 0) {
-            throw new ValidationError('Nothing to save');
-        }
-        if (upserts.length > SCENARIO_MAX_SCENARIOS) {
-            throw new ValidationError(`At most ${SCENARIO_MAX_SCENARIOS} scenarios can be saved at once`);
+        const source = input && typeof input === 'object' && input.scenario && typeof input.scenario === 'object'
+            ? input.scenario
+            : input;
+        if (!source || typeof source !== 'object' || Array.isArray(source)) {
+            throw new ValidationError('Invalid scenario');
         }
 
         const workbook = await loadWorkbook();
@@ -1647,99 +1635,55 @@ export default (config = {}, configDir = process.cwd()) => {
         const constants = readConstants(workbook);
         const entries = scenarioSheetEntries(workbook, constants, date1904);
         const byName = new Map(entries.map((entry) => [entry.sheetName, entry]));
+        const requestedSheet = typeof source.sheetName === 'string' ? source.sheetName.trim() : '';
 
-        for (const deletion of deletes) {
-            const entry = byName.get(deletion.sheetName);
-            if (!entry) {
-                throw new ConflictError(`Scenario sheet "${deletion.sheetName}" no longer exists. Refresh and try again.`);
+        let existing = null;
+        if (requestedSheet) {
+            existing = byName.get(requestedSheet) || null;
+            if (!existing) {
+                throw new ConflictError(`Scenario sheet "${requestedSheet}" no longer exists. Refresh and try again.`);
             }
-            if (deletion.revision != null && entry.scenario && entry.scenario.revision !== deletion.revision) {
-                throw new ConflictError(`Scenario "${entry.scenario.name}" changed on disk. Refresh and try again.`);
+            if (!existing.scenario) {
+                throw new ValidationError(`Scenario sheet "${requestedSheet}" is invalid: ${existing.error}`);
             }
+            const revision = Number.isInteger(source.revision) ? source.revision : 0;
+            if (existing.scenario.revision !== revision) {
+                throw new ConflictError(`Scenario "${existing.scenario.name}" changed on disk. Refresh and try again.`);
+            }
+        } else if (entries.some((entry) => entry.scenario)) {
+            throw new ConflictError('A scenario sheet already exists in this workbook. Refresh and try again.');
         }
 
-        const toWrite = [];
-        const seen = new Set();
         const now = new Date().toISOString();
-        for (const item of upserts) {
-            if (!item || typeof item !== 'object') {
-                throw new ValidationError('Invalid scenario');
-            }
-            const sheetName = typeof item.sheetName === 'string' && item.sheetName.trim() ?
-                item.sheetName.trim() : null;
-            const revision = Number.isInteger(item.revision) ? item.revision : 0;
-            if (sheetName) {
-                if (seen.has(sheetName)) {
-                    throw new ValidationError('The same scenario was sent twice');
-                }
-                seen.add(sheetName);
-                if (seenDeletes.has(sheetName)) {
-                    throw new ValidationError('A scenario cannot be saved and deleted in the same request');
-                }
-                const entry = byName.get(sheetName);
-                if (!entry) {
-                    throw new ConflictError(`Scenario sheet "${sheetName}" no longer exists. Refresh and try again.`);
-                }
-                if (!entry.scenario) {
-                    throw new ValidationError(`Scenario sheet "${sheetName}" is invalid: ${entry.error}`);
-                }
-                if (entry.scenario.revision !== revision) {
-                    throw new ConflictError(`Scenario "${entry.scenario.name}" changed on disk. Refresh and try again.`);
-                }
-                toWrite.push({
-                    existing: entry,
-                    scenario: normalizeScenario(item, constants, {
-                        sheetName,
-                        revision: entry.scenario.revision + 1,
-                        updatedAt: now,
-                    }),
-                });
-            } else {
-                toWrite.push({
-                    existing: null,
-                    scenario: normalizeScenario(item, constants, {
-                        sheetName: null,
-                        revision: 1,
-                        updatedAt: now,
-                    }),
-                });
-            }
-        }
+        const scenario = normalizeScenario(source, constants, {
+            sheetName: existing?.scenario.sheetName ?? null,
+            revision: existing ? existing.scenario.revision + 1 : 1,
+            updatedAt: now,
+        });
 
-        for (const deletion of deletes) {
-            const entry = byName.get(deletion.sheetName);
-            if (entry) {
-                workbook.removeWorksheet(entry.sheet.id);
+        let sheet;
+        let sheetName;
+        if (existing) {
+            sheet = existing.sheet;
+            const otherNames = workbook.worksheets
+                .filter((candidate) => candidate.id !== sheet.id)
+                .map((candidate) => candidate.name);
+            sheetName = scenarioSheetName(scenario.name, otherNames, sheet.name);
+            if (sheet.name !== sheetName) {
+                sheet.name = sheetName;
             }
+        } else {
+            sheetName = scenarioSheetName(scenario.name, workbook.worksheets.map((candidate) => candidate.name));
+            sheet = workbook.addWorksheet(sheetName);
         }
+        scenario.sheetName = sheetName;
+        writeScenarioSheet(sheet, scenario, constants);
 
-        for (const { existing, scenario } of toWrite) {
-            let sheet;
-            let sheetName;
-            if (existing) {
-                sheet = existing.sheet;
-                const otherNames = workbook.worksheets
-                    .filter((candidate) => candidate.id !== sheet.id)
-                    .map((candidate) => candidate.name);
-                sheetName = scenarioSheetName(scenario.name, otherNames, sheet.name);
-                if (sheet.name !== sheetName) {
-                    sheet.name = sheetName;
-                }
-            } else {
-                sheetName = scenarioSheetName(scenario.name, workbook.worksheets.map((candidate) => candidate.name));
-                sheet = workbook.addWorksheet(sheetName);
-            }
-            scenario.sheetName = sheetName;
-            writeScenarioSheet(sheet, scenario, constants);
-        }
-
-        const names = toWrite.map(({ scenario }) => scenario.name);
-        const deletedNames = deletes.length ? `; deleted ${deletes.map((entry) => entry.sheetName).join(', ')}` : '';
-        const commitMessage = `D$CPLN: update forecast scenarios${names.length ? ` (${names.join(', ').slice(0, 160)})` : ''}${deletedNames}`.slice(0, 240);
-        const { commitWarning } = await saveWorkbook(workbook, commitMessage);
+        const { commitWarning } = await saveWorkbook(workbook, `D$CPLN: update forecast (${scenario.name})`.slice(0, 240));
         const savedEntries = scenarioSheetEntries(workbook, constants, date1904);
+        const saved = savedEntries.find((entry) => entry.sheetName === sheetName);
         return {
-            scenarios: savedEntries.filter((entry) => entry.scenario).map((entry) => entry.scenario),
+            scenario: saved?.scenario || scenario,
             errors: savedEntries.filter((entry) => entry.error)
                 .map((entry) => ({ sheetName: entry.sheetName, error: entry.error })),
             commitWarning,

@@ -113,9 +113,9 @@ merge may be the only copy.
   refuse the Cleanup action, so originals are never removed by File Pipelines.
 - Cleanup verifies before deleting: `copy` files must hash-match; `standardize`
   files must exist under the standardized/tagged name with a matching embedded
-  date; snap and voicenote groups must have their output file present, with the
-  input listed in its XMP tag (and a matching duration for snaps). Anything
-  unverifiable is blocked and surfaced as a conflict.
+  date; snap groups must have their output file present, with the input listed
+  in its XMP tag and a matching duration. Anything unverifiable is blocked and
+  surfaced as a conflict.
 - Cleaned originals move to **trash** (default retention 30 days) instead of
   being deleted outright.
 - A heartbeat lock file in the synced tree prevents two File Pipelines instances

@@ -1,3 +1,4 @@
+import { Dialog } from '@dscpln/ui-kit'
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 import { showToast } from '@dscpln/ui-kit'
 import { categoryColor } from './lib/insights-model.js'
@@ -51,14 +52,7 @@ const CategoriesDialog = forwardRef(function CategoriesDialog({ data, excluded, 
   }
 
   return (
-    <dialog ref={rootRef} className="wide-dialog categories-dialog">
-      <article>
-        <header className="card__header">
-          <h2>Counted categories</h2>
-          <span className="card__header-tools">
-            <button className="outline secondary icon-button" type="button" aria-label="Close" onClick={() => rootRef.current.close()}>&times;</button>
-          </span>
-        </header>
+    <Dialog dialogRef={rootRef} autoOpen={false} className="wide-dialog categories-dialog" title="Counted categories">
 
         <p className="hint">
           Unchecked categories are left out of this page&rsquo;s totals, budgets and charts.
@@ -81,8 +75,7 @@ const CategoriesDialog = forwardRef(function CategoriesDialog({ data, excluded, 
             <button type="button" disabled={saving || !changed} onClick={save}>Save as default</button>
           </span>
         </div>
-      </article>
-    </dialog>
+    </Dialog>
   )
 })
 

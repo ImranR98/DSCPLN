@@ -1,3 +1,4 @@
+import { Dialog } from '@dscpln/ui-kit'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { getJson, parseIso, postJson, putJson, toIso, showToast } from '@dscpln/ui-kit'
 
@@ -264,14 +265,7 @@ const TransactionDialog = forwardRef(function TransactionDialog({ data, today, o
   }, [])
 
   return (
-    <dialog ref={rootRef} className="wide-dialog">
-      <article>
-        <header className="card__header">
-          <h2>{editing ? 'Edit transaction' : 'Add transaction'}</h2>
-          <span className="card__header-tools">
-            <button className="outline secondary icon-button" type="button" aria-label="Close" onClick={() => rootRef.current.close()}>&times;</button>
-          </span>
-        </header>
+    <Dialog dialogRef={rootRef} autoOpen={false} className="wide-dialog" title={editing ? 'Edit transaction' : 'Add transaction'}>
 
         <form id="transactionForm" onSubmit={submit}>
           <div className="segmented" role="radiogroup" aria-label="Transaction kind">
@@ -387,8 +381,7 @@ const TransactionDialog = forwardRef(function TransactionDialog({ data, today, o
           <button className="outline secondary" type="button" onClick={() => rootRef.current.close()}>Cancel</button>
           <button type="submit" form="transactionForm" disabled={saving}>Save</button>
         </div>
-      </article>
-    </dialog>
+    </Dialog>
   )
 })
 

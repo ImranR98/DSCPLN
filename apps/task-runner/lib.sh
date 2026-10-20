@@ -152,6 +152,15 @@ bctl_pipelines() {  # CLI ARGS... — ensure dependencies, then run the CLI
   node "$cli" "$@"
 }
 
+bctl_move_file() {  # SRC DEST — preserve mode/owner without SELinux context warnings
+  local src="$1" dest="$2"
+  if [[ "$(stat -c %d -- "$src")" == "$(stat -c %d -- "$dest")" ]]; then
+    mv "$src" "$dest"
+  else
+    cp -p --no-preserve=context "$src" "$dest" && rm -f "$src"
+  fi
+}
+
 bctl_standardize_into() {  # SRC DEST PIPELINES_CLI
   # Copy SRC's files to a temp dir, standardize them with the File Pipelines CLI,
   # and move the results into DEST (originals are left in place).
@@ -175,7 +184,7 @@ bctl_standardize_into() {  # SRC DEST PIPELINES_CLI
     return 1
   fi
   for f in "$tmp"/*; do
-    mv "$f" "$dest/$(basename "$f")"
+    bctl_move_file "$f" "$dest/$(basename "$f")"
   done
   rm -rf "$tmp"
 }
@@ -220,7 +229,7 @@ case "${1:-}" in
       name="$rename"
       [[ -z "$name" ]] && name="$(basename "$f")"
       log "Moving $(basename "$f") → $dest/$name"
-      mv "$f" "$dest/$name"
+      bctl_move_file "$f" "$dest/$name"
       count=$((count + 1))
     done
     if [[ $git -eq 1 ]]; then

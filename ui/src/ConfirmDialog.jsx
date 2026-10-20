@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState } from 'react'
+import { Dialog } from '@dscpln/ui-kit'
 
 const ConfirmDialog = forwardRef(function ConfirmDialog(_props, ref) {
   const rootRef = useRef(null)
@@ -45,21 +46,22 @@ const ConfirmDialog = forwardRef(function ConfirmDialog(_props, ref) {
   }
 
   return (
-    <dialog ref={rootRef} className="narrow-dialog forecast-dialog" aria-labelledby={titleId} aria-describedby={messageId}>
-      <article>
-        <header className="card__header">
-          <h2 id={titleId}>{state.title}</h2>
-          <span className="card__header-tools">
-            <button className="outline secondary icon-button" type="button" aria-label="Close" onClick={() => rootRef.current.close()}>&times;</button>
-          </span>
-        </header>
-        <div className="confirm-dialog__message" id={messageId}>{state.message}</div>
-        <div className="dialog-actions">
+    <Dialog
+      dialogRef={rootRef}
+      autoOpen={false}
+      className="narrow-dialog forecast-dialog"
+      title={state.title}
+      titleId={titleId}
+      describedBy={messageId}
+      actions={(
+        <>
           <button className="outline secondary" type="button" onClick={() => rootRef.current.close()}>{state.cancelLabel}</button>
           <button className={state.danger ? 'danger' : ''} type="button" onClick={confirm}>{state.confirmLabel}</button>
-        </div>
-      </article>
-    </dialog>
+        </>
+      )}
+    >
+      <div className="confirm-dialog__message" id={messageId}>{state.message}</div>
+    </Dialog>
   )
 })
 

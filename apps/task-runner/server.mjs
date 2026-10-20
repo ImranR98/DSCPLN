@@ -501,6 +501,47 @@ export function taskJson(t) {
   };
 }
 
+const metricEscape = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')
+
+// Prometheus text format for the scheduled-task dead-man switch. Keep this
+// dependency-free: the values already exist in taskJson/state.
+export function metricsText() {
+  const lines = [
+    '# HELP task_runner_configured_tasks Number of tasks loaded from config.mjs',
+    '# TYPE task_runner_configured_tasks gauge',
+    `task_runner_configured_tasks ${TASK_LIST.length}`,
+    '# HELP task_runner_schedules_enabled Whether this instance fires schedules',
+    '# TYPE task_runner_schedules_enabled gauge',
+    `task_runner_schedules_enabled ${SCHEDULES_ENABLED ? 1 : 0}`,
+    '# HELP task_runner_task_last_run_timestamp_seconds Unix timestamp of the last completed run',
+    '# TYPE task_runner_task_last_run_timestamp_seconds gauge',
+    '# HELP task_runner_task_last_run_ok Whether the last completed run succeeded',
+    '# TYPE task_runner_task_last_run_ok gauge',
+    '# HELP task_runner_task_next_run_timestamp_seconds Unix timestamp of the next scheduled run',
+    '# TYPE task_runner_task_next_run_timestamp_seconds gauge',
+    '# HELP task_runner_task_schedule_enabled Whether the task has an enabled schedule',
+    '# TYPE task_runner_task_schedule_enabled gauge',
+    '# HELP task_runner_task_missed Number of missed scheduled occurrences',
+    '# TYPE task_runner_task_missed gauge',
+    '# HELP task_runner_task_running Whether the task is currently running',
+    '# TYPE task_runner_task_running gauge',
+    '# HELP task_runner_task_available Whether the task is available on this instance',
+    '# TYPE task_runner_task_available gauge',
+  ]
+  for (const task of TASK_LIST) {
+    const t = taskJson(task)
+    const labels = `task="${metricEscape(t.name)}",group="${metricEscape(t.group ?? '')}"`
+    lines.push(`task_runner_task_last_run_timestamp_seconds{${labels}} ${t.state?.ts ?? 0}`)
+    lines.push(`task_runner_task_last_run_ok{${labels}} ${t.state?.ok ? 1 : 0}`)
+    lines.push(`task_runner_task_next_run_timestamp_seconds{${labels}} ${t.next_run ?? 0}`)
+    lines.push(`task_runner_task_schedule_enabled{${labels}} ${t.schedule?.enabled ? 1 : 0}`)
+    lines.push(`task_runner_task_missed{${labels}} ${t.schedule_missed ?? 0}`)
+    lines.push(`task_runner_task_running{${labels}} ${t.running ? 1 : 0}`)
+    lines.push(`task_runner_task_available{${labels}} ${t.avail ? 1 : 0}`)
+  }
+  return `${lines.join('\n')}\n`
+}
+
 export function createApp(options = {}) {
   const basePath = options.basePath ?? process.env.BASE_PATH ?? ''
   const browserRemote = options.browserUpstream ?? process.env.BROWSER_REMOTE
@@ -541,6 +582,11 @@ export function createApp(options = {}) {
         const best = Math.max(...candidates.map((c) => c.score))
         const tied = candidates.filter((c) => c.score === best).map((c) => c.task)
         res.json({ result: { task: tied[0], ambiguous: tied } })
+      })
+
+      router.get('/api/metrics', (req, res) => {
+        res.type('text/plain; version=0.0.4; charset=utf-8')
+        res.send(metricsText())
       })
 
       router.get('/api/tasks', (req, res) => {

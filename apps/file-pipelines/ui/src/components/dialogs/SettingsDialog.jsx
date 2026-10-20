@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
 import { METHOD_LABEL } from '../../lib/view.js'
-import Modal from '../Modal.jsx'
+import { Dialog } from '@dscpln/ui-kit'
 
 // The config editor: global settings up top, then one folder editor per
 // configured folder.
@@ -12,14 +12,7 @@ export default function SettingsDialog({ draft, updateDraft, addFolder, saveSett
   }
 
   return (
-    <Modal onClose={onClose} data-testid="settings-dialog" className="wide-dialog">
-      <article>
-        <header className="card__header">
-          <h2>Settings</h2>
-          <span className="card__header-tools">
-            <button className="outline secondary icon-button" aria-label="Close" onClick={onClose}>&times;</button>
-          </span>
-        </header>
+    <Dialog onClose={onClose} data-testid="settings-dialog" className="wide-dialog" title="Settings">
         <p className="hint">Changes are written back to the config file and applied immediately. The bind host and port are fixed at deploy time.</p>
 
         <div className="form-grid">
@@ -111,7 +104,6 @@ export default function SettingsDialog({ draft, updateDraft, addFolder, saveSett
           <button className="outline secondary" onClick={onClose}>Cancel</button>
           <button onClick={saveSettings}>Save</button>
         </div>
-      </article>
-    </Modal>
+    </Dialog>
   )
 }

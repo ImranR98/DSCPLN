@@ -808,6 +808,18 @@ test('validate-fresh: stale newest export fails the run', async () => {
 
 // ---- API-level suites ------------------------------------------------------
 
+test('metrics: exposes scheduled task gauges', async () => {
+  const t = task('Scheduled Metric', {
+    commands: 'true',
+    schedule: { enabled: true, days: [0], at: '04:00', catchUp: true },
+  })
+  await bctl.boot(makeConfig([t]))
+  const text = bctl.metricsText()
+  assert.match(text, /task_runner_configured_tasks 1/)
+  assert.match(text, /task_runner_task_schedule_enabled\{task="Scheduled Metric"/)
+  assert.match(text, /task_runner_task_last_run_timestamp_seconds\{task="Scheduled Metric"/)
+})
+
 test('API: /api/tasks returns groups in config order', async () => {
   await bootWith(writeConfig('groups-order.mjs', {
     maindir,

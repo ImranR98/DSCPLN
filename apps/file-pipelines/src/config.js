@@ -1,6 +1,6 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { atomicWriteFile, expandPath, pathExists } from "@dscpln/server-kit";
+import { configStore, expandPath, readJsonFile } from "@dscpln/server-kit";
 
 export const METHODS = ["standardize", "snapchat", "copy", "reviewed-audio"];
 export const MANUAL_PLACEMENT_METHODS = new Set(["standardize", "snapchat", "reviewed-audio"]);
@@ -10,8 +10,6 @@ export function defaultConfig() {
     bindHost: "127.0.0.1",
     port: 8791,
     concurrency: 2,
-    paused: false,
-    dryRun: false,
     trashRetentionDays: 30,
     settleSeconds: 60,
     maxAutoRetries: 3,
@@ -53,8 +51,9 @@ export function normalizeConfig(raw) {
   cfg.maxAutoRetries = Math.max(0, Math.floor(asNumber(cfg.maxAutoRetries, 3)));
   cfg.lockHeartbeatSeconds = Math.max(10, asNumber(cfg.lockHeartbeatSeconds, 300));
   cfg.lockStaleSeconds = Math.max(cfg.lockHeartbeatSeconds * 2, asNumber(cfg.lockStaleSeconds, 900));
-  cfg.paused = Boolean(cfg.paused);
-  cfg.dryRun = Boolean(cfg.dryRun);
+  // Runtime toggles are persisted separately by the daemon.
+  delete cfg.paused;
+  delete cfg.dryRun;
   cfg.stagingDir = expandPath(cfg.stagingDir);
   cfg.reviewDir = expandPath(cfg.reviewDir);
   cfg.trashDir = expandPath(cfg.trashDir);
@@ -128,25 +127,24 @@ export function validateConfig(cfg) {
   return cfg;
 }
 
+function storeFor(file) {
+  return configStore(file, {
+    defaults: defaultConfig(),
+    normalize: normalizeConfig,
+    validate: validateConfig,
+  });
+}
+
 export async function loadConfig(file) {
-  let raw = null;
-  if (await pathExists(file)) {
-    raw = JSON.parse(await fsp.readFile(file, "utf8"));
-  }
-  // Fresh installs start with no folders; everything is configured from the UI.
-  const cfg = normalizeConfig(raw ?? { ...defaultConfig(), folders: [] });
-  validateConfig(cfg);
-  if (!raw) {
-    await saveConfig(file, cfg);
-  }
-  return cfg;
+  // Read the raw file once to migrate the old in-config runtime toggles; the
+  // persisted config itself is owned by configStore and never contains them.
+  const legacy = await readJsonFile(file, null);
+  const cfg = await storeFor(file).load();
+  return { ...cfg, paused: legacy?.paused === true, dryRun: legacy?.dryRun === true };
 }
 
 export async function saveConfig(file, cfg) {
-  // `paused`/`dryRun` are runtime toggles persisted in <logDir>/../state.json;
-  // keep the declarative config free of them.
-  const { paused, dryRun, ...clean } = cfg;
-  await atomicWriteFile(file, JSON.stringify(clean, null, 2) + "\n");
+  await storeFor(file).save(cfg);
 }
 
 export async function ensureRuntimeDirs(cfg, warn = () => {}) {

@@ -1,3 +1,4 @@
+import { Dialog } from '@dscpln/ui-kit'
 import { forwardRef, useId, useImperativeHandle, useRef, useState } from 'react'
 
 const EventDialog = forwardRef(function EventDialog({ asOf, onSave }, ref) {
@@ -63,14 +64,7 @@ const EventDialog = forwardRef(function EventDialog({ asOf, onSave }, ref) {
   }
 
   return (
-    <dialog ref={rootRef} className="narrow-dialog forecast-dialog" aria-labelledby={titleId}>
-      <article>
-        <header className="card__header">
-          <h2 id={titleId}>{editingIndex == null ? 'Add one-time event' : 'Edit one-time event'}</h2>
-          <span className="card__header-tools">
-            <button className="outline secondary icon-button" type="button" aria-label="Close" onClick={() => rootRef.current.close()}>&times;</button>
-          </span>
-        </header>
+    <Dialog dialogRef={rootRef} autoOpen={false} className="narrow-dialog forecast-dialog" titleId={titleId} title={editingIndex == null ? 'Add one-time event' : 'Edit one-time event'}>
         <form id="forecastEventForm" noValidate onSubmit={submit}>
           <div className="native-fields">
             <label className="field">
@@ -112,8 +106,7 @@ const EventDialog = forwardRef(function EventDialog({ asOf, onSave }, ref) {
           <button className="outline secondary" type="button" onClick={() => rootRef.current.close()}>Cancel</button>
           <button type="submit" form="forecastEventForm">{editingIndex == null ? 'Add event' : 'Save event'}</button>
         </div>
-      </article>
-    </dialog>
+    </Dialog>
   )
 })
 

@@ -1,15 +1,8 @@
-import Modal from '../Modal.jsx'
+import { Dialog } from '@dscpln/ui-kit'
 
 export default function SetDateDialog({ dialog, setField, onStandardize, onClose }) {
   return (
-    <Modal onClose={onClose} className="narrow-dialog">
-      <article>
-        <header className="card__header">
-          <h2>Set date</h2>
-          <span className="card__header-tools">
-            <button className="outline secondary icon-button" aria-label="Close" onClick={onClose}>&times;</button>
-          </span>
-        </header>
+          <Dialog onClose={onClose} className="narrow-dialog" title="Set date">
         <p className="hint">The copy will be standardized with this date and placed in the destination.</p>
         <div className="native-fields">
           <label className="native-field">
@@ -26,7 +19,6 @@ export default function SetDateDialog({ dialog, setField, onStandardize, onClose
           <button className="outline secondary" onClick={onClose}>Cancel</button>
           <button onClick={onStandardize}>Standardize</button>
         </div>
-      </article>
-    </Modal>
+    </Dialog>
   )
 }

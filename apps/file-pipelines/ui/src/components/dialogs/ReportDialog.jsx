@@ -1,10 +1,8 @@
-import Modal from '../Modal.jsx'
+import { Dialog } from '@dscpln/ui-kit'
 
 export default function ReportDialog({ entries, onClose }) {
   return (
-    <Modal onClose={onClose} className="wide-dialog">
-      <article>
-        <header className="card__header"><h2>Report</h2></header>
+          <Dialog onClose={onClose} className="wide-dialog" title="Report">
         <div className="checklist">
           {entries.map((entry) => (
             <div className="checklist__row" key={entry.name + (entry.reason ?? '')}>
@@ -16,7 +14,6 @@ export default function ReportDialog({ entries, onClose }) {
         <div className="dialog-actions">
           <button onClick={onClose}>Close</button>
         </div>
-      </article>
-    </Modal>
+    </Dialog>
   )
 }

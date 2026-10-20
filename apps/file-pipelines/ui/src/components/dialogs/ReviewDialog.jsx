@@ -1,5 +1,5 @@
 import { apiUrl, formatBytes } from '@dscpln/ui-kit'
-import Modal from '../Modal.jsx'
+import { Dialog } from '@dscpln/ui-kit'
 
 const groupKey = (group) => group.file
   ? `${group.folder}\u0000file\u0000${group.file}`
@@ -51,14 +51,7 @@ export default function ReviewDialog({
   onClose,
 }) {
   return (
-    <Modal onClose={onClose} data-testid="review-dialog" className="wide-dialog">
-      <article>
-        <header className="card__header">
-          <h2>Review</h2>
-          <span className="card__header-tools">
-            <button className="outline secondary icon-button" aria-label="Close" onClick={onClose}>&times;</button>
-          </span>
-        </header>
+          <Dialog onClose={onClose} data-testid="review-dialog" className="wide-dialog" title="Review">
         <p className="hint">
           Reviewed audio is approved here: grouped folders merge and move same-day clips;
           per-file folders standardize and move each file. Delete moves sources to trash.
@@ -164,7 +157,6 @@ export default function ReviewDialog({
         <div className="dialog-actions">
           <button className="outline secondary" onClick={onClose}>Close</button>
         </div>
-      </article>
-    </Modal>
+    </Dialog>
   )
 }

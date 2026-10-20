@@ -1,3 +1,4 @@
+import { Dialog } from '@dscpln/ui-kit'
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 import { postJson, showToast } from '@dscpln/ui-kit'
 import { number } from './lib/money.js'
@@ -49,14 +50,7 @@ const BudgetDialog = forwardRef(function BudgetDialog({ data, onrefresh }, ref) 
   }
 
   return (
-    <dialog ref={rootRef} className="narrow-dialog">
-      <article>
-        <header className="card__header">
-          <h2>Edit budget</h2>
-          <span className="card__header-tools">
-            <button className="outline secondary icon-button" type="button" aria-label="Close" onClick={() => rootRef.current.close()}>&times;</button>
-          </span>
-        </header>
+    <Dialog dialogRef={rootRef} autoOpen={false} className="narrow-dialog" title="Edit budget">
 
         <form id="budgetForm" noValidate onSubmit={submit}>
           <p className="hint">Editing the {currency} budget.</p>
@@ -94,8 +88,7 @@ const BudgetDialog = forwardRef(function BudgetDialog({ data, onrefresh }, ref) 
           <button className="outline secondary" type="button" onClick={() => rootRef.current.close()}>Cancel</button>
           <button type="submit" form="budgetForm" disabled={Boolean(validityError) || saving}>Save</button>
         </div>
-      </article>
-    </dialog>
+    </Dialog>
   )
 })
 

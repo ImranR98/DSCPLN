@@ -521,7 +521,7 @@ main > * {
 .folder-card--standardize { --method-color: var(--accent); }
 .folder-card--snapchat { --method-color: #7c5cff; }
 .folder-card--copy { --method-color: var(--warn); }
-.folder-card--voicenotes { --method-color: #db2777; }
+.folder-card--reviewed-audio { --method-color: #db2777; }
 
 /* The accent bar and badge say which method the folder uses; problems take
    the colour over. */

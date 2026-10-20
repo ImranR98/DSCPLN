@@ -16,8 +16,8 @@ export default function FolderCard({
   onSetDate,
 }) {
   const stats = folderStats(folder)
-  const voiceGroups = folder.method === 'voicenotes' ? reviewGroups(folder) : []
-  const reviewCount = folder.method === 'voicenotes' ? voiceGroups.length : stats.review
+  const reviewedAudioGroups = folder.method === 'reviewed-audio' ? reviewGroups(folder) : []
+  const reviewCount = folder.method === 'reviewed-audio' ? reviewedAudioGroups.length : stats.review
   const cardClass = `card folder-card folder-card--${folder.method}` +
     (folder.counts.conflict ? ' card--over' : !folder.counts.conflict && stats.issues ? ' card--warn' : '')
   const snapshot = isSnapshot(folder)
@@ -108,10 +108,10 @@ export default function FolderCard({
           </p>
 
           <div className="folder-card__actions">
-            {folder.method !== 'voicenotes' ? (
+            {folder.method !== 'reviewed-audio' ? (
               <button className="outline secondary" onClick={onProcessNow}>Process now</button>
             ) : null}
-            {folder.method === 'voicenotes' || folder.placement === 'manual' || stats.review > 0 ? (
+            {folder.method === 'reviewed-audio' || folder.placement === 'manual' || stats.review > 0 ? (
               <button className={reviewCount > 0 ? '' : 'outline secondary'} onClick={onOpenReview}>
                 Review{reviewCount > 0 ? ` (${reviewCount})` : ''}
               </button>
@@ -144,12 +144,12 @@ export default function FolderCard({
                         <span className={`pill pill--${file.status === 'done' ? 'ok' : file.status === 'error' ? 'fail' : file.status === 'conflict' ? 'neutral' : 'running'}`}>{file.status}</span>
                       </div>
                       <div className="file__actions">
-                        {folder.method !== 'voicenotes' && (file.status === 'error' || file.status === 'conflict') ? (
+                        {folder.method !== 'reviewed-audio' && (file.status === 'error' || file.status === 'conflict') ? (
                           <button className="outline secondary icon-button icon-button--small" title="Retry" aria-label={`Retry ${file.name}`} onClick={() => onFileAction(file.name, 'retry')}>
                             <RefreshCw size={14} strokeWidth={1.8} />
                           </button>
                         ) : null}
-                        {folder.method !== 'voicenotes' && file.status === 'error' ? (
+                        {folder.method !== 'reviewed-audio' && file.status === 'error' ? (
                           <>
                             <button className="outline secondary icon-button icon-button--small" title="Repair (ffmpeg remux)" aria-label={`Repair ${file.name}`} onClick={() => onFileAction(file.name, 'repair')}>
                               <Wrench size={14} strokeWidth={1.8} />
@@ -159,7 +159,7 @@ export default function FolderCard({
                             </button>
                           </>
                         ) : null}
-                        {folder.method !== 'voicenotes' && (file.status === 'error' || file.status === 'conflict' || file.status === 'pending') ? (
+                        {folder.method !== 'reviewed-audio' && (file.status === 'error' || file.status === 'conflict' || file.status === 'pending') ? (
                           <button className="outline secondary icon-button icon-button--small" title="Import as-is" aria-label={`Import ${file.name} as-is`} onClick={() => onFileAction(file.name, 'import')}>
                             <Import size={14} strokeWidth={1.8} />
                           </button>

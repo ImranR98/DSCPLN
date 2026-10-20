@@ -1,8 +1,8 @@
-// Approval-only flow for voicenotes. The source folder is the queue: a group
-// is every clip currently present for one chat directory + clip date. The user
-// either merges the group and moves the result to the destination, or deletes
-// the group into trash. There are no parked outputs and no per-file statuses
-// to lose across restarts.
+// Approval-only flow for reviewed audio. The source folder is the queue.
+// Grouped mode lists one item per chat directory + clip date; the user either
+// merges and moves the group, or deletes it to trash. Per-file mode lists each
+// file and standardizes/moves or deletes it individually. There are no parked
+// outputs and no per-file statuses to lose across restarts.
 
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -24,7 +24,7 @@ import { trashFile } from "./cleanup.js";
 import { STATUS } from "./store.js";
 import { uniqueSuffix } from "./util.js";
 import { parseSnapInputs, statSize } from "./verify.js";
-import { sanitizeChat, voiceNoteDateOf, voiceNoteDestName, voiceNoteGroupOf } from "./voicenotes.js";
+import { sanitizeChat, reviewedAudioDateOf, reviewedAudioDestName, reviewedAudioGroupOf } from "./reviewed-audio.js";
 import { DestExistsError, moveIntoPlace } from "./processors/place.js";
 import { processStandardize } from "./processors/standardize.js";
 
@@ -47,7 +47,7 @@ function groupFiles(folder, { chat, date, file }) {
   const names = [];
   for (const item of folder.files.values()) {
     if (item.status === STATUS.IGNORED || item.status === STATUS.CLEANED) continue;
-    const group = voiceNoteGroupOf(item.name, folder.def.datePattern);
+    const group = reviewedAudioGroupOf(item.name, folder.def.datePattern);
     if (group && group.chat === chat && group.date === date) names.push(item.name);
   }
   return names.sort();
@@ -64,12 +64,12 @@ async function requireSettled(store, folder, names) {
   }
 }
 
-export async function listVoiceNoteGroups(ctx) {
+export async function listReviewedAudioGroups(ctx) {
   const { store } = ctx;
   const now = Date.now();
   const groups = [];
   for (const folder of store.listFolders()) {
-    if (folder.def.method !== "voicenotes" || !folder.exists) continue;
+    if (folder.def.method !== "reviewed-audio" || !folder.exists) continue;
     if (perFile(folder)) {
       for (const file of folder.files.values()) {
         if (file.status === STATUS.IGNORED || file.status === STATUS.CLEANED) continue;
@@ -91,7 +91,7 @@ export async function listVoiceNoteGroups(ctx) {
     const byKey = new Map();
     for (const file of folder.files.values()) {
       if (file.status === STATUS.IGNORED || file.status === STATUS.CLEANED) continue;
-      const group = voiceNoteGroupOf(file.name, folder.def.datePattern);
+      const group = reviewedAudioGroupOf(file.name, folder.def.datePattern);
       if (!group) continue;
       const key = `${group.chat}\u0000${group.date}`;
       let entry = byKey.get(key);
@@ -113,7 +113,7 @@ export async function listVoiceNoteGroups(ctx) {
     for (const entry of byKey.values()) {
       entry.files.sort();
       entry.count = entry.files.length;
-      entry.destName = voiceNoteDestName(entry.chat, entry.date);
+      entry.destName = reviewedAudioDestName(entry.chat, entry.date);
       entry.destExists = (await statSize(path.join(folder.def.destination, entry.destName))) !== null;
       groups.push(entry);
     }
@@ -216,7 +216,7 @@ async function approveStandardizeFile(ctx, folder, file) {
   if (!state) throw httpError(404, "file is no longer present");
   let forcedDate = null;
   if (folder.def.datePattern) {
-    const raw = voiceNoteDateOf(path.basename(file), folder.def.datePattern);
+    const raw = reviewedAudioDateOf(path.basename(file), folder.def.datePattern);
     if (!raw) throw httpError(409, "the file name does not match datePattern");
     forcedDate = `${raw.slice(0, 4)}:${raw.slice(4, 6)}:${raw.slice(6, 8)} 00:00:00`;
   }
@@ -239,8 +239,8 @@ async function approveStandardizeFile(ctx, folder, file) {
   throw httpError(409, result.message || "could not standardize this file");
 }
 
-export async function approveVoiceNoteGroup(ctx, folder, { chat, date, file }) {
-  if (folder.def.method !== "voicenotes") throw httpError(400, "not a voicenotes folder");
+export async function approveReviewedAudioGroup(ctx, folder, { chat, date, file }) {
+  if (folder.def.method !== "reviewed-audio") throw httpError(400, "not a reviewed-audio folder");
   return ctx.queue.runExclusive(folder.def.name, async () => {
     if (perFile(folder)) {
       if (!file) throw httpError(400, "file is required");
@@ -254,7 +254,7 @@ export async function approveVoiceNoteGroup(ctx, folder, { chat, date, file }) {
     if (!inputs.length) throw httpError(404, "no clips in this group");
     await requireSettled(ctx.store, folder, inputs);
 
-    const destName = voiceNoteDestName(chat, date);
+    const destName = reviewedAudioDestName(chat, date);
     const destPath = path.join(folder.def.destination, destName);
     if (ctx.config.dryRun) {
       return { ok: true, dryRun: true, destName, inputs };
@@ -276,7 +276,7 @@ export async function approveVoiceNoteGroup(ctx, folder, { chat, date, file }) {
           );
         }
         const trash = await trashInputs(ctx, folder, inputs, destName);
-        ctx.log(`already merged ${inputs.length} voice note(s) → ${destName}; source clips moved to trash`);
+        ctx.log(`already merged ${inputs.length} audio clip(s) → ${destName}; source clips moved to trash`);
         ctx.notify.notify("info", `${folder.def.name}: already merged → ${destName}; source clips moved to trash`);
         return { ok: true, alreadyPlaced: true, destName, inputs, ...trash };
       }
@@ -291,7 +291,7 @@ export async function approveVoiceNoteGroup(ctx, folder, { chat, date, file }) {
       }
       ctx.store.invalidateDest(folder.def.name);
       const trash = await trashInputs(ctx, folder, inputs, destName);
-      ctx.log(`merged ${inputs.length} voice note(s) → ${destName}`);
+      ctx.log(`merged ${inputs.length} audio clip(s) → ${destName}`);
       ctx.notify.notify("info", `${folder.def.name}: merged ${inputs.length} clip(s) → ${destName}`);
       if (trash.failed.length) {
         ctx.notify.notify("warn", `${folder.def.name}: merged, but ${trash.failed.length} source clip(s) could not be moved to trash`);
@@ -303,8 +303,8 @@ export async function approveVoiceNoteGroup(ctx, folder, { chat, date, file }) {
   });
 }
 
-export async function deleteVoiceNoteGroup(ctx, folder, { chat, date, file }) {
-  if (folder.def.method !== "voicenotes") throw httpError(400, "not a voicenotes folder");
+export async function deleteReviewedAudioGroup(ctx, folder, { chat, date, file }) {
+  if (folder.def.method !== "reviewed-audio") throw httpError(400, "not a reviewed-audio folder");
   return ctx.queue.runExclusive(folder.def.name, async () => {
     if (perFile(folder)) {
       if (!file) throw httpError(400, "file is required");
@@ -327,7 +327,7 @@ export async function deleteVoiceNoteGroup(ctx, folder, { chat, date, file }) {
       return { ok: true, dryRun: true, deleted: inputs };
     }
     const result = await trashInputs(ctx, folder, inputs, null);
-    ctx.log(`deleted ${result.trashed.length} voice note(s) from ${chat || "(root)"} / ${date} into trash`);
+    ctx.log(`deleted ${result.trashed.length} audio clip(s) from ${chat || "(root)"} / ${date} into trash`);
     ctx.notify.notify("info", `${folder.def.name}: deleted ${result.trashed.length} clip(s) (${chat || "root"} / ${date}) into trash`);
     if (result.failed.length) {
       ctx.notify.notify("warn", `${folder.def.name}: ${result.failed.length} clip(s) could not be moved to trash`);

@@ -176,29 +176,33 @@ export default function App() {
 
   /* ---------- review ---------- */
 
-  const reviewFolders = (state?.folders ?? []).filter((folder) => folder.method === 'voicenotes' ? (folder.counts.review ?? 0) > 0 : (folder.placement === 'manual' || (folder.counts.review ?? 0) > 0))
+  const reviewFolders = (state?.folders ?? []).filter((folder) => folder.method === 'reviewed-audio' ? (folder.counts.review ?? 0) > 0 : (folder.placement === 'manual' || (folder.counts.review ?? 0) > 0))
 
   const openReview = async () => {
     try {
-      const { entries, voicenotes } = await getJson('api/review')
-      setReviewDialog({ entries, voicenotes })
+      const { entries, reviewedAudio } = await getJson('api/review')
+      setReviewDialog({ entries, reviewedAudio })
     } catch (err) {
       notify(err.message, 'error')
     }
   }
 
-  const voiceGroupKey = (group) => group.file
+  const reviewedAudioGroupKey = (group) => group.file
     ? `${group.folder}\u0000file\u0000${group.file}`
     : `${group.folder}\u0000${group.chat}\u0000${group.date}`
 
-  const approveVoiceNote = async (group) => {
-    const key = voiceGroupKey(group)
+  const approveReviewedAudio = async (group) => {
+    const key = reviewedAudioGroupKey(group)
     setReviewBusy(key)
     try {
-      const result = await postJson('api/review/voicenotes/approve', group.file
+      const result = await postJson('api/review/reviewed-audio/approve', group.file
         ? { folder: group.folder, file: group.file }
         : { folder: group.folder, chat: group.chat, date: group.date })
-      notify(result?.alreadyPlaced ? 'Already merged; source clips moved to trash.' : 'Merged and moved to the destination.')
+      notify(result?.alreadyPlaced
+        ? 'Already merged; source clips moved to trash.'
+        : group.file
+          ? 'Standardized and moved to the destination.'
+          : 'Merged and moved to the destination.')
       await openReview()
       refresh()
       refreshTrash()
@@ -209,16 +213,19 @@ export default function App() {
     }
   }
 
-  const deleteVoiceNote = async (group) => {
-    const label = `${group.chat || '(root)'} / ${group.date}`
-    if (!(await askConfirm('Confirm', `Move ${group.count} voice note clip(s) for ${label} to trash?`, 'Delete'))) return
-    const key = voiceGroupKey(group)
+  const deleteReviewedAudio = async (group) => {
+    const label = group.file || `${group.chat || '(root)'} / ${group.date}`
+    const message = group.file
+      ? `Move ${label} to trash?`
+      : `Move ${group.count} audio clip(s) for ${label} to trash?`
+    if (!(await askConfirm('Confirm', message, 'Delete'))) return
+    const key = reviewedAudioGroupKey(group)
     setReviewBusy(key)
     try {
-      await postJson('api/review/voicenotes/delete', group.file
+      await postJson('api/review/reviewed-audio/delete', group.file
         ? { folder: group.folder, file: group.file }
         : { folder: group.folder, chat: group.chat, date: group.date })
-      notify('Voice note clips moved to trash.')
+      notify(group.file ? 'File moved to trash.' : 'Audio clips moved to trash.')
       await openReview()
       refresh()
       refreshTrash()
@@ -337,7 +344,7 @@ export default function App() {
       folder.settleSeconds = Number(folder.settleSeconds)
       folder.groupWindowSeconds = Number(folder.groupWindowSeconds)
       folder.filePattern ||= null
-      if (folder.method === 'voicenotes') folder.recursive = true
+      if (folder.method === 'reviewed-audio') folder.recursive = true
       if (folder.method === 'copy') folder.placement = 'auto'
     }
     try {
@@ -488,10 +495,10 @@ export default function App() {
         <ReviewDialog
           entries={reviewDialog.entries}
           reviewFolders={reviewFolders}
-          voicenotes={reviewDialog.voicenotes ?? []}
+          reviewedAudio={reviewDialog.reviewedAudio ?? []}
           busy={reviewBusy}
-          onApproveVoiceNote={approveVoiceNote}
-          onDeleteVoiceNote={deleteVoiceNote}
+          onApproveReviewedAudio={approveReviewedAudio}
+          onDeleteReviewedAudio={deleteReviewedAudio}
           onReviewAction={reviewAction}
           onReviewActionAll={reviewActionAll}
           onClose={() => setReviewDialog(null)}

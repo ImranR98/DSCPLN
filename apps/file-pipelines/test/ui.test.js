@@ -58,10 +58,10 @@ async function makeSetup({ datePattern = "(\\d{4})-(\\d{2})-(\\d{2})" } = {}) {
     notifySuccess: true,
     folders: [
       {
-        name: "voicenotes",
+        name: "reviewed-audio",
         source: src,
         destination: dest,
-        method: "voicenotes",
+        method: "reviewed-audio",
         ...(datePattern ? { datePattern } : {}),
         placement: "manual",
         settleSeconds: 0,
@@ -75,20 +75,20 @@ async function makeSetup({ datePattern = "(\\d{4})-(\\d{2})-(\\d{2})" } = {}) {
   return { root, daemon, dest, base: `http://127.0.0.1:${port}` };
 }
 
-test("ui: review a voicenote group and merge it into the destination", { skip: !CAN_RUN }, async () => {
+test("ui: review a reviewed-audio group and merge it into the destination", { skip: !CAN_RUN }, async () => {
   const { root, daemon, dest, base } = await makeSetup();
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
     await page.goto(base);
 
-    const card = page.locator(".folder-card", { hasText: "voicenotes" }).first();
+    const card = page.locator(".folder-card", { hasText: "reviewed-audio" }).first();
     const reviewButton = card.getByRole("button", { name: /^Review/ });
     await reviewButton.waitFor({ state: "visible" });
     await reviewButton.click();
 
     const dialog = page.locator('[data-testid="review-dialog"]');
-    const group = dialog.locator('[data-testid="voice-group-voicenotes-20190529"]');
+    const group = dialog.locator('[data-testid="review-group-reviewed-audio-20190529"]');
     await group.waitFor({ state: "visible", timeout: 30_000 });
     assert.match(await group.textContent(), /201301 · 20190529/);
     await group.getByRole("button", { name: "Merge & move" }).click();
@@ -103,13 +103,13 @@ test("ui: review a voicenote group and merge it into the destination", { skip: !
   }
 });
 
-test("ui: per-file voicenote review standardizes and moves one file", { skip: !CAN_RUN }, async () => {
+test("ui: per-file reviewed-audio review standardizes and moves one file", { skip: !CAN_RUN }, async () => {
   const { root, daemon, dest, base } = await makeSetup({ datePattern: null });
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
     await page.goto(base);
-    const card = page.locator(".folder-card", { hasText: "voicenotes" }).first();
+    const card = page.locator(".folder-card", { hasText: "reviewed-audio" }).first();
     await card.getByRole("button", { name: /^Review/ }).click();
     const dialog = page.locator('[data-testid="review-dialog"]');
     const row = dialog.locator(".review-row", { hasText: "voice 2019-05-29 take1.opus" }).first();
@@ -176,10 +176,10 @@ test("ui: delete requires confirmation and moves the source clips to trash", { s
   try {
     const page = await browser.newPage();
     await page.goto(base);
-    const card = page.locator(".folder-card", { hasText: "voicenotes" }).first();
+    const card = page.locator(".folder-card", { hasText: "reviewed-audio" }).first();
     await card.getByRole("button", { name: /^Review/ }).click();
     const dialog = page.locator('[data-testid="review-dialog"]');
-    const group = dialog.locator('[data-testid="voice-group-voicenotes-20190529"]');
+    const group = dialog.locator('[data-testid="review-group-reviewed-audio-20190529"]');
     await group.waitFor({ state: "visible", timeout: 30_000 });
 
     await group.getByRole("button", { name: "Delete" }).click();
@@ -190,7 +190,7 @@ test("ui: delete requires confirmation and moves the source clips to trash", { s
     const gone = await waitFor(async () => {
       const files = await fsp.readdir(path.join(root, "src", "201301"));
       const review = await (await fetch(`${base}/api/review`)).json();
-      return files.length === 0 && review.voicenotes.length === 0;
+      return files.length === 0 && review.reviewedAudio.length === 0;
     });
     assert.equal(gone, true, "the source clips must be moved to trash");
     assert.deepEqual(await fsp.readdir(dest), [], "delete must never write to the destination");
@@ -230,8 +230,8 @@ test("ui: archive folders (cleanup disabled) expose no Cleanup button", { skip: 
     const archiveCard = page.locator(".folder-card", { hasText: "archive" }).first();
     await archiveCard.waitFor({ state: "visible" });
     assert.equal(await archiveCard.getByRole("button", { name: /Cleanup/ }).count(), 0, "cleanup must be hidden for cleanup:false folders");
-    const voicenotesCard = page.locator(".folder-card", { hasText: "voicenotes" }).first();
-    assert.equal(await voicenotesCard.getByRole("button", { name: /^Review/ }).count(), 1, "manual folders expose Review");
+    const reviewedAudioCard = page.locator(".folder-card", { hasText: "reviewed-audio" }).first();
+    assert.equal(await reviewedAudioCard.getByRole("button", { name: /^Review/ }).count(), 1, "manual folders expose Review");
   } finally {
     await browser.close();
     await daemon.stop();

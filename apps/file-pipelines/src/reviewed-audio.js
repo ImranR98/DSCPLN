@@ -1,8 +1,7 @@
-// Helpers for the `voicenotes` method: clips are grouped by a date extracted
-// from their file name. The scheme is user-defined per folder via `datePattern`
-// (e.g. WhatsApp push-to-talk clips are `PTT-YYYYMMDD-WA####.<ext>` inside
-// per-chat subdirectories). Same-day clips in the same directory are
-// concatenated (with a short tone between them) into one merged file.
+// Helpers for the `reviewed-audio` method: files can be grouped by a date
+// extracted from their file name, or reviewed one at a time. The date scheme
+// is user-defined per folder via `datePattern` (e.g. WhatsApp push-to-talk
+// clips are `PTT-YYYYMMDD-WA####.<ext>` inside per-chat subdirectories).
 
 const regexCache = new Map();
 
@@ -19,7 +18,7 @@ export function datePatternRegex(pattern) {
 // All capture groups (or the whole match when there are none) are joined and
 // normalized by stripping non-digits; the result must be a YYYYMMDD date. So
 // both `(\d{8})` and `(\d{4})-(\d{2})-(\d{2})` work.
-export function voiceNoteDateOf(baseName, pattern) {
+export function reviewedAudioDateOf(baseName, pattern) {
   const regex = datePatternRegex(pattern);
   if (!regex) return null;
   const match = regex.exec(baseName);
@@ -30,12 +29,12 @@ export function voiceNoteDateOf(baseName, pattern) {
 }
 
 // Splits a store key ("<chat>/<file>", chat possibly empty) into chat + date.
-export function voiceNoteGroupOf(relName, pattern) {
+export function reviewedAudioGroupOf(relName, pattern) {
   const posix = String(relName).split("\\").join("/");
   const slash = posix.lastIndexOf("/");
   const chat = slash === -1 ? "" : posix.slice(0, slash);
   const base = slash === -1 ? posix : posix.slice(slash + 1);
-  const date = voiceNoteDateOf(base, pattern);
+  const date = reviewedAudioDateOf(base, pattern);
   if (!date) return null;
   return { chat, date };
 }
@@ -47,7 +46,7 @@ export function sanitizeChat(chat) {
 
 // The final (standardized) name a merged group gets, with the chat id embedded
 // so flat destinations can't collide across chats on the same day.
-export function voiceNoteDestName(chat, date) {
+export function reviewedAudioDestName(chat, date) {
   const safeChat = sanitizeChat(chat);
   const ymd = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
   const base = safeChat ? `${date}-merged-${safeChat}` : `${date}-merged`;

@@ -75,9 +75,9 @@ export class Queue {
         if (this.running >= config.concurrency) break;
         if (this.active.has(folder.def.name)) continue;
         if (!folder.exists) continue;
-        // Voicenotes are approval-only: the Review dialog lists source groups
-        // and the user explicitly merges/moves or deletes each one.
-        if (folder.def.method === "voicenotes") continue;
+        // Reviewed audio is approval-only: the Review dialog lists source
+        // groups/files and the user explicitly moves or deletes each one.
+        if (folder.def.method === "reviewed-audio") continue;
         const now = Date.now();
         const auto = folder.def.placement !== "manual" || folder.def.autoProcess;
 
@@ -110,8 +110,8 @@ export class Queue {
     const { store } = this.ctx;
     const folder = store.getFolder(folderName);
     if (!folder) return { ok: false, error: "unknown folder" };
-    if (folder.def.method === "voicenotes") {
-      return { ok: false, error: "voicenotes are approved per group from Review" };
+    if (folder.def.method === "reviewed-audio") {
+      return { ok: false, error: "reviewed audio is approved from Review" };
     }
     if (folder.exists === false) return { ok: false, error: "source directory is not available" };
     if (this.active.has(folderName)) return { ok: false, busy: true, error: "another job is already running for this folder" };
@@ -133,7 +133,7 @@ export class Queue {
     return { ok: true, processed: count };
   }
 
-  // Serialize an external action (voicenote approve/delete) against the
+  // Serialize an external action (reviewed-audio approve/delete) against the
   // normal watcher queue for the same folder.
   async runExclusive(folderName, job) {
     if (this.active.has(folderName)) {

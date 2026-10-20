@@ -186,10 +186,10 @@ async function makeReviewDaemon(options = {}) {
         settleSeconds: 0,
       },
       {
-        name: "voicenotes",
+        name: "reviewed-audio",
         source: path.join(root, "src"),
         destination: path.join(root, "dest"),
-        method: "voicenotes",
+        method: "reviewed-audio",
         datePattern: "-(\\d{8})-",
         placement: "manual",
         settleSeconds: 0,
@@ -217,17 +217,17 @@ test("api: state exposes the new folder options and disabled cleanup preview", a
   try {
     const state = await (await fetch(`${base}/api/state`)).json();
     const archive = state.folders.find((f) => f.name === "archive");
-    const voicenotes = state.folders.find((f) => f.name === "voicenotes");
+    const reviewedAudioFolder = state.folders.find((f) => f.name === "reviewed-audio");
     assert.equal(archive.recursive, true);
     assert.equal(archive.onChanged, "overwrite");
     assert.equal(archive.cleanup, false);
     assert.equal(archive.notify, "errors");
-    assert.equal(voicenotes.method, "voicenotes");
-    assert.equal(voicenotes.placement, "manual");
-    assert.equal(voicenotes.recursive, true);
-    assert.equal(voicenotes.cleanup, false);
-    assert.equal(voicenotes.autoProcess, false);
-    assert.equal(voicenotes.datePattern, "-(\\d{8})-");
+    assert.equal(reviewedAudioFolder.method, "reviewed-audio");
+    assert.equal(reviewedAudioFolder.placement, "manual");
+    assert.equal(reviewedAudioFolder.recursive, true);
+    assert.equal(reviewedAudioFolder.cleanup, false);
+    assert.equal(reviewedAudioFolder.autoProcess, false);
+    assert.equal(reviewedAudioFolder.datePattern, "-(\\d{8})-");
     assert.equal(state.config.reviewDir, daemon.config.reviewDir);
 
     const preview = await (await fetch(`${base}/api/cleanup/archive`)).json();
@@ -239,7 +239,7 @@ test("api: state exposes the new folder options and disabled cleanup preview", a
   }
 });
 
-test("api: voicenotes list, approve and delete groups", { skip: !CAN_RUN }, async () => {
+test("api: reviewed audio list, approve and delete groups", { skip: !CAN_RUN }, async () => {
   const { root, daemon, base, src, dest } = await makeReviewDaemon();
   try {
     const makeClip = (day, n) => execFileSync("ffmpeg", [
@@ -251,43 +251,43 @@ test("api: voicenotes list, approve and delete groups", { skip: !CAN_RUN }, asyn
     makeClip("29", 2);
     await waitFor(async () => {
       const review = await (await fetch(`${base}/api/review`)).json();
-      return review.voicenotes.length === 1 && review.voicenotes[0].count === 2;
+      return review.reviewedAudio.length === 1 && review.reviewedAudio[0].count === 2;
     });
 
     const review = await (await fetch(`${base}/api/review`)).json();
-    const group = review.voicenotes[0];
-    assert.equal(group.folder, "voicenotes");
+    const group = review.reviewedAudio[0];
+    assert.equal(group.folder, "reviewed-audio");
     assert.equal(group.chat, "201301");
     assert.equal(group.date, "20190529");
     assert.equal(group.destName, "2019-05-29-00-00-00-(20190529-merged-201301).mp4");
 
-    const approved = await (await fetch(`${base}/api/review/voicenotes/approve`, {
+    const approved = await (await fetch(`${base}/api/review/reviewed-audio/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ folder: "voicenotes", chat: group.chat, date: group.date }),
+      body: JSON.stringify({ folder: "reviewed-audio", chat: group.chat, date: group.date }),
     })).json();
     assert.equal(approved.ok, true, JSON.stringify(approved));
     assert.equal(await fsp.stat(path.join(dest, group.destName)).then(() => true).catch(() => false), true);
     assert.deepEqual(await fsp.readdir(path.join(src, "201301")), [], "approved source clips move to trash");
-    assert.deepEqual((await (await fetch(`${base}/api/review`)).json()).voicenotes, []);
+    assert.deepEqual((await (await fetch(`${base}/api/review`)).json()).reviewedAudio, []);
 
     // A second group is deleted without touching the destination.
     makeClip("30", 1);
-    await waitFor(async () => (await (await fetch(`${base}/api/review`)).json()).voicenotes.length === 1);
-    const second = (await (await fetch(`${base}/api/review`)).json()).voicenotes[0];
-    const deleted = await (await fetch(`${base}/api/review/voicenotes/delete`, {
+    await waitFor(async () => (await (await fetch(`${base}/api/review`)).json()).reviewedAudio.length === 1);
+    const second = (await (await fetch(`${base}/api/review`)).json()).reviewedAudio[0];
+    const deleted = await (await fetch(`${base}/api/review/reviewed-audio/delete`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ folder: "voicenotes", chat: second.chat, date: second.date }),
+      body: JSON.stringify({ folder: "reviewed-audio", chat: second.chat, date: second.date }),
     })).json();
     assert.equal(deleted.ok, true, JSON.stringify(deleted));
     assert.deepEqual(await fsp.readdir(path.join(src, "201301")), [], "deleted source clips move to trash");
     assert.deepEqual(await fsp.readdir(dest), [group.destName], "delete must not write to the destination");
 
-    const missing = await fetch(`${base}/api/review/voicenotes/approve`, {
+    const missing = await fetch(`${base}/api/review/reviewed-audio/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ folder: "voicenotes", chat: "201301", date: "20990101" }),
+      body: JSON.stringify({ folder: "reviewed-audio", chat: "201301", date: "20990101" }),
     });
     assert.equal(missing.status, 404);
   } finally {
@@ -296,13 +296,13 @@ test("api: voicenotes list, approve and delete groups", { skip: !CAN_RUN }, asyn
   }
 });
 
-test("api: voicenote mutations are protected by the origin check", async () => {
+test("api: reviewed audio mutations are protected by the origin check", async () => {
   const { root, daemon, base } = await makeReviewDaemon();
   try {
-    const response = await fetch(`${base}/api/review/voicenotes/approve`, {
+    const response = await fetch(`${base}/api/review/reviewed-audio/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Origin: "http://evil.example" },
-      body: JSON.stringify({ folder: "voicenotes", chat: "x", date: "20240101" }),
+      body: JSON.stringify({ folder: "reviewed-audio", chat: "x", date: "20240101" }),
     });
     assert.equal(response.status, 403);
   } finally {

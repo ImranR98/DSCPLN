@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { findRealExifDate, standardNameFor } from "./exif.js";
-import { voiceNoteGroupOf } from "./voicenotes.js";
+import { reviewedAudioGroupOf } from "./reviewed-audio.js";
 import { DirCache, classifyDestMatch, findExpectedDestName, mapSnapInputs, readSnapOutputs, statSize } from "./verify.js";
 import { shouldSkipName, isSyncConflictName, matchesPattern, statOrNull } from "./util.js";
 import { isSnapshotFolder } from "./snapshot.js";
@@ -162,9 +162,9 @@ export class Store extends EventEmitter {
     if (!folder) return;
     const base = path.basename(name);
     const patternOk = matchesPattern(base, folder.def.filePattern);
-    const dateOk = folder.def.method !== "voicenotes"
+    const dateOk = folder.def.method !== "reviewed-audio"
       || !folder.def.datePattern
-      || voiceNoteGroupOf(name, folder.def.datePattern) !== null;
+      || reviewedAudioGroupOf(name, folder.def.datePattern) !== null;
     const matches = patternOk && dateOk;
     const mismatchMessage = !patternOk
       ? `does not match ${folder.def.filePattern}`
@@ -286,7 +286,7 @@ export class Store extends EventEmitter {
       await this.deriveCopyProcessed(folder);
       return;
     }
-    if (def.method === "voicenotes") {
+    if (def.method === "reviewed-audio") {
       // Approval-only: the source files are the queue, so there is no derived
       // processed/duplicate state to recompute.
       return;

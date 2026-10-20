@@ -1,12 +1,12 @@
-// Manual-placement review: list parked items and clip groups, stream parked
-// audio/video with range requests, and place/discard items.
+// Review: list parked manual-placement items and reviewed-audio queue items,
+// stream parked audio/video with range requests, and place/discard/approve.
 
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { parkPathFor } from "../park.js";
 import { discardAllReview, discardReview, listReview, placeAllReview, placeReview } from "../review.js";
-import { approveVoiceNoteGroup, deleteVoiceNoteGroup, listVoiceNoteGroups } from "../voicenotes-flow.js";
+import { approveReviewedAudioGroup, deleteReviewedAudioGroup, listReviewedAudioGroups } from "../reviewed-audio-flow.js";
 import { json, readBody } from "./http.js";
 
 function contentTypeFor(filePath) {
@@ -21,8 +21,8 @@ export async function handleReview(ctx, method, pathname) {
 
   if (method === "GET" && pathname === "/review") {
     const entries = await listReview(daemon.ctx);
-    const voicenotes = await listVoiceNoteGroups(daemon.ctx);
-    json(res, 200, { entries, voicenotes });
+    const reviewedAudio = await listReviewedAudioGroups(daemon.ctx);
+    json(res, 200, { entries, reviewedAudio });
     return true;
   }
 
@@ -70,14 +70,14 @@ export async function handleReview(ctx, method, pathname) {
     return true;
   }
 
-  if (method === "POST" && (pathname === "/review/voicenotes/approve" || pathname === "/review/voicenotes/delete")) {
+  if (method === "POST" && (pathname === "/review/reviewed-audio/approve" || pathname === "/review/reviewed-audio/delete")) {
     const body = await readBody(req);
     const folder = daemon.store.getFolder(String(body.folder ?? ""));
     if (!folder) {
       json(res, 404, { error: "unknown folder" });
       return true;
     }
-    const action = pathname.endsWith("/approve") ? approveVoiceNoteGroup : deleteVoiceNoteGroup;
+    const action = pathname.endsWith("/approve") ? approveReviewedAudioGroup : deleteReviewedAudioGroup;
     const result = await action(daemon.ctx, folder, {
       chat: String(body.chat ?? ""),
       date: String(body.date ?? ""),

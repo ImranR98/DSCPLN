@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { DAY_NAMES } from '../../lib/view.js'
+import { DAY_NAMES, METHOD_LABEL } from '../../lib/view.js'
 import Modal from '../Modal.jsx'
 
 // The config editor: global settings up top, then one folder editor per
@@ -61,7 +61,7 @@ export default function SettingsDialog({ draft, updateDraft, addFolder, saveSett
               <div className="field"><span className="field__label">Destination</span><input value={folder.destination} onChange={(event) => setFolder(index, (f) => { f.destination = event.target.value })} /></div>
               <div className="field"><span className="field__label">Method</span>
                 <select value={folder.method} onChange={(event) => setFolder(index, (f) => { f.method = event.target.value })}>
-                  {['standardize', 'snapchat', 'copy', 'voicenotes'].map((method) => <option value={method} key={method}>{method}</option>)}
+                  {['standardize', 'snapchat', 'copy', 'reviewed-audio'].map((method) => <option value={method} key={method}>{METHOD_LABEL[method] ?? method}</option>)}
                 </select>
               </div>
               {folder.method === 'copy' ? (
@@ -100,9 +100,9 @@ export default function SettingsDialog({ draft, updateDraft, addFolder, saveSett
               <div className="field" hidden={folder.snapshot}><span className="field__label">File pattern</span><input value={folder.filePattern ?? ''} onChange={(event) => setFolder(index, (f) => { f.filePattern = event.target.value })} /></div>
             </div>
             <div className="form-grid field-grid--checks" hidden={folder.snapshot}>
-              <label><input type="checkbox" checked={folder.recursive === true || folder.method === 'voicenotes'} disabled={folder.method === 'voicenotes'} onChange={(event) => setFolder(index, (f) => { f.recursive = event.target.checked })} /> Recursive (mirror subdirectories)</label>
+              <label><input type="checkbox" checked={folder.recursive === true || folder.method === 'reviewed-audio'} disabled={folder.method === 'reviewed-audio'} onChange={(event) => setFolder(index, (f) => { f.recursive = event.target.checked })} /> Recursive (mirror subdirectories)</label>
               <label><input type="checkbox" checked={folder.includeHidden === true} onChange={(event) => setFolder(index, (f) => { f.includeHidden = event.target.checked })} /> Include hidden files</label>
-              {folder.method !== 'voicenotes' ? (
+              {folder.method !== 'reviewed-audio' ? (
                 <>
                   <label><input type="checkbox" checked={folder.cleanup !== false} onChange={(event) => setFolder(index, (f) => { f.cleanup = event.target.checked })} /> Allow cleanup of processed originals</label>
                   <label><input type="checkbox" checked={folder.autoProcess === true} onChange={(event) => setFolder(index, (f) => { f.autoProcess = event.target.checked })} /> Prepare new files automatically (manual review)</label>
@@ -150,13 +150,13 @@ export default function SettingsDialog({ draft, updateDraft, addFolder, saveSett
               </>
             ) : null}
             <div className="form-grid" hidden={folder.snapshot}>
-              <div className="field" hidden={folder.method === 'voicenotes'}><span className="field__label">Placement</span>
+              <div className="field" hidden={folder.method === 'reviewed-audio'}><span className="field__label">Placement</span>
                 <select value={folder.placement ?? 'auto'} onChange={(event) => setFolder(index, (f) => { f.placement = event.target.value })}>
                   <option value="auto">auto</option><option value="manual">manual</option>
                 </select>
               </div>
-              {folder.method === 'voicenotes' ? (
-                <p className="hint">Voice notes are always approved per chat/day in the Review dialog: merge &amp; move, or delete to trash.</p>
+              {folder.method === 'reviewed-audio' ? (
+                <p className="hint">Reviewed audio is always approved from the Review dialog: merge &amp; move grouped clips, or standardize &amp; move each file. Delete moves sources to trash.</p>
               ) : null}
               <div className="field"><span className="field__label">On change</span>
                 <select value={folder.onChanged ?? 'overwrite'} onChange={(event) => setFolder(index, (f) => { f.onChanged = event.target.value })}>
@@ -168,11 +168,11 @@ export default function SettingsDialog({ draft, updateDraft, addFolder, saveSett
                   <option value="all">all</option><option value="errors">errors</option>
                 </select>
               </div>
-              {folder.method === 'voicenotes' || folder.datePattern ? (
+              {folder.method === 'reviewed-audio' || folder.datePattern ? (
                 <div className="field" hidden={folder.snapshot}>
-                  <span className="field__label">Date pattern (optional for voicenotes)</span>
-                  <input value={folder.datePattern ?? ''} placeholder="-(\d{8})- (leave blank for per-file standardize)" onChange={(event) => setFolder(index, (f) => { f.datePattern = event.target.value })} />
-                  <p className="hint">With a date pattern, clips are grouped by chat/day and merged. Leave it blank to standardize and review each file individually.</p>
+                  <span className="field__label">Date pattern (optional for reviewed audio)</span>
+                  <input value={folder.datePattern ?? ''} placeholder="-(\d{8})- (leave blank to use file metadata)" onChange={(event) => setFolder(index, (f) => { f.datePattern = event.target.value })} />
+                  <p className="hint">The pattern supplies the file date. When concatenation is on, clips are also grouped by chat/day; turn it off to standardize each file individually.</p>
                 </div>
               ) : null}
             </div>

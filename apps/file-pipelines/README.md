@@ -19,7 +19,7 @@ Configuration can also be mounted from a private `dscpln-config` repo: set `--co
 | `standardize` | Picks a date (`DateTimeOriginal`, else the oldest date-like tag), writes all date tags, renames to `YYYY-MM-DD-HH-MM-SS-(<original-name>).ext`, and copies into the destination. |
 | `snapchat`    | Waits until the folder has been quiet for `settleSeconds` (default 30 min), groups `Snapchat-*.mp4` clips whose timestamps are within `groupWindowSeconds` (default 15s), concatenates + re-encodes each group, standardizes the output, and records the input list in a custom `XMP-media-sync:Inputs` tag on the output. |
 | `copy`        | Byte-verified copy, original name preserved (call recordings). Add `recursive: true` to mirror a whole tree (WhatsApp AllMedia archives) and `onChanged` to control what happens when a same-name source changes. Add `snapshot: true` to run on demand/schedule instead of watching (see below). |
-| `voicenotes`  | Approval-only audio. With `datePattern` + `concat: true` (default), groups same-day clips and merges them into one MP4 on approval (a 0.1s tone between clips). With `concat: false` or no `datePattern`, standardizes and moves each file individually. Delete trashes the source instead. See Voicenotes below. |
+| `reviewed-audio` | Approval-only audio. With `datePattern` + `concat: true` (default), groups same-day clips and merges them into one MP4 on approval (a 0.1s tone between clips). With `concat: false` or no `datePattern`, standardizes and moves each file individually. Delete trashes the source instead. See Reviewed audio below. |
 
 ## Snapshot copies
 
@@ -63,34 +63,39 @@ read (e.g. `user_home_t`). Set `PIPELINES_SELINUX_TYPE=spc_t` (with
 host) to have the Job run with that label instead of relabeling the source
 folders.
 
-## Voicenotes (approval only)
+## Reviewed audio (approval only)
 
-Voicenotes never process automatically. The source folder is the queue: a group
-is every clip currently present for one chat directory + clip date. Open
-**Review** and choose one action per group:
+Reviewed audio never processes automatically. The source folder is the queue.
+Open **Review** and choose one action per item:
 
-- **Merge & move** — concatenate the group, standardize the output, move it to
-  the destination, then move the source clips to trash.
-- **Delete** — move the source clips to trash; no destination file is written.
+- **Grouped mode** (`datePattern` + `concat: true`, the default): a group is
+  every clip currently present for one chat directory + clip date.
+  **Merge & move** concatenates the group, standardizes the output, moves it to
+  the destination, then moves the source clips to trash.
+- **Per-file mode** (`concat: false`, or no `datePattern`): each file is listed
+  separately. **Standardize & move** standardizes and moves that file, then
+  moves the source to trash.
+- **Delete** — move the source clip/file to trash; no destination file is
+  written.
 
-This is a single transaction per group, so a discarded group cannot come back
-after a restart. If a destination merge already exists for the same chat/day,
-the merge is accepted as already done when its XMP input list matches; otherwise
-approval is refused until that destination file is moved or deleted. A clip
-that arrives after approval appears as a new group.
+Each approval is a single transaction, so a discarded item cannot come back
+after a restart. In grouped mode, if a destination merge already exists for the
+same chat/day, the merge is accepted as already done when its XMP input list
+matches; otherwise approval is refused until that destination file is moved or
+deleted. A clip that arrives after approval appears as a new group.
 
-`settleSeconds` delays a group until its clips have been quiet that long.
-`placement`, `autoProcess` and cleanup are not used for voicenotes.
+`settleSeconds` delays an item until its files have been quiet that long.
+`placement`, `autoProcess` and cleanup are not used for reviewed audio.
 
-To standardize and copy **individual files** instead of merging them, omit
-`datePattern` or set `concat: false`:
+To standardize and copy **individual files** instead of merging them, set
+`concat: false` (or omit `datePattern`):
 
 ```json
 {
   "name": "WhatsApp Audio",
   "source": "/source/Media/WhatsApp Audio",
   "destination": "/destination/Media/Recordings",
-  "method": "voicenotes",
+  "method": "reviewed-audio",
   "datePattern": "-(\\d{8})-",
   "concat": false,
   "settleSeconds": 60
@@ -100,6 +105,8 @@ To standardize and copy **individual files** instead of merging them, omit
 With `concat: false`, `datePattern` is still used to extract the file date for
 the standardized name; leave it out to let the normal date metadata/file mtime
 decide. Each file appears in Review with **Standardize & move** and **Delete**.
+The old `voicenotes` method name is accepted and normalized to `reviewed-audio`
+when a config is loaded.
 
 ## Manual placement (standardize / snapchat)
 
@@ -117,7 +124,7 @@ merge may be the only copy.
 
 ## Safety model
 
-- Source files are only ever **read** until you press Cleanup, or — for voicenotes — until you approve/delete a group in Review.
+- Source files are only ever **read** until you press Cleanup, or — for reviewed audio — until you approve/delete an item in Review.
 - Placements are same-filesystem atomic renames from a staging area; the
   destination never sees partial files. Replacing a changed file (`copy`
   overwrite mode) is also atomic: temp file + rename in the destination
@@ -149,7 +156,7 @@ merge may be the only copy.
 | `src/config.js` / `src/schedule.js` | config shape/normalization/validation; run schedules |
 | `src/store.js` | per-folder file state (scan, dedupe/conflict detection, cleanup previews) |
 | `src/queue.js` / `src/processors/` | the work queue and the standardize/snapchat/copy processors |
-| `src/voicenotes-flow.js` | approval-only voicenote group listing, merge/move and delete |
+| `src/reviewed-audio-flow.js` | approval-only reviewed-audio listing, per-file standardize/move and grouped merge/delete |
 | `src/watchers.js` | chokidar watchers for watched folders (snapshots are skipped) |
 | `src/snapshot.js` | snapshot copies: generated commands + remote Kubernetes Jobs |
 | `src/scheduler.js` | fires snapshot folders on their schedule |
@@ -181,19 +188,19 @@ Paths accept `~` and environment variables. Key fields:
 | field | meaning |
 |---|---|
 | `folders[].source` / `sources` / `.destination` | watched folder (or snapshot sources) and the destination |
-| `folders[].method` | `standardize` \| `snapchat` \| `copy` \| `voicenotes` |
+| `folders[].method` | `standardize` \| `snapchat` \| `copy` \| `reviewed-audio` |
 | `folders[].settleSeconds` | quiet period before processing (snaps: 1800) |
 | `folders[].groupWindowSeconds` | snap grouping window |
 | `folders[].filePattern` | optional glob (`Snapchat-*.mp4`); non-matching files show as ignored |
-| `folders[].recursive` | mirror subdirectories (implied by `voicenotes`); `copy` uses it for whole-tree archives |
+| `folders[].recursive` | mirror subdirectories (implied by `reviewed-audio`); `copy` uses it for whole-tree archives |
 | `folders[].includeHidden` | also ingest dot-files (`copy` archives); sync internals (`.stfolder`, `!sync`, `*.tmp`, `.file-pipelines*`) are always skipped |
 | `folders[].onChanged` | `copy` only: `overwrite` (default) replaces a changed destination copy atomically; `conflict` flags it |
-| `folders[].cleanup` | `false` hides and refuses cleanup (forever archives); always false for voicenotes |
+| `folders[].cleanup` | `false` hides and refuses cleanup (forever archives); always false for reviewed audio |
 | `folders[].notify` | `all` (default) notifies on every success; `errors` only notifies failures (use for bulk archives) |
 | `folders[].placement` | `auto` (default) or `manual` — park processed files for review (standardize/snapchat only) |
 | `folders[].autoProcess` | `placement: manual` only (standardize/snapchat): process new items automatically instead of on demand |
-| `folders[].datePattern` | `voicenotes` only (optional): regex extracting the clip/file date; capture groups are joined, non-digits stripped, result must be `YYYYMMDD` |
-| `folders[].concat` | `voicenotes` only (default `true`): group by chat/day and merge. `false` (or no `datePattern`) standardizes each file individually |
+| `folders[].datePattern` | `reviewed-audio` only (optional): regex extracting the clip/file date; capture groups are joined, non-digits stripped, result must be `YYYYMMDD` |
+| `folders[].concat` | `reviewed-audio` only (default `true`): group by chat/day and merge. `false` (or no `datePattern`) standardizes each file individually |
 | `folders[].snapshot` | `copy` only: run on demand/schedule instead of watching; enables `sources`, `subdir`, `nameSuffix`, `touch`, `runner`, `schedule`, `command` |
 | `folders[].runner` | snapshot only: Kubernetes node to run the Job on (`null` = this server) |
 | `folders[].schedule` | snapshot only: `{enabled, days, at, catchUp}` |

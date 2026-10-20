@@ -7,7 +7,7 @@ import path from "node:path";
 import { Daemon } from "../src/daemon.js";
 import { listReview, placeReview } from "../src/review.js";
 import { STATUS } from "../src/store.js";
-import { approveVoiceNoteGroup, deleteVoiceNoteGroup, listVoiceNoteGroups } from "../src/voicenotes-flow.js";
+import { approveReviewedAudioGroup, deleteReviewedAudioGroup, listReviewedAudioGroups } from "../src/reviewed-audio-flow.js";
 
 function have(cmd) {
   try {
@@ -20,7 +20,7 @@ function have(cmd) {
 
 const CAN_RUN = have("ffmpeg") && have("exiftool") && have("ffprobe");
 
-function makeVoiceNote(file) {
+function makeAudioClip(file) {
   execFileSync("mkdir", ["-p", path.dirname(file)]);
   execFileSync("ffmpeg", [
     "-loglevel", "error", "-y",
@@ -48,7 +48,7 @@ async function waitFor(fn, timeoutMs = 60_000, intervalMs = 250) {
   return false;
 }
 
-async function makeVoiceSetup({ settleSeconds = 0, dryRun = false, datePattern = "-(\\d{8})-", concat } = {}) {
+async function makeReviewedAudioSetup({ settleSeconds = 0, dryRun = false, datePattern = "-(\\d{8})-", concat } = {}) {
   const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-voice-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
@@ -74,10 +74,10 @@ async function makeVoiceSetup({ settleSeconds = 0, dryRun = false, datePattern =
     lockStaleSeconds: 120,
     notifySuccess: false,
     folders: [{
-      name: "voicenotes",
+      name: "reviewed-audio",
       source: src,
       destination: dest,
-      method: "voicenotes",
+      method: "reviewed-audio",
       ...(datePattern ? { datePattern } : {}),
       ...(concat === undefined ? {} : { concat }),
       settleSeconds,
@@ -90,22 +90,22 @@ async function makeVoiceSetup({ settleSeconds = 0, dryRun = false, datePattern =
 
 const DEST_NAME = "2019-05-29-00-00-00-(20190529-merged-chat).mp4";
 
-test("voicenotes: approve merges, standardizes, moves and trashes the group", { skip: !CAN_RUN }, async () => {
-  const { root, src, dest, daemon } = await makeVoiceSetup();
+test("reviewed audio: approve merges, standardizes, moves and trashes the group", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, daemon } = await makeReviewedAudioSetup();
   try {
-    makeVoiceNote(path.join(src, "chat", "PTT-20190529-WA0001.opus"));
-    makeVoiceNote(path.join(src, "chat", "PTT-20190529-WA0002.opus"));
-    await daemon.store.scanFolder("voicenotes");
-    const folder = daemon.store.getFolder("voicenotes");
+    makeAudioClip(path.join(src, "chat", "PTT-20190529-WA0001.opus"));
+    makeAudioClip(path.join(src, "chat", "PTT-20190529-WA0002.opus"));
+    await daemon.store.scanFolder("reviewed-audio");
+    const folder = daemon.store.getFolder("reviewed-audio");
 
-    const groups = await listVoiceNoteGroups(daemon.ctx);
+    const groups = await listReviewedAudioGroups(daemon.ctx);
     assert.equal(groups.length, 1);
     assert.equal(groups[0].chat, "chat");
     assert.equal(groups[0].date, "20190529");
     assert.equal(groups[0].count, 2);
     assert.equal(groups[0].destExists, false);
 
-    const result = await approveVoiceNoteGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" });
+    const result = await approveReviewedAudioGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" });
     assert.equal(result.ok, true, JSON.stringify(result));
     assert.equal(result.destName, DEST_NAME);
     assert.deepEqual(result.trashed, [
@@ -114,7 +114,7 @@ test("voicenotes: approve merges, standardizes, moves and trashes the group", { 
     ]);
     assert.deepEqual(await fsp.readdir(dest), [DEST_NAME]);
     assert.deepEqual(await fsp.readdir(path.join(src, "chat")), []);
-    assert.deepEqual((await listVoiceNoteGroups(daemon.ctx)), []);
+    assert.deepEqual((await listReviewedAudioGroups(daemon.ctx)), []);
 
     const tags = await daemon.exiftool.readRaw(path.join(dest, DEST_NAME), ["-m"]);
     assert.match(String(tags.Inputs), /PTT-20190529-WA0001\.opus/);
@@ -125,14 +125,14 @@ test("voicenotes: approve merges, standardizes, moves and trashes the group", { 
   }
 });
 
-test("voicenotes: delete trashes the group without writing the destination", { skip: !CAN_RUN }, async () => {
-  const { root, src, dest, daemon } = await makeVoiceSetup();
+test("reviewed audio: delete trashes the group without writing the destination", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, daemon } = await makeReviewedAudioSetup();
   try {
-    makeVoiceNote(path.join(src, "chat", "PTT-20190529-WA0001.opus"));
-    await daemon.store.scanFolder("voicenotes");
-    const folder = daemon.store.getFolder("voicenotes");
+    makeAudioClip(path.join(src, "chat", "PTT-20190529-WA0001.opus"));
+    await daemon.store.scanFolder("reviewed-audio");
+    const folder = daemon.store.getFolder("reviewed-audio");
 
-    const result = await deleteVoiceNoteGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" });
+    const result = await deleteReviewedAudioGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" });
     assert.equal(result.ok, true);
     assert.deepEqual(result.deleted, ["chat/PTT-20190529-WA0001.opus"]);
     assert.deepEqual(await fsp.readdir(path.join(src, "chat")), []);
@@ -143,20 +143,20 @@ test("voicenotes: delete trashes the group without writing the destination", { s
   }
 });
 
-test("voicenotes: approve is idempotent when the destination merge already lists the inputs", { skip: !CAN_RUN }, async () => {
-  const { root, src, dest, daemon } = await makeVoiceSetup();
+test("reviewed audio: approve is idempotent when the destination merge already lists the inputs", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, daemon } = await makeReviewedAudioSetup();
   try {
     const name = "chat/PTT-20190529-WA0001.opus";
-    makeVoiceNote(path.join(src, name));
-    await daemon.store.scanFolder("voicenotes");
-    const folder = daemon.store.getFolder("voicenotes");
-    assert.equal((await approveVoiceNoteGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" })).ok, true);
+    makeAudioClip(path.join(src, name));
+    await daemon.store.scanFolder("reviewed-audio");
+    const folder = daemon.store.getFolder("reviewed-audio");
+    assert.equal((await approveReviewedAudioGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" })).ok, true);
 
     // Simulate a crash between placing the output and trashing the sources:
     // re-create the same clip and approve again.
-    makeVoiceNote(path.join(src, name));
-    await daemon.store.scanFolder("voicenotes");
-    const again = await approveVoiceNoteGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" });
+    makeAudioClip(path.join(src, name));
+    await daemon.store.scanFolder("reviewed-audio");
+    const again = await approveReviewedAudioGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" });
     assert.equal(again.ok, true);
     assert.equal(again.alreadyPlaced, true);
     assert.deepEqual(await fsp.readdir(path.join(src, "chat")), []);
@@ -167,16 +167,16 @@ test("voicenotes: approve is idempotent when the destination merge already lists
   }
 });
 
-test("voicenotes: a different destination file blocks approval and keeps the sources", { skip: !CAN_RUN }, async () => {
-  const { root, src, dest, daemon } = await makeVoiceSetup();
+test("reviewed audio: a different destination file blocks approval and keeps the sources", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, daemon } = await makeReviewedAudioSetup();
   try {
-    makeVoiceNote(path.join(src, "chat", "PTT-20190529-WA0001.opus"));
+    makeAudioClip(path.join(src, "chat", "PTT-20190529-WA0001.opus"));
     await fsp.writeFile(path.join(dest, DEST_NAME), "not an earlier merge");
-    await daemon.store.scanFolder("voicenotes");
-    const folder = daemon.store.getFolder("voicenotes");
+    await daemon.store.scanFolder("reviewed-audio");
+    const folder = daemon.store.getFolder("reviewed-audio");
 
     await assert.rejects(
-      () => approveVoiceNoteGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" }),
+      () => approveReviewedAudioGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" }),
       /already exists/,
     );
     assert.equal(await fsp.stat(path.join(src, "chat", "PTT-20190529-WA0001.opus")).then(() => true).catch(() => false), true);
@@ -186,25 +186,25 @@ test("voicenotes: a different destination file blocks approval and keeps the sou
   }
 });
 
-test("voicenotes: a late clip after approval becomes a group that needs a decision", { skip: !CAN_RUN }, async () => {
-  const { root, src, daemon } = await makeVoiceSetup();
+test("reviewed audio: a late clip after approval becomes a group that needs a decision", { skip: !CAN_RUN }, async () => {
+  const { root, src, daemon } = await makeReviewedAudioSetup();
   try {
-    makeVoiceNote(path.join(src, "chat", "PTT-20190529-WA0001.opus"));
-    await daemon.store.scanFolder("voicenotes");
-    const folder = daemon.store.getFolder("voicenotes");
-    assert.equal((await approveVoiceNoteGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" })).ok, true);
+    makeAudioClip(path.join(src, "chat", "PTT-20190529-WA0001.opus"));
+    await daemon.store.scanFolder("reviewed-audio");
+    const folder = daemon.store.getFolder("reviewed-audio");
+    assert.equal((await approveReviewedAudioGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" })).ok, true);
 
-    makeVoiceNote(path.join(src, "chat", "PTT-20190529-WA0002.opus"));
-    await daemon.store.scanFolder("voicenotes");
-    const groups = await listVoiceNoteGroups(daemon.ctx);
+    makeAudioClip(path.join(src, "chat", "PTT-20190529-WA0002.opus"));
+    await daemon.store.scanFolder("reviewed-audio");
+    const groups = await listReviewedAudioGroups(daemon.ctx);
     assert.equal(groups.length, 1);
     assert.equal(groups[0].count, 1);
     assert.equal(groups[0].destExists, true);
     await assert.rejects(
-      () => approveVoiceNoteGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" }),
+      () => approveReviewedAudioGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" }),
       /already exists/,
     );
-    const deleted = await deleteVoiceNoteGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" });
+    const deleted = await deleteReviewedAudioGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" });
     assert.equal(deleted.ok, true);
     assert.deepEqual(await fsp.readdir(path.join(src, "chat")), []);
   } finally {
@@ -213,16 +213,16 @@ test("voicenotes: a late clip after approval becomes a group that needs a decisi
   }
 });
 
-test("voicenotes: settling groups cannot be approved yet", { skip: !CAN_RUN }, async () => {
-  const { root, src, daemon } = await makeVoiceSetup({ settleSeconds: 60 });
+test("reviewed audio: settling groups cannot be approved yet", { skip: !CAN_RUN }, async () => {
+  const { root, src, daemon } = await makeReviewedAudioSetup({ settleSeconds: 60 });
   try {
-    makeVoiceNote(path.join(src, "chat", "PTT-20190529-WA0001.opus"));
-    await daemon.store.scanFolder("voicenotes");
-    const folder = daemon.store.getFolder("voicenotes");
-    const groups = await listVoiceNoteGroups(daemon.ctx);
+    makeAudioClip(path.join(src, "chat", "PTT-20190529-WA0001.opus"));
+    await daemon.store.scanFolder("reviewed-audio");
+    const folder = daemon.store.getFolder("reviewed-audio");
+    const groups = await listReviewedAudioGroups(daemon.ctx);
     assert.equal(groups[0].settling, true);
     await assert.rejects(
-      () => approveVoiceNoteGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" }),
+      () => approveReviewedAudioGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" }),
       /settle/,
     );
   } finally {
@@ -231,13 +231,13 @@ test("voicenotes: settling groups cannot be approved yet", { skip: !CAN_RUN }, a
   }
 });
 
-test("voicenotes: dry-run reports the plan without writing or trashing", { skip: !CAN_RUN }, async () => {
-  const { root, src, dest, daemon } = await makeVoiceSetup({ dryRun: true });
+test("reviewed audio: dry-run reports the plan without writing or trashing", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, daemon } = await makeReviewedAudioSetup({ dryRun: true });
   try {
-    makeVoiceNote(path.join(src, "chat", "PTT-20190529-WA0001.opus"));
-    await daemon.store.scanFolder("voicenotes");
-    const folder = daemon.store.getFolder("voicenotes");
-    const result = await approveVoiceNoteGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" });
+    makeAudioClip(path.join(src, "chat", "PTT-20190529-WA0001.opus"));
+    await daemon.store.scanFolder("reviewed-audio");
+    const folder = daemon.store.getFolder("reviewed-audio");
+    const result = await approveReviewedAudioGroup(daemon.ctx, folder, { chat: "chat", date: "20190529" });
     assert.equal(result.dryRun, true);
     assert.deepEqual(await fsp.readdir(dest), []);
     assert.equal(await fsp.stat(path.join(src, "chat", "PTT-20190529-WA0001.opus")).then(() => true).catch(() => false), true);
@@ -247,39 +247,39 @@ test("voicenotes: dry-run reports the plan without writing or trashing", { skip:
   }
 });
 
-test("voicenotes per-file: each file is approved by standardizing and moving it", { skip: !CAN_RUN }, async () => {
-  const { root, src, dest, daemon } = await makeVoiceSetup({ datePattern: null });
+test("reviewed audio per-file: each file is approved by standardizing and moving it", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, daemon } = await makeReviewedAudioSetup({ datePattern: null });
   try {
     makePhoto(path.join(src, "audio", "recording.jpg"));
-    await daemon.store.scanFolder("voicenotes");
-    const folder = daemon.store.getFolder("voicenotes");
-    const groups = await listVoiceNoteGroups(daemon.ctx);
+    await daemon.store.scanFolder("reviewed-audio");
+    const folder = daemon.store.getFolder("reviewed-audio");
+    const groups = await listReviewedAudioGroups(daemon.ctx);
     assert.equal(groups.length, 1);
     assert.equal(groups[0].file, "audio/recording.jpg");
     assert.equal(groups[0].count, 1);
 
-    const result = await approveVoiceNoteGroup(daemon.ctx, folder, { file: "audio/recording.jpg" });
+    const result = await approveReviewedAudioGroup(daemon.ctx, folder, { file: "audio/recording.jpg" });
     assert.equal(result.ok, true, JSON.stringify(result));
     assert.equal(result.destName, "2019-04-02-10-20-30-(recording).jpg");
     assert.deepEqual(await fsp.readdir(dest), [result.destName]);
     assert.deepEqual(await fsp.readdir(path.join(src, "audio")), []);
-    assert.deepEqual(await listVoiceNoteGroups(daemon.ctx), []);
+    assert.deepEqual(await listReviewedAudioGroups(daemon.ctx), []);
   } finally {
     await daemon.stop();
     await fsp.rm(root, { recursive: true, force: true });
   }
 });
 
-test("voicenotes per-file: datePattern + concat:false standardizes OPUS by filename date", { skip: !CAN_RUN }, async () => {
-  const { root, src, dest, daemon } = await makeVoiceSetup({ datePattern: "-(\\d{8})-", concat: false });
+test("reviewed audio per-file: datePattern + concat:false standardizes OPUS by filename date", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, daemon } = await makeReviewedAudioSetup({ datePattern: "-(\\d{8})-", concat: false });
   try {
-    makeVoiceNote(path.join(src, "audio", "AUD-20240101-WA0001.opus"));
-    await daemon.store.scanFolder("voicenotes");
-    const folder = daemon.store.getFolder("voicenotes");
-    const groups = await listVoiceNoteGroups(daemon.ctx);
+    makeAudioClip(path.join(src, "audio", "AUD-20240101-WA0001.opus"));
+    await daemon.store.scanFolder("reviewed-audio");
+    const folder = daemon.store.getFolder("reviewed-audio");
+    const groups = await listReviewedAudioGroups(daemon.ctx);
     assert.equal(groups.length, 1);
     assert.equal(groups[0].file, "audio/AUD-20240101-WA0001.opus");
-    const result = await approveVoiceNoteGroup(daemon.ctx, folder, { file: "audio/AUD-20240101-WA0001.opus" });
+    const result = await approveReviewedAudioGroup(daemon.ctx, folder, { file: "audio/AUD-20240101-WA0001.opus" });
     assert.equal(result.ok, true, JSON.stringify(result));
     assert.equal(result.destName, "2024-01-01-00-00-00-(AUD-20240101-WA0001).opus");
     assert.deepEqual(await fsp.readdir(dest), [result.destName]);
@@ -290,13 +290,13 @@ test("voicenotes per-file: datePattern + concat:false standardizes OPUS by filen
   }
 });
 
-test("voicenotes per-file: delete trashes the file and writes nothing", { skip: !CAN_RUN }, async () => {
-  const { root, src, dest, daemon } = await makeVoiceSetup({ datePattern: null });
+test("reviewed audio per-file: delete trashes the file and writes nothing", { skip: !CAN_RUN }, async () => {
+  const { root, src, dest, daemon } = await makeReviewedAudioSetup({ datePattern: null });
   try {
-    makeVoiceNote(path.join(src, "audio", "PTT-20240101-WA0001.opus"));
-    await daemon.store.scanFolder("voicenotes");
-    const folder = daemon.store.getFolder("voicenotes");
-    const result = await deleteVoiceNoteGroup(daemon.ctx, folder, { file: "audio/PTT-20240101-WA0001.opus" });
+    makeAudioClip(path.join(src, "audio", "PTT-20240101-WA0001.opus"));
+    await daemon.store.scanFolder("reviewed-audio");
+    const folder = daemon.store.getFolder("reviewed-audio");
+    const result = await deleteReviewedAudioGroup(daemon.ctx, folder, { file: "audio/PTT-20240101-WA0001.opus" });
     assert.equal(result.ok, true);
     assert.deepEqual(result.deleted, ["audio/PTT-20240101-WA0001.opus"]);
     assert.deepEqual(await fsp.readdir(path.join(src, "audio")), []);

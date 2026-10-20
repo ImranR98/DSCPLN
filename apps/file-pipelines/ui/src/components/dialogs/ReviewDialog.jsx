@@ -8,10 +8,10 @@ const groupKey = (group) => group.file
 export default function ReviewDialog({
   entries,
   reviewFolders,
-  voicenotes,
+  reviewedAudio,
   busy,
-  onApproveVoiceNote,
-  onDeleteVoiceNote,
+  onApproveReviewedAudio,
+  onDeleteReviewedAudio,
   onReviewAction,
   onReviewActionAll,
   onClose,
@@ -26,15 +26,16 @@ export default function ReviewDialog({
           </span>
         </header>
         <p className="hint">
-          Voicenotes are approved per chat/day: merge and move the group, or move its clips to trash.
+          Reviewed audio is approved here: grouped folders merge and move same-day clips;
+          per-file folders standardize and move each file. Delete moves sources to trash.
           Nothing is written or deleted until you choose.
         </p>
 
-        {voicenotes.length ? (
+        {reviewedAudio.length ? (
           <section className="review-section">
-            <h3>Voice notes</h3>
+            <h3>Reviewed audio</h3>
             <div className="review-groups">
-              {voicenotes.map((group) => {
+              {reviewedAudio.map((group) => {
                 const key = groupKey(group)
                 const disabled = group.settling || busy === key
                 const label = group.file || `${group.chat || '(root)'} · ${group.date}`
@@ -42,7 +43,7 @@ export default function ReviewDialog({
                   ? `${formatBytes(group.bytes)}${group.settling ? ' · settling…' : ''}`
                   : `${group.count} clip${group.count === 1 ? '' : 's'} · ${formatBytes(group.bytes)}${group.destExists ? ' · destination merge exists' : ''}${group.settling ? ' · settling…' : ''}`
                 return (
-                  <div className="review-row" key={key} data-testid={`voice-group-${group.folder}-${group.date || encodeURIComponent(group.file)}`}>
+                  <div className="review-row" key={key} data-testid={`review-group-${group.folder}-${group.date || encodeURIComponent(group.file)}`}>
                     <div className="review-row__main">
                       <span className="checklist__main">{label}</span>
                       <span className="checklist__meta">{meta}</span>
@@ -50,7 +51,7 @@ export default function ReviewDialog({
                     <div className="review-row__actions">
                       <button
                         disabled={disabled}
-                        onClick={() => onApproveVoiceNote(group)}
+                        onClick={() => onApproveReviewedAudio(group)}
                         title={group.destExists ? 'A merge already exists for this chat/day; delete or move it first' : undefined}
                       >
                         {busy === key ? 'Working…' : group.file ? 'Standardize & move' : 'Merge & move'}
@@ -58,7 +59,7 @@ export default function ReviewDialog({
                       <button
                         className="outline secondary"
                         disabled={disabled}
-                        onClick={() => onDeleteVoiceNote(group)}
+                        onClick={() => onDeleteReviewedAudio(group)}
                       >
                         Delete
                       </button>
@@ -101,7 +102,7 @@ export default function ReviewDialog({
           )
         })}
 
-        {!voicenotes.length && !entries.length ? (
+        {!reviewedAudio.length && !entries.length ? (
           <p className="muted">Nothing awaiting review.</p>
         ) : null}
 

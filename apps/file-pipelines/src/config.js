@@ -3,12 +3,12 @@ import path from "node:path";
 import { atomicWriteFile, expandPath, pathExists } from "./util.js";
 import { normalizeSchedule } from "./schedule.js";
 
-export const METHODS = ["standardize", "snapchat", "copy", "voicenotes"];
+export const METHODS = ["standardize", "snapchat", "copy", "reviewed-audio"];
 // Snapshot copies (`copy` + `snapshot: true`) run on demand/schedule instead
 // of watching a local source; they can list several sources and run as a Job
 // on another node.
 export const isSnapshotCopy = (folder) => Boolean(folder && folder.method === "copy" && folder.snapshot);
-export const MANUAL_PLACEMENT_METHODS = new Set(["standardize", "snapchat", "voicenotes"]);
+export const MANUAL_PLACEMENT_METHODS = new Set(["standardize", "snapchat", "reviewed-audio"]);
 
 export function defaultConfig() {
   return {
@@ -79,7 +79,9 @@ export function normalizeConfig(raw) {
     // Legacy configs expressed run-on-schedule copies as `method: "command"`;
     // fold them into snapshot copies with a command override.
     const legacyCommand = folder.method === "command";
-    const method = legacyCommand ? "copy" : folder.method;
+    // `voicenotes` was renamed to `reviewed-audio`; accept old configs and
+    // normalize them on load/save so they do not need a manual migration.
+    const method = legacyCommand ? "copy" : folder.method === "voicenotes" ? "reviewed-audio" : folder.method;
     const snapshot = method === "copy" && (legacyCommand || Boolean(folder.snapshot));
     const sourceList = Array.isArray(folder.sources) ? folder.sources : [];
     const sources = (sourceList.length ? sourceList : folder.source ? [folder.source] : [])
@@ -93,19 +95,19 @@ export function normalizeConfig(raw) {
       method,
       snapshot,
       filePattern: folder.filePattern || null,
-      datePattern: method === "voicenotes" ? String(folder.datePattern ?? "").trim() || null : null,
-      concat: method === "voicenotes" ? folder.concat !== false : true,
+      datePattern: method === "reviewed-audio" ? String(folder.datePattern ?? "").trim() || null : null,
+      concat: method === "reviewed-audio" ? folder.concat !== false : true,
       settleSeconds: folder.settleSeconds === undefined ? cfg.settleSeconds : Math.max(0, asNumber(folder.settleSeconds, cfg.settleSeconds)),
       groupWindowSeconds: Math.max(1, asNumber(folder.groupWindowSeconds, 15)),
-      // Copy folders can mirror whole trees; voice notes always need subdirs.
-      recursive: Boolean(folder.recursive) || method === "voicenotes",
+      // Copy folders can mirror whole trees; reviewed audio always needs subdirs.
+      recursive: Boolean(folder.recursive) || method === "reviewed-audio",
       includeHidden: Boolean(folder.includeHidden),
       onChanged: folder.onChanged === "conflict" ? "conflict" : "overwrite",
-      // Voicenotes are approval-only: the source clips are the queue, so the
-      // normal cleanup/manual-parking flags do not apply.
-      cleanup: snapshot || method === "voicenotes" ? false : folder.cleanup !== false,
-      placement: method === "voicenotes" ? "manual" : folder.placement === "manual" ? "manual" : "auto",
-      autoProcess: method === "voicenotes" ? false : Boolean(folder.autoProcess),
+      // Reviewed audio is approval-only: the source files are the queue, so
+      // the normal cleanup/manual-parking flags do not apply.
+      cleanup: snapshot || method === "reviewed-audio" ? false : folder.cleanup !== false,
+      placement: method === "reviewed-audio" ? "manual" : folder.placement === "manual" ? "manual" : "auto",
+      autoProcess: method === "reviewed-audio" ? false : Boolean(folder.autoProcess),
       notify: folder.notify === "errors" ? "errors" : "all",
       // Snapshot copies: optional generated-script override, selective copy
       // of a subdirectory, destination naming/marker, a remote runner node and
@@ -144,7 +146,7 @@ export function validateConfig(cfg) {
       if (folder.nameSuffix) errors.push(`folder ${folder.name}: nameSuffix is only supported for snapshot copies`);
       if (folder.touch) errors.push(`folder ${folder.name}: touch is only supported for snapshot copies`);
     }
-    if (folder.method === "voicenotes" && folder.datePattern) {
+    if (folder.method === "reviewed-audio" && folder.datePattern) {
       try {
         new RegExp(folder.datePattern);
       } catch (err) {

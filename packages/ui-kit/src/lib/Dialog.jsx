@@ -11,6 +11,7 @@ export default function Dialog({
   describedBy,
   className = '',
   onClose,
+  requestClose = null,
   autoOpen = true,
   closeButton = true,
   children,
@@ -20,7 +21,10 @@ export default function Dialog({
   const localRef = useRef(null)
   const ref = dialogRef ?? localRef
   useModal(ref, onClose, { autoOpen })
-  const close = () => ref.current?.close()
+  const close = () => {
+    if (requestClose) requestClose()
+    else ref.current?.close()
+  }
 
   return (
     <dialog

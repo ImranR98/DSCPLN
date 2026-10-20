@@ -115,21 +115,6 @@
 
 /* ---------- Figure + progress ---------- */
 
-.figure {
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: var(--space-1) var(--space-3);
-    margin: 0 0 var(--space-3);
-}
-
-.figure__spend {
-    font-size: var(--fs-2xl);
-    font-weight: 750;
-    letter-spacing: -0.03em;
-    line-height: 1.15;
-}
-
 .progress__pace {
     position: absolute;
     top: -3px;

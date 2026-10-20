@@ -66,7 +66,7 @@ folders.
 ## Reviewed audio (approval only)
 
 Reviewed audio never processes automatically. The source folder is the queue.
-Open **Review** and choose one action per item:
+Open **Review**, listen to the source clip(s), and choose one action per item:
 
 - **Grouped mode** (`datePattern` + `concat: true`, the default): a group is
   every clip currently present for one chat directory + clip date.
@@ -84,8 +84,10 @@ same chat/day, the merge is accepted as already done when its XMP input list
 matches; otherwise approval is refused until that destination file is moved or
 deleted. A clip that arrives after approval appears as a new group.
 
-`settleSeconds` delays an item until its files have been quiet that long.
-`placement`, `autoProcess` and cleanup are not used for reviewed audio.
+Review streams the source audio with HTTP Range requests, so players can start
+before the file is downloaded and seeking works. `settleSeconds` delays an item
+until its files have been quiet that long. `placement`, `autoProcess` and
+cleanup are not used for reviewed audio.
 
 To standardize and copy **individual files** instead of merging them, set
 `concat: false` (or omit `datePattern`):

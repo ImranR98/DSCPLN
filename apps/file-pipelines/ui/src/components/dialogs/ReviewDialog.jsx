@@ -39,6 +39,7 @@ export default function ReviewDialog({
                 const key = groupKey(group)
                 const disabled = group.settling || busy === key
                 const label = group.file || `${group.chat || '(root)'} · ${group.date}`
+                const files = group.files ?? (group.file ? [group.file] : [])
                 const meta = group.file
                   ? `${formatBytes(group.bytes)}${group.settling ? ' · settling…' : ''}`
                   : `${group.count} clip${group.count === 1 ? '' : 's'} · ${formatBytes(group.bytes)}${group.destExists ? ' · destination merge exists' : ''}${group.settling ? ' · settling…' : ''}`
@@ -47,6 +48,19 @@ export default function ReviewDialog({
                     <div className="review-row__main">
                       <span className="checklist__main">{label}</span>
                       <span className="checklist__meta">{meta}</span>
+                    </div>
+                    <div className="review-audio">
+                      {files.map((file) => (
+                        <div className="review-audio__item" key={file}>
+                          {files.length > 1 ? <span className="review-audio__label">{file.split('/').pop()}</span> : null}
+                          <audio
+                            controls
+                            preload="none"
+                            aria-label={`Listen to ${file.split('/').pop()}`}
+                            src={apiUrl(`api/review/audio/${encodeURIComponent(group.folder)}/${encodeURIComponent(file)}`)}
+                          ></audio>
+                        </div>
+                      ))}
                     </div>
                     <div className="review-row__actions">
                       <button

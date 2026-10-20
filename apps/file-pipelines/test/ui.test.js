@@ -26,17 +26,19 @@ async function waitFor(fn, timeoutMs = 30_000, intervalMs = 200) {
   return false;
 }
 
-async function makeSetup({ datePattern = "(\\d{4})-(\\d{2})-(\\d{2})" } = {}) {
+async function makeSetup({ datePattern = "(\\d{4})-(\\d{2})-(\\d{2})", clips = 1 } = {}) {
   const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-ui-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
   await fsp.mkdir(path.join(src, "201301"), { recursive: true });
   await fsp.mkdir(dest, { recursive: true });
-  execFileSync("ffmpeg", [
-    "-loglevel", "error", "-y",
-    "-f", "lavfi", "-i", "sine=frequency=440:duration=0.5",
-    "-c:a", "libopus", path.join(src, "201301", "voice 2019-05-29 take1.opus"),
-  ]);
+  for (let index = 1; index <= clips; index += 1) {
+    execFileSync("ffmpeg", [
+      "-loglevel", "error", "-y",
+      "-f", "lavfi", "-i", "sine=frequency=440:duration=0.5",
+      "-c:a", "libopus", path.join(src, "201301", `voice 2019-05-29 take${index}.opus`),
+    ]);
+  }
   const configPath = path.join(root, "config.json");
   const config = {
     configVersion: 1,
@@ -76,7 +78,7 @@ async function makeSetup({ datePattern = "(\\d{4})-(\\d{2})-(\\d{2})" } = {}) {
 }
 
 test("ui: review a reviewed-audio group and merge it into the destination", { skip: !CAN_RUN }, async () => {
-  const { root, daemon, dest, base } = await makeSetup();
+  const { root, daemon, dest, base } = await makeSetup({ clips: 2 });
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
@@ -91,6 +93,8 @@ test("ui: review a reviewed-audio group and merge it into the destination", { sk
     const group = dialog.locator('[data-testid="review-group-reviewed-audio-20190529"]');
     await group.waitFor({ state: "visible", timeout: 30_000 });
     assert.match(await group.textContent(), /201301 · 20190529/);
+    assert.equal(await group.locator("audio").count(), 2, "each clip in a group gets an audio player");
+    assert.match(await group.locator("audio").first().getAttribute("src"), /review\/audio\/reviewed-audio\//);
     await group.getByRole("button", { name: "Merge & move" }).click();
 
     const destName = "2019-05-29-00-00-00-(20190529-merged-201301).mp4";
@@ -114,6 +118,8 @@ test("ui: per-file reviewed-audio review standardizes and moves one file", { ski
     const dialog = page.locator('[data-testid="review-dialog"]');
     const row = dialog.locator(".review-row", { hasText: "voice 2019-05-29 take1.opus" }).first();
     await row.waitFor({ state: "visible", timeout: 30_000 });
+    assert.equal(await row.locator("audio").count(), 1, "per-file review gets an audio player");
+    assert.match(await row.locator("audio").getAttribute("src"), /review\/audio\/reviewed-audio\//);
     await row.getByRole("button", { name: "Standardize & move" }).click();
 
     const placed = await waitFor(async () => (await fsp.readdir(dest)).length === 1);

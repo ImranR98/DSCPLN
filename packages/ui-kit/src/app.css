@@ -1127,6 +1127,32 @@ button svg, a[role="button"] svg {
     flex: 1 1 12rem;
 }
 
+.review-audio {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    flex: 1 1 18rem;
+    min-width: 12rem;
+}
+
+.review-audio__item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.review-audio__label {
+    font-size: 0.78rem;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}
+
+.review-audio audio {
+    width: 100%;
+    max-width: 22rem;
+    flex: none;
+}
+
 .review-row__actions {
     display: flex;
     gap: 0.4rem;

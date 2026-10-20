@@ -261,6 +261,17 @@ test("api: reviewed audio list, approve and delete groups", { skip: !CAN_RUN }, 
     assert.equal(group.date, "20190529");
     assert.equal(group.destName, "2019-05-29-00-00-00-(20190529-merged-201301).mp4");
 
+    const audioResponse = await fetch(`${base}/api/review/audio/reviewed-audio/${encodeURIComponent(group.files[0])}`, {
+      headers: { Range: "bytes=0-15" },
+    });
+    assert.equal(audioResponse.status, 206);
+    assert.equal(audioResponse.headers.get("content-type"), "audio/ogg");
+    assert.equal(audioResponse.headers.get("accept-ranges"), "bytes");
+    assert.equal((await audioResponse.arrayBuffer()).byteLength, 16);
+
+    const badAudio = await fetch(`${base}/api/review/audio/reviewed-audio/${encodeURIComponent("../../etc/passwd")}`);
+    assert.equal(badAudio.status, 404);
+
     const approved = await (await fetch(`${base}/api/review/reviewed-audio/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

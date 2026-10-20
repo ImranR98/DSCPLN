@@ -98,68 +98,6 @@
     overflow-wrap: anywhere;
 }
 
-.figure {
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: var(--space-1) var(--space-3);
-    margin: 0 0 var(--space-3);
-}
-
-.figure__spend {
-    font-size: var(--fs-2xl);
-    font-weight: 750;
-    letter-spacing: -0.03em;
-    line-height: 1.15;
-    font-variant-numeric: tabular-nums lining-nums;
-}
-
-.figure__meta {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 0.35rem;
-}
-
-.figure__of,
-.figure__budget {
-    font-size: var(--fs-md);
-    color: var(--text-muted);
-}
-
-.progress {
-    position: relative;
-    height: 10px;
-    border-radius: var(--radius-pill);
-    background: var(--surface-3);
-}
-
-.progress__fill {
-    height: 100%;
-    width: 0%;
-    min-width: 0;
-    border-radius: inherit;
-    background: var(--ok);
-    transition: width 0.5s ease, background-color 0.3s ease;
-}
-
-.card--warn .progress__fill {
-    background: var(--warn);
-}
-
-.card--over .progress__fill {
-    background: var(--over);
-}
-
-.pace {
-    margin: var(--space-2) 0 0;
-    font-size: var(--fs-sm);
-    color: var(--text-muted);
-}
-
-.pace:empty {
-    display: none;
-}
-
 .folder-paths {
     display: flex;
     flex-wrap: wrap;

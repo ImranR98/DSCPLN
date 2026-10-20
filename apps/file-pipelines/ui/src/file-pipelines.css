@@ -25,3 +25,394 @@
     font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
     font-size: var(--fs-sm);
 }
+
+/* ---------- folder cards ---------- */
+
+.folder-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(25rem, 1fr));
+    gap: var(--space-4);
+    align-items: stretch;
+}
+
+.folder-card {
+    --method-color: var(--accent);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.folder-card--standardize { --method-color: var(--accent); }
+.folder-card--snapchat { --method-color: #7c5cff; }
+.folder-card--copy { --method-color: var(--warn); }
+.folder-card--reviewed-audio { --method-color: #db2777; }
+
+/* The accent bar and badge say which method the folder uses; problems take
+   the colour over. */
+.folder-card.card--warn { --method-color: var(--warn); }
+.folder-card.card--over { --method-color: var(--over); }
+
+.folder-card .folder-card__actions {
+    margin-bottom: var(--space-3);
+}
+
+.folder-card .folder-details {
+    margin-top: auto;
+}
+
+.method-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.1rem 0.5rem;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--method-color) 14%, transparent);
+    color: var(--method-color);
+    font-size: var(--fs-2xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.folder-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: var(--method-color);
+}
+
+.folder-title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.folder-title h2 {
+    font-size: var(--fs-md);
+    font-weight: 700;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+.figure {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    margin: 0 0 var(--space-3);
+}
+
+.figure__spend {
+    font-size: var(--fs-2xl);
+    font-weight: 750;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums lining-nums;
+}
+
+.figure__meta {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+}
+
+.figure__of,
+.figure__budget {
+    font-size: var(--fs-md);
+    color: var(--text-muted);
+}
+
+.progress {
+    position: relative;
+    height: 10px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-3);
+}
+
+.progress__fill {
+    height: 100%;
+    width: 0%;
+    min-width: 0;
+    border-radius: inherit;
+    background: var(--ok);
+    transition: width 0.5s ease, background-color 0.3s ease;
+}
+
+.card--warn .progress__fill {
+    background: var(--warn);
+}
+
+.card--over .progress__fill {
+    background: var(--over);
+}
+
+.pace {
+    margin: var(--space-2) 0 0;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+}
+
+.pace:empty {
+    display: none;
+}
+
+.folder-paths {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-2);
+    margin: var(--space-3) 0 0;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+}
+
+.folder-paths code {
+    background: none;
+    padding: 0;
+}
+
+.folder-paths__arrow {
+    color: var(--border-strong);
+}
+
+.folder-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+}
+
+/* ---------- file list ---------- */
+
+.folder-details {
+    margin-top: var(--space-3);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--border);
+}
+
+.files__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 24rem;
+    overflow-y: auto;
+}
+
+.file {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--border);
+}
+
+.file:first-child {
+    border-top: 0;
+}
+
+.file:last-child {
+    padding-bottom: 0;
+}
+
+.file__main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.file__name {
+    font-weight: 550;
+    overflow-wrap: anywhere;
+}
+
+.file__notes {
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.file__dest {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.file__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-1);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+}
+
+.file__actions {
+    display: flex;
+    gap: var(--space-1);
+    justify-content: flex-end;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .file__actions {
+        opacity: 0;
+        transition: opacity 0.15s ease;
+    }
+
+    .file:hover .file__actions,
+    .file:focus-within .file__actions,
+    .file--error .file__actions,
+    .file--conflict .file__actions {
+        opacity: 1;
+    }
+}
+
+@media (hover: none), (pointer: coarse) {
+    .file__actions {
+        opacity: 1;
+    }
+}
+
+.files-empty {
+    margin: var(--space-3) 0 0;
+    font-size: var(--fs-sm);
+}
+
+/* ---------- panels ---------- */
+
+.side-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: var(--space-4);
+    align-items: start;
+}
+
+.trash__list {
+    margin-top: var(--space-2);
+}
+
+.trash__day {
+    margin-top: var(--space-1);
+}
+
+.trash-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+}
+
+#trashSelectAll {
+    margin-top: var(--space-2);
+}
+
+.activity-log {
+    max-height: 22rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.activity-log:empty::before {
+    content: "No activity yet.";
+    color: var(--text-muted);
+}
+
+/* Review dialog (manual placement parks) */
+.review-section {
+    margin-bottom: 1.25rem;
+}
+
+.review-section h3 {
+    margin: 0 0 0.5rem;
+}
+
+.review-bulk-actions {
+    justify-content: flex-start;
+    margin: 0 0 0.5rem;
+}
+
+.review-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.review-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    padding: 0.5rem 0;
+    border-top: 1px solid var(--border);
+}
+
+.review-row__main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 16rem;
+    flex: 1 1 16rem;
+}
+
+.review-row audio {
+    height: 2rem;
+    max-width: 18rem;
+    flex: 1 1 12rem;
+}
+
+.review-audio {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    flex: 1 1 18rem;
+    min-width: 12rem;
+}
+
+.review-audio__item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.review-audio__label {
+    font-size: 0.78rem;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}
+
+.review-audio audio {
+    width: 100%;
+    max-width: 22rem;
+    flex: none;
+}
+
+.review-row__actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-left: auto;
+}
+
+.field-grid--checks label {
+    align-self: end;
+    padding-bottom: 0.35rem;
+}
+
+@media (max-width: 62rem) {
+    .side-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 44rem) {
+    .folder-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

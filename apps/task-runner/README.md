@@ -43,8 +43,7 @@ matches open a picker. Task cards are grouped by their group name and each has:
   directory is missing) that becomes **Stop** while running
 - a **Log** button (last run's output; the live line streams under the title)
 - a **Generate Export** link when the task sets `export_url:`
-- a status line (last run time/result) stored in the task's `state_dir` as
-  `.backup-state-<task>.json`
+- a status line (last run time/result) stored in `BACKUPCTL_STATE_DIR/tasks/<slug>.json`
 
 There are no automatic timeouts — a run goes until it finishes or you stop it.
 Any number of tasks run in parallel; tasks sharing a `serial_key` are queued
@@ -95,7 +94,7 @@ of config tokens that should never appear in a logged command/output.
 (values may reference other tokens; resolution loops until stable). Built-in
 tokens: `{{repo_dir}}` (repo root, override with `BACKUPCTL_REPO_DIR`) and
 `{{lib}}` (the packaged `lib.sh`). `~` and env vars expand on resolved paths.
-Every task needs `state_dir:` — run state is stored there.
+Every task needs `state_dir:` — it is the default `move`/`ingest` destination. Run state itself is centralized under `BACKUPCTL_STATE_DIR/tasks/`.
 
 If you keep your own helper scripts, place them somewhere on the machine or
 mount them into the container and reference them from the config (for example
@@ -106,6 +105,7 @@ mount them into the container and reference them from the config (for example
 Common: `name`, `note` (help text in the drop zone), `state_dir` (required),
 `serial_key` (tasks sharing a key run one at a time), `host` (`any`, or the
 instance name), `prompts`, `export_url`, `schedule`, `env`, `secrets`,
+`run_as` (optional `{ uid, gid }`; user-data tasks run as the host owner),
 `notify` (`never|errors|always`) and `notify_name`.
 
 Runner: exactly one of `commands` (bash string or list), `script:`, `move:`,
@@ -117,7 +117,9 @@ directory the card requires; glob-aware), `check:` (bash gate: the task is
 unavailable while it exits non-zero, with its first output line as the card's
 badge; results are cached ~15s), `browser: true` (the card gets an embedded
 login-browser section; it auto-opens when the task starts), `summary_last_line:
-true` (summary = last non-command log line).
+true` (summary = last non-command log line). `run_as: { uid: '{{app_uid}}', gid:
+'{{app_gid}}' }` drops the task shell to the host data owner; leave it unset for
+tasks that need root (PV backups, SSH keys).
 
 - `script: 'bash body'` — wrapped in a temp-file heredoc so inner processes
   can't consume the rest of the script from stdin.
@@ -269,8 +271,9 @@ bash '{{lib}}' move --git --rename bookmarks.html '{{maindir}}/Manual' {{uploads
 
 or sourced inside a `script:` for anything with logic. Subcommands:
 `move`, `copy`, `ingest`, `encrypt`, `git-commit`, `validate-fresh`,
-`prune-exports`; sourceable helpers: `bctl_extract`, `bctl_rsync`,
-`bctl_git_commit`, `bctl_standardize_into`, `bctl_import_pair`,
+`prune-exports`, `remote-subdirs`, `python-venv`; sourceable helpers:
+`bctl_extract`, `bctl_rsync`, `bctl_git_commit`, `bctl_standardize_into`,
+`bctl_import_pair`, `bctl_remote_subdirs`, `bctl_python_venv`,
 `bctl_first_glob`, `bctl_export_dirs` (see `lib.sh` for the full list).
 
 Service-specific concerns (installing a CLI, validating an export is fresh,
@@ -309,7 +312,7 @@ only) gives tools that refuse non-TTY stdin a pseudo-terminal when
 
 ### State
 
-- `<state_dir>/.backup-state-<slug>.json` — `{task, ts, ok, summary, output}`,
+- `<BACKUPCTL_STATE_DIR>/tasks/<slug>.json` — `{task, ts, ok, summary, output}`; legacy `<state_dir>/.backup-state-<slug>.json` is read once during the upgrade
   written atomically.
 - `bctl_git_commit` stages with `git add -A . ':(exclude).backup-state-*'`, so
   state files never churn backup repos.

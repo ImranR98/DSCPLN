@@ -117,9 +117,9 @@ one consolidated ask, then:
 
 1. Confirm `INFRA_DIR` (the deployment-repo checkout; ask if unset) and that it
    is clean.
-2. `scripts/build-all.sh --pin <apps...>` — rebuilds the shared base first,
-   pushes the app images, prints the digest table, and rewrites the deployment
-   templates' digests.
+2. `scripts/build-all.sh --pin <apps...>` — builds the unified image once,
+   pushes the requested app tags, prints the digest table, and rewrites the
+   deployment templates' digests.
 3. Review `git -C "$INFRA_DIR" diff` — only the intended image lines.
 4. Roll out via the deployment repo's runbook (helm + rollout status), or print
    the pending commands if this machine lacks deploy access.

@@ -4,7 +4,8 @@ import path from "node:path";
 import { findExpectedDestName, verificationFor } from "./verify.js";
 import { probeDuration } from "./ffmpeg.js";
 import { DestExistsError, moveIntoPlace } from "./processors/place.js";
-import { atomicWriteFile, pathExists, sha256File, uniqueSuffix } from "./util.js";
+import { atomicWriteFile, pathExists } from "@dscpln/server-kit";
+import { sha256File, uniqueSuffix } from "./util.js";
 import { STATUS } from "./store.js";
 
 const MANIFEST_NAME = ".manifest.json";

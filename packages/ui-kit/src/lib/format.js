@@ -51,11 +51,12 @@ export function humanAgo(ms) {
   const delta = (Date.now() - Number(ms)) / 1000
   if (!Number.isFinite(delta)) return '—'
   if (delta < 60) return 'just now'
-  if (delta < 3600) return `${Math.floor(delta / 60)} min ago`
-  if (delta < 86400) return `${Math.floor(delta / 3600)} hr ago`
-  if (delta < 30 * 86400) return `${Math.floor(delta / 86400)} days ago`
-  if (delta < 365 * 86400) return `${Math.floor(delta / (30 * 86400))} months ago`
-  return `${Math.floor(delta / (365 * 86400))} years ago`
+  const ago = (value, one, many) => `${value} ${value === 1 ? one : many} ago`
+  if (delta < 3600) return ago(Math.floor(delta / 60), 'min', 'min')
+  if (delta < 86400) return ago(Math.floor(delta / 3600), 'hr', 'hr')
+  if (delta < 30 * 86400) return ago(Math.floor(delta / 86400), 'day', 'days')
+  if (delta < 365 * 86400) return ago(Math.floor(delta / (30 * 86400)), 'month', 'months')
+  return ago(Math.floor(delta / (365 * 86400)), 'year', 'years')
 }
 
 export function formatNumber(value, options) {

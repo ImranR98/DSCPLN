@@ -26,8 +26,6 @@ apps/
   portal/config.json       ntfy settings + the portal card list
   balance-xlsx/config.json workbook path and notifications
   file-pipelines/config.json folder pipelines
-  contacts-calendar/config.json Nextcloud export settings
-  ytmusic/config.json      music library and auth
 tools/                     helper scripts called by tasks
 ```
 
@@ -38,12 +36,11 @@ The per-app configs are mounted/pointed at with:
 | Portal | `DSCPLN_CONFIG_FILE` | `$DSCPLN_DATA_DIR/config.json` |
 | Balance XLSX | `DSCPLN_CONFIG` | `./config.json` |
 | File Pipelines | `--config <path>` | `/config/config.json` |
-| Contacts + Calendar | `DSCPLN_CONFIG_FILE` | `$DSCPLN_DATA_DIR/config.json` |
-| YTMusic Downloads | `DSCPLN_CONFIG_FILE` | `$DSCPLN_DATA_DIR/config.json` |
 | Task Runner | `BACKUPCTL_CONFIG_FILE` | `apps/task-runner/config.mjs` |
 
 `DSCPLN_STATE_FILE` keeps a scheduled app's run state on its own volume when
-the config file is mounted read-only.
+the config file is mounted read-only. Contacts/YTMusic are Task Runner jobs in
+the example config; their tools live under `tools/` in the private repo.
 
 Example Docker Compose mounts:
 
@@ -51,12 +48,14 @@ Example Docker Compose mounts:
 services:
   portal:
     environment:
+      APP: portal
       DSCPLN_CONFIG_FILE: /config/config.json
     volumes:
       - ./dscpln-config/apps/portal:/config
 
   balance-xlsx:
     environment:
+      APP: balance
       DSCPLN_CONFIG: /config/config.json
     volumes:
       - ./dscpln-config/apps/balance-xlsx:/config:ro
@@ -64,6 +63,7 @@ services:
 
   task-runner:
     environment:
+      APP: task-runner
       BACKUPCTL_CONFIG_FILE: /config-src/config.mjs
       BACKUPCTL_REPO_DIR: /app
     volumes:
@@ -71,9 +71,8 @@ services:
       - ./data:/data
 ```
 
-If an app's Settings UI writes its config (Portal, File Pipelines, Contacts,
-YTMusic), mount that app's config directory writable. Balance and Task Runner
-only read their config.
+If an app's Settings UI writes its config (Portal, File Pipelines), mount that
+app's config directory writable. Balance and Task Runner only read their config.
 
 ## Schedules and notifications
 

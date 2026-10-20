@@ -131,19 +131,47 @@ export async function runCommands(ctx) {
   for (const [key, value] of Object.entries(task.env ?? {})) {
     env[key] = String(resolve(value, ctx.local ?? {}));
   }
+  // Optional per-task identity: user-data tasks run as the host owner while
+  // the server stays root for backup/recovery tasks. The deployment grants
+  // CAP_SETUID/CAP_SETGID only for this drop-privilege path.
+  const runAs = {};
+  if (task.run_as !== undefined) {
+    const spec = typeof task.run_as === 'object' && task.run_as !== null ? task.run_as : { uid: task.run_as, gid: task.run_as };
+    const uid = Number(resolve(spec.uid, ctx.local ?? {}));
+    const gid = Number(resolve(spec.gid ?? spec.uid, ctx.local ?? {}));
+    if (!Number.isInteger(uid) || uid < 0 || !Number.isInteger(gid) || gid < 0) {
+      return [false, `Invalid run_as identity: uid=${spec.uid} gid=${spec.gid}`];
+    }
+    runAs.uid = uid;
+    runAs.gid = gid;
+    try {
+      fs.chownSync(ctx.tmpdir, uid, gid);
+      fs.chmodSync(ctx.tmpdir, 0o700);
+      // Drop-zone uploads are written by the root server; hand the staged
+      // tree to the task user so upload tasks can read/rename their inputs.
+      for (const file of ctx.files ?? []) fs.chownSync(file, uid, gid);
+      const staging = ctx.files?.length ? path.dirname(ctx.files[0]) : null;
+      if (staging) {
+        fs.chownSync(staging, uid, gid);
+        fs.chmodSync(staging, 0o700);
+      }
+    } catch (err) {
+      return [false, `Could not prepare task files for uid ${uid}: ${err.message}`];
+    }
+  }
   const cmds = Array.isArray(task.commands) ? task.commands : [task.commands];
   for (const cmd of cmds) {
     const resolved = resolve(cmd, ctx.local, extra);
     let rc;
     if (capture) {
-      const { rc: r, out, err } = await shCapture(resolved, { cwd, redact, env, groups });
+      const { rc: r, out, err } = await shCapture(resolved, { cwd, redact, env, groups, ...runAs });
       rc = r;
       const lines = splitLines(out);
       for (const line of lines) ctx.log(line);
       if (err.trim()) ctx.log(err.trim());
       output.push(...lines);
     } else {
-      rc = await sh(resolved, { cwd, log: ctx.log, redact, env, groups });
+      rc = await sh(resolved, { cwd, log: ctx.log, redact, env, groups, ...runAs });
     }
     if (rc !== 0) return failRun(rc);
   }
@@ -304,6 +332,7 @@ export async function boot(configPath = undefined) {
 // `serial_key` are queued and run one at a time (FIFO per key).
 export const RUNS = new Map(); // taskName -> { task, log, read, cancelled, groups: Set, ts, tmpdir }
 export const DONE = []; // completed runs awaiting delivery to /api/status
+const DONE_LIMIT = 200; // bound memory if no UI is polling /api/status
 const SERIAL_QUEUES = new Map(); // serial_key -> [{ taskName, payload }]
 
 function serialKeyHeld(key) {
@@ -359,6 +388,7 @@ function startRun(taskName, payload = {}, trigger = 'manual') {
       RUNS.delete(taskName);
       clearRunning(taskName);
       DONE.push({ task: taskName, ok, summary, paste: Boolean(task.capture), trigger });
+      if (DONE.length > DONE_LIMIT) DONE.splice(0, DONE.length - DONE_LIMIT);
       drainSerialQueue(task.serial_key);
       notifyTask(task, ok, summary).catch((err) => console.error(`notification failed: ${err.message}`));
     }

@@ -2889,3 +2889,20 @@ details.card[open] > summary::after {
         gap: 2px;
     }
 }
+
+
+/* API settings page: keep the reference readable and the tables scrollable. */
+.settings-page {
+    width: min(100%, 56rem);
+    margin: 0 auto;
+}
+
+@media (max-width: 44rem) {
+    .settings-page {
+        padding-inline: var(--space-2);
+    }
+
+    .api-table {
+        min-width: 34rem;
+    }
+}

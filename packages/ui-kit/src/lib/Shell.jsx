@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pause, Play, RefreshCw, ScrollText, Settings } from 'lucide-react'
+import AppHeader from './AppHeader.jsx'
 import { getJson, postJson, putJson, subscribe } from './api.js'
 import { formatDateTime, formatDuration, formatTime, humanAgo } from './format.js'
 import ThemeToggle from './ThemeToggle.jsx'
@@ -121,13 +122,12 @@ export default function Shell({
 
   return (
     <>
-      <header className="app-header" data-app={name}>
-        <div className="app-header__top">
-          <h1>
-            <a className="app-header__brand" href="/">D<span className="accent">$</span>CPLN</a>{' '}
-            <span className="app-header__app">· {name}</span>
-          </h1>
-          <div className="app-header__actions">
+      <AppHeader
+        name={name}
+        meta={<span className={`status-tag status-tag--${status}`} data-testid="status"><span>{statusText}</span></span>}
+        metaTools={updatedAt ? `updated ${formatTime(updatedAt)}` : null}
+        actions={(
+          <>
             <button
               className="outline secondary icon-button"
               type="button"
@@ -151,13 +151,9 @@ export default function Shell({
               <RefreshCw size={16} strokeWidth={1.8} />
             </button>
             <ThemeToggle />
-          </div>
-        </div>
-        <div className="app-header__meta">
-          <span className={`status-tag status-tag--${status}`} data-testid="status"><span>{statusText}</span></span>
-          <span className="app-header__meta-tools muted">{updatedAt ? `updated ${formatTime(updatedAt)}` : ''}</span>
-        </div>
-      </header>
+          </>
+        )}
+      />
 
       <main>
         <section className="card card--hero" id="overviewCard">

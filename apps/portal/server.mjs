@@ -21,9 +21,7 @@ export const DEFAULT_FUNCTIONS = [
   { path: 'balance', icon: 'dollar', name: 'Balance XLSX', description: 'Budget dashboard backed by the live workbook', kind: 'balance' },
   { path: 'pipelines', icon: 'workflow', name: 'File Pipelines', description: 'Scheduled folder pipelines: standardize, copy, archive', kind: 'pipelines' },
   { path: 'watxt', icon: 'message', name: 'WhatsApp TXT', description: 'Browse, import and merge WhatsApp exports', kind: 'watxt' },
-  { path: 'tasks', icon: 'wrench', name: 'Task Runner', description: 'Config-driven scheduled and on-demand workflows', kind: 'tasks' },
-  { path: 'contacts', icon: 'contact', name: 'Contacts + Calendar', description: 'Scheduled Nextcloud exports', kind: 'scheduled' },
-  { path: 'ytmusic', icon: 'music', name: 'YTMusic Downloads', description: 'Scheduled YouTube Music library downloads', kind: 'scheduled' },
+  { path: 'tasks', icon: 'wrench', name: 'Task Runner', description: 'Scheduled and on-demand workflows', kind: 'tasks' },
 ]
 
 export const DEFAULT_CONFIG = {

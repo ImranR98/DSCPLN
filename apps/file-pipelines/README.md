@@ -4,12 +4,6 @@ Watches configured folders for new media, processes each file with one of the
 file methods below, and **never deletes an original until you explicitly clean
 up** — and then only after verifying the destination copy.
 
-`copy` folders can also be **snapshots**: instead of watching a source, they
-run on demand or on a schedule and copy whole entries (optionally one
-subdirectory of each) from one or more sources. A snapshot can run locally or
-as a Kubernetes Job on another node — e.g. archiving Wine-prefix game saves
-from a gaming PC — alongside the watched media folders.
-
 Configuration can also be mounted from a private `dscpln-config` repo: set `--config` to its `apps/file-pipelines/config.json`; run state stays on the app volume (`DSCPLN_STATE_FILE` for scheduled apps). See `config-template/README.md`.
 
 ## Methods
@@ -18,50 +12,8 @@ Configuration can also be mounted from a private `dscpln-config` repo: set `--co
 |---------------|--------------|
 | `standardize` | Picks a date (`DateTimeOriginal`, else the oldest date-like tag), writes all date tags, renames to `YYYY-MM-DD-HH-MM-SS-(<original-name>).ext`, and copies into the destination. |
 | `snapchat`    | Waits until the folder has been quiet for `settleSeconds` (default 30 min), groups `Snapchat-*.mp4` clips whose timestamps are within `groupWindowSeconds` (default 15s), concatenates + re-encodes each group, standardizes the output, and records the input list in a custom `XMP-media-sync:Inputs` tag on the output. |
-| `copy`        | Byte-verified copy, original name preserved (call recordings). Add `recursive: true` to mirror a whole tree (WhatsApp AllMedia archives) and `onChanged` to control what happens when a same-name source changes. Add `snapshot: true` to run on demand/schedule instead of watching (see below). |
+| `copy`        | Byte-verified copy, original name preserved (call recordings). Add `recursive: true` to mirror a whole tree (WhatsApp AllMedia archives) and `onChanged` to control what happens when a same-name source changes. |
 | `reviewed-audio` | Approval-only audio. With `datePattern` + `concat: true` (default), groups same-day clips and merges them into one MP4 on approval (a 0.1s tone between clips). With `concat: false` or no `datePattern`, standardizes and moves each file individually. Delete trashes the source instead. See Reviewed audio below. |
-
-## Snapshot copies
-
-```jsonc
-{
-  "name": "Wine Game Save Files",
-  "method": "copy",
-  "snapshot": true,
-  "sources": [                                  // one or more; absolute paths on the runner node
-    "/home/me/Games/Installs/Synced",
-    "/home/me/Games/Installs/Unsynced"
-  ],
-  "destination": "/backup/Game Save Files",
-  "subdir": "drive_c/users/steamuser",          // optional: copy only this path within each entry
-  "nameSuffix": " (Wine prefix home dir)",      // optional: destination naming
-  "touch": "lastBackedUp.txt",                  // optional: write the run date here
-  "runner": { "node": "desktop" },                // null = this server
-  "schedule": { "enabled": true, "days": [0], "at": "04:00", "catchUp": true }
-}
-```
-
-Each run copies every top-level entry of every source into
-`<destination>/<entry><nameSuffix>` with `rsync -a` (symlinks preserved; only
-entries containing `subdir` are copied when it is set). A `command` on the
-folder replaces the generated script and sees `{{source}}`,
-`{{destination}}` and `{{staging}}`.
-
-`days` are 0 (Sunday) to 6; an empty list means every day. `catchUp: false`
-skips an occurrence missed while the daemon was off instead of running it on
-startup, and a folder's first-ever tick only seeds the schedule (no surprise
-run). The job image carries bash/rsync/tar/ffmpeg. Remote runs need the
-deployment's shared RWX staging volume (`PIPELINES_STAGING_DIR`), the job
-image (`PIPELINES_IMAGE`) and its claim (`PIPELINES_STAGING_CLAIM`); the
-daemon needs `kubectl` and permission to manage Jobs in its namespace. A
-snapshot copy keeps no per-file state (no cleanup of originals): its history
-is the run log in the UI.
-
-On SELinux-enforcing nodes, host sources may carry labels containers cannot
-read (e.g. `user_home_t`). Set `PIPELINES_SELINUX_TYPE=spc_t` (with
-`PIPELINES_SELINUX_LEVEL=s0` to keep written files category-free for the
-host) to have the Job run with that label instead of relabeling the source
-folders.
 
 ## Reviewed audio (approval only)
 
@@ -158,17 +110,15 @@ merge may be the only copy.
 | path | what lives there |
 |---|---|
 | `src/index.js` | CLI entry (`serve`/`standardize`/`snapconcat`/`concataudio`/`clean-synced`) |
-| `src/daemon.js` | wires the store, queue, watcher, scheduler, snapshot runner and API |
-| `src/config.js` / `src/schedule.js` | config shape/normalization/validation; run schedules |
+| `src/daemon.js` | wires the store, queue, watchers and API |
+| `src/config.js` | config shape/normalization/validation |
 | `src/store.js` | per-folder file state (scan, dedupe/conflict detection, cleanup previews) |
 | `src/queue.js` / `src/processors/` | the work queue and the standardize/snapchat/copy processors |
 | `src/reviewed-audio-flow.js` | approval-only reviewed-audio listing, per-file standardize/move and grouped merge/delete |
-| `src/watchers.js` | chokidar watchers for watched folders (snapshots are skipped) |
-| `src/snapshot.js` | snapshot copies: generated commands + remote Kubernetes Jobs |
-| `src/scheduler.js` | fires snapshot folders on their schedule |
+| `src/watchers.js` | chokidar watchers for watched folders |
 | `src/cleanup.js` | verified cleanup into trash, restore and empty |
 | `src/review.js` / `src/park.js` | manual-placement parking and the review API |
-| `src/api/index.js` | HTTP server setup, `/events` stream, route dispatch |
+| `src/api/index.js` | HTTP server setup and route dispatch |
 | `src/api/{state,folders,review,cleanup,trash}.js` | the API route modules |
 | `ui/src/App.jsx` | dashboard orchestration (state, actions, layout) |
 | `ui/src/components/` | folder/overview/trash/activity cards and the dialogs |
@@ -193,7 +143,7 @@ Paths accept `~` and environment variables. Key fields:
 
 | field | meaning |
 |---|---|
-| `folders[].source` / `sources` / `.destination` | watched folder (or snapshot sources) and the destination |
+| `folders[].source` / `.destination` | watched folder and the destination |
 | `folders[].method` | `standardize` \| `snapchat` \| `copy` \| `reviewed-audio` |
 | `folders[].settleSeconds` | quiet period before processing (snaps: 1800) |
 | `folders[].groupWindowSeconds` | snap grouping window |
@@ -207,14 +157,11 @@ Paths accept `~` and environment variables. Key fields:
 | `folders[].autoProcess` | `placement: manual` only (standardize/snapchat): process new items automatically instead of on demand |
 | `folders[].datePattern` | `reviewed-audio` only (optional): regex extracting the clip/file date; capture groups are joined, non-digits stripped, result must be `YYYYMMDD` |
 | `folders[].concat` | `reviewed-audio` only (default `true`): group by chat/day and merge. `false` (or no `datePattern`) standardizes each file individually |
-| `folders[].snapshot` | `copy` only: run on demand/schedule instead of watching; enables `sources`, `subdir`, `nameSuffix`, `touch`, `runner`, `schedule`, `command` |
-| `folders[].runner` | snapshot only: Kubernetes node to run the Job on (`null` = this server) |
-| `folders[].schedule` | snapshot only: `{enabled, days, at, catchUp}` |
 | `stagingDir` / `reviewDir` / `trashDir` | working area (same filesystem as destinations for atomic renames), parked review outputs, and cleaned-original storage |
 | `trashRetentionDays` | days before trash is swept |
 | `concurrency` | parallel jobs (per-folder jobs are serialized) |
 | `notifySuccess` | failures always notify; successes notify unless `notifySuccess` is off |
-| `paused` / `dryRun` | persisted toggles |
+| `paused` / `dryRun` | runtime toggles persisted in `<logDir>/../state.json`, not in the declarative `config.json` |
 
 Notifications are relayed through the portal (`DSCPLN_PORTAL_URL`, e.g.
 `http://portal:8080` in Kubernetes), whose Settings hold the ntfy URL and

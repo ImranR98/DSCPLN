@@ -250,7 +250,17 @@ test('slugify + state file round-trip (atomic, full output preserved)', () => {
   assert.equal(rec.ok, true);
   assert.equal(rec.summary, 'summary');
   assert.equal(rec.output.length, 25000);
-  assert.ok(fs.existsSync(path.join(SANDBOX, 'data/Dest', '.backup-state-Test_Task_.json')));
+  assert.ok(fs.existsSync(bctl.stateFileFor(t)), 'state is stored under BACKUPCTL_STATE_DIR/tasks');
+});
+
+test('legacy per-destination state is read once after the move to BACKUPCTL_STATE_DIR/tasks', () => {
+  const local = { maindir: path.join(SANDBOX, 'data') };
+  const t = { name: 'Legacy Task', state_dir: '{{maindir}}/LegacyDest' };
+  const legacy = bctl.legacyStateFileFor(t, local);
+  fs.mkdirSync(path.dirname(legacy), { recursive: true });
+  fs.writeFileSync(legacy, JSON.stringify({ ok: true, summary: 'legacy', output: 'old' }));
+  const rec = bctl.loadTaskState(t, local);
+  assert.equal(rec.summary, 'legacy');
 });
 
 test('running marker + staging', () => {
@@ -659,6 +669,46 @@ test('capture: output becomes the summary; paste_done commits', async () => {
   );
   assert.equal(rc, 0);
 });
+
+test('run_as: task shell runs with the requested uid/gid', async (t) => {
+  const uid = process.getuid?.()
+  const gid = process.getgid?.()
+  if (uid === undefined || gid === undefined) {
+    t.skip('POSIX uid/gid not available')
+    return
+  }
+  const run = task('Run As Test', {
+    run_as: { uid, gid },
+    capture: true,
+    commands: 'id -u; id -g',
+  });
+  const [local, tasks] = await bctl.loadConfig(makeConfig([run]))
+  const [ok, summary] = await bctl.runTask(tasks[0], local, [])
+  assert.equal(ok, true, summary)
+  assert.equal(summary, `${uid}\n${gid}`)
+})
+
+test('run_as: staged uploads are readable by the task user', async (t) => {
+  const uid = process.getuid?.()
+  const gid = process.getgid?.()
+  if (uid === undefined || gid === undefined) {
+    t.skip('POSIX uid/gid not available')
+    return
+  }
+  const up = task('Run As Upload', {
+    run_as: { uid, gid },
+    uploads: true,
+    glob: '*.txt',
+    capture: true,
+    commands: 'cat {{uploads}}',
+  })
+  const [local, tasks] = await bctl.loadConfig(makeConfig([up]))
+  await stage(up.name, 'input.txt', 'staged content')
+  const file = path.join(bctl.stagingDir(up.name), 'input.txt')
+  const [ok, summary] = await bctl.runTask(tasks[0], local, [file])
+  assert.equal(ok, true, summary)
+  assert.equal(summary, 'staged content')
+})
 
 test('summary_last_line: last non-command log line', async () => {
   const t = task('SumLast', {

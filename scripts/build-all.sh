@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build and push every D$CPLN app image (or the ones given), print a digest
+# Build the unified D$CPLN image once, tag/push every app tag, print a digest
 # table, and optionally pin the digests into a deployment repo's templates.
 #
 #   scripts/build-all.sh                 # build all
-#   scripts/build-all.sh ytmusic portal  # build a subset
+#   scripts/build-all.sh portal balance  # build a subset (one image, two tags)
 #   scripts/build-all.sh --pin           # build all + rewrite deployment templates
 #
 # REGISTRY/IMAGE_ORG choose where images are pushed (default docker.io/imranrdev).
@@ -22,7 +22,7 @@ APPS=()
 for arg in "$@"; do
     case "$arg" in
         --pin) PIN=1 ;;
-        -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
         *) APPS+=("$arg") ;;
     esac
 done
@@ -39,16 +39,32 @@ if [ "$PIN" = 1 ] && [ -n "$(git -C "$DEPLOY_DIR" status --porcelain 2>/dev/null
     exit 1
 fi
 
-# Every app image builds FROM the shared base, so refresh it first.
-"$ROOT/scripts/build-base.sh"
+ENGINE="${ENGINE:-}"
+if [ -z "$ENGINE" ]; then
+    if command -v podman >/dev/null 2>&1; then ENGINE=podman
+    elif command -v docker >/dev/null 2>&1; then ENGINE=docker
+    else echo "Error: neither podman nor docker found" >&2; exit 1
+    fi
+fi
+
+IMAGE_ORG="${IMAGE_ORG:-imranrdev}"
+REGISTRY="${REGISTRY:-docker.io}"
+BUILD_IMAGE="${REGISTRY}/${IMAGE_ORG}/dscpln-app:latest"
+
+echo "==> Building unified image ($ENGINE, linux/amd64)"
+"$ENGINE" build --platform linux/amd64 -f "$ROOT/docker/app.Dockerfile" -t "$BUILD_IMAGE" "$ROOT"
 
 declare -A DIGESTS=()
 for app in "${APPS[@]}"; do
-    image="${REGISTRY:-docker.io}/${IMAGE_ORG:-imranrdev}/${IMAGE_NAMES[$app]:-dscpln-$app}:latest"
+    [[ -n "${IMAGE_NAMES[$app]:-}" ]] || { echo "Error: unknown app '$app'" >&2; exit 1; }
+    image="${REGISTRY}/${IMAGE_ORG}/${IMAGE_NAMES[$app]}:latest"
     echo "=================== $app ==================="
-    output="$("$ROOT/scripts/build.sh" "$app")"
-    digest="$(grep -oE 'sha256:[0-9a-f]{64}' <<<"$output" | tail -1)"
-    [ -n "$digest" ] || { echo "Error: could not parse digest for $app" >&2; exit 1; }
+    "$ENGINE" tag "$BUILD_IMAGE" "$image"
+    digest_file="$(mktemp)"
+    "$ENGINE" push --digestfile "$digest_file" "$image" >/dev/null
+    digest="$(cat "$digest_file")"
+    rm -f "$digest_file"
+    [ -n "$digest" ] || { echo "Error: push produced no digest for $app" >&2; exit 1; }
     DIGESTS[$app]="$digest"
 done
 

@@ -1,6 +1,6 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { atomicWriteFile } from "./util.js";
+import { atomicWriteFile } from "@dscpln/server-kit";
 
 // Parked ("awaiting review") outputs live under <reviewDir>/<folder>/ as the
 // final standardized file plus a sidecar manifest next to it. Parked files are

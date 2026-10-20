@@ -10,7 +10,7 @@
     "apps/*"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=26"
   },
   "scripts": {
     "lint": "eslint .",
@@ -20,12 +20,10 @@
     "mock": "npm run mock --workspace dscpln-balance-xlsx",
     "ui": "npm run build:ui --workspaces --if-present",
     "balance-xlsx": "npm start --workspace dscpln-balance-xlsx",
-    "contacts-calendar": "npm start --workspace dscpln-contacts",
     "file-pipelines": "npm start --workspace dscpln-file-pipelines",
     "portal": "npm start --workspace dscpln-portal",
     "task-runner": "npm start --workspace dscpln-task-runner",
-    "whatsapp-txt": "npm start --workspace dscpln-watxt",
-    "ytmusic": "npm start --workspace dscpln-ytmusic"
+    "whatsapp-txt": "npm start --workspace dscpln-watxt"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

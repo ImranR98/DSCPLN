@@ -1,18 +1,12 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { atomicWriteFile, expandPath, pathExists } from "./util.js";
-import { normalizeSchedule } from "./schedule.js";
+import { atomicWriteFile, expandPath, pathExists } from "@dscpln/server-kit";
 
 export const METHODS = ["standardize", "snapchat", "copy", "reviewed-audio"];
-// Snapshot copies (`copy` + `snapshot: true`) run on demand/schedule instead
-// of watching a local source; they can list several sources and run as a Job
-// on another node.
-export const isSnapshotCopy = (folder) => Boolean(folder && folder.method === "copy" && folder.snapshot);
 export const MANUAL_PLACEMENT_METHODS = new Set(["standardize", "snapchat", "reviewed-audio"]);
 
 export function defaultConfig() {
   return {
-    configVersion: 1,
     bindHost: "127.0.0.1",
     port: 8791,
     concurrency: 2,
@@ -22,13 +16,6 @@ export function defaultConfig() {
     settleSeconds: 60,
     maxAutoRetries: 3,
     stagingDir: "~/.file-pipelines/staging",
-    pipelineStagingDir: process.env.PIPELINES_STAGING_DIR || "~/.file-pipelines/pipeline-staging",
-    pipelineStagingClaim: process.env.PIPELINES_STAGING_CLAIM || "file-pipelines-staging",
-    pipelineImage: process.env.PIPELINES_IMAGE || "imranrdev/dscpln-file-pipelines:latest",
-    pipelineUid: Number(process.env.PIPELINES_UID ?? 1000),
-    pipelineSeLinuxType: process.env.PIPELINES_SELINUX_TYPE || null,
-    pipelineSeLinuxLevel: process.env.PIPELINES_SELINUX_LEVEL || null,
-    pipelineTimeoutSeconds: 3600,
     reviewDir: "~/.file-pipelines/review",
     trashDir: "~/.file-pipelines/trash",
     logDir: "~/.file-pipelines/logs",
@@ -69,31 +56,19 @@ export function normalizeConfig(raw) {
   cfg.paused = Boolean(cfg.paused);
   cfg.dryRun = Boolean(cfg.dryRun);
   cfg.stagingDir = expandPath(cfg.stagingDir);
-  cfg.pipelineStagingDir = expandPath(cfg.pipelineStagingDir);
-  cfg.pipelineTimeoutSeconds = Math.max(60, Math.floor(asNumber(cfg.pipelineTimeoutSeconds, 3600)));
   cfg.reviewDir = expandPath(cfg.reviewDir);
   cfg.trashDir = expandPath(cfg.trashDir);
   cfg.logDir = expandPath(cfg.logDir);
   cfg.syncLockFile = expandPath(cfg.syncLockFile);
   cfg.folders = cfg.folders.map((folder) => {
-    // Legacy configs expressed run-on-schedule copies as `method: "command"`;
-    // fold them into snapshot copies with a command override.
-    const legacyCommand = folder.method === "command";
     // `voicenotes` was renamed to `reviewed-audio`; accept old configs and
     // normalize them on load/save so they do not need a manual migration.
-    const method = legacyCommand ? "copy" : folder.method === "voicenotes" ? "reviewed-audio" : folder.method;
-    const snapshot = method === "copy" && (legacyCommand || Boolean(folder.snapshot));
-    const sourceList = Array.isArray(folder.sources) ? folder.sources : [];
-    const sources = (sourceList.length ? sourceList : folder.source ? [folder.source] : [])
-      .map((source) => expandPath(source))
-      .filter(Boolean);
+    const method = folder.method === "voicenotes" ? "reviewed-audio" : folder.method;
     return {
       name: String(folder.name ?? "").trim(),
-      source: expandPath(folder.source) || sources[0] || "",
-      sources,
+      source: expandPath(folder.source) || "",
       destination: expandPath(folder.destination),
       method,
-      snapshot,
       filePattern: folder.filePattern || null,
       datePattern: method === "reviewed-audio" ? String(folder.datePattern ?? "").trim() || null : null,
       concat: method === "reviewed-audio" ? folder.concat !== false : true,
@@ -105,19 +80,10 @@ export function normalizeConfig(raw) {
       onChanged: folder.onChanged === "conflict" ? "conflict" : "overwrite",
       // Reviewed audio is approval-only: the source files are the queue, so
       // the normal cleanup/manual-parking flags do not apply.
-      cleanup: snapshot || method === "reviewed-audio" ? false : folder.cleanup !== false,
+      cleanup: method === "reviewed-audio" ? false : folder.cleanup !== false,
       placement: method === "reviewed-audio" ? "manual" : folder.placement === "manual" ? "manual" : "auto",
       autoProcess: method === "reviewed-audio" ? false : Boolean(folder.autoProcess),
       notify: folder.notify === "errors" ? "errors" : "all",
-      // Snapshot copies: optional generated-script override, selective copy
-      // of a subdirectory, destination naming/marker, a remote runner node and
-      // the same schedule shape the other D$CPLN apps use.
-      command: snapshot ? String(folder.command ?? "").trim() || null : null,
-      subdir: snapshot ? String(folder.subdir ?? "").trim().replace(/^\/+|\/+$/g, "") || null : null,
-      nameSuffix: snapshot ? String(folder.nameSuffix ?? "") : "",
-      touch: snapshot ? String(folder.touch ?? "").trim() || null : null,
-      runner: { node: snapshot ? String(folder.runner?.node ?? "").trim() || null : null },
-      schedule: normalizeSchedule(folder.schedule),
     };
   });
   return cfg;
@@ -130,22 +96,9 @@ export function validateConfig(cfg) {
     if (!folder.name) errors.push("folder with empty name");
     if (seen.has(folder.name)) errors.push(`duplicate folder name: ${folder.name}`);
     seen.add(folder.name);
-    if (!folder.sources?.length) errors.push(`folder ${folder.name}: missing source`);
+    if (!folder.source) errors.push(`folder ${folder.name}: missing source`);
     if (!folder.destination) errors.push(`folder ${folder.name}: missing destination`);
     if (!METHODS.includes(folder.method)) errors.push(`folder ${folder.name}: unknown method ${folder.method}`);
-    if (folder.snapshot && folder.method !== "copy") {
-      errors.push(`folder ${folder.name}: snapshot is only supported for copy folders`);
-    }
-    if (!folder.snapshot && folder.sources?.length > 1) {
-      errors.push(`folder ${folder.name}: multiple sources require a snapshot copy`);
-    }
-    if (!folder.snapshot) {
-      if (folder.runner?.node) errors.push(`folder ${folder.name}: a remote runner is only supported for snapshot copies`);
-      if (folder.command) errors.push(`folder ${folder.name}: a command override is only supported for snapshot copies`);
-      if (folder.subdir) errors.push(`folder ${folder.name}: subdir is only supported for snapshot copies`);
-      if (folder.nameSuffix) errors.push(`folder ${folder.name}: nameSuffix is only supported for snapshot copies`);
-      if (folder.touch) errors.push(`folder ${folder.name}: touch is only supported for snapshot copies`);
-    }
     if (folder.method === "reviewed-audio" && folder.datePattern) {
       try {
         new RegExp(folder.datePattern);
@@ -156,14 +109,12 @@ export function validateConfig(cfg) {
     if (folder.placement === "manual" && !MANUAL_PLACEMENT_METHODS.has(folder.method)) {
       errors.push(`folder ${folder.name}: manual placement is only supported for ${[...MANUAL_PLACEMENT_METHODS].join(", ")}`);
     }
-    if (folder.destination) {
+    if (folder.source && folder.destination) {
       const dst = path.resolve(folder.destination);
-      for (const source of folder.sources ?? []) {
-        const src = path.resolve(source);
-        if (src === dst) errors.push(`folder ${folder.name}: source and destination are the same`);
-        if (dst.startsWith(src + path.sep)) errors.push(`folder ${folder.name}: destination is inside source`);
-        if (src.startsWith(dst + path.sep)) errors.push(`folder ${folder.name}: source is inside destination`);
-      }
+      const src = path.resolve(folder.source);
+      if (src === dst) errors.push(`folder ${folder.name}: source and destination are the same`);
+      if (dst.startsWith(src + path.sep)) errors.push(`folder ${folder.name}: destination is inside source`);
+      if (src.startsWith(dst + path.sep)) errors.push(`folder ${folder.name}: source is inside destination`);
     }
   }
   if (!cfg.stagingDir) errors.push("stagingDir is required");
@@ -192,7 +143,10 @@ export async function loadConfig(file) {
 }
 
 export async function saveConfig(file, cfg) {
-  await atomicWriteFile(file, JSON.stringify(cfg, null, 2) + "\n");
+  // `paused`/`dryRun` are runtime toggles persisted in <logDir>/../state.json;
+  // keep the declarative config free of them.
+  const { paused, dryRun, ...clean } = cfg;
+  await atomicWriteFile(file, JSON.stringify(clean, null, 2) + "\n");
 }
 
 export async function ensureRuntimeDirs(cfg, warn = () => {}) {

@@ -3,6 +3,8 @@ import { getPath, setPath } from './paths.js'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
+const fieldId = (path) => `dscpln-${String(path).replace(/[^a-zA-Z0-9_-]/g, '-')}`
+
 const SettingsDialog = forwardRef(function SettingsDialog(
   { fields = [], schedule = true, notice = null, onsave, extra },
   ref,
@@ -74,24 +76,27 @@ const SettingsDialog = forwardRef(function SettingsDialog(
             <section className="settings-section">
               <h3>Schedule</h3>
               <div className="settings-row">
-                <span>Enabled</span>
+                <label htmlFor="dscpln-schedule-enabled">Enabled</label>
                 <input
+                  id="dscpln-schedule-enabled"
                   type="checkbox"
                   checked={Boolean(draft.schedule.enabled)}
                   onChange={(event) => patchSchedule({ enabled: event.target.checked })}
                 />
               </div>
               <div className="settings-row">
-                <span>Catch up missed runs</span>
+                <label htmlFor="dscpln-schedule-catchup">Catch up missed runs</label>
                 <input
+                  id="dscpln-schedule-catchup"
                   type="checkbox"
                   checked={draft.schedule.catchUp !== false}
                   onChange={(event) => patchSchedule({ catchUp: event.target.checked })}
                 />
               </div>
               <div className="field">
-                <span className="field__label">At</span>
+                <label className="field__label" htmlFor="dscpln-schedule-at">At</label>
                 <input
+                  id="dscpln-schedule-at"
                   type="time"
                   value={draft.schedule.at ?? '03:00'}
                   onChange={(event) => patchSchedule({ at: event.target.value })}
@@ -126,9 +131,10 @@ const SettingsDialog = forwardRef(function SettingsDialog(
                 </label>
               ) : (
                 <>
-                  <span className="field__label">{field.label ?? field.path}</span>
+                  <label className="field__label" htmlFor={fieldId(field.path)}>{field.label ?? field.path}</label>
                   {field.type === 'textarea' ? (
                     <textarea
+                      id={fieldId(field.path)}
                       rows={field.rows ?? 5}
                       placeholder={field.placeholder}
                       spellCheck="false"
@@ -137,13 +143,14 @@ const SettingsDialog = forwardRef(function SettingsDialog(
                       onChange={(event) => update(field.path, event.target.value)}
                     ></textarea>
                   ) : field.type === 'select' ? (
-                    <select value={value(field.path)} onChange={(event) => update(field.path, event.target.value)}>
+                    <select id={fieldId(field.path)} value={value(field.path)} onChange={(event) => update(field.path, event.target.value)}>
                       {(field.options ?? []).map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
                     </select>
                   ) : (
                     <input
+                      id={fieldId(field.path)}
                       type={field.type === 'password' ? 'password' : field.type ?? 'text'}
                       placeholder={field.placeholder}
                       autoComplete="off"

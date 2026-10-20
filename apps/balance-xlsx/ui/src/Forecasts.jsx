@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChartNoAxesColumn, LayoutDashboard, RefreshCw, Wrench } from 'lucide-react'
 import {
+  AppHeader,
   formats,
   getJson,
   parseIso,
@@ -441,10 +442,12 @@ export default function Forecasts() {
 
   return (
     <>
-      <header className="app-header">
-        <div className="app-header__top">
-          <h1><a className="app-header__brand" href="/">D<span className="accent">$</span>CPLN <span className="app-header__app">⋅ Balance XLSX</span></a></h1>
-          <div className="app-header__actions">
+      <AppHeader
+        name="Balance XLSX"
+        meta="Forecasts"
+        metaTools={<span className="muted">{headerMeta}{statusText ? ` · ${statusText}` : ''}</span>}
+        actions={(
+          <>
             <a role="button" className="outline secondary icon-button" href="./" title="Dashboard" aria-label="Dashboard">
               <LayoutDashboard size={16} strokeWidth={1.8} />
             </a>
@@ -458,15 +461,9 @@ export default function Forecasts() {
               <RefreshCw size={16} strokeWidth={1.8} />
             </button>
             <ThemeToggle />
-          </div>
-        </div>
-        <div className="app-header__meta">
-          <span>Forecasts</span>
-          <span className="app-header__meta-tools">
-            <span className="muted">{headerMeta}{statusText ? ` · ${statusText}` : ''}</span>
-          </span>
-        </div>
-      </header>
+          </>
+        )}
+      />
 
       <main className={`forecast-page${hasChanges ? ' forecast-page--dirty' : ''}`}>
         {loading ? (

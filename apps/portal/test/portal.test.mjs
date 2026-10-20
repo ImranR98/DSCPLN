@@ -5,7 +5,7 @@ import http from 'node:http'
 import { once } from 'node:events'
 import { createPortalApp } from '../server.mjs'
 
-const EXPECTED_LINKS = ['/balance', '/pipelines', '/watxt', '/tasks', '/contacts', '/ytmusic']
+const EXPECTED_LINKS = ['/balance', '/pipelines', '/watxt', '/tasks']
 
 async function portalFixture(t) {
   const portal = createPortalApp({ dataDir: tempDir('portal-test-'), log: () => {} })
@@ -216,12 +216,17 @@ test('portal shows the next scheduled run for scheduled apps', async (t) => {
   t.after(() => browser.close())
 
   const { base } = await portalFixture(t)
+  await fetch(`${base}/api/config`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ functions: [{ path: 'contacts', icon: 'contact', name: 'Contacts + Calendar', description: 'test', kind: 'scheduled' }] }),
+  })
   const page = await browser.newPage()
   const nextRun = Date.now() + 3 * 3600_000
   await page.route('**/contacts/api/health', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }))
   await page.route('**/contacts/api/state', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ paused: false, nextRun, missed: 0 }) }))
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ paused: false, nextRun, missed: 1 }) }))
 
   await page.goto(`${base}/`)
   await page.waitForFunction(() => {
@@ -230,6 +235,7 @@ test('portal shows the next scheduled run for scheduled apps', async (t) => {
   })
   const text = await page.$eval('[data-testid="next-contacts"]', (node) => node.textContent)
   assert.match(text, /^next /)
+  assert.match(text, /1 missed/)
 })
 
 test('portal tiles show per-app detail lines', async (t) => {
@@ -243,7 +249,7 @@ test('portal tiles show per-app detail lines', async (t) => {
   const { base } = await portalFixture(t)
   const page = await browser.newPage()
   const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
-  for (const path of ['balance', 'pipelines', 'watxt', 'tasks', 'contacts', 'ytmusic']) {
+  for (const path of ['balance', 'pipelines', 'watxt', 'tasks']) {
     await page.route(`**/${path}/api/health`, (route) => route.fulfill(json({ ok: true })))
     await page.route(`**/${path}/api/state`, (route) => route.fulfill(json({ paused: false })))
   }
@@ -254,27 +260,44 @@ test('portal tiles show per-app detail lines', async (t) => {
     route.fulfill(json({ conversations: 3, messages: 42 })))
   await page.route('**/tasks/api/tasks', (route) =>
     route.fulfill(json({ groups: [{ tasks: [{ name: 'a', state: { ok: false } }, { name: 'b', state: { ok: true } }] }] })))
-  await page.route('**/contacts/api/state', (route) =>
-    route.fulfill(json({
-      paused: false,
-      lastRun: { endedAt: Date.now() - 3600_000, ok: true, summary: 'Exported 4 collections' },
-      nextRun: Date.now() + 3600_000,
-      missed: 1,
-    })))
 
   await page.goto(`${base}/`)
   await page.waitForFunction(() =>
-    document.querySelector('[data-testid="detail-contacts"]')?.textContent?.startsWith('last '))
+    document.querySelector('[data-testid="detail-balance"]')?.textContent?.includes('over budget'))
 
   const detailOf = (path) => page.$eval(`[data-testid="detail-${path}"]`, (node) => node.textContent)
-  assert.match(await detailOf('contacts'), /^last .* · OK$/)
   assert.match(await detailOf('balance'), /USD over budget/)
   assert.match(await detailOf('pipelines'), /2 active · 1 errors/)
   assert.match(await detailOf('watxt'), /3 conversations · 42 messages/)
   assert.match(await detailOf('tasks'), /2 tasks · 1 failing/)
+})
 
-  const next = await page.$eval('[data-testid="next-contacts"]', (node) => node.textContent)
-  assert.match(next, /1 missed/)
+test('portal keeps the last known detail when an app goes offline', async (t) => {
+  const browser = await launchBrowser()
+  if (!browser) {
+    t.skip('chromium not available (playwright browsers missing)')
+    return
+  }
+  t.after(() => browser.close())
+
+  const { base } = await portalFixture(t)
+  const page = await browser.newPage()
+  const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+  let online = true
+  await page.route('**/watxt/api/health', (route) =>
+    route.fulfill(online ? json({ ok: true }) : { status: 503, contentType: 'application/json', body: '{"ok":false}' }))
+  await page.route('**/watxt/api/state', (route) =>
+    route.fulfill(json({ conversations: 3, messages: 42 })))
+
+  await page.goto(`${base}/`)
+  await page.waitForFunction(() =>
+    document.querySelector('[data-testid="detail-watxt"]')?.textContent?.includes('3 conversations'))
+
+  online = false
+  await page.click('[aria-label="Refresh status"]')
+  await page.waitForTimeout(300)
+  const detail = await page.$eval('[data-testid="detail-watxt"]', (node) => node.textContent)
+  assert.match(detail, /3 conversations/)
 })
 
 test('portal functions are config-driven', async (t) => {

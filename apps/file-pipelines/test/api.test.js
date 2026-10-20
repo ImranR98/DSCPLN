@@ -28,8 +28,6 @@ async function makeDaemon(options = {}) {
     bindHost: "127.0.0.1",
     port: 0,
     concurrency: 1,
-    paused: false,
-    dryRun: false,
     trashRetentionDays: 30,
     settleSeconds: 60,
     maxAutoRetries: 3,
@@ -74,6 +72,10 @@ test("api: health, state, pause, process-now, config validation", async () => {
       body: JSON.stringify({ paused: true }),
     });
     assert.equal(daemon.config.paused, true);
+    const persisted = JSON.parse(await fsp.readFile(path.join(root, "config.json"), "utf8"));
+    assert.equal("paused" in persisted, false, "runtime toggles stay out of config.json");
+    const runtime = JSON.parse(await fsp.readFile(path.join(root, "state.json"), "utf8"));
+    assert.equal(runtime.paused, true);
     await fetch(`${base}/api/pause`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -161,8 +163,6 @@ async function makeReviewDaemon(options = {}) {
     bindHost: "127.0.0.1",
     port: 0,
     concurrency: 1,
-    paused: false,
-    dryRun: false,
     trashRetentionDays: 30,
     settleSeconds: 0,
     maxAutoRetries: 3,

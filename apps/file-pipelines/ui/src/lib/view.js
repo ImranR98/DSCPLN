@@ -5,16 +5,7 @@ import { formatDuration } from '@dscpln/ui-kit'
 
 export const STATUS_RANK = { error: 0, conflict: 1, queued: 2, processing: 3, pending: 4, review: 5, done: 6, duplicate: 7, discarded: 8, cleaned: 9, ignored: 10 }
 export const METHOD_LABEL = { standardize: 'standardize', snapchat: 'snapchat', copy: 'copy', 'reviewed-audio': 'Reviewed audio' }
-export const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 export const FILE_LIMIT = 300
-
-export const isSnapshot = (folder) => folder.method === 'copy' && folder.snapshot === true
-
-export function scheduleLabel(schedule) {
-  if (!schedule?.enabled) return 'manual'
-  const days = schedule.days?.length ? schedule.days.map((day) => DAY_NAMES[day]).join(', ') : 'every day'
-  return `${days} at ${schedule.at}`
-}
 
 export function folderStats(folder) {
   const counts = folder.counts ?? {}
@@ -40,9 +31,6 @@ export function folderContext(folder) {
     const parts = ['approval only', grouped ? 'grouped by date' : 'per-file standardize', `settle ${formatDuration(folder.settleSeconds)}`]
     if (folder.datePattern) parts.push(folder.datePattern)
     return parts.join(' · ')
-  }
-  if (isSnapshot(folder)) {
-    return ['snapshot copy', folder.runner?.node ? `node ${folder.runner.node}` : 'this server', scheduleLabel(folder.schedule)].join(' · ')
   }
   const parts = [`settle ${formatDuration(folder.settleSeconds)}`]
   if (folder.method === 'snapchat') parts.push(`window ${formatDuration(folder.groupWindowSeconds)}`)

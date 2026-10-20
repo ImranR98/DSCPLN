@@ -175,7 +175,7 @@ Import API: `POST /api/import/upload?batch=&name=` (raw body), `POST /api/import
 ### Docker
 
 ```
-docker build -t whatsapptxt-browser .
+scripts/build.sh whatsapp-txt
 docker run --rm -p 8787:8787 -v "/path/to/WhatsApp TXT:/data" whatsapptxt-browser
 ```
 

@@ -77,25 +77,6 @@ async function shootViewport(page, name) {
   console.log('shot', name)
 }
 
-const ago = (minutes) => Date.now() - minutes * 60_000
-
-function writeState(dir, { summary, minutesAgo = 65 }) {
-  const endedAt = ago(minutesAgo)
-  const startedAt = endedAt - 2000
-  const run = { startedAt, endedAt, durationSec: 2, ok: true, summary, trigger: 'schedule' }
-  const state = {
-    lastRun: run,
-    history: [run],
-    nextRun: null,
-    paused: false,
-    missed: 0,
-    lastScheduledRun: endedAt,
-    runMarker: null,
-    updatedAt: Date.now(),
-  }
-  fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify(state, null, 2))
-}
-
 /* ---------------- portal ---------------- */
 {
   const { createApp } = await import(path.join(REPO, 'packages/server-kit/app.mjs'))
@@ -104,15 +85,13 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
   await once(server, 'listening')
   const base = `http://127.0.0.1:${server.address().port}`
   const page = await newPage()
-  for (const p of ['balance', 'pipelines', 'watxt', 'tasks', 'contacts', 'ytmusic']) {
+  for (const p of ['balance', 'pipelines', 'watxt', 'tasks']) {
     await page.route(`**/${p}/api/health`, (route) => route.fulfill(json({ ok: true })))
   }
   await page.route('**/balance/status', (route) => route.fulfill(json({ overBudget: [] })))
   await page.route('**/pipelines/api/state', (route) => route.fulfill(json({ paused: false, folders: [{ counts: { queued: 2, review: 1 } }] })))
   await page.route('**/watxt/api/state', (route) => route.fulfill(json({ conversations: 12, messages: 8421 })))
   await page.route('**/tasks/api/tasks', (route) => route.fulfill(json({ groups: [{ tasks: [{ state: { ok: true } }, { state: { ok: true } }, { state: { ok: true } }] }] })))
-  await page.route('**/contacts/api/state', (route) => route.fulfill(json({ paused: false, lastRun: { endedAt: ago(120), ok: true }, nextRun: Date.now() + 5 * 86400_000, missed: 0 })))
-  await page.route('**/ytmusic/api/state', (route) => route.fulfill(json({ paused: false, lastRun: { endedAt: ago(400), ok: true }, nextRun: Date.now() + 15 * 3600_000, missed: 0 })))
   await page.goto(`${base}/`)
   await page.waitForSelector('[data-testid="detail-balance"]')
   await shoot(page, 'portal')
@@ -322,68 +301,6 @@ function writeState(dir, { summary, minutesAgo = 65 }) {
   await page.waitForSelector('[data-testid^="task-"]')
   await page.waitForTimeout(600)
   await shoot(page, 'task-runner')
-  await page.close()
-  await new Promise((resolve) => server.close(resolve))
-}
-
-/* ---------------- contacts ---------------- */
-{
-  const dir = tmp('shot-contacts-')
-  fs.mkdirSync(path.join(dir, 'Backups/Manual'), { recursive: true })
-  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
-    nextcloudUrl: 'http://nextcloud',
-    username: 'alice',
-    appPassword: 'app-password-placeholder',
-    destination: path.join(dir, 'Backups/Manual'),
-    collections: [
-      { href: '/remote.php/dav/calendars/alice/personal/', type: 'calendar', displayName: 'Personal', enabled: true, filename: 'Personal.ics' },
-      { href: '/remote.php/dav/calendars/alice/todo/', type: 'calendar', displayName: 'TODO', enabled: true, filename: 'TODO.ics' },
-      { href: '/remote.php/dav/addressbooks/users/alice/contacts/', type: 'addressbook', displayName: 'Contacts', enabled: true, filename: 'Contacts.vcf' },
-    ],
-    git: { enabled: true, message: '' },
-    schedule: { enabled: true, days: [0], at: '03:00', catchUp: true },
-    notifySuccess: true,
-  }, null, 2))
-  writeState(dir, { summary: 'Exported 3 collections' })
-  const { createContactsApp } = await import(path.join(REPO, 'apps/contacts-calendar/server.mjs'))
-  const app = createContactsApp({ dataDir: dir })
-  await app.start()
-  const server = app.app.listen(0, '127.0.0.1')
-  await once(server, 'listening')
-  const base = `http://127.0.0.1:${server.address().port}`
-  const page = await newPage()
-  await page.goto(base)
-  await page.waitForSelector('[data-testid="run-now"]')
-  await shoot(page, 'contacts')
-  await page.click('[aria-label="Settings"]')
-  await page.waitForSelector('dialog[open] .collection-row', { timeout: 10000 })
-  await page.locator('dialog[open]').screenshot({ path: path.join(OUT, 'contacts-settings.png') })
-  console.log('shot contacts-settings')
-  await page.close()
-  await new Promise((resolve) => server.close(resolve))
-}
-
-/* ---------------- ytmusic ---------------- */
-{
-  const dir = tmp('shot-ytmusic-')
-  fs.mkdirSync(path.join(dir, 'Music'), { recursive: true })
-  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
-    musicDir: path.join(dir, 'Music'),
-    browserJson: '{"cookie":"placeholder"}',
-    notifySuccess: false,
-    schedule: { enabled: true, days: [], at: '05:00', catchUp: true },
-  }, null, 2))
-  writeState(dir, { summary: 'Downloaded 3 new tracks · 12 unsorted' })
-  const { createYtmusicApp } = await import(path.join(REPO, 'apps/ytmusic/server.mjs'))
-  const app = createYtmusicApp({ dataDir: dir })
-  await app.start()
-  const server = app.app.listen(0, '127.0.0.1')
-  await once(server, 'listening')
-  const base = `http://127.0.0.1:${server.address().port}`
-  const page = await newPage()
-  await page.goto(base)
-  await page.waitForSelector('[data-testid="run-now"]')
-  await shoot(page, 'ytmusic')
   await page.close()
   await new Promise((resolve) => server.close(resolve))
 }

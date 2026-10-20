@@ -1,14 +1,11 @@
 import { CalendarDays, Import, RefreshCw, Wrench } from 'lucide-react'
 import { formatBytes, formatDateTime } from '@dscpln/ui-kit'
-import { FILE_LIMIT, METHOD_LABEL, folderContext, folderStats, isSnapshot, reviewGroups, scheduleLabel, sortedFiles } from '../lib/view.js'
+import { FILE_LIMIT, METHOD_LABEL, folderContext, folderStats, reviewGroups, sortedFiles } from '../lib/view.js'
 
 export default function FolderCard({
   folder,
-  run,
-  dryRun,
   expanded,
   onToggleExpanded,
-  onRunSnapshot,
   onProcessNow,
   onOpenReview,
   onOpenCleanup,
@@ -20,8 +17,6 @@ export default function FolderCard({
   const reviewCount = folder.method === 'reviewed-audio' ? reviewedAudioGroups.length : stats.review
   const cardClass = `card folder-card folder-card--${folder.method}` +
     (folder.counts.conflict ? ' card--over' : !folder.counts.conflict && stats.issues ? ' card--warn' : '')
-  const snapshot = isSnapshot(folder)
-
   return (
     <section className={cardClass}>
       <div className="card__header">
@@ -33,51 +28,7 @@ export default function FolderCard({
         <span className="card__context">{folderContext(folder)}</span>
       </div>
 
-      {snapshot ? (
-        <>
-          <p className="folder-paths">
-            <code>{(folder.sources?.length ? folder.sources : [folder.source]).join(' · ')}</code>
-            <span className="folder-paths__arrow">→</span>
-            <code>{folder.destination}</code>
-          </p>
-
-          <div className="pipeline-meta">
-            <div className="pipeline-meta__row">
-              <span className="muted">Schedule</span>
-              <span>{scheduleLabel(folder.schedule)}</span>
-            </div>
-            <div className="pipeline-meta__row">
-              <span className="muted">Next run</span>
-              <span>{run?.nextRun ? formatDateTime(run.nextRun) : '—'}</span>
-            </div>
-            <div className="pipeline-meta__row">
-              <span className="muted">Last run</span>
-              <span>
-                {run?.running ? (
-                  <span className="pill pill--running">running…</span>
-                ) : run?.lastRunAt ? (
-                  <>
-                    <span className={`pill pill--${run.ok === false ? 'fail' : 'ok'}`}>{run.ok === false ? 'failed' : 'ok'}</span>
-                    <span className="muted"> {formatDateTime(run.lastRunAt)}</span>
-                  </>
-                ) : (
-                  <span className="muted">never</span>
-                )}
-              </span>
-            </div>
-            {run?.summary ? (
-              <p className="muted pipeline-meta__summary">{run.summary}</p>
-            ) : null}
-          </div>
-
-          <div className="folder-card__actions">
-            <button disabled={run?.running || dryRun} onClick={onRunSnapshot}>
-              {run?.running ? 'Running…' : 'Run copy'}
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
+      <>
           <p className="figure">
             <span className="figure__spend">{stats.pending}</span>
             <span className="figure__meta">
@@ -175,7 +126,6 @@ export default function FolderCard({
             )}
           </details>
         </>
-      )}
     </section>
   )
 }

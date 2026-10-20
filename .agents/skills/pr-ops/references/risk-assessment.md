@@ -10,18 +10,18 @@
 | Grouped non-major batch | one PR, many packages, branch `renovate/npm-deps-(non-major)` | Tier = riskiest member; enumerate the PR body table |
 | 0.x minor | `0.5.3` → `0.6.0` | Tier B/C — 0.x minors may break; read the changelog |
 | Major | `express` 4→5, `chokidar` 4→5, `exiftool-vendored` 35→39, UI majors | Tier C |
-| node base image | `docker/base.Dockerfile` `node:24-slim` → `node:26-slim` | Tier C — every image plus the Node floor for the whole repo |
+| node base image | `docker/app.Dockerfile` `node:26-slim` | Tier C — every app tag plus the Node floor for the whole repo |
 
 ## Impact (what a bump can reach)
 
 - **Shipped runtime** — anything in a workspace's `dependencies`, including
-  `packages/server-kit` (all 7 apps run through it; it owns express for them).
+  `packages/server-kit` (all 5 apps run through it; it owns express for them).
   These end up in the app images.
 - **Build-time** — devDeps used by the UI build (`vite`, `react`,
   `@vitejs/plugin-react`, `@dscpln/ui-kit`): they change the UIs that ship in
   `static/`, not server runtime.
 - **Tooling-only** — root devDeps, `scripts/`, `.github/`, docs: never copied
-  into images (the base Dockerfile copies only the package manifests,
+  into images (the app Dockerfile copies only the package manifests,
   `packages/` and `apps/`).
 - **App consequence** — file-pipelines (moves and deletes user media after
   verification) and task-runner (runs configured bash on user data) are the
@@ -97,7 +97,7 @@
 ## Repo-specific couplings and gotchas
 
 - `packages/server-kit` is express for every app; a server-kit dependency bump
-  reaches all 7 apps, and balance-xlsx / task-runner / whatsapp-txt also carry
+  reaches all 5 apps, and balance-xlsx / task-runner / whatsapp-txt also carry
   their own express dependency.
 - All apps share `vite`/`react`/`@vitejs/plugin-react` versions from their
   devDeps — bump them uniformly.
@@ -121,8 +121,8 @@
   rebuild.
 - **express 4 → 5** — major across server-kit and three apps; path-to-regexp
   route syntax is the migration surface. Tier C; after merge, rebuild every
-  app image.
+  app tag (one unified image).
 - **chokidar 4 → 5 / exiftool-vendored 35 → 39** — file-pipelines runtime deps.
-  Tier C; after merge, rebuild only `dscpln-file-pipelines`.
+  Tier C; after merge, rebuild the `file-pipelines` tag.
 - **node 24-slim → 26-slim** — base image. Tier C; after merge, rebuild all
-  images (the base is an input to every app build).
+  app tags (the node base is the only image layer).

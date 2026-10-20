@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Boxes,
-  Contact,
   DollarSign,
   MessageSquareText,
-  Music,
   RefreshCw,
   Settings,
   Workflow,
   Wrench,
 } from 'lucide-react'
 import {
+  AppHeader,
   formatDateTime,
   formatTime,
   getJson,
@@ -25,10 +24,8 @@ import FunctionCard from './FunctionCard.jsx'
 
 const ICONS = {
   boxes: Boxes,
-  contact: Contact,
   dollar: DollarSign,
   message: MessageSquareText,
-  music: Music,
   workflow: Workflow,
   wrench: Wrench,
 }
@@ -37,9 +34,7 @@ const DEFAULT_FUNCTIONS = [
   { path: 'balance', icon: 'dollar', name: 'Balance XLSX', description: 'Budget dashboard backed by the live workbook', kind: 'balance' },
   { path: 'pipelines', icon: 'workflow', name: 'File Pipelines', description: 'Scheduled folder pipelines: standardize, copy, archive', kind: 'pipelines' },
   { path: 'watxt', icon: 'message', name: 'WhatsApp TXT', description: 'Browse, import and merge WhatsApp exports', kind: 'watxt' },
-  { path: 'tasks', icon: 'wrench', name: 'Task Runner', description: 'Config-driven scheduled and on-demand workflows', kind: 'tasks' },
-  { path: 'contacts', icon: 'contact', name: 'Contacts + Calendar', description: 'Scheduled Nextcloud exports', kind: 'scheduled' },
-  { path: 'ytmusic', icon: 'music', name: 'YTMusic Downloads', description: 'Scheduled YouTube Music library downloads', kind: 'scheduled' },
+  { path: 'tasks', icon: 'wrench', name: 'Task Runner', description: 'Scheduled and on-demand workflows', kind: 'tasks' },
 ]
 
 const EMPTY = { loaded: false, online: true, detail: '', tone: '', next: '', nextTone: '', issue: false }
@@ -154,6 +149,8 @@ const emptyCards = (list = DEFAULT_FUNCTIONS) => Object.fromEntries(list.map((fn
 export default function App() {
   const [functions, setFunctions] = useState(() => withIcons(DEFAULT_FUNCTIONS))
   const [cards, setCards] = useState(() => emptyCards())
+  const cardsRef = useRef(cards)
+  cardsRef.current = cards
   const [checkedAt, setCheckedAt] = useState(null)
   const [busy, setBusy] = useState(false)
   const settingsRef = useRef(null)
@@ -211,7 +208,7 @@ export default function App() {
     await Promise.all(
       list.map(async (fn) => {
         const online = await ping(`${fn.path}/api/health`)
-        const previous = cards[fn.path]
+        const previous = cardsRef.current[fn.path]
         let card = { ...EMPTY, loaded: true, online }
         if (online) {
           try {
@@ -232,6 +229,7 @@ export default function App() {
         next[fn.path] = card
       }),
     )
+    cardsRef.current = next
     setCards(next)
     setCheckedAt(Date.now())
     setBusy(false)
@@ -263,12 +261,22 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const attention = Object.values(cards).filter((card) => card.loaded && (!card.online || card.issue)).length
+
   return (
     <>
-      <header className="app-header">
-        <div className="app-header__top">
-          <h1><a className="app-header__brand" href="/">D<span className="accent">$</span>CPLN</a></h1>
-          <div className="app-header__actions">
+      <AppHeader
+        meta="Every backup and sync workflow, one place."
+        metaTools={(
+          <>
+            <span className={`portal-attention ${attention ? 'is-over' : 'is-ok'}`} data-testid="attention">
+              {checkedAt ? (attention ? `${attention} need attention` : 'all healthy') : 'checking…'}
+            </span>
+            {checkedAt ? <span className="muted" data-testid="checked">checked {formatTime(checkedAt)}</span> : null}
+          </>
+        )}
+        actions={(
+          <>
             <button className="outline secondary icon-button" type="button" aria-label="Notification settings" title="Notification settings"
               onClick={openSettings} data-testid="settings-open">
               <Settings size={16} strokeWidth={1.8} />
@@ -278,15 +286,9 @@ export default function App() {
               <RefreshCw size={16} strokeWidth={1.8} />
             </button>
             <ThemeToggle />
-          </div>
-        </div>
-        <div className="app-header__meta">
-          <span className="muted">Every backup and sync workflow, one place.</span>
-          <span className="app-header__meta-tools">
-            {checkedAt ? <span className="muted" data-testid="checked">checked {formatTime(checkedAt)}</span> : null}
-          </span>
-        </div>
-      </header>
+          </>
+        )}
+      />
 
       <main>
         <div className="portal-grid">

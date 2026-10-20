@@ -24,8 +24,7 @@ export default function FunctionCard({ fn, card }) {
       <span
         className={`portal-card__status ${offline ? 'is-fail' : 'is-ok'}`}
         data-testid={`status-${fn.path}`}
-        hidden={!offline}
-      >unreachable</span>
+      >{offline ? 'unreachable' : 'online'}</span>
     </a>
   )
 }

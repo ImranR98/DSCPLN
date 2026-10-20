@@ -4,7 +4,16 @@ node_modules
 **/node_modules
 **/test
 **/docs
+**/static
+**/DEPLOY.md
+**/*.sync-conflict*
 *.log
 logs
 data
 tmp
+.env
+.env.*
+secrets*
+# Personal runtime configs: never bake these into a public image.
+apps/*/config.json
+apps/task-runner/config.mjs

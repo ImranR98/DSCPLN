@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
-import { getJson, postJson, showToast, ThemeToggle, Toasts, uploadFile as uploadFileRequest, usePolling } from '@dscpln/ui-kit'
+import { AppHeader, getJson, postJson, showToast, ThemeToggle, Toasts, uploadFile as uploadFileRequest, usePolling } from '@dscpln/ui-kit'
 import { useDropzone } from './hooks/useDropzone.js'
 import TaskCard from './components/TaskCard.jsx'
 import ConfirmModal from './components/modals/ConfirmModal.jsx'
@@ -312,10 +312,11 @@ export default function App() {
 
   return (
     <>
-      <header className="app-header">
-        <div className="app-header__top">
-          <h1><a className="app-header__brand" href="/">D<span className="accent">$</span>CPLN</a> <span className="app-header__app">⋅ Task Runner</span></h1>
-          <div className="app-header__actions">
+      <AppHeader
+        name="Task Runner"
+        meta="Config-driven local backups"
+        actions={(
+          <>
             {missingConfig ? (
               <span className="alert-badge">Missing config.mjs — create it (see README.md for the schema)</span>
             ) : null}
@@ -323,12 +324,9 @@ export default function App() {
               <RefreshCw size={16} strokeWidth={1.8} />
             </button>
             <ThemeToggle />
-          </div>
-        </div>
-        <div className="app-header__meta">
-          <span className="muted">Config-driven local backups</span>
-        </div>
-      </header>
+          </>
+        )}
+      />
 
       <main className="page-wrap">
         <section className="card global-drop">
@@ -367,7 +365,7 @@ export default function App() {
           </div>
         ))}
 
-        <p className="footer-note">Run state is stored per task in its destination folder (.backup-state-*.json); dropped files are held in the browser until you click Run.</p>
+        <p className="footer-note">Run state is stored under the Task Runner state directory; dropped files are held in the browser until you click Run.</p>
       </main>
 
       {modals.map((entry) => {

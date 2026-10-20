@@ -3,7 +3,7 @@
 
 import path from "node:path";
 import { emptyTrash, listTrash, restoreTrashFiles } from "../cleanup.js";
-import { expandPath } from "../util.js";
+import { expandPath } from "@dscpln/server-kit";
 import { json, readBody } from "./http.js";
 
 // Restores may only target a directory inside a configured source or

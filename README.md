@@ -10,9 +10,7 @@ small always-on Node apps — one per function — served behind a single host
 | [Balance XLSX](apps/balance-xlsx/README.md) | `/balance` | Budget dashboard, insights and a live forecast planner backed by an Excel workbook (external, token-protected API at `/balance/api`) |
 | [File Pipelines](apps/file-pipelines/README.md) | `/pipelines` | Watches device folders, standardizes media, queues review/trash |
 | [WhatsApp TXT](apps/whatsapp-txt/README.md) | `/watxt` | Browses, imports and merges WhatsApp chat exports |
-| [Task Runner](apps/task-runner/README.md) | `/tasks` | Config-driven workflows: scheduled and on-demand bash tasks, drop zones, prompts |
-| [Contacts + Calendar](apps/contacts-calendar/README.md) | `/contacts` | Scheduled Nextcloud contacts/calendar exports |
-| [YTMusic Downloads](apps/ytmusic/README.md) | `/ytmusic` | Scheduled YouTube Music library downloads |
+| [Task Runner](apps/task-runner/README.md) | `/tasks` | Config-driven workflows: scheduled and on-demand bash tasks, drop zones, prompts, plus the scheduled Contacts/YTMusic jobs |
 
 Each app's README covers its configuration fields, defaults and container
 volumes; [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) covers the shared kits
@@ -48,14 +46,14 @@ All images use synthetic demo data — regenerate them with
 |---|---|
 | ![D$CPLN portal](docs/screenshots/portal.png) | ![Balance dashboard](docs/screenshots/balance-dashboard.png) |
 | ![File Pipelines](docs/screenshots/file-pipelines.png) | ![WhatsApp TXT](docs/screenshots/whatsapp.png) |
-| ![Task Runner](docs/screenshots/task-runner.png) | ![Contacts + Calendar settings](docs/screenshots/contacts-settings.png) |
-| ![YTMusic Downloads](docs/screenshots/ytmusic.png) | ![Balance insights](docs/screenshots/balance-insights.png) |
-| ![Balance forecasts](docs/screenshots/balance-forecasts.png) | ![Contacts + Calendar](docs/screenshots/contacts.png) |
+| ![Task Runner](docs/screenshots/task-runner.png) | ![Balance insights](docs/screenshots/balance-insights.png) |
+| ![Balance forecasts](docs/screenshots/balance-forecasts.png) | |
 
 ## Run with Docker
 
 Images are published as `imranrdev/dscpln-<app>` (portal, balance, file-pipelines,
-watxt, task-runner, contacts, ytmusic). `docker-compose.example.yaml` shows the
+watxt, task-runner). All five tags are built from the same unified image; the
+deployment's `APP` env selects the server. `docker-compose.example.yaml` shows the
 expected volumes and ports for a few of them:
 
 ```sh
@@ -69,14 +67,14 @@ route `/<name>` to that container; otherwise leave it empty.
 
 ## Development
 
-Requires Node 22+ (24 recommended).
+Requires Node 26+.
 
 ```sh
 npm install            # installs every workspace
 npm test               # builds every UI and runs every test suite
 npm run ui             # build all UIs only
 npm run balance-xlsx   # start Balance XLSX locally (http://localhost:3300)
-npm run ytmusic        # ...or any app by name
+npm run task-runner    # ...or any app by name
 ```
 
 Each app has an `apps/<app>/ui/` front end (React + Vite, built into the

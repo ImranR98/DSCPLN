@@ -43,7 +43,9 @@ const gitCommit = (dir, message) => {
     GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME ?? process.env.GIT_AUTHOR_NAME ?? 'D$CPLN',
     GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL ?? process.env.GIT_AUTHOR_EMAIL ?? 'dscpln@localhost',
   }
-  const run = (args) => spawnSync('git', args, { cwd: dir, encoding: 'utf8', env })
+  // The Task Runner is root while the backup repository is owned by the login
+  // user; mark this repo safe for the duration of the commit.
+  const run = (args) => spawnSync('git', ['-c', `safe.directory=${dir}`, ...args], { cwd: dir, encoding: 'utf8', env })
   if (!fs.existsSync(path.join(dir, '.git'))) run(['init', '-q'])
   run(['add', '-A', '.', ':(exclude).backup-state-*'])
   const commit = run(['commit', '-q', '-m', message])
@@ -77,7 +79,7 @@ for (const collection of enabled) {
   const data = await exportCollection({
     nextcloudUrl: config.nextcloudUrl,
     username: config.username,
-    appPassword: config.appPassword,
+    appPassword: process.env.CONTACTS_APP_PASSWORD ?? config.appPassword,
     href: collection.href,
   })
   if (data.length === 0) {

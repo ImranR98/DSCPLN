@@ -26,6 +26,9 @@ Subcommands (rc-checked; run with `bash lib.sh <cmd> ...`):
   git-commit DIR [MSG]                        init/add/commit (state files excluded)
   validate-fresh DIR [MAX_AGE_SECONDS]        fail unless the newest export is fresh
   prune-exports DIR [--keep-newer]            delete all but the newest export dir
+  remote-subdirs DEST SUFFIX SUBDIR SSH_TARGET MARKER ROOT...
+                                              sync <entry>/<subdir> from remote roots
+  python-venv DIR REQUIREMENTS               create/refresh a reusable Python venv
 
 Or `source lib.sh` and call the bctl_* functions directly (see the task config
 examples in config.example.mjs and the README).
@@ -47,9 +50,10 @@ bctl_rsync_delete() { rsync -aq --delete "$@"; }
 bctl_git_commit() {  # DIR [MSG] — state files excluded; empty commits tolerated
   local d="$1" msg="${2:-D\$CPLN · $(date)}" out
   mkdir -p "$d"
-  git -C "$d" init -q
-  git -C "$d" add -A . ':(exclude).backup-state-*'
-  out=$(git -C "$d" commit -q -m "$msg" 2>&1) && return 0
+  # The runner is root while most data repos are owned by the login user.
+  git -C "$d" -c safe.directory="$d" init -q
+  git -C "$d" -c safe.directory="$d" add -A . ':(exclude).backup-state-*'
+  out=$(git -C "$d" -c safe.directory="$d" commit -q -m "$msg" 2>&1) && return 0
   case "$out" in
     *"nothing to commit"*|*"nothing added to commit"*) return 0 ;;
   esac
@@ -85,6 +89,46 @@ bctl_adb_pull() {  # TARGET DEST REMOTE_PATH... — stream a tar of remote paths
   local target="$1" dest="$2"; shift 2
   mkdir -p "$dest"
   adb -s "$target" exec-out tar -C /sdcard -c "$@" | tar -x -C "$dest"
+}
+
+bctl_python_venv() {  # DIR REQUIREMENTS — create/refresh a reusable venv
+  local dir="$1" req="$2"
+  if [[ ! -x "$dir/bin/python" ]]; then
+    log "Creating Python venv $dir..."
+    python3 -m venv --clear "$dir"
+  fi
+  "$dir/bin/pip" install -q -r "$req" >/dev/null
+}
+
+bctl_remote_subdirs() {  # DEST SUFFIX SUBDIR SSH_TARGET MARKER ROOT... — sync remote tree entries
+  # Copy <entry>/<subdir> for every top-level directory under each remote ROOT
+  # into DEST/<entry><SUFFIX> over rsync/ssh, optionally writing MARKER.
+  # Set RSYNC_RSH (e.g. "ssh -i /ssh/id_ed25519 -o BatchMode=yes") in the task.
+  local dest="$1" suffix="$2" subdir="$3" target="$4" marker="$5"; shift 5
+  local ssh_cmd="${RSYNC_RSH:-ssh}" root name out tmp found=0
+  [[ $# -gt 0 ]] || { log "bctl_remote_subdirs: no remote roots" >&2; return 2; }
+  mkdir -p "$dest"
+  for root in "$@"; do
+    while IFS= read -r name; do
+      [[ -n "$name" ]] || continue
+      found=1
+      out="$dest/$name$suffix"
+      # Stage the remote copy next to the destination, then merge locally:
+      # a dropped SSH connection never leaves a half-updated backup entry.
+      tmp=$(mktemp -d "$dest/.bctl-sync.XXXXXX")
+      log "Syncing $target:$root/$name/$subdir → $out"
+      if ! rsync -a -e "$ssh_cmd" "$target:$root/$name/$subdir/" "$tmp/"; then
+        rm -rf "$tmp"
+        log "rsync failed for $target:$root/$name/$subdir" >&2
+        return 1
+      fi
+      mkdir -p "$out"
+      rsync -a "$tmp/" "$out/"
+      rm -rf "$tmp"
+      [[ -z "$marker" ]] || date > "$out/$marker"
+    done < <($ssh_cmd "$target" "find '$root' -mindepth 1 -maxdepth 1 -type d -exec test -d '{}/$subdir' \\; -printf '%f\\n'" 2>/dev/null)
+  done
+  [[ $found -eq 1 ]] || { log "bctl_remote_subdirs: no matching entries under $*" >&2; return 1; }
 }
 
 bctl_ensure_pipelines() {  # CLI — install the CLI's dependencies once
@@ -125,7 +169,7 @@ bctl_standardize_into() {  # SRC DEST PIPELINES_CLI
     return 0
   fi
   mkdir -p "$dest"
-  if ! bctl_pipelines "$cli" standardize "$tmp"; then
+  if ! bctl_pipelines "$cli" standardize -n "$tmp"; then
     log "Standardize failed for $src" >&2
     rm -rf "$tmp"
     return 1
@@ -145,7 +189,9 @@ bctl_import_pair() {  # SRC DEST PIPELINES_CLI — clean already-synced + standa
   bctl_pipelines "$cli" clean-synced --delete "$src" "$dest"
   log "Importing $(basename "$src") → $dest..."
   bctl_standardize_into "$src" "$dest" "$cli"
-  find "$src" -maxdepth 1 -type f -delete
+  # Only remove the top-level files standardize_into actually processed;
+  # hidden files are left alone (the helper's glob skips them).
+  find "$src" -maxdepth 1 -type f ! -name '.*' -delete
 }
 
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
@@ -229,6 +275,18 @@ case "${1:-}" in
       exit 1
     fi
     log "Synced sources → $dest"
+    ;;
+
+  remote-subdirs)
+    # lib.sh remote-subdirs DEST SUFFIX SUBDIR SSH_TARGET MARKER ROOT...
+    shift
+    bctl_remote_subdirs "$@"
+    ;;
+
+  python-venv)
+    # lib.sh python-venv DIR REQUIREMENTS
+    shift
+    bctl_python_venv "$@"
     ;;
 
   encrypt)

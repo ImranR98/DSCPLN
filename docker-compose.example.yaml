@@ -14,6 +14,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      APP: portal
       DSCPLN_CONFIG_FILE: /config/config.json
     volumes:
       - ./dscpln-config/apps/portal:/config
@@ -23,6 +24,7 @@ services:
     ports:
       - "3300:3300"
     environment:
+      APP: balance
       DSCPLN_CONFIG: /config/config.json
     volumes:
       - ./dscpln-config/apps/balance-xlsx:/config:ro
@@ -32,6 +34,8 @@ services:
 
   file-pipelines:
     image: imranrdev/dscpln-file-pipelines:latest
+    environment:
+      APP: file-pipelines
     ports:
       - "8791:8791"
     volumes:
@@ -42,36 +46,12 @@ services:
       - /path/to/phone-sync:/phone-sync:ro
       - /path/to/media:/media
 
-  ytmusic:
-    image: imranrdev/dscpln-ytmusic:latest
-    ports:
-      - "8082:8080"
-    environment:
-      DSCPLN_CONFIG_FILE: /config/config.json
-      DSCPLN_STATE_FILE: /data/state.json
-    volumes:
-      - ./dscpln-config/apps/ytmusic:/config
-      - ./ytmusic-data:/data
-      - /path/to/music:/home/node/Music
-
-  contacts-calendar:
-    image: imranrdev/dscpln-contacts:latest
-    ports:
-      - "8083:8080"
-    environment:
-      DSCPLN_CONFIG_FILE: /config/config.json
-      DSCPLN_STATE_FILE: /data/state.json
-    volumes:
-      - ./dscpln-config/apps/contacts-calendar:/config
-      - ./contacts-data:/data
-      # Exports are written here (default destination is ~/Backups/Manual):
-      - /path/to/backups:/home/node/Backups/Manual
-
   task-runner:
     image: imranrdev/dscpln-task-runner:latest
     ports:
       - "8085:8085"
     environment:
+      APP: task-runner
       BACKUPCTL_CONFIG_FILE: /config-src/config.mjs
       BACKUPCTL_STATE_DIR: /data/state
       BACKUPCTL_TMP_DIR: /data/tmp

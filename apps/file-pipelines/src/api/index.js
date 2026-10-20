@@ -1,6 +1,5 @@
-// The HTTP API: server setup (base-path mounting, HTML injection for the UI,
-// CSRF origin check), the /events stream, and dispatch to the route modules in
-// this directory (state, folders, review, cleanup, trash).
+// The HTTP API: server setup (base-path mounting, HTML injection, the kit's
+// CSRF guard) and dispatch to the route modules in this directory.
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,7 +18,6 @@ const ROUTE_HANDLERS = [handleState, handleFolders, handleReview, handleCleanup,
 export class ApiServer {
   constructor(daemon) {
     this.daemon = daemon;
-    this.clients = new Set();
     this.server = null;
   }
 
@@ -30,7 +28,7 @@ export class ApiServer {
       pageTitle: null, // the page carries its own <title>
       basePath,
       staticDir: PUBLIC_DIR,
-      jsonBody: false, // the API reads its own bodies (and /events streams)
+      jsonBody: false, // the API reads its own bodies
       routes: (router) => {
         router.use("/api", (req, res) => {
           this.#handleApi(req, res).catch((err) => {
@@ -42,7 +40,6 @@ export class ApiServer {
         });
       },
     });
-    this.daemon.store.on("update", () => this.#broadcast({ type: "update" }));
     await new Promise((resolve, reject) => {
       this.server = app.listen(this.daemon.config.port, this.daemon.config.bindHost, resolve);
       this.server.once("error", reject);
@@ -50,37 +47,7 @@ export class ApiServer {
   }
 
   async close() {
-    for (const res of this.clients) {
-      try {
-        res.end();
-      } catch {
-        // ignore
-      }
-    }
-    this.clients.clear();
     if (this.server) await new Promise((resolve) => this.server.close(resolve));
-  }
-
-  #broadcast(event) {
-    const payload = `data: ${JSON.stringify(event)}\n\n`;
-    for (const res of this.clients) {
-      try {
-        res.write(payload);
-      } catch {
-        this.clients.delete(res);
-      }
-    }
-  }
-
-  #checkOrigin(req) {
-    const origin = req.headers.origin;
-    if (!origin) return true;
-    try {
-      const host = new URL(origin).host;
-      return host === req.headers.host;
-    } catch {
-      return false;
-    }
   }
 
   async #handleApi(req, res) {
@@ -89,20 +56,6 @@ export class ApiServer {
     const method = req.method ?? "GET";
 
     if (method === "GET" && pathname === "/health") return json(res, 200, { ok: true });
-
-    if (method === "GET" && pathname === "/events") {
-      res.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-store",
-        Connection: "keep-alive",
-      });
-      res.write("data: {\"type\":\"hello\"}\n\n");
-      this.clients.add(res);
-      req.on("close", () => this.clients.delete(res));
-      return;
-    }
-
-    if (method !== "GET" && !this.#checkOrigin(req)) return json(res, 403, { error: "cross-origin request rejected" });
 
     const ctx = { req, res, url, daemon: this.daemon };
     for (const handler of ROUTE_HANDLERS) {

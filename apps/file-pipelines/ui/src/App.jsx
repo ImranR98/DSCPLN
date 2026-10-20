@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { FlaskConical, Pause, Play, RefreshCw, Settings } from 'lucide-react'
-import { formatTime, getJson, postJson, putJson, showToast, ThemeToggle, Toasts, usePolling } from '@dscpln/ui-kit'
+import { AppHeader, formatTime, getJson, postJson, putJson, showToast, ThemeToggle, Toasts, usePolling } from '@dscpln/ui-kit'
 import ActivityCard from './components/ActivityCard.jsx'
 import FolderCard from './components/FolderCard.jsx'
 import OverviewCard from './components/OverviewCard.jsx'
@@ -117,7 +117,6 @@ export default function App() {
   }
 
   const processNow = (folderName, files) => act(`api/process/${encodeURIComponent(folderName)}`, files ? { files } : {})
-  const runSnapshot = (folderName) => act(`api/snapshot/${encodeURIComponent(folderName)}`)
   const fileAction = (folder, file, action, extra = {}) => act(`api/actions/${encodeURIComponent(folder)}/${encodeURIComponent(file)}`, { action, ...extra })
   const togglePaused = () => act('api/pause', { paused: !state.paused })
   const toggleDryRun = () => act('api/dry-run', { dryRun: !state.dryRun })
@@ -395,8 +394,6 @@ export default function App() {
       draft.folders = [...draft.folders, {
         name: '', source: '', destination: '', method: 'standardize', settleSeconds: 60,
         groupWindowSeconds: 15, placement: 'auto', onChanged: 'overwrite', notify: 'all',
-        snapshot: false, sources: [], subdir: '', nameSuffix: '', touch: '',
-        command: '', runner: { node: '' }, schedule: { enabled: false, days: [], at: '03:00', catchUp: true },
       }]
     })
   }
@@ -407,17 +404,6 @@ export default function App() {
     config.trashRetentionDays = Number(config.trashRetentionDays)
     config.settleSeconds = Number(config.settleSeconds)
     for (const folder of config.folders) {
-      if (folder.method === 'copy' && folder.snapshot) {
-        folder.sources = (Array.isArray(folder.sources) ? folder.sources : []).map((source) => String(source).trim()).filter(Boolean)
-        folder.source = folder.sources[0] ?? ''
-        folder.runner = { node: String(folder.runner?.node ?? '').trim() || null }
-        folder.subdir = String(folder.subdir ?? '').trim() || null
-        folder.nameSuffix = String(folder.nameSuffix ?? '')
-        folder.touch = String(folder.touch ?? '').trim() || null
-        folder.command = String(folder.command ?? '').trim() || null
-        folder.cleanup = false
-        continue
-      }
       folder.settleSeconds = Number(folder.settleSeconds)
       folder.groupWindowSeconds = Number(folder.groupWindowSeconds)
       folder.filePattern ||= null
@@ -437,10 +423,17 @@ export default function App() {
   /* ---------- render ---------- */
   return (
     <>
-      <header className="app-header">
-        <div className="app-header__top">
-          <h1><a className="app-header__brand" href="/">D<span className="accent">$</span>CPLN</a> <span className="app-header__app">⋅ File Pipelines</span></h1>
-          <div className="app-header__actions">
+      <AppHeader
+        name="File Pipelines"
+        meta={<span className={`status-tag status-tag--${statusTone}`}><span>{statusText}</span></span>}
+        metaTools={(
+          <>
+            <span className="muted">{totals.pending} pending · {totals.issues} issue{totals.issues === 1 ? '' : 's'}</span>
+            <span className="muted">{state ? `updated ${formatTime(now)}` : ''}</span>
+          </>
+        )}
+        actions={(
+          <>
             <button className="outline secondary icon-button" title={state?.paused ? 'Resume processing' : 'Pause processing'} aria-label="Pause/Resume" onClick={togglePaused}>
               {state?.paused ? <Play size={16} strokeWidth={1.8} /> : <Pause size={16} strokeWidth={1.8} />}
             </button>
@@ -454,16 +447,9 @@ export default function App() {
               <RefreshCw size={16} strokeWidth={1.8} />
             </button>
             <ThemeToggle />
-          </div>
-        </div>
-        <div className="app-header__meta">
-          <span className={`status-tag status-tag--${statusTone}`}><span>{statusText}</span></span>
-          <span className="app-header__meta-tools">
-            <span className="muted">{totals.pending} pending · {totals.issues} issue{totals.issues === 1 ? '' : 's'}</span>
-            <span className="muted">{state ? `updated ${formatTime(now)}` : ''}</span>
-          </span>
-        </div>
-      </header>
+          </>
+        )}
+      />
 
       <main>
         <OverviewCard
@@ -479,8 +465,6 @@ export default function App() {
             <FolderCard
               key={folder.name}
               folder={folder}
-              run={state?.runs?.[folder.name] ?? null}
-              dryRun={state?.dryRun}
               expanded={expanded}
               onToggleExpanded={(open) => {
                 setExpanded((current) => {
@@ -490,7 +474,6 @@ export default function App() {
                   return next
                 })
               }}
-              onRunSnapshot={() => runSnapshot(folder.name)}
               onProcessNow={() => processNow(folder.name)}
               onOpenReview={openReview}
               onOpenCleanup={() => openCleanup(folder.name)}

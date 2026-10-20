@@ -2,7 +2,7 @@
 # App registry shared by scripts/build.sh and scripts/build-all.sh.
 # Sourced, never executed directly.
 
-ALL_APPS=(portal balance-xlsx file-pipelines whatsapp-txt task-runner contacts-calendar ytmusic)
+ALL_APPS=(portal balance-xlsx file-pipelines whatsapp-txt task-runner)
 
 # app -> image name (repo under IMAGE_ORG)
 declare -A IMAGE_NAMES=(
@@ -10,8 +10,6 @@ declare -A IMAGE_NAMES=(
     [file-pipelines]=dscpln-file-pipelines
     [whatsapp-txt]=dscpln-watxt
     [task-runner]=dscpln-task-runner
-    [contacts-calendar]=dscpln-contacts
-    [ytmusic]=dscpln-ytmusic
     [portal]=dscpln-portal
 )
 
@@ -21,7 +19,5 @@ declare -A TEMPLATES=(
     [file-pipelines]=file-pipelines.yaml
     [whatsapp-txt]=whatsapp-txt-browser.yaml
     [task-runner]=backupctl.yaml
-    [contacts-calendar]=contacts-calendar.yaml
-    [ytmusic]=ytmusic.yaml
     [portal]=portal.yaml
 )

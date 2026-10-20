@@ -14,13 +14,21 @@ export function slugify(name) {
   return String(name).replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
-export function stateFileFor(task, local) {
+// Run state is centralized under BACKUPCTL_STATE_DIR/tasks/ so it never lands
+// in a data/backup tree. `state_dir` remains the task's default move/ingest
+// destination and the location of legacy state files.
+export function stateFileFor(task) {
+  return path.join(STATE_DIR, 'tasks', `${slugify(task.name)}.json`);
+}
+
+// Pre-centralization location, read once for a seamless upgrade.
+export function legacyStateFileFor(task, local) {
   const base = expand(resolve(task.state_dir, local));
   return path.join(base, `.backup-state-${slugify(task.name)}.json`);
 }
 
 export function saveTaskState(task, local, ok, summary, output = '') {
-  const file = stateFileFor(task, local);
+  const file = stateFileFor(task);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const data = {
     task: task.name,
@@ -36,13 +44,15 @@ export function saveTaskState(task, local, ok, summary, output = '') {
 }
 
 export function loadTaskState(task, local) {
-  const file = stateFileFor(task, local);
-  if (!fs.existsSync(file)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    return null;
+  for (const file of [stateFileFor(task), legacyStateFileFor(task, local)]) {
+    if (!fs.existsSync(file)) continue;
+    try {
+      return JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch {
+      // try the next location
+    }
   }
+  return null;
 }
 
 function writeRunning(list) {

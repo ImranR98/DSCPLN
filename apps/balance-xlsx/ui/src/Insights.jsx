@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { LayoutDashboard, TrendingUp, Wrench } from 'lucide-react'
 import {
+  AppHeader,
   formats,
   getJson,
   startOfDay,
@@ -304,10 +305,12 @@ export default function Insights() {
 
   return (
     <>
-      <header className="app-header">
-        <div className="app-header__top">
-          <h1><a className="app-header__brand" href="/">D<span className="accent">$</span>CPLN <span className="app-header__app">⋅ Balance XLSX</span></a></h1>
-          <div className="app-header__actions">
+      <AppHeader
+        name="Balance XLSX"
+        meta="Insights"
+        metaTools={<span className="muted">{rangeLabel}</span>}
+        actions={(
+          <>
             <a role="button" className="outline secondary icon-button" href="./" title="Dashboard" aria-label="Dashboard">
               <LayoutDashboard size={16} strokeWidth={1.8} />
             </a>
@@ -318,15 +321,9 @@ export default function Insights() {
               <Wrench size={16} strokeWidth={1.8} />
             </a>
             <ThemeToggle />
-          </div>
-        </div>
-        <div className="app-header__meta">
-          <span>Insights</span>
-          <span className="app-header__meta-tools">
-            <span className="muted">{rangeLabel}</span>
-          </span>
-        </div>
-      </header>
+          </>
+        )}
+      />
 
       <main className="insights">
         <section className="card insights-filters" aria-label="Date range and comparison">

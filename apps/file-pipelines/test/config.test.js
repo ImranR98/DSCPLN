@@ -41,80 +41,38 @@ test("an existing config is loaded without being rewritten", async () => {
   }
 });
 
-test("config: snapshot copies carry sources, runner and schedule", () => {
+test("config: copy folders normalize their tree options", () => {
   const cfg = normalizeConfig({
     ...defaultConfig(),
     folders: [
       {
-        name: "wine",
+        name: "calls",
         method: "copy",
-        snapshot: true,
-        sources: ["/home/user/Games/Installs/Synced", "/home/user/Games/Installs/Unsynced"],
-        destination: "/home/user/Main/Backups/Game Save Files",
-        subdir: "drive_c/users/steamuser",
-        nameSuffix: " (Wine prefix home dir)",
-        touch: "lastBackedUp.txt",
-        runner: { node: "desktop" },
-        schedule: { enabled: true, days: [1, 3], at: "4:30" },
+        source: "/phone/Calls",
+        destination: "/backup/Calls",
+        recursive: true,
+        onChanged: "conflict",
+        cleanup: false,
       },
     ],
   });
   validateConfig(cfg);
   const folder = cfg.folders[0];
   assert.equal(folder.method, "copy");
-  assert.equal(folder.snapshot, true);
-  assert.deepEqual(folder.sources, [
-    "/home/user/Games/Installs/Synced",
-    "/home/user/Games/Installs/Unsynced",
-  ]);
-  assert.equal(folder.source, "/home/user/Games/Installs/Synced");
-  assert.equal(folder.subdir, "drive_c/users/steamuser");
-  assert.equal(folder.nameSuffix, " (Wine prefix home dir)");
-  assert.equal(folder.touch, "lastBackedUp.txt");
+  assert.equal(folder.recursive, true);
+  assert.equal(folder.onChanged, "conflict");
   assert.equal(folder.cleanup, false);
-  assert.deepEqual(folder.runner, { node: "desktop" });
-  assert.deepEqual(folder.schedule, { enabled: true, days: [1, 3], at: "04:30", catchUp: true });
-  assert.equal(cfg.pipelineStagingClaim, "file-pipelines-staging");
-  assert.ok(cfg.pipelineStagingDir.endsWith(".file-pipelines/pipeline-staging"));
+  assert.equal(folder.source, "/phone/Calls");
 });
 
-test("config: legacy command folders migrate to snapshot copies", () => {
-  const cfg = normalizeConfig({
-    ...defaultConfig(),
-    folders: [
-      {
-        name: "wine",
-        source: "/srv/games",
-        destination: "/backup/games",
-        method: "command",
-        command: "rsync -a {{source}}/ {{destination}}/",
-      },
-    ],
-  });
-  validateConfig(cfg);
-  const folder = cfg.folders[0];
-  assert.equal(folder.method, "copy");
-  assert.equal(folder.snapshot, true);
-  assert.equal(folder.command, "rsync -a {{source}}/ {{destination}}/");
-  assert.deepEqual(folder.sources, ["/srv/games"]);
-});
-
-test("config: snapshot fields are validated", () => {
+test("config: a source is required for every folder method", () => {
   const base = (folder) => ({ ...defaultConfig(), folders: [folder] });
   assert.throws(
-    () => validateConfig(base({ name: "a", source: "/s", destination: "/d", method: "copy", runner: { node: "desktop" } })),
-    /only supported for snapshot copies/,
-  );
-  assert.throws(
-    () => validateConfig(base({ name: "b", sources: ["/s1", "/s2"], destination: "/d", method: "copy" })),
-    /multiple sources require a snapshot copy/,
-  );
-  assert.throws(
-    () => validateConfig(base({ name: "c", source: "/s", destination: "/d", method: "standardize", snapshot: true })),
-    /snapshot is only supported for copy folders/,
-  );
-  assert.throws(
-    () => validateConfig(base({ name: "d", destination: "/d", method: "copy", snapshot: true })),
+    () => validateConfig(base({ name: "d", destination: "/d", method: "copy" })),
     /missing source/,
+  );
+  assert.throws(
+    () => validateConfig(base({ name: "e", source: "/s", destination: "/d", method: "nope" })),
+    /unknown method/,
   );
 });

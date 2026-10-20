@@ -10,20 +10,21 @@ Determine impact from `gh pr diff <n> --name-only`, not from the lockfile alone:
 
 | Changed | Rebuild |
 |---|---|
-| `docker/base.Dockerfile`, `packages/*` (`server-kit`, `ui-kit`, `test-kit`) | all 7 apps (`scripts/build-all.sh` with no app args) |
-| `apps/<app>/package.json` (deps or devDeps), `apps/<app>/ui/**`, `apps/<app>/Dockerfile` | that app |
+| `docker/app.Dockerfile`, `packages/*` (`server-kit`, `ui-kit`, `test-kit`) | all 5 app tags (`scripts/build-all.sh`) |
+| `apps/<app>/package.json` (deps or devDeps), `apps/<app>/ui/**` | that app tag (`scripts/build.sh <app>`) |
 | `package-lock.json` | follow the manifest that changed (the rows above) |
 | root `package.json` devDeps only (eslint, playwright-core, …), `scripts/`, `docs/`, `.github/`, tests | nothing — never ships |
 
-Apps: `portal balance-xlsx file-pipelines whatsapp-txt task-runner
-contacts-calendar ytmusic` (`scripts/images.sh`).
+Apps: `portal balance-xlsx file-pipelines whatsapp-txt task-runner`
+(`scripts/images.sh`).
 
 ## Rebuild & pin
 
-Every app image builds FROM the shared base (`docker/base.Dockerfile`, full
-workspace install), so `build-all.sh` refreshes the base first. Pinning writes
-each digest into `$INFRA_DIR/targets/srv0/k3s-apps/templates/<app>.yaml` via the
-`TEMPLATES` map in `scripts/images.sh`.
+Every app tag is the same unified image (`docker/app.Dockerfile`); the
+deployment's `APP` env selects the server. `build-all.sh` builds it once and
+pushes every tag. Pinning writes each digest into
+`$INFRA_DIR/targets/srv0/k3s-apps/templates/<app>.yaml` via the `TEMPLATES` map
+in `scripts/images.sh`.
 
 Preconditions:
 

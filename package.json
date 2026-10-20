@@ -2,7 +2,7 @@
   "name": "dscpln-balance-xlsx",
   "version": "1.0.0",
   "description": "Balance XLSX: budget tracker backed by an Excel workbook, with a dashboard, insights, forecast scenarios, and push notifications",
-  "main": "server.js",
+  "main": "server.mjs",
   "workspaces": [],
   "scripts": {
     "build:ui": "vite build",
@@ -15,7 +15,6 @@
   "license": "MIT",
   "dependencies": {
     "@dscpln/server-kit": "*",
-    "axios": "^1.5.1",
     "exceljs": "^4.4.0",
     "express": "^5.0.0"
   },

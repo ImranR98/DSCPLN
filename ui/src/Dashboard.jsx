@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChartNoAxesColumn, RefreshCw, SlidersHorizontal, TrendingUp, Wrench } from 'lucide-react'
-import { formats, getJson, postJson, startOfDay, toIso, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
+import { AppHeader, formats, getJson, postJson, startOfDay, toIso, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
 import { moneyFor } from './lib/money.js'
 import { renderMonthly } from './lib/chart.js'
 import { sortNewestFirst, formatCount } from './lib/transactions.js'
@@ -159,10 +159,14 @@ export default function Dashboard() {
 
   return (
     <>
-      <header className="app-header">
-        <div className="app-header__top">
-          <h1><a className="app-header__brand" href="/">D<span className="accent">$</span>CPLN</a> <span className="app-header__app">⋅ Balance XLSX</span></h1>
-          <div className="app-header__actions">
+      <AppHeader
+        name="Balance XLSX"
+        meta={<span>{contextLabel}</span>}
+        metaTools={(
+          <span className="muted">{[updatedLabel, excludedCount ? `${excludedCount} not counted` : ''].filter(Boolean).join(' · ')}</span>
+        )}
+        actions={(
+          <>
             <a role="button" className="outline secondary icon-button" href="forecasts" title="Forecasts" aria-label="Forecasts">
               <TrendingUp size={16} strokeWidth={1.8} />
             </a>
@@ -179,15 +183,9 @@ export default function Dashboard() {
               <RefreshCw size={16} strokeWidth={1.8} />
             </button>
             <ThemeToggle />
-          </div>
-        </div>
-        <div className="app-header__meta">
-          <span>{contextLabel}</span>
-          <span className="app-header__meta-tools">
-            <span className="muted">{[updatedLabel, excludedCount ? `${excludedCount} not counted` : ''].filter(Boolean).join(' · ')}</span>
-          </span>
-        </div>
-      </header>
+          </>
+        )}
+      />
 
       <main className="layout">
         <div className="layout__main">

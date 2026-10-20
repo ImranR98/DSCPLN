@@ -28,6 +28,7 @@ export default function App() {
   const [restoreDialog, setRestoreDialog] = useState(null)
   const [reviewDialog, setReviewDialog] = useState(null)
   const [reviewBusy, setReviewBusy] = useState('')
+  const [reviewBulkBusy, setReviewBulkBusy] = useState('')
   const [settingsDraft, setSettingsDraft] = useState(null)
 
   const notify = (message, tone = 'success') => showToast(message, tone)
@@ -191,13 +192,17 @@ export default function App() {
     ? `${group.folder}\u0000file\u0000${group.file}`
     : `${group.folder}\u0000${group.chat}\u0000${group.date}`
 
+  const reviewedAudioItemLabel = (group) => group.file || `${group.chat || '(root)'} / ${group.date}`
+
+  const reviewedAudioRequest = (group, action) => postJson(`api/review/reviewed-audio/${action}`, group.file
+    ? { folder: group.folder, file: group.file }
+    : { folder: group.folder, chat: group.chat, date: group.date })
+
   const approveReviewedAudio = async (group) => {
     const key = reviewedAudioGroupKey(group)
     setReviewBusy(key)
     try {
-      const result = await postJson('api/review/reviewed-audio/approve', group.file
-        ? { folder: group.folder, file: group.file }
-        : { folder: group.folder, chat: group.chat, date: group.date })
+      const result = await reviewedAudioRequest(group, 'approve')
       notify(result?.alreadyPlaced
         ? 'Already merged; source clips moved to trash.'
         : group.file
@@ -222,9 +227,7 @@ export default function App() {
     const key = reviewedAudioGroupKey(group)
     setReviewBusy(key)
     try {
-      await postJson('api/review/reviewed-audio/delete', group.file
-        ? { folder: group.folder, file: group.file }
-        : { folder: group.folder, chat: group.chat, date: group.date })
+      await reviewedAudioRequest(group, 'delete')
       notify(group.file ? 'File moved to trash.' : 'Audio clips moved to trash.')
       await openReview()
       refresh()
@@ -233,6 +236,80 @@ export default function App() {
       notify(`Delete failed: ${err.message}`, 'error')
     } finally {
       setReviewBusy('')
+    }
+  }
+
+  const approveAllReviewedAudio = async (groups) => {
+    if (!groups.length) return
+    if (groups.some((group) => group.settling)) {
+      notify('Wait for all items to settle before approving them.', 'error')
+      return
+    }
+    const allFiles = groups.every((group) => group.file)
+    const allGroups = groups.every((group) => !group.file)
+    const actionLabel = allFiles ? 'Standardize & move all' : allGroups ? 'Merge & move all' : 'Approve all'
+    const message = allFiles
+      ? `Standardize and move all ${groups.length} files to the destination?`
+      : allGroups
+        ? `Merge and move all ${groups.length} groups to the destination?`
+        : `Approve all ${groups.length} reviewed audio items and move them to the destination?`
+    if (!(await askConfirm('Confirm', message, actionLabel, 'primary'))) return
+    setReviewBulkBusy('approve')
+    const failures = []
+    let done = 0
+    try {
+      for (const group of groups) {
+        try {
+          await reviewedAudioRequest(group, 'approve')
+          done += 1
+        } catch (err) {
+          failures.push(`${reviewedAudioItemLabel(group)}: ${err.message}`)
+        }
+      }
+      await openReview()
+      refresh()
+      refreshTrash()
+      if (failures.length) {
+        notify(`${done} of ${groups.length} approved. ${failures.length} failed: ${failures[0]}`, 'error')
+      } else {
+        notify(`${done} reviewed audio ${done === 1 ? 'item' : 'items'} moved to the destination.`)
+      }
+    } finally {
+      setReviewBulkBusy('')
+    }
+  }
+
+  const deleteAllReviewedAudio = async (groups) => {
+    if (!groups.length) return
+    if (groups.some((group) => group.settling)) {
+      notify('Wait for all items to settle before deleting them.', 'error')
+      return
+    }
+    const fileCount = groups.reduce((sum, group) => sum + (group.files?.length ?? 1), 0)
+    const message = `Move ${fileCount} source file${fileCount === 1 ? '' : 's'} from ${groups.length} reviewed audio item${groups.length === 1 ? '' : 's'} to trash?`
+    if (!(await askConfirm('Confirm', message, 'Delete all'))) return
+    setReviewBulkBusy('delete')
+    const failures = []
+    let done = 0
+    try {
+      for (const group of groups) {
+        try {
+          await reviewedAudioRequest(group, 'delete')
+          done += 1
+        } catch (err) {
+          failures.push(`${reviewedAudioItemLabel(group)}: ${err.message}`)
+        }
+      }
+      await openReview()
+      refresh()
+      refreshTrash()
+      if (failures.length) {
+        notify(`${done} of ${groups.length} deleted. ${failures.length} failed: ${failures[0]}`, 'error')
+      } else {
+        notify(`${fileCount} source file${fileCount === 1 ? '' : 's'} moved to trash.`)
+      }
+    } finally {
+      setReviewBulkBusy('')
     }
   }
 
@@ -497,8 +574,11 @@ export default function App() {
           reviewFolders={reviewFolders}
           reviewedAudio={reviewDialog.reviewedAudio ?? []}
           busy={reviewBusy}
+          bulkBusy={reviewBulkBusy}
           onApproveReviewedAudio={approveReviewedAudio}
           onDeleteReviewedAudio={deleteReviewedAudio}
+          onApproveAllReviewedAudio={approveAllReviewedAudio}
+          onDeleteAllReviewedAudio={deleteAllReviewedAudio}
           onReviewAction={reviewAction}
           onReviewActionAll={reviewActionAll}
           onClose={() => setReviewDialog(null)}

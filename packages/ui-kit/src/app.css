@@ -1097,6 +1097,11 @@ button svg, a[role="button"] svg {
     margin: 0 0 0.5rem;
 }
 
+.review-bulk-actions {
+    justify-content: flex-start;
+    margin: 0 0 0.5rem;
+}
+
 .review-groups {
     display: flex;
     flex-direction: column;

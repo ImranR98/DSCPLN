@@ -78,6 +78,10 @@ Open **Review**, listen to the source clip(s), and choose one action per item:
 - **Delete** — move the source clip/file to trash; no destination file is
   written.
 
+The Reviewed audio section also offers **Standardize & move all** (or **Merge &
+move all** for grouped folders) and **Delete all**. Both ask for confirmation,
+process items one at a time, and report any failures without stopping the rest.
+
 Each approval is a single transaction, so a discarded item cannot come back
 after a restart. In grouped mode, if a destination merge already exists for the
 same chat/day, the merge is accepted as already done when its XMP input list

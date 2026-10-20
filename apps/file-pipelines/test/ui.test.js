@@ -93,6 +93,7 @@ test("ui: review a reviewed-audio group and merge it into the destination", { sk
     const group = dialog.locator('[data-testid="review-group-reviewed-audio-20190529"]');
     await group.waitFor({ state: "visible", timeout: 30_000 });
     assert.match(await group.textContent(), /201301 · 20190529/);
+    assert.match(await dialog.getByTestId("review-approve-all").textContent(), /Merge & move all \(1\)/);
     assert.equal(await group.locator("audio").count(), 2, "each clip in a group gets an audio player");
     assert.match(await group.locator("audio").first().getAttribute("src"), /review\/audio\/reviewed-audio\//);
     await group.getByRole("button", { name: "Merge & move" }).click();
@@ -125,6 +126,68 @@ test("ui: per-file reviewed-audio review standardizes and moves one file", { ski
     const placed = await waitFor(async () => (await fsp.readdir(dest)).length === 1);
     assert.equal(placed, true, "the standardized file must land in the destination");
     assert.deepEqual(await fsp.readdir(path.join(root, "src", "201301")), []);
+  } finally {
+    await browser.close();
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ui: standardize and move all reviewed-audio files asks for confirmation", { skip: !CAN_RUN }, async () => {
+  const { root, daemon, dest, base } = await makeSetup({ datePattern: null, clips: 2 });
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.goto(base);
+    const card = page.locator(".folder-card", { hasText: "reviewed-audio" }).first();
+    await card.getByRole("button", { name: /^Review/ }).click();
+    const dialog = page.locator('[data-testid="review-dialog"]');
+    const approveAll = dialog.getByTestId("review-approve-all");
+    await approveAll.waitFor({ state: "visible", timeout: 30_000 });
+    assert.match(await approveAll.textContent(), /Standardize & move all \(2\)/);
+    await approveAll.click();
+
+    const confirm = page.locator('[data-testid="confirm-dialog"]');
+    await confirm.waitFor({ state: "visible" });
+    assert.match(await confirm.textContent(), /Standardize and move all 2 files/);
+    await confirm.getByRole("button", { name: "Standardize & move all" }).click();
+
+    const moved = await waitFor(async () => (await fsp.readdir(dest)).length === 2);
+    assert.equal(moved, true, "both files must land in the destination");
+    assert.deepEqual(await fsp.readdir(path.join(root, "src", "201301")), []);
+  } finally {
+    await browser.close();
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ui: delete all reviewed-audio files asks for confirmation", { skip: !CAN_RUN }, async () => {
+  const { root, daemon, dest, base } = await makeSetup({ datePattern: null, clips: 2 });
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.goto(base);
+    const card = page.locator(".folder-card", { hasText: "reviewed-audio" }).first();
+    await card.getByRole("button", { name: /^Review/ }).click();
+    const dialog = page.locator('[data-testid="review-dialog"]');
+    const deleteAll = dialog.getByTestId("review-delete-all");
+    await deleteAll.waitFor({ state: "visible", timeout: 30_000 });
+    assert.match(await deleteAll.textContent(), /Delete all \(2\)/);
+    await deleteAll.click();
+
+    const confirm = page.locator('[data-testid="confirm-dialog"]');
+    await confirm.waitFor({ state: "visible" });
+    assert.match(await confirm.textContent(), /Move 2 source files from 2 reviewed audio items to trash/);
+    await confirm.getByRole("button", { name: "Delete all" }).click();
+
+    const deleted = await waitFor(async () => {
+      const files = await fsp.readdir(path.join(root, "src", "201301"));
+      const review = await (await fetch(`${base}/api/review`)).json();
+      return files.length === 0 && review.reviewedAudio.length === 0;
+    });
+    assert.equal(deleted, true, "all source files must be moved to trash");
+    assert.deepEqual(await fsp.readdir(dest), []);
   } finally {
     await browser.close();
     await daemon.stop();

@@ -5,13 +5,47 @@ const groupKey = (group) => group.file
   ? `${group.folder}\u0000file\u0000${group.file}`
   : `${group.folder}\u0000${group.chat}\u0000${group.date}`
 
+function BulkActions({ groups, busy, bulkBusy, onApproveAll, onDeleteAll }) {
+  const settling = groups.some((group) => group.settling)
+  const disabled = settling || Boolean(busy) || Boolean(bulkBusy)
+  const allFiles = groups.every((group) => group.file)
+  const allGroups = groups.every((group) => !group.file)
+  const approveLabel = allFiles ? 'Standardize & move all' : allGroups ? 'Merge & move all' : 'Approve all'
+  const settleTitle = settling ? 'Wait for all items to settle first' : undefined
+
+  return (
+    <div className="folder-card__actions review-bulk-actions">
+      <button
+        data-testid="review-approve-all"
+        disabled={disabled}
+        title={settleTitle}
+        onClick={() => onApproveAll(groups)}
+      >
+        {bulkBusy === 'approve' ? 'Working…' : `${approveLabel} (${groups.length})`}
+      </button>
+      <button
+        className="outline secondary"
+        data-testid="review-delete-all"
+        disabled={disabled}
+        title={settleTitle}
+        onClick={() => onDeleteAll(groups)}
+      >
+        {bulkBusy === 'delete' ? 'Working…' : `Delete all (${groups.length})`}
+      </button>
+    </div>
+  )
+}
+
 export default function ReviewDialog({
   entries,
   reviewFolders,
   reviewedAudio,
   busy,
+  bulkBusy,
   onApproveReviewedAudio,
   onDeleteReviewedAudio,
+  onApproveAllReviewedAudio,
+  onDeleteAllReviewedAudio,
   onReviewAction,
   onReviewActionAll,
   onClose,
@@ -34,10 +68,17 @@ export default function ReviewDialog({
         {reviewedAudio.length ? (
           <section className="review-section">
             <h3>Reviewed audio</h3>
+            <BulkActions
+              groups={reviewedAudio}
+              busy={busy}
+              bulkBusy={bulkBusy}
+              onApproveAll={onApproveAllReviewedAudio}
+              onDeleteAll={onDeleteAllReviewedAudio}
+            />
             <div className="review-groups">
               {reviewedAudio.map((group) => {
                 const key = groupKey(group)
-                const disabled = group.settling || busy === key
+                const disabled = group.settling || Boolean(busy) || Boolean(bulkBusy)
                 const label = group.file || `${group.chat || '(root)'} · ${group.date}`
                 const files = group.files ?? (group.file ? [group.file] : [])
                 const meta = group.file

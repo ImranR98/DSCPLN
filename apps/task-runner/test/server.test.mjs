@@ -836,6 +836,58 @@ test('API: /api/tasks returns groups in config order', async () => {
   await close();
 });
 
+test('API: schedule overrides persist and update the effective schedule', async () => {
+  const name = 'Schedule UI Test'
+  const t = task(name, { commands: 'true' })
+  await bootWith(makeConfig([t]))
+  const { req, close } = await api()
+  try {
+    const saved = await req('PUT', `/api/schedule/${encodeURIComponent(name)}`, {
+      enabled: true,
+      days: [1, 3],
+      at: '07:30',
+      catchUp: false,
+    })
+    assert.equal(saved.status, 200)
+    assert.deepEqual(saved.json.schedule, { enabled: true, days: [1, 3], at: '07:30', catchUp: false })
+    assert.ok(saved.json.next_run)
+    assert.equal(saved.json.scheduled, true)
+
+    const list = await req('GET', '/api/tasks')
+    const shown = list.json.groups[0].tasks.find((entry) => entry.name === name)
+    assert.equal(shown.schedulable, true)
+    assert.equal(shown.schedule.enabled, true)
+    assert.equal(shown.schedule.at, '07:30')
+
+    const overrides = bctl.loadScheduleOverrides()
+    assert.equal(overrides[name].at, '07:30')
+
+    const disabled = await req('PUT', `/api/schedule/${encodeURIComponent(name)}`, { enabled: false, at: '07:30' })
+    assert.equal(disabled.status, 200)
+    assert.equal(disabled.json.schedule.enabled, false)
+    assert.equal(disabled.json.next_run, null)
+  } finally {
+    bctl.saveScheduleOverride(name, null)
+    bctl.stopSchedulers()
+    await close()
+  }
+
+  const uploadTask = task('Schedule Needs Upload', {
+    uploads: true,
+    glob: '*.txt',
+    commands: 'true',
+  })
+  await bootWith(makeConfig([uploadTask]))
+  const second = await api()
+  try {
+    const rejected = await second.req('PUT', `/api/schedule/${encodeURIComponent('Schedule Needs Upload')}`, { enabled: true, at: '07:30' })
+    assert.equal(rejected.status, 400)
+    assert.match(rejected.json.detail, /cannot be scheduled/)
+  } finally {
+    await second.close()
+  }
+})
+
 test('API: upload validation, detect scoring + ambiguity, CSRF guard', async () => {
   const t1 = task('Detect A', { group: 'G', uploads: true, glob: 'takeout-*.zip', commands: 'true' });
   const t2 = task('Detect B', { group: 'G', uploads: true, glob: '*.zip', commands: 'true' });

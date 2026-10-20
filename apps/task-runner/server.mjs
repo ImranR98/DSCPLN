@@ -23,6 +23,7 @@ import {
   Notifier,
   normalizeSpec,
   occurrenceAfter,
+  occurrenceBefore,
   Scheduler,
 } from '@dscpln/server-kit';
 import {
@@ -43,10 +44,12 @@ import {
 export { attachBrowserWebSocket };
 import {
   clearRunning,
+  loadScheduleOverrides,
   loadScheduleState,
   loadTaskState,
   markRunning,
   runningMarker,
+  saveScheduleOverride,
   saveTaskState,
   scheduleStore,
   slugify,
@@ -71,6 +74,14 @@ const MAX_UPLOAD_BYTES = 50 * 1024 * 1024 * 1024;
 const SCHEDULES_ENABLED = process.env.BACKUPCTL_SCHEDULES !== '0';
 const SCHEDULERS = new Map();
 const NOTIFY_RELAY = String(process.env.DSCPLN_PORTAL_URL ?? '').trim();
+
+// Fields that make a task require a person at the keyboard; such tasks cannot
+// be put on a schedule. Kept in sync with config-loader's scheduled validation.
+const SCHEDULE_BLOCKERS = ['uploads', 'prompts', 'require', 'browser', 'commit_dir'];
+
+export function isSchedulable(task) {
+  return !SCHEDULE_BLOCKERS.some((field) => Boolean(task[field]));
+}
 
 async function notifyTask(task, ok, summary) {
   const mode = task.notify ?? 'never';
@@ -325,7 +336,19 @@ export async function boot(configPath = undefined) {
       throw e;
     }
   }
+  applyScheduleOverrides();
   TASK_MAP = new Map(TASK_LIST.map((t) => [t.name, t]));
+}
+
+function applyScheduleOverrides() {
+  const overrides = loadScheduleOverrides();
+  for (const task of TASK_LIST) {
+    if (!Object.prototype.hasOwnProperty.call(overrides, task.name)) continue;
+    if (!isSchedulable(task)) continue;
+    const spec = normalizeSpec(overrides[task.name]);
+    if (spec.enabled && !spec.at) continue;
+    task.schedule = spec;
+  }
 }
 
 // run slots: any number of tasks can run in parallel; tasks sharing a
@@ -411,25 +434,39 @@ function runScheduledTask(task) {
   startRun(task.name, {}, 'schedule');
 }
 
+export function startSchedulerForTask(task) {
+  stopSchedulerForTask(task.name);
+  if (!SCHEDULES_ENABLED) return false;
+  const schedule = task.schedule ? normalizeSpec(task.schedule) : null;
+  if (!schedule?.enabled) return false;
+  if (task.host !== 'any' && task.host !== instanceHost()) return false;
+  const store = scheduleStore(task.name);
+  const scheduler = new Scheduler({
+    getSpec: () => task.schedule,
+    onDue: () => runScheduledTask(task),
+    isBusy: () => RUNS.has(task.name) || isQueued(task.name, task.serial_key) || serialKeyHeld(task.serial_key),
+    onMissed: () => store.markMissed(),
+    store,
+    log: (line) => console.log(`[schedule] ${task.name}: ${line}`),
+  });
+  scheduler.start();
+  SCHEDULERS.set(task.name, scheduler);
+  return true;
+}
+
+export function stopSchedulerForTask(taskName) {
+  const scheduler = SCHEDULERS.get(taskName);
+  if (!scheduler) return false;
+  scheduler.stop();
+  SCHEDULERS.delete(taskName);
+  return true;
+}
+
 export function startSchedulers() {
   if (!SCHEDULES_ENABLED) return [];
   const started = [];
   for (const task of TASK_LIST) {
-    const schedule = task.schedule ? normalizeSpec(task.schedule) : null;
-    if (!schedule?.enabled) continue;
-    if (task.host !== 'any' && task.host !== instanceHost()) continue;
-    const store = scheduleStore(task.name);
-    const scheduler = new Scheduler({
-      getSpec: () => task.schedule,
-      onDue: () => runScheduledTask(task),
-      isBusy: () => RUNS.has(task.name) || isQueued(task.name, task.serial_key) || serialKeyHeld(task.serial_key),
-      onMissed: () => store.markMissed(),
-      store,
-      log: (line) => console.log(`[schedule] ${task.name}: ${line}`),
-    });
-    scheduler.start();
-    SCHEDULERS.set(task.name, scheduler);
-    started.push(task.name);
+    if (startSchedulerForTask(task)) started.push(task.name);
   }
   if (started.length) console.log(`Schedules enabled: ${started.join(', ')}`);
   return started;
@@ -487,6 +524,7 @@ export function taskJson(t) {
     export_url: t.export_url,
     avail,
     avail_reason: reason,
+    schedulable: isSchedulable(t),
     queued,
     state: stateJson,
     pill: running ? 'running' : pill,
@@ -566,7 +604,7 @@ export function createApp(options = {}) {
 
       // JSON body parsing only for the endpoints that need it; /api/upload
       // streams raw bytes straight to disk (JSON-typed uploads included).
-      router.use(['/api/run', '/api/cancel', '/api/paste_done'], express.json({ limit: '1mb' }))
+      router.use(['/api/run', '/api/cancel', '/api/paste_done', '/api/schedule'], express.json({ limit: '1mb' }))
 
       // most-specific pattern wins; ties listed as `ambiguous`
       router.post('/api/detect', (req, res) => {
@@ -582,6 +620,38 @@ export function createApp(options = {}) {
         const best = Math.max(...candidates.map((c) => c.score))
         const tied = candidates.filter((c) => c.score === best).map((c) => c.task)
         res.json({ result: { task: tied[0], ambiguous: tied } })
+      })
+
+      router.put('/api/schedule/:taskName', async (req, res) => {
+        const task = TASK_MAP.get(req.params.taskName)
+        if (!task) return res.status(404).json({ detail: 'Unknown task' })
+        if (!isSchedulable(task)) {
+          return res.status(400).json({ detail: 'This task needs manual input or browser interaction and cannot be scheduled' })
+        }
+        const raw = req.body && typeof req.body === 'object' ? req.body : {}
+        const spec = normalizeSpec({
+          enabled: raw.enabled === true,
+          days: raw.days,
+          at: raw.at,
+          catchUp: raw.catchUp !== false,
+        })
+        if (spec.enabled && !spec.at) {
+          return res.status(400).json({ detail: 'A time (HH:MM) is required when the schedule is enabled' })
+        }
+        try {
+          saveScheduleOverride(task.name, spec)
+          task.schedule = spec
+          // Do not replay occurrences from before the edit. The next new
+          // occurrence after the chosen time is the first one that fires.
+          const latest = occurrenceBefore(spec, new Date())
+          if (latest != null) await scheduleStore(task.name).setLastScheduledRun(latest)
+          stopSchedulerForTask(task.name)
+          const scheduled = startSchedulerForTask(task)
+          console.log(`[schedule] ${task.name}: ${spec.enabled ? 'enabled' : 'disabled'}${spec.at ? ` at ${spec.at}` : ''}`)
+          res.json({ schedule: spec, next_run: spec.enabled ? occurrenceAfter(spec, new Date()) : null, scheduled })
+        } catch (err) {
+          res.status(500).json({ detail: err.message })
+        }
       })
 
       router.get('/api/metrics', (req, res) => {

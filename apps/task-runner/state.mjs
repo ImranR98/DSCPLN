@@ -9,6 +9,7 @@ import { expand, resolve } from './template.mjs';
 export const STATE_DIR = process.env.BACKUPCTL_STATE_DIR ?? path.join(os.homedir(), '.backupctl');
 const RUNNING_FILE = path.join(STATE_DIR, 'running.json');
 const SCHEDULE_DIR = path.join(STATE_DIR, 'schedules');
+const SCHEDULE_OVERRIDES_FILE = path.join(STATE_DIR, 'schedule-overrides.json');
 
 export function slugify(name) {
   return String(name).replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -146,4 +147,26 @@ export function scheduleStore(taskName) {
       saveScheduleState(taskName, current);
     },
   };
+}
+
+/* UI schedule overrides: effective schedules for tasks, separate from the
+ * read-only config checkout. Keys are task names; values are normalized specs. */
+export function loadScheduleOverrides() {
+  if (!fs.existsSync(SCHEDULE_OVERRIDES_FILE)) return {};
+  try {
+    const data = JSON.parse(fs.readFileSync(SCHEDULE_OVERRIDES_FILE, 'utf8'));
+    return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveScheduleOverride(taskName, spec) {
+  const all = loadScheduleOverrides();
+  if (spec == null) delete all[taskName];
+  else all[taskName] = spec;
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  const tmp = SCHEDULE_OVERRIDES_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(all, null, 2), { mode: 0o600 });
+  fs.renameSync(tmp, SCHEDULE_OVERRIDES_FILE);
 }

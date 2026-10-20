@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
-import { AppHeader, getJson, postJson, showToast, ThemeToggle, Toasts, uploadFile as uploadFileRequest, usePolling } from '@dscpln/ui-kit'
+import { AppHeader, getJson, postJson, putJson, showToast, ThemeToggle, Toasts, uploadFile as uploadFileRequest, usePolling } from '@dscpln/ui-kit'
 import { useDropzone } from './hooks/useDropzone.js'
 import TaskCard from './components/TaskCard.jsx'
+import ScheduleModal from './components/ScheduleModal.jsx'
 import ConfirmModal from './components/modals/ConfirmModal.jsx'
 import FieldsModal from './components/modals/FieldsModal.jsx'
 import PickerModal from './components/modals/PickerModal.jsx'
@@ -19,6 +20,7 @@ export default function App() {
   const [liveLogs, setLiveLogs] = useState({})
   const [now, setNow] = useState(Date.now())
   const [modals, setModals] = useState([])
+  const [scheduleTask, setScheduleTask] = useState(null)
 
   const uploadAborts = useRef(new Map())
 
@@ -294,6 +296,14 @@ export default function App() {
     }
   }
 
+  const saveSchedule = async (task, schedule) => {
+    const saved = await putJson(`api/schedule/${encodeURIComponent(task.name)}`, schedule)
+    setScheduleTask(null)
+    toast('Schedule saved.')
+    await loadTasks()
+    return saved
+  }
+
   useEffect(() => {
     const total = Object.values(liveLogs).reduce((sum, lines) => sum + lines.length, 0)
     const pre = document.querySelector('dialog[open] .log-box')
@@ -356,6 +366,7 @@ export default function App() {
                   onToggleBrowser={(name) => setOpenBrowsers((current) => ({ ...current, [name]: !current[name] }))}
                   onQueueFiles={queueFiles}
                   onRemoveQueued={removeQueued}
+                  onSchedule={setScheduleTask}
                   onRun={runTask}
                   onCancel={cancelRun}
                   onLog={openLog}
@@ -367,6 +378,14 @@ export default function App() {
 
         <p className="footer-note">Run state is stored under the Task Runner state directory; dropped files are held in the browser until you click Run.</p>
       </main>
+
+      {scheduleTask ? (
+        <ScheduleModal
+          task={scheduleTask}
+          onClose={() => setScheduleTask(null)}
+          onSave={(schedule) => saveSchedule(scheduleTask, schedule)}
+        />
+      ) : null}
 
       {modals.map((entry) => {
         const close = () => closeModal(entry.id)

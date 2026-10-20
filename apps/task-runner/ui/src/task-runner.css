@@ -209,6 +209,7 @@ main.page-wrap {
 
 .card-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--space-2);
     align-items: center;
     margin-top: auto;
@@ -283,4 +284,25 @@ main.page-wrap {
     .task-grid {
         grid-template-columns: 1fr;
     }
+}
+
+.schedule-editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.schedule-toggle,
+.schedule-day {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--fs-sm);
+}
+
+.schedule-days {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    margin-top: var(--space-1);
 }

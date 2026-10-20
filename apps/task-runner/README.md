@@ -59,6 +59,14 @@ instance was down. Schedules persist their last handled occurrence and missed
 count under `BACKUPCTL_STATE_DIR/schedules/`; the card shows the next run and
 the portal sees the task through `/api/tasks`.
 
+Every task that can run unattended has a **Schedule** button on its card. The
+UI can enable/disable it, choose daily or specific weekdays, set the local
+time, and toggle catch-up. Changes are saved in
+`BACKUPCTL_STATE_DIR/schedule-overrides.json` (the config checkout stays
+read-only) and take effect immediately; `config.mjs` remains the default for
+tasks without an override. The API is
+`PUT /api/schedule/:taskName` with `{enabled, days, at, catchUp}`.
+
 Scheduled runs are unattended, so the loader rejects `uploads`, `prompts`,
 `require`, `browser` and `commit_dir` on scheduled tasks. A task that is
 already running, unavailable (host/root/check), or blocked by its `serial_key`
@@ -312,14 +320,15 @@ only) gives tools that refuse non-TTY stdin a pseudo-terminal when
 
 ### State
 
-- `<BACKUPCTL_STATE_DIR>/tasks/<slug>.json` — `{task, ts, ok, summary, output}`; legacy `<state_dir>/.backup-state-<slug>.json` is read once during the upgrade
-  written atomically.
+- `<BACKUPCTL_STATE_DIR>/tasks/<slug>.json` — `{task, ts, ok, summary, output}`; legacy `<state_dir>/.backup-state-<slug>.json` is read once during the upgrade. Written atomically.
 - `bctl_git_commit` stages with `git add -A . ':(exclude).backup-state-*'`, so
   state files never churn backup repos.
 - `running.json` (in `BACKUPCTL_STATE_DIR`, default `~/.backupctl`) marks an
   in-flight task; after a crash it shows as `Interrupted`.
 - `schedules/<task>.json` (same directory) stores the last scheduled occurrence
   and missed count for catch-up across restarts.
+- `schedule-overrides.json` (same directory) stores UI-edited schedules; it
+  overrides the task's `schedule` from `config.mjs`.
 - `staging/<task>/` is transient scratch space, cleared when a run ends; run
   commands get a per-run `TMPDIR` (under `BACKUPCTL_TMP_DIR`, default
   `~/Downloads/backupctl-tmp`) so large extractions don't fill `/tmp`.

@@ -27,6 +27,7 @@ export default function TaskCard({
   onToggleBrowser,
   onQueueFiles,
   onRemoveQueued,
+  onSchedule,
   onRun,
   onCancel,
   onLog,
@@ -101,6 +102,11 @@ export default function TaskCard({
       <div className="card-actions">
         {task.export_url ? (
           <a role="button" className="outline secondary" href={task.export_url} target="_blank" rel="noreferrer">Generate Export</a>
+        ) : null}
+        {task.schedulable ? (
+          <button className="outline secondary" onClick={() => onSchedule(task)}>
+            Schedule
+          </button>
         ) : null}
         <button
           className={busy ? 'outline secondary' : ''}

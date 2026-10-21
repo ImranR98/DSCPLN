@@ -10,7 +10,7 @@
 # built-in defaults and Settings UI instead.
 services:
   portal:
-    image: imranrdev/dscpln-portal:latest
+    image: ghcr.io/imranr98/dscpln-portal:latest
     ports:
       - "8080:8080"
     environment:
@@ -20,7 +20,7 @@ services:
       - ./dscpln-config/apps/portal:/config
 
   balance-xlsx:
-    image: imranrdev/dscpln-balance:latest
+    image: ghcr.io/imranr98/dscpln-balance:latest
     ports:
       - "3300:3300"
     environment:
@@ -33,7 +33,7 @@ services:
     # The template's workbookFile is /data/Balance.xlsx.
 
   file-pipelines:
-    image: imranrdev/dscpln-file-pipelines:latest
+    image: ghcr.io/imranr98/dscpln-file-pipelines:latest
     environment:
       APP: file-pipelines
     ports:
@@ -47,7 +47,7 @@ services:
       - /path/to/media:/media
 
   task-runner:
-    image: imranrdev/dscpln-task-runner:latest
+    image: ghcr.io/imranr98/dscpln-task-runner:latest
     ports:
       - "8085:8085"
     environment:

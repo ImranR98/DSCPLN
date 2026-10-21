@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -20,3 +24,114 @@ jobs:
       - run: npm run lint
       - run: npm run check:html
       - run: npm test
+
+  publish:
+    needs: test
+    # Publish only from main after tests pass. workflow_dispatch is an escape
+    # hatch for re-publishing; dispatch it from main.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Serialize pushes so two merges cannot race :latest. A newer pending run
+    # replaces an older pending one, so the last main build always wins.
+    concurrency:
+      group: publish-images
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image tags
+        id: images
+        env:
+          # Keep one registry/org/tag source of truth with the local scripts.
+          IMAGE_ORG: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          source scripts/images.sh
+          REGISTRY="$DEFAULT_REGISTRY"
+          # Docker references are lowercase; GitHub owners are case-insensitive.
+          IMAGE_ORG="${IMAGE_ORG:-$DEFAULT_IMAGE_ORG}"
+          IMAGE_ORG="${IMAGE_ORG,,}"
+          {
+            echo "tags<<EOF"
+            for app in "${ALL_APPS[@]}"; do
+              printf '%s/%s/%s:latest\n' "$REGISTRY" "$IMAGE_ORG" "${IMAGE_NAMES[$app]}"
+            done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/app.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.images.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify tags and record digests
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.images.outputs.tags }}
+        run: |
+          set -euo pipefail
+          [ -n "$DIGEST" ] || { echo "Error: build produced no digest" >&2; exit 1; }
+
+          {
+            echo "## Published images"
+            echo
+            echo "Commit: \`${GITHUB_SHA}\`"
+            echo
+            echo "| App | Pinned reference |"
+            echo "|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          : > image-digests.txt
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            actual="$(docker buildx imagetools inspect "$tag" --format '{{.Manifest.Digest}}')"
+            if [ "$actual" != "$DIGEST" ]; then
+              echo "Error: $tag resolves to $actual, expected $DIGEST" >&2
+              exit 1
+            fi
+            pinned="${tag}@${DIGEST}"
+            printf 'image: %s\n' "$pinned" | tee -a image-digests.txt
+            app="${tag##*/}"
+            app="${app%%:*}"
+            echo "| \`${app}\` | \`${pinned}\` |" >> "$GITHUB_STEP_SUMMARY"
+          done <<< "$TAGS"
+
+          {
+            echo
+            echo "Digest: \`${DIGEST}\`"
+            echo
+            echo "Deployments pin these digests; this run does not deploy anything."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload digest table
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-digests-${{ github.sha }}
+          path: image-digests.txt
+          if-no-files-found: error
+          # Re-running the publish job reuses the run's artifact name.
+          overwrite: true

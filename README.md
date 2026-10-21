@@ -51,19 +51,30 @@ All images use synthetic demo data — regenerate them with
 
 ## Run with Docker
 
-Images are published as `imranrdev/dscpln-<app>` (portal, balance, file-pipelines,
-watxt, task-runner). All five tags are built from the same unified image; the
-deployment's `APP` env selects the server. `docker-compose.example.yaml` shows the
-expected volumes and ports for a few of them:
+Images are published as `ghcr.io/imranr98/dscpln-<app>` (portal, balance,
+file-pipelines, watxt, task-runner). All five tags are built from the same
+unified image; the deployment's `APP` env selects the server. CI publishes them
+after every green `main` build and lists the digest to pin in the run summary.
+`docker-compose.example.yaml` shows the expected volumes and ports for a few of
+them:
 
 ```sh
-docker run -p 8080:8080 imranrdev/dscpln-portal:latest
+docker run -p 8080:8080 ghcr.io/imranr98/dscpln-portal:latest
 ```
 
-Apps keep their config/state in the directories you mount (or on a Docker
-volume) and can be configured from their Settings UI. When you put several apps
-behind one reverse proxy, set `BASE_PATH=/<name>` (for example `/pipelines`) and
-route `/<name>` to that container; otherwise leave it empty.
+The images contain only the public app code and synthetic examples; runtime
+config and secrets are never baked in. Apps keep their config/state in the
+directories you mount (or on a Docker volume) and can be configured from their
+Settings UI. When you put several apps behind one reverse proxy, set
+`BASE_PATH=/<name>` (for example `/pipelines`) and route `/<name>` to that
+container; otherwise leave it empty.
+
+GHCR creates new packages private by default. After the first publish, make each
+`dscpln-*` package public (package settings → Change visibility), or add an
+`imagePullSecret` with `read:packages` to the deployment. Local builds push to
+GHCR too; authenticate with a personal access token that has `write:packages`
+(`docker login ghcr.io -u <user>`), or set `REGISTRY`/`IMAGE_ORG` to push
+elsewhere.
 
 ## Development
 
@@ -88,3 +99,8 @@ These apps drive backups of personal data, so the conventions matter: never
 delete user data, write config/state atomically (`0600`), verify before
 overwriting, keep on-disk formats stable, and treat secrets as write-only
 (they are masked in API responses and stored on the app's private volume).
+
+Published images contain the public app code and synthetic examples only.
+Runtime config, secrets and data belong on mounted volumes (see
+[`config-template/`](config-template/README.md)) and must never be copied into
+`apps/` or `packages/`; the image build also excludes the usual runtime files.

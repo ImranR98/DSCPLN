@@ -126,15 +126,28 @@ const createApp = (config) => {
                     const currencies = (overview.currencies || []).map((entry) => ({
                         code: entry.code,
                         symbol: entry.symbol || '',
+                        primary: Boolean(entry.primary),
                         monthlyBudget: entry.monthlyBudget,
                         monthsSpend: entry.monthsSpend,
                         overBudget: entry.monthlyBudget > 0 && entry.monthsSpend >= entry.monthlyBudget,
                     }))
+                    const primary = currencies.find((entry) => entry.primary) ?? currencies[0] ?? null
                     statusCache = {
                         at: Date.now(),
                         body: {
                             currencies,
                             overBudget: currencies.filter((c) => c.overBudget).map((c) => c.code),
+                            summary: {
+                                period: new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
+                                code: primary?.code ?? null,
+                                symbol: primary?.symbol ?? '',
+                                spend: primary?.monthsSpend ?? 0,
+                                budget: primary?.monthlyBudget ?? 0,
+                                left: primary && primary.monthlyBudget > 0 ? primary.monthlyBudget - primary.monthsSpend : null,
+                                overBudget: Boolean(primary?.overBudget),
+                                transactions: Array.isArray(overview.transactions) ? overview.transactions.length : 0,
+                                currencies: currencies.length,
+                            },
                         },
                     }
                 }

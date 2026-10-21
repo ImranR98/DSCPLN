@@ -32,6 +32,23 @@ test('serves workbook data with categories, currencies and income stats', async 
     assert.deepEqual(data.conversionCategories, ['Conversion'])
 })
 
+test('portal status includes a compact summary', async (t) => {
+    const { server, baseUrl } = await startServer()
+    t.after(() => new Promise((resolve) => server.close(resolve)))
+
+    const status = await (await fetch(`${baseUrl}/status`)).json()
+    assert.equal(status.summary.code, 'CAD')
+    assert.equal(status.summary.symbol, '$')
+    assert.equal(status.summary.budget, 3000)
+    assert.equal(typeof status.summary.spend, 'number')
+    assert.equal(typeof status.summary.left, 'number')
+    assert.equal(typeof status.summary.overBudget, 'boolean')
+    assert.equal(typeof status.summary.transactions, 'number')
+    assert.equal(status.summary.currencies, 3)
+    assert.match(status.summary.period, /\d{4}/)
+    assert.equal(status.currencies.find((entry) => entry.code === 'CAD').primary, true)
+})
+
 test('supports transaction CRUD and category suggestions', async (t) => {
     const { server, baseUrl } = await startServer()
     t.after(() => new Promise((resolve) => server.close(resolve)))

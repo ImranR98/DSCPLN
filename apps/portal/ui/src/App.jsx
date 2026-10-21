@@ -10,7 +10,9 @@ import {
 } from 'lucide-react'
 import {
   AppHeader,
+  formatBytes,
   formatDateTime,
+  formatNumber,
   formatTime,
   getJson,
   humanAgo,
@@ -37,7 +39,30 @@ const DEFAULT_FUNCTIONS = [
   { path: 'tasks', icon: 'wrench', name: 'Task Runner', description: 'Scheduled and on-demand workflows', kind: 'tasks' },
 ]
 
-const EMPTY = { loaded: false, online: true, detail: '', tone: '', next: '', nextTone: '', issue: false }
+const EMPTY = {
+  loaded: false,
+  online: true,
+  issue: false,
+  kicker: '',
+  primary: { value: '—', label: '', tone: '' },
+  progress: null,
+  stats: [],
+  footer: { text: '', tone: '' },
+}
+
+const asNumber = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback
+
+const moneyText = (value, code, symbol = '') => {
+  const amount = asNumber(value)
+  const prefix = symbol || (code ? `${code} ` : '')
+  const formatted = new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Math.abs(amount))
+  return `${amount < 0 ? '−' : ''}${prefix}${formatted}`
+}
+
+const stat = (label, value, tone = '') => ({ label, value: String(value), tone })
 
 const SETTINGS_FIELDS = [
   {
@@ -57,82 +82,153 @@ const SETTINGS_FIELDS = [
 async function scheduledDetail(fn) {
   const state = await getJson(`${fn.path}/api/state`)
   const last = state.lastRun
-  let detail = 'never run'
-  let tone = ''
+  let primary = { value: 'Never', label: 'last run', tone: '' }
   let issue = false
-  if (state.runMarker) {
-    detail = 'running now'
-    tone = 'ok'
-  } else if (last) {
-    detail = `last ${humanAgo(last.endedAt)} · ${last.ok ? 'OK' : 'Failed'}`
-    tone = last.ok ? 'ok' : 'over'
+  if (state.runMarker) primary = { value: 'Running', label: 'now', tone: 'ok' }
+  else if (last) {
+    primary = { value: last.ok ? 'OK' : 'Failed', label: `last ${humanAgo(last.endedAt)}`, tone: last.ok ? 'ok' : 'over' }
     issue = !last.ok
   }
-  let next = 'manual only'
-  let nextTone = ''
-  if (state.paused) {
-    next = 'paused'
-    nextTone = 'warn'
-  } else if (Number.isFinite(state.nextRun)) {
-    next = `next ${formatDateTime(state.nextRun)}`
-    if (state.missed) {
-      next += ` · ${state.missed} missed`
-      nextTone = 'warn'
-      issue = true
-    }
+  const stats = [
+    stat('Next', state.paused ? 'Paused' : Number.isFinite(state.nextRun) ? formatDateTime(state.nextRun) : 'Manual', state.paused ? 'warn' : ''),
+    stat('Missed', state.missed ?? 0, state.missed ? 'warn' : ''),
+    stat('Status', state.paused ? 'Paused' : 'Scheduled', state.paused ? 'warn' : 'ok'),
+  ]
+  return {
+    issue,
+    kicker: fn.name,
+    primary,
+    stats,
+    footer: { text: state.paused ? 'Scheduled runs are paused' : 'Scheduled workflow', tone: state.paused ? 'warn' : '' },
   }
-  return { detail, tone, next, nextTone, issue }
 }
 
 async function pipelinesDetail(fn) {
   const state = await getJson(`${fn.path}/api/state`)
-  if (state.paused) return { detail: 'paused', tone: 'warn', issue: false }
   let active = 0
   let review = 0
   let errors = 0
-  for (const folder of state.folders ?? []) {
+  let lastEventAt = 0
+  const folders = state.folders ?? []
+  for (const folder of folders) {
     const counts = folder.counts ?? {}
     active += (counts.pending ?? 0) + (counts.queued ?? 0) + (counts.processing ?? 0)
     review += counts.review ?? 0
     errors += (counts.error ?? 0) + (counts.conflict ?? 0)
+    lastEventAt = Math.max(lastEventAt, asNumber(folder.lastEventAt))
   }
-  const parts = []
-  if (active) parts.push(`${active} active`)
-  if (review) parts.push(`${review} in review`)
-  if (errors) parts.push(`${errors} errors`)
+  const paused = Boolean(state.paused)
+  const dryRun = Boolean(state.dryRun)
+  const footer = paused
+    ? { text: 'Paused', tone: 'warn' }
+    : dryRun
+      ? { text: 'Dry run · no files are written', tone: 'warn' }
+      : lastEventAt
+        ? { text: `Last change ${humanAgo(lastEventAt)}`, tone: '' }
+        : { text: 'Watching for changes', tone: '' }
   return {
-    detail: parts.join(' · ') || 'idle',
-    tone: errors ? 'over' : review ? 'warn' : 'ok',
     issue: errors > 0,
+    kicker: `${folders.length} folder${folders.length === 1 ? '' : 's'}`,
+    primary: {
+      value: active ? formatNumber(active) : 'Idle',
+      label: active ? 'in flight' : 'queue',
+      tone: active ? 'ok' : '',
+    },
+    stats: [
+      stat('Review', formatNumber(review), review ? 'warn' : ''),
+      stat('Errors', formatNumber(errors), errors ? 'over' : ''),
+      stat('Folders', formatNumber(folders.length)),
+    ],
+    footer,
   }
 }
 
 async function watxtDetail(fn) {
   const state = await getJson(`${fn.path}/api/state`)
+  const skipped = Array.isArray(state.skipped) ? state.skipped.length : asNumber(state.skipped)
+  const indexed = state.indexedAt ? `Indexed ${humanAgo(Date.parse(state.indexedAt))}` : 'Not indexed yet'
   return {
-    detail: `${state.conversations ?? 0} conversations · ${state.messages ?? 0} messages`,
-    tone: '',
     issue: false,
+    kicker: state.watching ? 'Watching for exports' : 'Indexed library',
+    primary: { value: formatNumber(state.conversations ?? 0), label: 'conversations', tone: 'ok' },
+    stats: [
+      stat('Messages', formatNumber(state.messages ?? 0)),
+      stat('Size', state.bytes == null ? '—' : formatBytes(state.bytes)),
+      stat('Skipped', formatNumber(skipped), skipped ? 'warn' : ''),
+    ],
+    footer: { text: indexed, tone: state.watching ? 'ok' : '' },
   }
 }
 
 async function tasksDetail(fn) {
   const data = await getJson(`${fn.path}/api/tasks`)
   const tasks = (data.groups ?? []).flatMap((group) => group.tasks ?? [])
+  const scheduled = tasks.filter((task) => task.schedule?.enabled)
   const running = tasks.filter((task) => task.running).length
   const failing = tasks.filter((task) => task.state && task.state.ok === false && !task.running).length
-  let detail = `${tasks.length} tasks`
-  if (running) detail += ` · ${running} running`
-  if (failing) detail += ` · ${failing} failing`
-  return { detail, tone: failing ? 'over' : 'ok', issue: failing > 0 }
+  const next = scheduled
+    .filter((task) => Number.isFinite(task.next_run))
+    .sort((a, b) => a.next_run - b.next_run)[0] ?? null
+  return {
+    issue: failing > 0,
+    kicker: `${tasks.length} task${tasks.length === 1 ? '' : 's'}`,
+    primary: { value: formatNumber(scheduled.length), label: 'scheduled', tone: scheduled.length ? 'ok' : '' },
+    stats: [
+      stat('Tasks', formatNumber(tasks.length)),
+      stat('Running', formatNumber(running), running ? 'ok' : ''),
+      stat('Failing', formatNumber(failing), failing ? 'over' : ''),
+    ],
+    footer: next
+      ? { text: `Next: ${next.name} · ${formatDateTime(next.next_run)}`, tone: '' }
+      : { text: 'No active schedules', tone: '' },
+  }
 }
 
 async function balanceDetail(fn) {
   const status = await getJson(`${fn.path}/status`)
-  if (status.overBudget?.length) {
-    return { detail: `${status.overBudget.join(', ')} over budget`, tone: 'over', issue: true }
+  const summary = status.summary
+  if (!summary) {
+    const over = status.overBudget ?? []
+    return {
+      issue: false,
+      kicker: 'Budget overview',
+      primary: { value: '—', label: 'summary unavailable', tone: '' },
+      stats: [{ label: 'Over budget', value: over.join(', ') || 'None', tone: over.length ? 'warn' : '' }],
+      footer: { text: over.length ? 'Open Balance to review the budget' : 'Within budget', tone: over.length ? 'warn' : 'ok' },
+    }
   }
-  return { detail: 'within budget', tone: 'ok', issue: false }
+  const budget = asNumber(summary.budget)
+  const spend = asNumber(summary.spend)
+  const left = summary.left == null ? null : asNumber(summary.left)
+  const hasBudget = budget > 0 && left != null
+  const pct = hasBudget ? Math.min(100, (spend / budget) * 100) : null
+  const over = Boolean(summary.overBudget)
+  const tone = over ? 'warn' : 'ok'
+  const code = summary.code || ''
+  const symbol = summary.symbol || ''
+  const stats = hasBudget
+    ? [
+        stat('Budget', moneyText(budget, code, symbol)),
+        stat('Left', moneyText(left, code, symbol), left < 0 ? 'warn' : ''),
+        stat('Transactions', formatNumber(summary.transactions ?? 0)),
+      ]
+    : [
+        stat('Transactions', formatNumber(summary.transactions ?? 0)),
+        stat('Currencies', formatNumber(summary.currencies ?? 0)),
+        stat('Budget', 'Not set', 'warn'),
+      ]
+  return {
+    issue: false,
+    kicker: [summary.period, code].filter(Boolean).join(' · '),
+    primary: { value: moneyText(spend, code, symbol), label: hasBudget ? 'spent this month' : 'spent', tone },
+    progress: pct == null ? null : { pct, tone: over ? 'warn' : 'ok' },
+    stats,
+    footer: over
+      ? { text: `Over budget by ${moneyText(Math.abs(left ?? 0), code, symbol)}`, tone: 'warn' }
+      : hasBudget
+        ? { text: `${moneyText(left, code, symbol)} left this month`, tone: 'ok' }
+        : { text: 'No budget set', tone: 'warn' },
+  }
 }
 
 const DETAILS = {
@@ -214,17 +310,11 @@ export default function App() {
           try {
             card = { ...card, ...(await (DETAILS[fn.kind] ?? scheduledDetail)(fn)) }
           } catch {
-            // detail is best-effort; the card still links to the app
+            card = { ...card, footer: { text: 'Summary unavailable', tone: 'warn' } }
           }
         } else {
-          // Keep the last known detail so an offline tile can explain itself.
-          card = {
-            ...card,
-            detail: previous?.detail ?? '',
-            tone: previous?.tone ?? '',
-            next: previous?.next ?? '',
-            nextTone: previous?.nextTone ?? '',
-          }
+          // Keep the last known summary so an offline tile can explain itself.
+          card = { ...EMPTY, ...(previous ?? {}), loaded: true, online: false, issue: true }
         }
         next[fn.path] = card
       }),

@@ -229,16 +229,15 @@ test('portal shows the next scheduled run for scheduled apps', async (t) => {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ paused: false, nextRun, missed: 1 }) }))
 
   await page.goto(`${base}/`)
-  await page.waitForFunction(() => {
-    const next = document.querySelector('[data-testid="next-contacts"]')
-    return next?.textContent?.startsWith('next ')
-  })
-  const text = await page.$eval('[data-testid="next-contacts"]', (node) => node.textContent)
-  assert.match(text, /^next /)
-  assert.match(text, /1 missed/)
+  await page.waitForFunction(() =>
+    document.querySelector('[data-testid="stat-contacts-0"]')?.textContent?.includes('Next'))
+  const next = await page.$eval('[data-testid="stat-contacts-0"]', (node) => node.textContent)
+  assert.match(next, /^Next/)
+  const missed = await page.$eval('[data-testid="stat-contacts-1"]', (node) => node.textContent)
+  assert.match(missed, /1/)
 })
 
-test('portal tiles show per-app detail lines', async (t) => {
+test('portal cards show app summaries', async (t) => {
   const browser = await launchBrowser()
   if (!browser) {
     t.skip('chromium not available (playwright browsers missing)')
@@ -251,25 +250,114 @@ test('portal tiles show per-app detail lines', async (t) => {
   const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
   for (const path of ['balance', 'pipelines', 'watxt', 'tasks']) {
     await page.route(`**/${path}/api/health`, (route) => route.fulfill(json({ ok: true })))
-    await page.route(`**/${path}/api/state`, (route) => route.fulfill(json({ paused: false })))
   }
-  await page.route('**/balance/status', (route) => route.fulfill(json({ overBudget: ['USD'] })))
-  await page.route('**/pipelines/api/state', (route) =>
-    route.fulfill(json({ paused: false, folders: [{ counts: { queued: 2, error: 1 } }] })))
-  await page.route('**/watxt/api/state', (route) =>
-    route.fulfill(json({ conversations: 3, messages: 42 })))
-  await page.route('**/tasks/api/tasks', (route) =>
-    route.fulfill(json({ groups: [{ tasks: [{ name: 'a', state: { ok: false } }, { name: 'b', state: { ok: true } }] }] })))
+  await page.route('**/balance/status', (route) => route.fulfill(json({
+    overBudget: ['CAD'],
+    summary: {
+      period: 'October 2026', code: 'CAD', symbol: '$', spend: 8266.59,
+      budget: 3000, left: -5266.59, overBudget: true, transactions: 47, currencies: 3,
+    },
+  })))
+  await page.route('**/pipelines/api/state', (route) => route.fulfill(json({
+    paused: false, dryRun: false,
+    folders: [{ counts: { queued: 2, error: 1 }, lastEventAt: Date.now() - 720_000 }],
+  })))
+  await page.route('**/watxt/api/state', (route) => route.fulfill(json({
+    conversations: 3, messages: 42, bytes: 1024, skipped: [],
+    indexedAt: new Date().toISOString(), watching: true,
+  })))
+  await page.route('**/tasks/api/tasks', (route) => route.fulfill(json({
+    groups: [{ tasks: [
+      { name: 'Scheduled', schedule: { enabled: true }, next_run: Date.now() + 3_600_000, running: false, state: { ok: true } },
+      { name: 'Failed', schedule: { enabled: false }, running: false, state: { ok: false } },
+    ] }],
+  })))
 
   await page.goto(`${base}/`)
   await page.waitForFunction(() =>
-    document.querySelector('[data-testid="detail-balance"]')?.textContent?.includes('over budget'))
+    document.querySelector('[data-testid="primary-balance"]')?.textContent?.includes('8,266.59'))
 
-  const detailOf = (path) => page.$eval(`[data-testid="detail-${path}"]`, (node) => node.textContent)
-  assert.match(await detailOf('balance'), /USD over budget/)
-  assert.match(await detailOf('pipelines'), /2 active · 1 errors/)
-  assert.match(await detailOf('watxt'), /3 conversations · 42 messages/)
-  assert.match(await detailOf('tasks'), /2 tasks · 1 failing/)
+  const text = (id) => page.$eval(`[data-testid="${id}"]`, (node) => node.textContent)
+  assert.match(await text('primary-balance'), /8,266\.59/)
+  assert.match(await text('stat-balance-0'), /3,000\.00/)
+  assert.match(await text('footer-balance'), /Over budget/)
+  assert.match(await text('primary-pipelines'), /^2$/)
+  assert.match(await text('stat-pipelines-1'), /Errors1/)
+  assert.match(await text('primary-watxt'), /^3$/)
+  assert.match(await text('stat-watxt-0'), /Messages42/)
+  assert.match(await text('primary-tasks'), /^1$/)
+  assert.match(await text('stat-tasks-2'), /Failing1/)
+  assert.match(await text('footer-tasks'), /Next: Scheduled/)
+})
+
+test('portal attention ignores over-budget', async (t) => {
+  const browser = await launchBrowser()
+  if (!browser) {
+    t.skip('chromium not available (playwright browsers missing)')
+    return
+  }
+  t.after(() => browser.close())
+
+  const { base } = await portalFixture(t)
+  const page = await browser.newPage()
+  const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+  for (const path of ['balance', 'pipelines', 'watxt', 'tasks']) {
+    await page.route(`**/${path}/api/health`, (route) => route.fulfill(json({ ok: true })))
+  }
+  await page.route('**/balance/status', (route) => route.fulfill(json({
+    overBudget: ['CAD'],
+    summary: {
+      period: 'October 2026', code: 'CAD', symbol: '$', spend: 8266.59,
+      budget: 3000, left: -5266.59, overBudget: true, transactions: 47, currencies: 1,
+    },
+  })))
+  await page.route('**/pipelines/api/state', (route) => route.fulfill(json({
+    paused: false, dryRun: false, folders: [{ counts: { queued: 0, error: 0 } }],
+  })))
+  await page.route('**/watxt/api/state', (route) => route.fulfill(json({
+    conversations: 3, messages: 42, bytes: 1024, skipped: [], indexedAt: new Date().toISOString(), watching: true,
+  })))
+  await page.route('**/tasks/api/tasks', (route) => route.fulfill(json({ groups: [{ tasks: [] }] })))
+
+  await page.goto(`${base}/`)
+  await page.waitForFunction(() =>
+    document.querySelector('[data-testid="attention"]')?.textContent === 'all healthy')
+  assert.match(await page.$eval('[data-testid="footer-balance"]', (node) => node.textContent), /Over budget/)
+})
+
+test('portal attention counts processing errors', async (t) => {
+  const browser = await launchBrowser()
+  if (!browser) {
+    t.skip('chromium not available (playwright browsers missing)')
+    return
+  }
+  t.after(() => browser.close())
+
+  const { base } = await portalFixture(t)
+  const page = await browser.newPage()
+  const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+  for (const path of ['balance', 'pipelines', 'watxt', 'tasks']) {
+    await page.route(`**/${path}/api/health`, (route) => route.fulfill(json({ ok: true })))
+  }
+  await page.route('**/balance/status', (route) => route.fulfill(json({
+    overBudget: [],
+    summary: {
+      period: 'October 2026', code: 'CAD', symbol: '$', spend: 100,
+      budget: 3000, left: 2900, overBudget: false, transactions: 2, currencies: 1,
+    },
+  })))
+  await page.route('**/pipelines/api/state', (route) => route.fulfill(json({
+    paused: false, dryRun: false, folders: [{ counts: { queued: 0, error: 1 } }],
+  })))
+  await page.route('**/watxt/api/state', (route) => route.fulfill(json({
+    conversations: 3, messages: 42, bytes: 1024, skipped: [], indexedAt: new Date().toISOString(), watching: true,
+  })))
+  await page.route('**/tasks/api/tasks', (route) => route.fulfill(json({ groups: [{ tasks: [] }] })))
+
+  await page.goto(`${base}/`)
+  await page.waitForFunction(() =>
+    document.querySelector('[data-testid="attention"]')?.textContent?.includes('1 need attention'))
+  assert.match(await page.$eval('[data-testid="stat-pipelines-1"]', (node) => node.textContent), /Errors1/)
 })
 
 test('portal keeps the last known detail when an app goes offline', async (t) => {
@@ -291,13 +379,13 @@ test('portal keeps the last known detail when an app goes offline', async (t) =>
 
   await page.goto(`${base}/`)
   await page.waitForFunction(() =>
-    document.querySelector('[data-testid="detail-watxt"]')?.textContent?.includes('3 conversations'))
+    document.querySelector('[data-testid="primary-watxt"]')?.textContent === '3')
 
   online = false
   await page.click('[aria-label="Refresh status"]')
   await page.waitForTimeout(300)
-  const detail = await page.$eval('[data-testid="detail-watxt"]', (node) => node.textContent)
-  assert.match(detail, /3 conversations/)
+  const detail = await page.$eval('[data-testid="primary-watxt"]', (node) => node.textContent)
+  assert.equal(detail, '3')
 })
 
 test('portal functions are config-driven', async (t) => {

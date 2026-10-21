@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RefreshCw, SlidersHorizontal } from 'lucide-react'
-import { AppHeader, getJson, postJson, putJson, showToast, ThemeToggle, Toasts, uploadFile as uploadFileRequest, usePolling } from '@dscpln/ui-kit'
+import { AppHeader, Field, getJson, postJson, putJson, showToast, ThemeToggle, Toasts, uploadFile as uploadFileRequest, usePolling } from '@dscpln/ui-kit'
 import { useDropzone } from './hooks/useDropzone.js'
 import TaskCard from './components/TaskCard.jsx'
 import AttributesModal from './components/AttributesModal.jsx'
@@ -438,9 +438,9 @@ export default function App() {
 
         <section className="card task-toolbar">
           <div className="task-toolbar__row">
-            <label className="task-toolbar__field">
-              <span>Group by</span>
+            <Field label="Group by" htmlFor="task-group-by" className="task-toolbar__field">
               <select
+                id="task-group-by"
                 data-testid="group-by"
                 value={groupBy}
                 onChange={(event) => {
@@ -452,10 +452,10 @@ export default function App() {
                   <option key={attribute.name} value={attribute.name}>{attribute.name}</option>
                 ))}
               </select>
-            </label>
-            <label className="task-toolbar__field">
-              <span>Show</span>
+            </Field>
+            <Field label="Show" htmlFor="task-filter-value" className="task-toolbar__field">
               <select
+                id="task-filter-value"
                 data-testid="filter-value"
                 value={activeFilter}
                 onChange={(event) => setFilterValue(event.target.value)}
@@ -463,13 +463,13 @@ export default function App() {
                 <option value="">All {groupBy || 'tasks'}</option>
                 {filterValues.map((value) => <option key={value} value={value}>{value}</option>)}
               </select>
-            </label>
+            </Field>
             <button
-              className="outline secondary"
+              className="outline secondary task-toolbar__manage"
               data-testid="manage-attributes"
               onClick={() => setAttributesOpen(true)}
             >
-              <SlidersHorizontal size={15} strokeWidth={1.8} />
+              <SlidersHorizontal size={16} strokeWidth={1.8} />
               Attributes
             </button>
           </div>

@@ -15,9 +15,24 @@
       "matchUpdateTypes": [
         "minor",
         "patch",
-        "digest"
+        "digest",
+        "pin"
       ],
       "groupName": "npm deps (non-major)"
+    },
+    {
+      "description": "Auto-merge non-major updates after CI passes",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest"
+      ],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "merge-commit",
+      "platformAutomerge": true,
+      "ignoreTests": false
     }
   ]
 }

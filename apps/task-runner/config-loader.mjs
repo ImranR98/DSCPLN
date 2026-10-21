@@ -228,9 +228,12 @@ export async function loadConfig(configPath = CONFIG_FILE) {
       merged.actions = normalizeActions(merged.actions, merged.name);
       const entry = meta?.tasks?.[merged.name];
       merged.attributes = { ...(entry?.attributes ?? {}) };
-      // New tasks and hand-written entries without a Category fall back to the
-      // config group, so the default Category view is never empty.
-      if (!merged.attributes.Category) merged.attributes.Category = merged.group;
+      // New tasks (or hand-written metadata entries with no attributes block)
+      // fall back to the config group. Once an entry has an attributes object,
+      // an empty Category is an intentional "Unassigned".
+      if (!Object.prototype.hasOwnProperty.call(entry ?? {}, 'attributes')) {
+        merged.attributes.Category = merged.group;
+      }
       if (entry && Object.prototype.hasOwnProperty.call(entry, 'schedule')) {
         merged.schedule = entry.schedule;
       }

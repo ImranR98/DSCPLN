@@ -229,6 +229,17 @@ test('loadConfig: task-meta supplies attributes, schedules and grouping', async 
     tasks: { 'Meta Upload': { schedule: { enabled: true, days: [], at: '04:00' } } },
   })
   await assert.rejects(bctl.loadConfig(badConfig), /scheduled tasks cannot use 'uploads'/)
+
+  // A task entry that explicitly has an attributes object can clear Category.
+  const clearedConfig = makeConfig([task('Cleared Meta', { commands: 'true' })])
+  writeMeta(clearedConfig, {
+    version: 1,
+    attributes: [{ name: 'Category', values: ['G'] }],
+    default_group_by: 'Category',
+    tasks: { 'Cleared Meta': { attributes: {} } },
+  })
+  const [, cleared] = await bctl.loadConfig(clearedConfig)
+  assert.deepEqual(cleared[0].attributes, {})
 })
 
 test('loadConfig: actions normalize and validate', async () => {

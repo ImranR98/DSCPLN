@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# App registry shared by scripts/build.sh and scripts/build-all.sh.
+# App registry shared by scripts/build.sh, scripts/build-all.sh and CI.
 # Sourced, never executed directly.
+
+# Defaults used by local builds; CI overrides IMAGE_ORG with the repository owner.
+DEFAULT_REGISTRY=ghcr.io
+DEFAULT_IMAGE_ORG=imranr98
 
 ALL_APPS=(portal balance-xlsx file-pipelines whatsapp-txt task-runner)
 

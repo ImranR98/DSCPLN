@@ -15,7 +15,7 @@ DSCPLN/
     whatsapp-txt/   WhatsApp TXT          /watxt
     task-runner/    Task Runner           /tasks (scheduled Contacts/YTMusic jobs, on-demand tasks)
   config-template/  starter for a private dscpln-config repo
-  scripts/          build helpers (one image per app)
+  scripts/          build/publish helpers (one unified image)
 ```
 
 ## Naming
@@ -23,7 +23,7 @@ DSCPLN/
 | thing | convention |
 |---|---|
 | UI header / document title | `D$CPLN ⋅ <Function>` (`⋅` = U+22C5) |
-| images | `imranrdev/dscpln-<app>` |
+| images | `ghcr.io/imranr98/dscpln-<app>` |
 | config/state on a PVC | `config.json`, `.dscpln-*-state.json`, mode `0600`, atomic writes |
 | app state files excluded from git commits | `.backup-state-*` (Task Runner), keep the exclusion pattern |
 | media XMP tags | `XMP-media-sync:*` (written on concatenated outputs) |
@@ -237,6 +237,15 @@ reverse proxy works — the apps only need `BASE_PATH` set per subpath.
 
 **Building & deploying an image**
 
+CI (`.github/workflows/ci.yml`) publishes all five tags after every green
+`main` build: one unified image, tagged as
+`ghcr.io/imranr98/dscpln-<app>:latest`. The `publish` job writes the digest
+table to the run summary and uploads it as `image-digests-<sha>`; deploy by
+pinning those digests. Publishing `:latest` does not change a running
+deployment.
+
+For a local/offline build (or to rebuild a single app):
+
 ```bash
 # on the PC, from the monorepo root (context = repo root). Every app tag uses
 # the same unified image; APP selects the server at runtime:
@@ -250,14 +259,20 @@ helm upgrade --install <release> <chart> -n apps
 kubectl -n apps rollout status deploy/<deployment>
 ```
 
-`scripts/build-all.sh` builds the image once, tags/pushes each app, prints
-a digest table, and with `--pin` writes the digests into your deployment repo
-(`DEPLOY_DIR`/`INFRA_DIR`; it refuses a dirty checkout). `REGISTRY`/`IMAGE_ORG` choose where
-images are pushed. The example Kubernetes templates share a `_helpers.tpl`
-(pod/container security contexts, readiness probe, Service) so the hardening
-posture and Service shape stay uniform.
+`scripts/build-all.sh` builds the image once, tags/pushes each app, prints a
+digest table, and with `--pin` writes the digests into your deployment repo
+(`DEPLOY_DIR`/`INFRA_DIR`; it refuses a dirty checkout) and rewrites the full
+image reference, so a registry/org change lands too. `REGISTRY`/`IMAGE_ORG`
+choose where images are pushed (default `ghcr.io/imranr98`); local pushes need a
+PAT with `write:packages`. The CI tag list comes from `scripts/images.sh`, so
+the two paths stay in sync. To republish without a new commit, dispatch the CI
+workflow from `main`. The example Kubernetes templates share a
+`_helpers.tpl` (pod/container security contexts, readiness probe, Service) so
+the hardening posture and Service shape stay uniform.
 
-Renovate bumps the pinned digests; never leave a floating tag unpinned.
+New GHCR packages are private by default. Make the five packages public once, or
+add an `imagePullSecret` with `read:packages` to the deployment. Renovate bumps
+the pinned digests; never leave a floating tag unpinned.
 
 **Balance API**
 

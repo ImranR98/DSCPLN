@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Build the unified D$CPLN image once, tag/push every app tag, print a digest
-# table, and optionally pin the digests into a deployment repo's templates.
+# table, and optionally pin the digests (and registry/org reference) into a
+# deployment repo's templates.
 #
 #   scripts/build-all.sh                 # build all
 #   scripts/build-all.sh portal balance  # build a subset (one image, two tags)
 #   scripts/build-all.sh --pin           # build all + rewrite deployment templates
 #
-# REGISTRY/IMAGE_ORG choose where images are pushed (default docker.io/imranrdev).
+# REGISTRY/IMAGE_ORG choose where images are pushed (default ghcr.io/imranr98).
 # --pin needs DEPLOY_DIR (or the legacy INFRA_DIR) and TEMPLATES_DIR (default
 # targets/srv0/k3s-apps/templates) and refuses a dirty checkout.
 set -euo pipefail
@@ -47,8 +48,12 @@ if [ -z "$ENGINE" ]; then
     fi
 fi
 
-IMAGE_ORG="${IMAGE_ORG:-imranrdev}"
-REGISTRY="${REGISTRY:-docker.io}"
+IMAGE_ORG="${IMAGE_ORG:-$DEFAULT_IMAGE_ORG}"
+REGISTRY="${REGISTRY:-$DEFAULT_REGISTRY}"
+# Docker references are lowercase; registry hosts and GitHub owners are
+# case-insensitive.
+IMAGE_ORG="${IMAGE_ORG,,}"
+REGISTRY="${REGISTRY,,}"
 BUILD_IMAGE="${REGISTRY}/${IMAGE_ORG}/dscpln-app:latest"
 
 echo "==> Building unified image ($ENGINE, linux/amd64)"
@@ -80,16 +85,17 @@ if [ "$PIN" = 1 ]; then
     for app in "${APPS[@]}"; do
         template="$DEPLOY_DIR/$TEMPLATES_DIR/${TEMPLATES[$app]:-}"
         [ -n "${TEMPLATES[$app]:-}" ] && [ -f "$template" ] || { echo "Error: no template for $app" >&2; exit 1; }
-        APP="$app" IMAGE_NAME="${IMAGE_NAMES[$app]}" DIGEST="${DIGESTS[$app]#sha256:}" TEMPLATE="$template" node -e '
+        image_ref="${REGISTRY}/${IMAGE_ORG}/${IMAGE_NAMES[$app]}:latest"
+        IMAGE_REF="$image_ref" APP="$app" IMAGE_NAME="${IMAGE_NAMES[$app]}" DIGEST="${DIGESTS[$app]}" TEMPLATE="$template" node -e '
             const fs = require("fs");
             const file = process.env.TEMPLATE;
             const text = fs.readFileSync(file, "utf8");
-            // Keep the existing image reference; swap only the digest. Match
-            // the app image specifically: templates can also have init or
+            // Match the app image specifically: templates can also have init or
             // sidecar images (busybox, selenium) before the app container.
+            // Rewrite the full reference so a registry/org change lands too.
             const name = process.env.IMAGE_NAME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-            const re = new RegExp(`(          image: \\S*/${name}:latest@sha256:)[0-9a-f]+`);
-            const next = text.replace(re, `$1${process.env.DIGEST}`);
+            const re = new RegExp(`(^[ \\t]*image: )\\S*/${name}:latest@sha256:[0-9a-f]+`, "m");
+            const next = text.replace(re, `$1${process.env.IMAGE_REF}@${process.env.DIGEST}`);
             if (next === text) {
                 console.error(`Error: ${process.env.APP}: image line for ${process.env.IMAGE_NAME} not found in ${file}`);
                 process.exit(1);

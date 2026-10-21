@@ -20,8 +20,12 @@ source "$ROOT/scripts/images.sh"
     echo "Error: unknown app '$APP' (known: ${ALL_APPS[*]})" >&2
     exit 1
 }
-REGISTRY="${REGISTRY:-docker.io}"
-IMAGE_ORG="${IMAGE_ORG:-imranrdev}"
+REGISTRY="${REGISTRY:-$DEFAULT_REGISTRY}"
+IMAGE_ORG="${IMAGE_ORG:-$DEFAULT_IMAGE_ORG}"
+# Docker references are lowercase; registry hosts and GitHub owners are
+# case-insensitive.
+REGISTRY="${REGISTRY,,}"
+IMAGE_ORG="${IMAGE_ORG,,}"
 IMAGE="${2:-${REGISTRY}/${IMAGE_ORG}/${IMAGE_NAMES[$APP]}:latest}"
 
 ENGINE="${ENGINE:-}"

@@ -165,32 +165,22 @@ async function tasksDetail(fn) {
   const data = await getJson(`${fn.path}/api/tasks`)
   const tasks = (data.groups ?? []).flatMap((group) => group.tasks ?? [])
   const scheduled = tasks.filter((task) => task.schedule?.enabled)
-  const running = tasks.filter((task) => task.running).length
-  const buckets = { stale: [], recent: [], errors: [] }
-  for (const task of tasks) {
-    const { key, item } = taskBucket(task)
-    buckets[key].push(item)
-  }
-  buckets.stale.sort((a, b) => (a.ts == null ? -1 : b.ts == null ? 1 : a.ts - b.ts))
-  buckets.recent.sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
-  buckets.errors.sort((a, b) => a.name.localeCompare(b.name))
-  const failing = buckets.errors.length
+  const counts = { stale: 0, recent: 0, errors: 0 }
+  for (const task of tasks) counts[taskBucket(task)] += 1
+  const stale = counts.stale
+  const recent = counts.recent
+  const errors = counts.errors
   const next = scheduled
     .filter((task) => Number.isFinite(task.next_run))
     .sort((a, b) => a.next_run - b.next_run)[0] ?? null
   return {
-    issue: failing > 0,
+    issue: errors > 0,
     kicker: `${tasks.length} task${tasks.length === 1 ? '' : 's'}`,
     primary: { value: formatNumber(scheduled.length), label: 'scheduled', tone: scheduled.length ? 'ok' : '' },
     stats: [
-      stat('Tasks', formatNumber(tasks.length)),
-      stat('Running', formatNumber(running), running ? 'ok' : ''),
-      stat('Failing', formatNumber(failing), failing ? 'over' : ''),
-    ],
-    lists: [
-      { key: 'stale', label: 'Stale / never', tone: 'warn', items: buckets.stale },
-      { key: 'recent', label: 'Recent', tone: 'ok', items: buckets.recent },
-      { key: 'errors', label: 'Errors', tone: 'over', items: buckets.errors },
+      stat('Stale', formatNumber(stale), stale ? 'warn' : ''),
+      stat('Recent', formatNumber(recent), recent ? 'ok' : ''),
+      stat('Errors', formatNumber(errors), errors ? 'over' : ''),
     ],
     footer: next
       ? { text: `Next: ${next.name} · ${formatDateTime(next.next_run)}`, tone: '' }

@@ -7,10 +7,10 @@ const NOW = Date.UTC(2026, 9, 20, 12)
 const ts = (ms) => ms / 1000
 
 test('task buckets use the 7-day threshold and put errors first', () => {
-  assert.equal(taskBucket({ name: 'recent', state: { ok: true, ts: ts(NOW - DAY_MS) } }, NOW).key, 'recent')
-  assert.equal(taskBucket({ name: 'stale', state: { ok: true, ts: ts(NOW - TASK_STALE_MS) } }, NOW).key, 'stale')
-  assert.equal(taskBucket({ name: 'never', state: null, running: false }, NOW).key, 'stale')
-  assert.equal(taskBucket({ name: 'running', state: null, running: true }, NOW).key, 'recent')
-  assert.equal(taskBucket({ name: 'failed', state: { ok: false, ts: ts(NOW - DAY_MS) } }, NOW).key, 'errors')
-  assert.equal(taskBucket({ name: 'old failed', state: { ok: false, ts: ts(NOW - 8 * DAY_MS) } }, NOW).key, 'errors')
+  assert.equal(taskBucket({ name: 'recent', state: { ok: true, ts: ts(NOW - DAY_MS) } }, NOW), 'recent')
+  assert.equal(taskBucket({ name: 'stale', state: { ok: true, ts: ts(NOW - TASK_STALE_MS) } }, NOW), 'stale')
+  assert.equal(taskBucket({ name: 'never', state: null, running: false }, NOW), 'stale')
+  assert.equal(taskBucket({ name: 'running', state: null, running: true }, NOW), 'recent')
+  assert.equal(taskBucket({ name: 'failed', state: { ok: false, ts: ts(NOW - DAY_MS) } }, NOW), 'errors')
+  assert.equal(taskBucket({ name: 'old failed', state: { ok: false, ts: ts(NOW - 8 * DAY_MS) } }, NOW), 'errors')
 })

@@ -288,11 +288,11 @@ test('portal cards show app summaries', async (t) => {
   assert.match(await text('primary-watxt'), /^3$/)
   assert.match(await text('stat-watxt-0'), /Messages42/)
   assert.match(await text('primary-tasks'), /^1$/)
-  assert.match(await text('stat-tasks-2'), /Failing1/)
+  assert.match(await text('stat-tasks-2'), /Errors1/)
   assert.match(await text('footer-tasks'), /Next: Scheduled/)
 })
 
-test('portal groups task runner items into stale, recent and error lists', async (t) => {
+test('portal shows task runner stale, recent and error counts', async (t) => {
   const browser = await launchBrowser()
   if (!browser) {
     t.skip('chromium not available (playwright browsers missing)')
@@ -317,19 +317,17 @@ test('portal groups task runner items into stale, recent and error lists', async
   })))
 
   await page.goto(`${base}/`)
-  await page.waitForSelector('[data-testid="task-list-stale"]')
+  await page.waitForSelector('[data-testid="stat-tasks-0"]')
 
   const text = (id) => page.$eval(`[data-testid="${id}"]`, (node) => node.textContent)
-  assert.equal(await text('task-list-stale-count'), '2')
-  assert.equal(await text('task-list-recent-count'), '1')
-  assert.equal(await text('task-list-errors-count'), '2')
-  assert.match(await text('task-list-stale'), /Stale/)
-  assert.match(await text('task-list-stale'), /Never/)
-  assert.doesNotMatch(await text('task-list-stale'), /Failed/)
-  assert.match(await text('task-list-recent'), /Fresh/)
-  assert.match(await text('task-list-errors'), /Failed/)
-  assert.match(await text('task-list-errors'), /Old failed/)
-  assert.match(await page.$eval('[data-testid="card-tasks"]', (node) => node.className), /portal-card--wide/)
+  const tone = (id) => page.$eval(`[data-testid="${id}"] .portal-card__stat-value`, (node) => node.className)
+  assert.match(await text('stat-tasks-0'), /Stale2/)
+  assert.match(await text('stat-tasks-1'), /Recent1/)
+  assert.match(await text('stat-tasks-2'), /Errors2/)
+  assert.match(await tone('stat-tasks-0'), /is-warn/)
+  assert.match(await tone('stat-tasks-1'), /is-ok/)
+  assert.match(await tone('stat-tasks-2'), /is-over/)
+  assert.doesNotMatch(await page.$eval('[data-testid="card-tasks"]', (node) => node.className), /portal-card--wide/)
 })
 
 test('portal attention ignores over-budget', async (t) => {

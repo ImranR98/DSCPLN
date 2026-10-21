@@ -25,9 +25,18 @@ const maindir = DATA;
 const PTY_HELPER = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'pty_runner.py');
 
 function writeConfig(name, data) {
-  const p = path.join(SANDBOX, name);
+  // Each config gets its own folder so task-meta.json from one test never
+  // leaks into another test's config.
+  const dir = fs.mkdtempSync(path.join(SANDBOX, 'cfg-'));
+  const p = path.join(dir, name);
   fs.writeFileSync(p, `export default ${JSON.stringify(data)};`);
   return p;
+}
+
+function writeMeta(configPath, meta) {
+  const file = path.join(path.dirname(configPath), 'task-meta.json');
+  fs.writeFileSync(file, JSON.stringify(meta, null, 2));
+  return file;
 }
 
 function makeConfig(tasks, extraValues = {}) {
@@ -185,6 +194,72 @@ test('loadConfig: script/move/ingest shorthands normalize into commands', async 
   assert.equal(bctl.resolve(tasks[3].commands, local), `bash ${lib} move --git --rename r.txt '/tmp/Else' {{uploads}}`);
   assert.equal(bctl.resolve(tasks[4].commands, local), `bash ${lib} ingest '/tmp/G' 'jq -r ".id" actor.json' {{uploads}}`);
 });
+
+test('loadConfig: task-meta supplies attributes, schedules and grouping', async () => {
+  const configPath = makeConfig([task('Meta Task', { commands: 'true' })])
+  writeMeta(configPath, {
+    version: 1,
+    attributes: [
+      { name: 'Category', values: ['G', 'Elsewhere'] },
+      { name: 'Best run from', values: ['Phone', 'PC'] },
+    ],
+    default_group_by: 'Best run from',
+    tasks: {
+      'Meta Task': {
+        attributes: { Category: 'Elsewhere', 'Best run from': 'Phone' },
+        schedule: { enabled: true, days: [1], at: '6:15', catchUp: false },
+      },
+    },
+  })
+  const [local, tasks] = await bctl.loadConfig(configPath)
+  assert.deepEqual(local.attributes, [
+    { name: 'Category', values: ['G', 'Elsewhere'] },
+    { name: 'Best run from', values: ['Phone', 'PC'] },
+  ])
+  assert.equal(local.default_group_by, 'Best run from')
+  assert.deepEqual(tasks[0].attributes, { Category: 'Elsewhere', 'Best run from': 'Phone' })
+  assert.deepEqual(tasks[0].schedule, { enabled: true, days: [1], at: '06:15', catchUp: false })
+
+  // Metadata schedules obey the same unattended-only rule as config ones.
+  const badConfig = makeConfig([task('Meta Upload', { commands: 'true', uploads: true, glob: '*.txt' })])
+  writeMeta(badConfig, {
+    version: 1,
+    attributes: [{ name: 'Category', values: ['G'] }],
+    default_group_by: 'Category',
+    tasks: { 'Meta Upload': { schedule: { enabled: true, days: [], at: '04:00' } } },
+  })
+  await assert.rejects(bctl.loadConfig(badConfig), /scheduled tasks cannot use 'uploads'/)
+})
+
+test('loadConfig: actions normalize and validate', async () => {
+  const configPath = makeConfig([
+    task('Action Task', {
+      commands: 'true',
+      actions: [
+        {
+          key: 'test',
+          label: 'Test it',
+          commands: ['echo ok'],
+          prompts: [{ key: 'code', label: 'Code', type: 'secret' }],
+          require: ['code'],
+        },
+      ],
+    }),
+  ])
+  const [, tasks] = await bctl.loadConfig(configPath)
+  assert.deepEqual(tasks[0].actions, [{
+    key: 'test',
+    label: 'Test it',
+    commands: ['echo ok'],
+    prompts: [{ key: 'code', label: 'Code', type: 'secret' }],
+    require: ['code'],
+    summary_last_line: true,
+  }])
+  await assert.rejects(
+    bctl.loadConfig(makeConfig([task('Bad Action', { commands: 'true', actions: [{ key: 'x' }] })])),
+    /needs 'commands'/,
+  )
+})
 
 test('script shorthand runs through the heredoc wrapper (stdin-safe)', async () => {
   const t = task('Script Task', {
@@ -836,38 +911,54 @@ test('API: /api/tasks returns groups in config order', async () => {
   await close();
 });
 
-test('API: schedule overrides persist and update the effective schedule', async () => {
+test('API: task settings persist schedules and attributes to task-meta.json', async () => {
   const name = 'Schedule UI Test'
   const t = task(name, { commands: 'true' })
-  await bootWith(makeConfig([t]))
+  const configPath = makeConfig([t])
+  const metaFile = writeMeta(configPath, {
+    version: 1,
+    attributes: [
+      { name: 'Category', values: ['G', 'Other'] },
+      { name: 'Best run from', values: ['Phone', 'PC'] },
+    ],
+    default_group_by: 'Best run from',
+    tasks: { [name]: { attributes: { Category: 'G', 'Best run from': 'Phone' } } },
+  })
+  await bootWith(configPath)
   const { req, close } = await api()
   try {
-    const saved = await req('PUT', `/api/schedule/${encodeURIComponent(name)}`, {
-      enabled: true,
-      days: [1, 3],
-      at: '07:30',
-      catchUp: false,
+    const saved = await req('PUT', `/api/tasks/${encodeURIComponent(name)}/settings`, {
+      schedule: { enabled: true, days: [1, 3], at: '07:30', catchUp: false },
+      attributes: { Category: 'Other', 'Best run from': 'PC' },
     })
     assert.equal(saved.status, 200)
     assert.deepEqual(saved.json.schedule, { enabled: true, days: [1, 3], at: '07:30', catchUp: false })
     assert.ok(saved.json.next_run)
     assert.equal(saved.json.scheduled, true)
+    assert.deepEqual(saved.json.attributes, { Category: 'Other', 'Best run from': 'PC' })
 
     const list = await req('GET', '/api/tasks')
-    const shown = list.json.groups[0].tasks.find((entry) => entry.name === name)
+    const shown = list.json.tasks.find((entry) => entry.name === name)
     assert.equal(shown.schedulable, true)
     assert.equal(shown.schedule.enabled, true)
     assert.equal(shown.schedule.at, '07:30')
+    assert.equal(shown.attributes['Best run from'], 'PC')
+    assert.equal(list.json.default_group_by, 'Best run from')
 
-    const overrides = bctl.loadScheduleOverrides()
-    assert.equal(overrides[name].at, '07:30')
+    const persisted = JSON.parse(fs.readFileSync(metaFile, 'utf8'))
+    assert.equal(persisted.tasks[name].schedule.at, '07:30')
+    assert.equal(persisted.tasks[name].attributes.Category, 'Other')
 
-    const disabled = await req('PUT', `/api/schedule/${encodeURIComponent(name)}`, { enabled: false, at: '07:30' })
+    const disabled = await req('PUT', `/api/tasks/${encodeURIComponent(name)}/settings`, {
+      schedule: { enabled: false, at: '07:30' },
+    })
     assert.equal(disabled.status, 200)
     assert.equal(disabled.json.schedule.enabled, false)
     assert.equal(disabled.json.next_run, null)
+    const afterDisable = JSON.parse(fs.readFileSync(metaFile, 'utf8'))
+    assert.equal(afterDisable.tasks[name].schedule.enabled, false)
+    assert.equal(afterDisable.tasks[name].attributes['Best run from'], 'PC')
   } finally {
-    bctl.saveScheduleOverride(name, null)
     bctl.stopSchedulers()
     await close()
   }
@@ -880,11 +971,98 @@ test('API: schedule overrides persist and update the effective schedule', async 
   await bootWith(makeConfig([uploadTask]))
   const second = await api()
   try {
-    const rejected = await second.req('PUT', `/api/schedule/${encodeURIComponent('Schedule Needs Upload')}`, { enabled: true, at: '07:30' })
+    const rejected = await second.req('PUT', `/api/tasks/${encodeURIComponent('Schedule Needs Upload')}/settings`, {
+      schedule: { enabled: true, at: '07:30' },
+    })
     assert.equal(rejected.status, 400)
     assert.match(rejected.json.detail, /cannot be scheduled/)
   } finally {
     await second.close()
+  }
+})
+
+test('API: attributes manager updates definitions and prunes task values', async () => {
+  const t1 = task('Attr One', { commands: 'true' })
+  const t2 = task('Attr Two', { commands: 'true' })
+  const configPath = makeConfig([t1, t2])
+  const metaFile = writeMeta(configPath, {
+    version: 1,
+    attributes: [
+      { name: 'Category', values: ['G'] },
+      { name: 'Best run from', values: ['Phone', 'PC'] },
+    ],
+    default_group_by: 'Best run from',
+    tasks: {
+      'Attr One': { attributes: { Category: 'G', 'Best run from': 'Phone' } },
+      'Attr Two': { attributes: { Category: 'G', 'Best run from': 'PC' } },
+    },
+  })
+  await bootWith(configPath)
+  const { req, close } = await api()
+  try {
+    const saved = await req('PUT', '/api/attributes', {
+      attributes: [
+        { name: 'Category', values: ['G'] },
+        { name: 'Best run from', values: ['Phone'] },
+        { name: 'Frequency', values: ['Weekly'] },
+      ],
+      default_group_by: 'Category',
+    })
+    assert.equal(saved.status, 200)
+    assert.equal(saved.json.default_group_by, 'Category')
+
+    const list = await req('GET', '/api/tasks')
+    const one = list.json.tasks.find((entry) => entry.name === 'Attr One')
+    const two = list.json.tasks.find((entry) => entry.name === 'Attr Two')
+    assert.deepEqual(one.attributes, { Category: 'G', 'Best run from': 'Phone' })
+    assert.deepEqual(two.attributes, { Category: 'G' })
+
+    const persisted = JSON.parse(fs.readFileSync(metaFile, 'utf8'))
+    assert.deepEqual(persisted.attributes.map((entry) => entry.name), ['Category', 'Best run from', 'Frequency'])
+    assert.equal(persisted.tasks['Attr Two'].attributes['Best run from'], undefined)
+
+    const rejected = await req('PUT', '/api/attributes', {
+      attributes: [{ name: 'Best run from', values: ['Phone'] }],
+      default_group_by: 'Best run from',
+    })
+    assert.equal(rejected.status, 400)
+    assert.match(rejected.json.detail, /Category/)
+  } finally {
+    await close()
+  }
+})
+
+test('API: card actions run without check gating and keep separate state', async () => {
+  const name = 'Action Task'
+  const t = task(name, {
+    commands: 'true',
+    check: 'false',
+    actions: [
+      { key: 'hello', label: 'Say hello', commands: ['echo hello-action'], summary_last_line: true },
+      { key: 'needs', label: 'Needs input', commands: ['echo {{value}}'], prompts: [{ key: 'value', label: 'Value' }], require: ['value'] },
+    ],
+  })
+  await bootWith(makeConfig([t]))
+  const { req, close } = await api()
+  try {
+    const missing = await req('POST', `/api/actions/${encodeURIComponent(name)}/needs`, {})
+    assert.equal(missing.status, 400)
+    assert.match(missing.json.detail, /Missing required input/)
+
+    const started = await req('POST', `/api/actions/${encodeURIComponent(name)}/hello`, {})
+    assert.equal(started.status, 200)
+    await pollUntil(async () => {
+      const status = await req('GET', '/api/status')
+      return (status.json.done ?? []).some((done) => done.action === 'hello')
+    })
+    const list = await req('GET', '/api/tasks')
+    const shown = list.json.tasks.find((entry) => entry.name === name)
+    assert.equal(shown.state, null, 'action state does not overwrite the task state')
+    const hello = shown.actions.find((action) => action.key === 'hello')
+    assert.equal(hello.state.ok, true)
+    assert.equal(hello.state.summary, 'hello-action')
+  } finally {
+    await close()
   }
 })
 

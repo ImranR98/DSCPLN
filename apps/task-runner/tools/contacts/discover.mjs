@@ -1,22 +1,25 @@
 #!/usr/bin/env node
-// Print the Nextcloud calendars/address books for a contacts config.
+// Discover the Nextcloud calendars/address books for a contacts config.
 //
-// This is the CLI successor to the Contacts app's Discover button: the
-// Task Runner config is read-only, so this prints a ready-to-paste
-// `collections` array and leaves editing to the config repo.
+// This is the CLI successor to the Contacts app's Discover button. With
+// --write it also updates the collections in the config (preserving existing
+// enabled/filename choices), which is what the Task Runner's Discover action
+// uses. Without --write it prints the JSON for manual pasting.
 import { readFile } from 'node:fs/promises'
 import { parseArgs } from 'node:util'
+import { atomicWriteFile } from '@dscpln/server-kit/atomic'
 import { discoverCollections, normalizeBaseUrl } from './dav.mjs'
 
 const { values } = parseArgs({
   options: {
     config: { type: 'string', short: 'c' },
+    write: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h' },
   },
 })
 
 if (values.help || !values.config) {
-  console.log('usage: node discover.mjs --config <config.json>')
+  console.log('usage: node discover.mjs --config <config.json> [--write]')
   process.exit(values.help ? 0 : 2)
 }
 
@@ -43,6 +46,11 @@ const collections = discovered.map((entry) => {
   }
 })
 
-console.log(JSON.stringify(collections, null, 2))
+if (values.write) {
+  await atomicWriteFile(values.config, `${JSON.stringify({ ...config, collections }, null, 2)}\n`, { mode: 0o644 })
+  console.log(`Updated ${values.config}`)
+} else {
+  console.log(JSON.stringify(collections, null, 2))
+}
 const enabled = collections.filter((entry) => entry.enabled).length
 console.log(`Discovered ${collections.length} collection(s), ${enabled} enabled.`)

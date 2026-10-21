@@ -27,12 +27,20 @@ import {
   Scheduler,
 } from '@dscpln/server-kit';
 import {
+  CONFIG_FILE,
   ConfigError,
   ConfigMissingError,
   LIB_PATH,
   REPO_DIR,
   loadConfig,
+  validateSchedule,
 } from './config-loader.mjs';
+import {
+  normalizeAttributeDefinitions,
+  TaskMetaError,
+  taskMetaFileFor,
+  writeTaskMeta,
+} from './task-meta.mjs';
 import { expand, resolve, shellSafe } from './template.mjs';
 import {
   attachBrowserWebSocket,
@@ -44,12 +52,11 @@ import {
 export { attachBrowserWebSocket };
 import {
   clearRunning,
-  loadScheduleOverrides,
+  ensureStateDir,
   loadScheduleState,
   loadTaskState,
   markRunning,
   runningMarker,
-  saveScheduleOverride,
   saveTaskState,
   scheduleStore,
   slugify,
@@ -314,17 +321,73 @@ export async function runTask(task, local, files, log = null, extra = null, opts
   return [ok, summary];
 }
 
+// A card action is a small, person-triggered command attached to a task
+// (test auth, pair a device, discover collections). It inherits the task's
+// identity, environment and host pin but its result is stored under a suffixed
+// state file so it never overwrites the task's last-run status.
+export function actionTaskFor(task, action) {
+  return {
+    ...task,
+    commands: action.commands,
+    prompts: action.prompts ?? [],
+    require: action.require ?? [],
+    uploads: false,
+    browser: false,
+    capture: false,
+    commit_dir: undefined,
+    summary_last_line: action.summary_last_line !== false,
+    notify: 'never',
+    state_suffix: `action-${action.key}`,
+    actions: [],
+    schedule: null,
+  }
+}
+
+function taskMeta() {
+  const meta = LOCAL.task_meta ?? {}
+  meta.version ??= 1
+  meta.attributes = LOCAL.attributes ?? []
+  meta.default_group_by = LOCAL.default_group_by ?? LOCAL.attributes?.[0]?.name ?? 'Category'
+  meta.tasks ??= {}
+  return meta
+}
+
+function persistTaskMeta() {
+  writeTaskMeta(TASK_META_FILE, taskMeta())
+}
+
+function cleanTaskAttributes(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new TaskMetaError('attributes must be an object')
+  }
+  const definitions = new Map((LOCAL.attributes ?? []).map((attribute) => [attribute.name, new Set(attribute.values)]))
+  const clean = {}
+  for (const [name, value] of Object.entries(raw)) {
+    if (!definitions.has(name)) throw new TaskMetaError(`Unknown attribute: '${name}'`)
+    if (value == null || value === '') continue
+    if (typeof value !== 'string') throw new TaskMetaError(`Attribute '${name}' must be a string`)
+    if (!definitions.get(name).has(value)) {
+      throw new TaskMetaError(`Attribute '${name}' has no value '${value}'`)
+    }
+    clean[name] = value
+  }
+  return clean
+}
+
 // server ---------------------------------------------------------------------
 
 export let LOCAL = {};
 export let TASK_LIST = [];
 export let MISSING_CONFIG = false;
 export let TASK_MAP = new Map();
+export let TASK_META_FILE = taskMetaFileFor(CONFIG_FILE);
 
 export async function boot(configPath = undefined) {
+  TASK_META_FILE = taskMetaFileFor(configPath ?? CONFIG_FILE);
   try {
     [LOCAL, TASK_LIST] = await loadConfig(configPath);
     LOCAL.host = instanceHost();
+    ensureStateDir();
   } catch (e) {
     if (e instanceof ConfigMissingError) {
       console.warn(`WARNING: ${e.message}`);
@@ -336,19 +399,7 @@ export async function boot(configPath = undefined) {
       throw e;
     }
   }
-  applyScheduleOverrides();
   TASK_MAP = new Map(TASK_LIST.map((t) => [t.name, t]));
-}
-
-function applyScheduleOverrides() {
-  const overrides = loadScheduleOverrides();
-  for (const task of TASK_LIST) {
-    if (!Object.prototype.hasOwnProperty.call(overrides, task.name)) continue;
-    if (!isSchedulable(task)) continue;
-    const spec = normalizeSpec(overrides[task.name]);
-    if (spec.enabled && !spec.at) continue;
-    task.schedule = spec;
-  }
 }
 
 // run slots: any number of tasks can run in parallel; tasks sharing a
@@ -377,16 +428,23 @@ export function isQueued(taskName, serialKey) {
   return Boolean(serialKey && (SERIAL_QUEUES.get(serialKey) ?? []).some((q) => q.taskName === taskName));
 }
 
-function startRun(taskName, payload = {}, trigger = 'manual') {
-  const task = TASK_MAP.get(taskName);
+function startRun(taskName, payload = {}, trigger = 'manual', actionKey = null) {
+  const baseTask = TASK_MAP.get(taskName);
+  const action = actionKey ? (baseTask.actions ?? []).find((entry) => entry.key === actionKey) : null;
+  if (actionKey && !action) throw new Error(`Unknown action '${actionKey}' for ${taskName}`);
+  const task = action ? actionTaskFor(baseTask, action) : baseTask;
   const staging = stagingDir(taskName);
-  const files = fs
-    .readdirSync(staging)
-    .filter((p) => !p.endsWith('.part') && fs.statSync(path.join(staging, p)).isFile())
-    .map((p) => path.join(staging, p));
+  const files = action
+    ? []
+    : fs
+      .readdirSync(staging)
+      .filter((p) => !p.endsWith('.part') && fs.statSync(path.join(staging, p)).isFile())
+      .map((p) => path.join(staging, p));
   const logger = makeLogger();
   const rec = {
     task: taskName,
+    action: action?.key ?? null,
+    action_label: action?.label ?? null,
     log: logger.lines,
     read: 0,
     cancelled: false,
@@ -410,7 +468,17 @@ function startRun(taskName, payload = {}, trigger = 'manual') {
     } finally {
       RUNS.delete(taskName);
       clearRunning(taskName);
-      DONE.push({ task: taskName, ok, summary, paste: Boolean(task.capture), trigger });
+      // Pairing/auth actions can change whether the task itself is available.
+      if (action) CHECK_CACHE.clear()
+      DONE.push({
+        task: taskName,
+        action: action?.key ?? null,
+        action_label: action?.label ?? null,
+        ok,
+        summary,
+        paste: Boolean(task.capture),
+        trigger,
+      });
       if (DONE.length > DONE_LIMIT) DONE.splice(0, DONE.length - DONE_LIMIT);
       drainSerialQueue(task.serial_key);
       notifyTask(task, ok, summary).catch((err) => console.error(`notification failed: ${err.message}`));
@@ -477,6 +545,24 @@ export function stopSchedulers() {
   SCHEDULERS.clear();
 }
 
+function actionJson(task, action) {
+  const rec = loadTaskState(actionTaskFor(task, action), LOCAL)
+  return {
+    key: action.key,
+    label: action.label,
+    prompts: action.prompts ?? [],
+    require: action.require ?? [],
+    state: rec
+      ? {
+          ts: rec.ts,
+          ok: Boolean(rec.ok),
+          summary: rec.summary ?? '',
+          last_run_text: `${rec.ok ? 'OK' : 'FAILED'} · ${humanAgo(rec.ts)}`,
+        }
+      : null,
+  }
+}
+
 export function taskJson(t) {
   const [avail, reason] = availability(t, LOCAL);
   let stateJson = null;
@@ -536,6 +622,8 @@ export function taskJson(t) {
     schedule_missed: scheduleState?.missed ?? 0,
     last_scheduled_run: scheduleState?.lastScheduledRun ?? null,
     notify: t.notify ?? 'never',
+    attributes: { ...(t.attributes ?? {}) },
+    actions: (t.actions ?? []).map((action) => actionJson(t, action)),
   };
 }
 
@@ -604,7 +692,10 @@ export function createApp(options = {}) {
 
       // JSON body parsing only for the endpoints that need it; /api/upload
       // streams raw bytes straight to disk (JSON-typed uploads included).
-      router.use(['/api/run', '/api/cancel', '/api/paste_done', '/api/schedule'], express.json({ limit: '1mb' }))
+      router.use(
+        ['/api/run', '/api/cancel', '/api/paste_done', '/api/tasks', '/api/attributes', '/api/actions'],
+        express.json({ limit: '1mb' }),
+      )
 
       // most-specific pattern wins; ties listed as `ambiguous`
       router.post('/api/detect', (req, res) => {
@@ -622,35 +713,98 @@ export function createApp(options = {}) {
         res.json({ result: { task: tied[0], ambiguous: tied } })
       })
 
-      router.put('/api/schedule/:taskName', async (req, res) => {
+      router.put('/api/tasks/:taskName/settings', async (req, res) => {
         const task = TASK_MAP.get(req.params.taskName)
         if (!task) return res.status(404).json({ detail: 'Unknown task' })
-        if (!isSchedulable(task)) {
-          return res.status(400).json({ detail: 'This task needs manual input or browser interaction and cannot be scheduled' })
-        }
         const raw = req.body && typeof req.body === 'object' ? req.body : {}
-        const spec = normalizeSpec({
-          enabled: raw.enabled === true,
-          days: raw.days,
-          at: raw.at,
-          catchUp: raw.catchUp !== false,
-        })
-        if (spec.enabled && !spec.at) {
-          return res.status(400).json({ detail: 'A time (HH:MM) is required when the schedule is enabled' })
-        }
         try {
-          saveScheduleOverride(task.name, spec)
-          task.schedule = spec
-          // Do not replay occurrences from before the edit. The next new
-          // occurrence after the chosen time is the first one that fires.
-          const latest = occurrenceBefore(spec, new Date())
-          if (latest != null) await scheduleStore(task.name).setLastScheduledRun(latest)
-          stopSchedulerForTask(task.name)
-          const scheduled = startSchedulerForTask(task)
-          console.log(`[schedule] ${task.name}: ${spec.enabled ? 'enabled' : 'disabled'}${spec.at ? ` at ${spec.at}` : ''}`)
-          res.json({ schedule: spec, next_run: spec.enabled ? occurrenceAfter(spec, new Date()) : null, scheduled })
+          let spec = task.schedule ? normalizeSpec(task.schedule) : null
+          if (raw.schedule !== undefined) {
+            if (!isSchedulable(task)) {
+              return res.status(400).json({ detail: 'This task needs manual input or browser interaction and cannot be scheduled' })
+            }
+            spec = normalizeSpec({
+              enabled: raw.schedule?.enabled === true,
+              days: raw.schedule?.days,
+              at: raw.schedule?.at,
+              catchUp: raw.schedule?.catchUp !== false,
+            })
+            if (spec.enabled && !spec.at) {
+              return res.status(400).json({ detail: 'A time (HH:MM) is required when the schedule is enabled' })
+            }
+            spec = validateSchedule(task, spec)
+          }
+          let attributes = task.attributes ?? {}
+          if (raw.attributes !== undefined) attributes = cleanTaskAttributes(raw.attributes)
+
+          const meta = taskMeta()
+          meta.tasks[task.name] ??= {}
+          if (raw.schedule !== undefined) meta.tasks[task.name].schedule = spec
+          if (raw.attributes !== undefined) meta.tasks[task.name].attributes = attributes
+          persistTaskMeta()
+
+          task.attributes = attributes
+          let scheduled = SCHEDULERS.has(task.name)
+          if (raw.schedule !== undefined) {
+            task.schedule = spec
+            // Do not replay occurrences from before the edit. The next new
+            // occurrence after the chosen time is the first one that fires.
+            if (spec?.enabled) {
+              const latest = occurrenceBefore(spec, new Date())
+              if (latest != null) await scheduleStore(task.name).setLastScheduledRun(latest)
+            }
+            stopSchedulerForTask(task.name)
+            scheduled = startSchedulerForTask(task)
+            console.log(`[schedule] ${task.name}: ${spec?.enabled ? 'enabled' : 'disabled'}${spec?.at ? ` at ${spec.at}` : ''}`)
+          }
+          res.json({
+            schedule: spec,
+            attributes,
+            next_run: spec?.enabled ? occurrenceAfter(spec, new Date()) : null,
+            scheduled,
+            task: taskJson(task),
+          })
         } catch (err) {
-          res.status(500).json({ detail: err.message })
+          const status = err instanceof TaskMetaError || err instanceof ConfigError ? 400 : 500
+          res.status(status).json({ detail: err.message })
+        }
+      })
+
+      router.put('/api/attributes', (req, res) => {
+        const raw = req.body && typeof req.body === 'object' ? req.body : {}
+        try {
+          const definitions = normalizeAttributeDefinitions(raw.attributes)
+          if (!definitions.some((attribute) => attribute.name === 'Category')) {
+            throw new TaskMetaError("The built-in 'Category' attribute is required")
+          }
+          const defaultBy = String(raw.default_group_by ?? LOCAL.default_group_by ?? '').trim()
+          if (!definitions.some((attribute) => attribute.name === defaultBy)) {
+            throw new TaskMetaError(`Default grouping attribute '${defaultBy}' does not exist`)
+          }
+
+          const valid = new Map(definitions.map((attribute) => [attribute.name, new Set(attribute.values)]))
+          const prune = (values) => {
+            const clean = {}
+            for (const [name, value] of Object.entries(values ?? {})) {
+              if (valid.get(name)?.has(value)) clean[name] = value
+            }
+            return clean
+          }
+
+          const meta = taskMeta()
+          meta.attributes = definitions
+          meta.default_group_by = defaultBy
+          for (const entry of Object.values(meta.tasks)) {
+            if (entry.attributes) entry.attributes = prune(entry.attributes)
+          }
+          for (const task of TASK_LIST) task.attributes = prune(task.attributes)
+          LOCAL.attributes = definitions
+          LOCAL.default_group_by = defaultBy
+          persistTaskMeta()
+          res.json({ attributes: definitions, default_group_by: defaultBy })
+        } catch (err) {
+          const status = err instanceof TaskMetaError ? 400 : 500
+          res.status(status).json({ detail: err.message })
         }
       })
 
@@ -661,8 +815,15 @@ export function createApp(options = {}) {
 
       router.get('/api/tasks', (req, res) => {
         const names = [...new Set(TASK_LIST.map((t) => t.group))]
+        const tasks = TASK_LIST.map(taskJson)
         res.json({
-          groups: names.map((name) => ({ name, tasks: TASK_LIST.filter((t) => t.group === name).map(taskJson) })),
+          groups: names.map((name) => ({
+            name,
+            tasks: tasks.filter((task) => task.group === name),
+          })),
+          tasks,
+          attributes: LOCAL.attributes ?? [],
+          default_group_by: LOCAL.default_group_by ?? 'Category',
           missing_config: MISSING_CONFIG,
           browser: Boolean(browserRemote),
         })
@@ -739,12 +900,34 @@ export function createApp(options = {}) {
         res.json({ started: true })
       })
 
+      // Card actions deliberately bypass `check:` (pairing exists to fix an
+      // unavailable device) but still respect host pinning and busy tasks.
+      router.post('/api/actions/:taskName/:actionKey', (req, res) => {
+        const task = TASK_MAP.get(req.params.taskName)
+        if (!task) return res.status(404).json({ detail: 'Unknown task' })
+        const action = (task.actions ?? []).find((entry) => entry.key === req.params.actionKey)
+        if (!action) return res.status(404).json({ detail: 'Unknown action' })
+        if (task.host !== 'any' && task.host !== instanceHost()) {
+          return res.status(400).json({ detail: `Pinned to ${task.host}` })
+        }
+        if (RUNS.has(task.name)) return res.status(409).json({ detail: 'This task is already running' })
+        if (serialKeyHeld(task.serial_key)) {
+          return res.status(409).json({ detail: 'Another task sharing this destination is running' })
+        }
+        const extra = req.body && typeof req.body === 'object' ? req.body : {}
+        for (const key of action.require ?? []) {
+          if (!extra[key]) return res.status(400).json({ detail: `Missing required input: ${key}` })
+        }
+        startRun(task.name, extra, 'action', action.key)
+        res.json({ started: true })
+      })
+
       router.get('/api/status', (req, res) => {
         const runs = []
         for (const [taskName, rec] of RUNS) {
           const newLines = rec.log.slice(rec.read)
           rec.read = rec.log.length
-          runs.push({ task: taskName, log: newLines })
+          runs.push({ task: taskName, action: rec.action, action_label: rec.action_label, log: newLines })
         }
         res.json({ runs, done: DONE.splice(0) })
       })

@@ -6,6 +6,13 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { normalizeSpec, specValid } from '@dscpln/server-kit';
 import { shellQuote } from './util.mjs';
+import {
+  attributeDefinitions,
+  defaultGroupBy,
+  readTaskMeta,
+  taskMetaFileFor,
+  TaskMetaError,
+} from './task-meta.mjs';
 
 export const REPO_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const CONFIG_FILE = process.env.BACKUPCTL_CONFIG_FILE ?? path.join(REPO_DIR, 'config.mjs');
@@ -85,7 +92,61 @@ function validateEnv(value, label) {
   return value;
 }
 
-function validateSchedule(task, schedule) {
+function validatePrompts(value, label) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new ConfigError(`${label} must be a list`);
+  const seen = new Set();
+  return value.map((prompt, index) => {
+    if (!prompt || typeof prompt !== 'object' || Array.isArray(prompt)) {
+      throw new ConfigError(`${label}[${index}] must be an object`);
+    }
+    const key = String(prompt.key ?? '').trim();
+    if (!key) throw new ConfigError(`${label}[${index}].key is required`);
+    if (seen.has(key)) throw new ConfigError(`${label} has duplicate key '${key}'`);
+    seen.add(key);
+    if (prompt.type !== undefined && !['confirm', 'secret'].includes(prompt.type)) {
+      throw new ConfigError(`${label}.${key}: type must be confirm or secret`);
+    }
+    return { ...prompt, key, label: String(prompt.label ?? key) };
+  });
+}
+
+function normalizeActions(value, taskName) {
+  if (value === undefined) return [];
+  const list = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? Object.entries(value).map(([key, action]) => ({ key, ...action }))
+      : null;
+  if (!list) throw new ConfigError(`Task '${taskName}': actions must be a list or object`);
+  const seen = new Set();
+  return list.map((action, index) => {
+    if (!action || typeof action !== 'object' || Array.isArray(action)) {
+      throw new ConfigError(`Task '${taskName}': actions[${index}] must be an object`);
+    }
+    const key = String(action.key ?? '').trim();
+    if (!key) throw new ConfigError(`Task '${taskName}': actions[${index}].key is required`);
+    if (seen.has(key)) throw new ConfigError(`Task '${taskName}': duplicate action '${key}'`);
+    seen.add(key);
+    if (!action.commands) {
+      throw new ConfigError(`Task '${taskName}': action '${key}' needs 'commands'`);
+    }
+    const require = action.require ?? [];
+    if (!Array.isArray(require) || require.some((item) => typeof item !== 'string' || !item.trim())) {
+      throw new ConfigError(`Task '${taskName}': action '${key}' require must be a list of prompt keys`);
+    }
+    return {
+      key,
+      label: String(action.label ?? key),
+      commands: action.commands,
+      prompts: validatePrompts(action.prompts, `Task '${taskName}': action '${key}' prompts`),
+      require: require.map((item) => item.trim()),
+      summary_last_line: action.summary_last_line !== false,
+    };
+  });
+}
+
+export function validateSchedule(task, schedule) {
   if (schedule === undefined || schedule === null) return null;
   if (typeof schedule !== 'object' || Array.isArray(schedule)) {
     throw new ConfigError(`Task '${task.name}': schedule must be an object`);
@@ -125,6 +186,19 @@ export async function loadConfig(configPath = CONFIG_FILE) {
   local.lib ??= LIB_PATH;
   local.secrets = validateSecrets(local.secrets, "Config 'secrets'");
   if (!Array.isArray(groups)) throw new ConfigError("Config needs a 'groups' array");
+  const metaFile = taskMetaFileFor(p);
+  let meta;
+  try {
+    meta = readTaskMeta(metaFile);
+  } catch (err) {
+    if (err instanceof TaskMetaError) throw new ConfigError(err.message);
+    throw err;
+  }
+  const attributes = attributeDefinitions(meta?.attributes, groups.map((group) => group.name));
+  local.attributes = attributes;
+  local.default_group_by = defaultGroupBy(meta, attributes);
+  local.meta_file = metaFile;
+  local.task_meta = meta ?? { version: 1, attributes: [], default_group_by: local.default_group_by, tasks: {} };
   const tasks = [];
   const groupSeen = new Set();
   const taskSeen = new Set();
@@ -151,12 +225,21 @@ export async function loadConfig(configPath = CONFIG_FILE) {
       merged.host ??= 'any';
       merged.env = validateEnv(merged.env, `Task '${merged.name}': env`);
       merged.secrets = validateSecrets(merged.secrets, `Task '${merged.name}': secrets`);
+      merged.actions = normalizeActions(merged.actions, merged.name);
+      const entry = meta?.tasks?.[merged.name];
+      merged.attributes = { ...(entry?.attributes ?? {}) };
+      // New tasks and hand-written entries without a Category fall back to the
+      // config group, so the default Category view is never empty.
+      if (!merged.attributes.Category) merged.attributes.Category = merged.group;
+      if (entry && Object.prototype.hasOwnProperty.call(entry, 'schedule')) {
+        merged.schedule = entry.schedule;
+      }
+      merged.schedule = validateSchedule(merged, merged.schedule);
       merged.notify = merged.notify ?? (merged.schedule ? 'errors' : 'never');
       if (!NOTIFY_MODES.has(merged.notify)) {
         throw new ConfigError(`Task '${merged.name}': notify must be never, errors or always`);
       }
       merged.notify_name ??= merged.name;
-      merged.schedule = validateSchedule(merged, merged.schedule);
       tasks.push(merged);
     }
   }

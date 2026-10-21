@@ -15,9 +15,14 @@ const bctl = await import('../server.mjs');
 
 
 const writeConfig = (data) => {
-  const p = path.join(SANDBOX, `ui-config-${Math.random().toString(36).slice(2)}.mjs`);
+  const dir = fs.mkdtempSync(path.join(SANDBOX, 'ui-cfg-'));
+  const p = path.join(dir, 'config.mjs');
   fs.writeFileSync(p, `export default ${JSON.stringify(data)};`);
   return p;
+};
+
+const writeMeta = (configPath, meta) => {
+  fs.writeFileSync(path.join(path.dirname(configPath), 'task-meta.json'), JSON.stringify(meta, null, 2));
 };
 
 test('ui: header, groups and task cards render on the shared kit', async () => {
@@ -36,6 +41,18 @@ test('ui: header, groups and task cards render on the shared kit', async () => {
           { name: 'Drop Task', state_dir: '{{maindir}}/State/drop', uploads: true, glob: '*.txt', commands: 'true' },
         ],
       }],
+    });
+    writeMeta(configPath, {
+      version: 1,
+      attributes: [
+        { name: 'Category', values: ['Everyday'] },
+        { name: 'Best run from', values: ['Phone', 'PC'] },
+      ],
+      default_group_by: 'Best run from',
+      tasks: {
+        'Plain Task': { attributes: { Category: 'Everyday', 'Best run from': 'PC' } },
+        'Drop Task': { attributes: { Category: 'Everyday', 'Best run from': 'Phone' } },
+      },
     });
     await bctl.boot(configPath);
     const app = bctl.createApp();
@@ -59,6 +76,20 @@ test('ui: header, groups and task cards render on the shared kit', async () => {
       assert.equal(await page.locator('[data-testid="task-Drop Task"] input[type="file"]').count(), 1);
       assert.equal(await page.locator('#global-dropzone').count(), 1);
       assert.equal(await page.locator('[data-testid="task-Plain Task"] button', { hasText: 'Run' }).count(), 1);
+      assert.equal(await page.locator('[data-testid="group-Phone"]').count(), 1);
+      assert.equal(await page.locator('[data-testid="task-Plain Task"] [data-attribute="Category"]').count(), 1);
+      await page.selectOption('[data-testid="group-by"]', 'Category');
+      await page.waitForTimeout(100);
+      assert.equal(await page.locator('[data-testid="group-Everyday"]').count(), 1);
+      await page.locator('[data-testid="task-Plain Task"] button', { hasText: 'Settings' }).click();
+      await page.waitForSelector('dialog[open]');
+      assert.match(await page.textContent('dialog[open] h2'), /Settings: Plain Task/);
+      await page.locator('dialog[open] button', { hasText: 'Cancel' }).click();
+      await page.waitForTimeout(100);
+      await page.click('[data-testid="manage-attributes"]');
+      await page.waitForSelector('dialog[open]');
+      assert.match(await page.textContent('dialog[open] h2'), /Manage attributes/);
+      await page.locator('dialog[open] button', { hasText: 'Cancel' }).click();
       await page.click('#refreshButton');
       await page.waitForTimeout(300);
       assert.deepEqual(errors, []);

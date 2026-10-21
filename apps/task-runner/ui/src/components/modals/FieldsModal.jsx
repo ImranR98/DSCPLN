@@ -24,7 +24,7 @@ export default function FieldsModal({ props, close }) {
           <Field key={field.label} label={field.label} htmlFor={`task-field-${index}`}>
             <input
               id={`task-field-${index}`}
-              type="password"
+              type={field.type === 'secret' ? 'password' : 'text'}
               autoComplete="off"
               value={values[index]}
               onChange={(event) => {

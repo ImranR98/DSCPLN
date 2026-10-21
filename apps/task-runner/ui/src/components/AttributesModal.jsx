@@ -85,7 +85,7 @@ export default function AttributesModal({ attributes, defaultGroupBy, onClose, o
         </>
       )}
     >
-      <div className="settings-editor">
+      <div className="settings-body">
         <p className="hint">Attributes group, filter and label tasks. Removing an attribute or value also removes it from tasks.</p>
 
         <Field label="Default grouping" htmlFor="default-group-by">

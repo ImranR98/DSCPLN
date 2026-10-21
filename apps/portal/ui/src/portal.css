@@ -238,7 +238,10 @@
 
 @media (max-width: 36rem) {
     .portal-card__stats {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        /* Keep the three summary figures aligned instead of leaving an empty
+           cell on the second row. */
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-1) var(--space-2);
     }
 
     .portal-card__status {

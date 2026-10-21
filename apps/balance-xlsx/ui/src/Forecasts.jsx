@@ -443,6 +443,7 @@ export default function Forecasts() {
   return (
     <>
       <AppHeader
+        className="app-header--stack-mobile"
         name="Balance XLSX"
         meta="Forecasts"
         metaTools={<span className="muted">{headerMeta}{statusText ? ` · ${statusText}` : ''}</span>}

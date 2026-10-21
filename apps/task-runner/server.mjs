@@ -588,11 +588,13 @@ export function taskJson(t) {
       };
     }
   }
-  // staleness policy: ok(<24h) > neutral(<=7d) > fail
+  // A successful run turns neutral once it is a day old and stays neutral
+  // after that: red is reserved for real failures, matching the portal's
+  // attention count. Staleness is still visible in the last-run text.
   let pill = 'fail';
   if (stateJson && stateJson.ok) {
     const age = Date.now() / 1000 - stateJson.ts;
-    pill = age < DAY_SECONDS ? 'ok' : age <= 7 * DAY_SECONDS ? 'neutral' : 'fail';
+    pill = age < DAY_SECONDS ? 'ok' : 'neutral';
   }
   const run = RUNS.get(t.name);
   const running = Boolean(run);

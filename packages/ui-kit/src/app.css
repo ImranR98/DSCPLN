@@ -210,7 +210,28 @@ h1 .accent {
 .app-header__meta-tools {
     display: inline-flex;
     align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
     gap: var(--space-2);
+}
+
+/* Wide action clusters (Balance, File Pipelines) need two rows on phones.
+   Keep the full app title on one line and put the icon row underneath. */
+@media (max-width: 40rem) {
+    .app-header--stack-mobile .app-header__top {
+        flex-wrap: wrap;
+        row-gap: var(--space-2);
+    }
+
+    .app-header--stack-mobile .app-header__top h1 {
+        flex: 1 1 100%;
+        white-space: nowrap;
+    }
+
+    .app-header--stack-mobile .app-header__actions {
+        margin-left: auto;
+        flex-wrap: nowrap;
+    }
 }
 
 .status-tag {
@@ -321,12 +342,18 @@ h1 .accent {
     gap: var(--space-2);
 }
 
-.settings-section h3 {
+.settings-section h3,
+h3.settings-section {
     margin: 0;
     font-size: var(--fs-sm);
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
+}
+
+h3.settings-section {
+    display: block;
+    margin: var(--space-5) 0 var(--space-2);
 }
 
 .settings-row {
@@ -598,12 +625,6 @@ main > * {
     margin-top: var(--space-3);
 }
 
-.settings-section {
-    margin: var(--space-5) 0 0;
-    font-size: var(--fs-md);
-    font-weight: 700;
-}
-
 .folder-actions {
     display: flex;
     justify-content: flex-end;
@@ -634,7 +655,7 @@ main > * {
 .ntfy-test {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     flex-wrap: wrap;
     gap: var(--space-2);
     margin-top: var(--space-3);

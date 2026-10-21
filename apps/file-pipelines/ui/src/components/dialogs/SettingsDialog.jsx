@@ -24,7 +24,7 @@ export default function SettingsDialog({ draft, updateDraft, addFolder, saveSett
           <label><input type="checkbox" checked={draft.notifySuccess !== false} onChange={(event) => updateDraft((next) => { next.notifySuccess = event.target.checked })} /> Notify when files are processed successfully</label>
         </div>
         <p className="hint">Notifications are sent through the portal&#39;s ntfy settings. Failures always notify; each folder can opt out of success notices below.</p>
-        <div className="form-grid">
+        <div className="form-grid form-grid--paths">
           <div className="field"><span className="field__label">Staging directory</span><input value={draft.stagingDir} onChange={(event) => updateDraft((next) => { next.stagingDir = event.target.value })} /></div>
           <div className="field"><span className="field__label">Review directory</span><input value={draft.reviewDir} onChange={(event) => updateDraft((next) => { next.reviewDir = event.target.value })} /></div>
           <div className="field"><span className="field__label">Trash directory</span><input value={draft.trashDir} onChange={(event) => updateDraft((next) => { next.trashDir = event.target.value })} /></div>

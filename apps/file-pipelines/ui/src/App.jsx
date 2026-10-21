@@ -424,6 +424,7 @@ export default function App() {
   return (
     <>
       <AppHeader
+        className="app-header--stack-mobile"
         name="File Pipelines"
         meta={<span className={`status-tag status-tag--${statusTone}`}><span>{statusText}</span></span>}
         metaTools={(

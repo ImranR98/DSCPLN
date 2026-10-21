@@ -14,7 +14,6 @@
     --radius: var(--radius-sm);
     --radius-lg: var(--radius);
     --shadow: var(--shadow-sm);
-    --topbar-height: 3.5rem;
 }
 
 * { box-sizing: border-box; }
@@ -742,15 +741,10 @@ dialog.import-dialog {
     width: min(40rem, 92vw);
 }
 
-.import-dialog h2 {
-    margin: 0 0 6px;
-    font-size: 1.15rem;
-}
-
 .import-hint {
     margin: 0 0 14px;
     color: var(--muted);
-    font-size: 0.9rem;
+    font-size: var(--fs-sm);
     line-height: 1.45;
 }
 
@@ -780,38 +774,12 @@ dialog.import-dialog {
 
 .import-drop__hint {
     color: var(--muted);
-    font-size: 0.9rem;
+    font-size: var(--fs-sm);
 }
 
-.import-drop button,
-.import-actions button {
-    border: 1px solid var(--border);
-    background: var(--panel);
-    color: var(--text);
-    border-radius: 8px;
-    padding: 7px 14px;
-    font: inherit;
-    cursor: pointer;
-}
-
-.import-drop button:hover,
-.import-actions button:hover { background: var(--panel-alt); }
-
-.import-actions button.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #fff;
-}
-
-.import-actions button.primary:disabled,
 .import-actions button:disabled {
     opacity: 0.5;
     cursor: default;
-}
-
-.import-actions button.ghost {
-    border-color: transparent;
-    color: var(--danger);
 }
 
 .import-list {
@@ -828,7 +796,7 @@ dialog.import-dialog {
     gap: 10px;
     padding: 6px 2px;
     border-bottom: 1px solid var(--border);
-    font-size: 0.9rem;
+    font-size: var(--fs-sm);
 }
 
 .import-item:last-child { border-bottom: none; }
@@ -843,7 +811,7 @@ dialog.import-dialog {
 
 .import-item__meta {
     color: var(--muted);
-    font-size: 0.82rem;
+    font-size: var(--fs-xs);
     white-space: nowrap;
 }
 
@@ -853,7 +821,7 @@ dialog.import-dialog {
 .import-status {
     margin: 12px 0 0;
     color: var(--muted);
-    font-size: 0.9rem;
+    font-size: var(--fs-sm);
 }
 
 .import-status--error { color: var(--danger); }
@@ -864,7 +832,7 @@ dialog.import-dialog {
     background: var(--panel-alt);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    font-size: 0.82rem;
+    font-size: var(--fs-xs);
     line-height: 1.5;
     max-height: 220px;
     overflow: auto;
@@ -873,9 +841,10 @@ dialog.import-dialog {
 
 .import-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
-    margin-top: 16px;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
 }
 
 .import-actions__spacer { flex: 1; }
@@ -883,9 +852,31 @@ dialog.import-dialog {
 /* responsive -------------------------------------------------------------- */
 
 @media (max-width: 800px) {
+    /* Put the search on its own full-width row; the first row keeps the
+       brand, sidebar toggle and action icons at their natural sizes. */
+    .topbar .app-header__top {
+        flex-wrap: wrap;
+        row-gap: 8px;
+        justify-content: flex-start;
+    }
+
+    .topbar .search-form {
+        order: 10;
+        flex: 1 1 100%;
+    }
+
+    .topbar .app-header__actions {
+        margin-left: auto;
+    }
+
+    .layout {
+        position: relative;
+    }
+
+    /* Positioned against .layout, so it follows a taller wrapped header. */
     .sidebar {
         position: absolute;
-        top: var(--topbar-height);
+        top: 0;
         bottom: 0;
         left: 0;
         z-index: 5;

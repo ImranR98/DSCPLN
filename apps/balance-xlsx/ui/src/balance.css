@@ -658,7 +658,8 @@ details.card[open] > summary::after {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-md);
-    max-height: 14rem;
+    /* Keep the menu above the dialog action row in the transaction form. */
+    max-height: 10rem;
     overflow: auto;
     overscroll-behavior: contain;
     touch-action: pan-y;
@@ -1453,6 +1454,12 @@ details.card[open] > summary::after {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
     gap: var(--space-3);
+}
+
+/* The import box is tab-separated data; proportional text hides bad columns. */
+#importForm textarea {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: var(--fs-sm);
 }
 
 /* Categories dialog: the insights checkbox panels laid out as a picker grid,

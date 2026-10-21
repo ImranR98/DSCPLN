@@ -75,7 +75,7 @@ export default function TaskSettingsModal({ task, attributes, onClose, onSave })
         </>
       )}
     >
-      <div className="settings-editor">
+      <div className="settings-body">
         <section className="settings-section">
           <h3>Attributes</h3>
           {attributes.length ? (

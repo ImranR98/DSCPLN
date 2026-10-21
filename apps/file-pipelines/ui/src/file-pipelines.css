@@ -26,6 +26,12 @@
     font-size: var(--fs-sm);
 }
 
+/* Paths and folder editors need more than the default 9rem columns. */
+.form-grid--paths,
+.folder-edit .form-grid {
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
 /* ---------- folder cards ---------- */
 
 .folder-grid {

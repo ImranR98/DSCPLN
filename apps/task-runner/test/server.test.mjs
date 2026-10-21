@@ -906,6 +906,17 @@ test('metrics: exposes scheduled task gauges', async () => {
   assert.match(text, /task_runner_task_last_run_timestamp_seconds\{task="Scheduled Metric"/)
 })
 
+test('taskJson: stale successful runs stay neutral, not failure-red', async () => {
+  await bootWith(makeConfig([task('Stale Success', { commands: 'true' })]))
+  const entry = bctl.TASK_LIST.find((item) => item.name === 'Stale Success')
+  bctl.saveTaskState(entry, bctl.LOCAL, true, 'completed', '')
+  const file = bctl.stateFileFor(entry)
+  const state = JSON.parse(fs.readFileSync(file, 'utf8'))
+  state.ts = Date.now() / 1000 - 8 * 24 * 60 * 60
+  fs.writeFileSync(file, JSON.stringify(state))
+  assert.equal(bctl.taskJson(entry).pill, 'neutral')
+})
+
 test('API: /api/tasks returns groups in config order', async () => {
   await bootWith(writeConfig('groups-order.mjs', {
     maindir,

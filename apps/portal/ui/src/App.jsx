@@ -23,6 +23,7 @@ import {
   ThemeToggle,
 } from '@dscpln/ui-kit'
 import FunctionCard from './FunctionCard.jsx'
+import { taskBucket } from './taskBuckets.js'
 
 const ICONS = {
   boxes: Boxes,
@@ -165,7 +166,15 @@ async function tasksDetail(fn) {
   const tasks = (data.groups ?? []).flatMap((group) => group.tasks ?? [])
   const scheduled = tasks.filter((task) => task.schedule?.enabled)
   const running = tasks.filter((task) => task.running).length
-  const failing = tasks.filter((task) => task.state && task.state.ok === false && !task.running).length
+  const buckets = { stale: [], recent: [], errors: [] }
+  for (const task of tasks) {
+    const { key, item } = taskBucket(task)
+    buckets[key].push(item)
+  }
+  buckets.stale.sort((a, b) => (a.ts == null ? -1 : b.ts == null ? 1 : a.ts - b.ts))
+  buckets.recent.sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
+  buckets.errors.sort((a, b) => a.name.localeCompare(b.name))
+  const failing = buckets.errors.length
   const next = scheduled
     .filter((task) => Number.isFinite(task.next_run))
     .sort((a, b) => a.next_run - b.next_run)[0] ?? null
@@ -177,6 +186,11 @@ async function tasksDetail(fn) {
       stat('Tasks', formatNumber(tasks.length)),
       stat('Running', formatNumber(running), running ? 'ok' : ''),
       stat('Failing', formatNumber(failing), failing ? 'over' : ''),
+    ],
+    lists: [
+      { key: 'stale', label: 'Stale / never', tone: 'warn', items: buckets.stale },
+      { key: 'recent', label: 'Recent', tone: 'ok', items: buckets.recent },
+      { key: 'errors', label: 'Errors', tone: 'over', items: buckets.errors },
     ],
     footer: next
       ? { text: `Next: ${next.name} · ${formatDateTime(next.next_run)}`, tone: '' }
@@ -193,8 +207,8 @@ async function balanceDetail(fn) {
       issue: false,
       kicker: 'Budget overview',
       primary: { value: '—', label: 'summary unavailable', tone: '' },
-      stats: [{ label: 'Over budget', value: over.join(', ') || 'None', tone: over.length ? 'warn' : '' }],
-      footer: { text: over.length ? 'Open Balance to review the budget' : 'Within budget', tone: over.length ? 'warn' : 'ok' },
+      stats: [{ label: 'Over budget', value: over.join(', ') || 'None', tone: over.length ? 'over' : '' }],
+      footer: { text: over.length ? 'Open Balance to review the budget' : 'Within budget', tone: over.length ? 'over' : 'ok' },
     }
   }
   const budget = asNumber(summary.budget)
@@ -203,13 +217,13 @@ async function balanceDetail(fn) {
   const hasBudget = budget > 0 && left != null
   const pct = hasBudget ? Math.min(100, (spend / budget) * 100) : null
   const over = Boolean(summary.overBudget)
-  const tone = over ? 'warn' : 'ok'
+  const tone = over ? 'over' : 'ok'
   const code = summary.code || ''
   const symbol = summary.symbol || ''
   const stats = hasBudget
     ? [
         stat('Budget', moneyText(budget, code, symbol)),
-        stat('Left', moneyText(left, code, symbol), left < 0 ? 'warn' : ''),
+        stat('Left', moneyText(left, code, symbol), left < 0 ? 'over' : ''),
         stat('Transactions', formatNumber(summary.transactions ?? 0)),
       ]
     : [
@@ -221,10 +235,10 @@ async function balanceDetail(fn) {
     issue: false,
     kicker: [summary.period, code].filter(Boolean).join(' · '),
     primary: { value: moneyText(spend, code, symbol), label: hasBudget ? 'spent this month' : 'spent', tone },
-    progress: pct == null ? null : { pct, tone: over ? 'warn' : 'ok' },
+    progress: pct == null ? null : { pct, tone: over ? 'over' : 'ok' },
     stats,
     footer: over
-      ? { text: `Over budget by ${moneyText(Math.abs(left ?? 0), code, symbol)}`, tone: 'warn' }
+      ? { text: `Over budget by ${moneyText(Math.abs(left ?? 0), code, symbol)}`, tone: 'over' }
       : hasBudget
         ? { text: `${moneyText(left, code, symbol)} left this month`, tone: 'ok' }
         : { text: 'No budget set', tone: 'warn' },

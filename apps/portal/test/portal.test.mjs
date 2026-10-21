@@ -281,6 +281,8 @@ test('portal cards show app summaries', async (t) => {
   assert.match(await text('primary-balance'), /8,266\.59/)
   assert.match(await text('stat-balance-0'), /3,000\.00/)
   assert.match(await text('footer-balance'), /Over budget/)
+  assert.match(await page.$eval('[data-testid="primary-balance"]', (node) => node.className), /is-over/)
+  assert.match(await page.$eval('[data-testid="footer-balance"]', (node) => node.className), /is-over/)
   assert.match(await text('primary-pipelines'), /^2$/)
   assert.match(await text('stat-pipelines-1'), /Errors1/)
   assert.match(await text('primary-watxt'), /^3$/)
@@ -288,6 +290,46 @@ test('portal cards show app summaries', async (t) => {
   assert.match(await text('primary-tasks'), /^1$/)
   assert.match(await text('stat-tasks-2'), /Failing1/)
   assert.match(await text('footer-tasks'), /Next: Scheduled/)
+})
+
+test('portal groups task runner items into stale, recent and error lists', async (t) => {
+  const browser = await launchBrowser()
+  if (!browser) {
+    t.skip('chromium not available (playwright browsers missing)')
+    return
+  }
+  t.after(() => browser.close())
+
+  const { base } = await portalFixture(t)
+  const page = await browser.newPage()
+  const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+  const now = Date.now() / 1000
+  const day = 24 * 60 * 60
+  await page.route('**/tasks/api/health', (route) => route.fulfill(json({ ok: true })))
+  await page.route('**/tasks/api/tasks', (route) => route.fulfill(json({
+    groups: [{ tasks: [
+      { name: 'Fresh', schedule: { enabled: true }, next_run: Date.now() + 3_600_000, running: false, state: { ok: true, ts: now - day, last_run_text: 'OK · 1 day ago' } },
+      { name: 'Stale', running: false, state: { ok: true, ts: now - 8 * day, last_run_text: 'OK · 8 days ago' } },
+      { name: 'Never', running: false, state: null },
+      { name: 'Failed', running: false, state: { ok: false, ts: now - 2 * day, last_run_text: 'FAILED · 2 days ago' } },
+      { name: 'Old failed', running: false, state: { ok: false, ts: now - 9 * day, last_run_text: 'FAILED · 9 days ago' } },
+    ] }],
+  })))
+
+  await page.goto(`${base}/`)
+  await page.waitForSelector('[data-testid="task-list-stale"]')
+
+  const text = (id) => page.$eval(`[data-testid="${id}"]`, (node) => node.textContent)
+  assert.equal(await text('task-list-stale-count'), '2')
+  assert.equal(await text('task-list-recent-count'), '1')
+  assert.equal(await text('task-list-errors-count'), '2')
+  assert.match(await text('task-list-stale'), /Stale/)
+  assert.match(await text('task-list-stale'), /Never/)
+  assert.doesNotMatch(await text('task-list-stale'), /Failed/)
+  assert.match(await text('task-list-recent'), /Fresh/)
+  assert.match(await text('task-list-errors'), /Failed/)
+  assert.match(await text('task-list-errors'), /Old failed/)
+  assert.match(await page.$eval('[data-testid="card-tasks"]', (node) => node.className), /portal-card--wide/)
 })
 
 test('portal attention ignores over-budget', async (t) => {

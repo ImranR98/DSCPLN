@@ -13,7 +13,7 @@ best-effort — if an app is down the link still works:
 | `online` / `unreachable` | `GET /<path>/api/health` |
 | File Pipelines (queue/error counts) | `GET /pipelines/api/state` |
 | WhatsApp TXT (conversation/message counts) | `GET /watxt/api/state` |
-| Task Runner (per-task last run, next run, missed) | `GET /tasks/api/tasks` |
+| Task Runner (stale/never, recent and error lists; next run and missed) | `GET /tasks/api/tasks` |
 | Balance (budget overage) | `GET /balance/status` |
 
 Configuration can also be mounted from a private `dscpln-config` repo: set `DSCPLN_CONFIG_FILE` to its `apps/portal/config.json`; run state stays on the app volume (`DSCPLN_STATE_FILE` for scheduled apps). See `config-template/README.md`.

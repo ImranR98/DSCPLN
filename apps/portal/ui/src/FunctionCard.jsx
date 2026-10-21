@@ -4,11 +4,12 @@ export default function FunctionCard({ fn, card }) {
   const kicker = card?.kicker ?? ''
   const primary = card?.primary ?? { value: '—', label: '', tone: '' }
   const stats = card?.stats ?? []
+  const lists = card?.lists ?? []
   const footer = card?.footer ?? { text: '', tone: '' }
 
   return (
     <a
-      className={`portal-card${offline ? ' is-offline' : ''}`}
+      className={`portal-card${lists.length ? ' portal-card--wide' : ''}${offline ? ' is-offline' : ''}`}
       href={`/${fn.path}`}
       data-testid={`card-${fn.path}`}
       aria-disabled={offline}
@@ -51,6 +52,27 @@ export default function FunctionCard({ fn, card }) {
               <span className="portal-card__stat-label">{entry.label}</span>
               <span className={`portal-card__stat-value${entry.tone ? ` is-${entry.tone}` : ''}`}>{entry.value}</span>
             </div>
+          ))}
+        </div>
+      ) : null}
+
+      {lists.length ? (
+        <div className="portal-card__lists">
+          {lists.map((list) => (
+            <section className={`portal-task-list is-${list.tone}`} key={list.key} data-testid={`task-list-${list.key}`}>
+              <h3 className="portal-task-list__head">
+                <span>{list.label}</span>
+                <span className="portal-task-list__count" data-testid={`task-list-${list.key}-count`}>{list.items.length}</span>
+              </h3>
+              <ul className="portal-task-list__items">
+                {list.items.length ? list.items.map((item, index) => (
+                  <li className="portal-task-list__item" key={`${item.name}-${index}`} data-testid={`task-list-${list.key}-item-${index}`}>
+                    <span className="portal-task-list__name">{item.name}</span>
+                    <span className="portal-task-list__detail">{item.detail}</span>
+                  </li>
+                )) : <li className="portal-task-list__empty">None</li>}
+              </ul>
+            </section>
           ))}
         </div>
       ) : null}

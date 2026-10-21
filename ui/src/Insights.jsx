@@ -306,6 +306,7 @@ export default function Insights() {
   return (
     <>
       <AppHeader
+        className="app-header--stack-mobile"
         name="Balance XLSX"
         meta="Insights"
         metaTools={<span className="muted">{rangeLabel}</span>}

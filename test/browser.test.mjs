@@ -37,6 +37,16 @@ test('dashboard loads under BASE_PATH with the shared kit', async (t) => {
     assert.match(await page.textContent('h1'), /Balance XLSX/)
     assert.deepEqual(errors, [])
 
+    // Add transaction starts on Amount, so the details suggestion menu cannot
+    // cover the dialog actions before the user has typed anything.
+    await page.locator('.expenses__actions button', { hasText: 'Add transaction' }).click()
+    const transactionDialog = page.locator('dialog[open]')
+    await transactionDialog.waitFor({ state: 'visible' })
+    assert.equal(await transactionDialog.locator('.autocomplete__menu').count(), 0)
+    await transactionDialog.locator('button', { hasText: 'Cancel' }).click()
+    await transactionDialog.waitFor({ state: 'hidden' })
+    assert.deepEqual(errors, [])
+
     // Category picker: the workbook defaults (Investment Buy/Sell) start
     // unchecked, and toggling one more category applies live to the page.
     await page.click('button[title="Counted categories"]')

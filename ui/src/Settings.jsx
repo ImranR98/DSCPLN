@@ -121,6 +121,7 @@ export default function Settings() {
   return (
     <>
       <AppHeader
+        className="app-header--stack-mobile"
         name="Balance XLSX"
         meta="API settings"
         actions={(

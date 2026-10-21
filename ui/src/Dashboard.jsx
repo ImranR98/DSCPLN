@@ -160,6 +160,7 @@ export default function Dashboard() {
   return (
     <>
       <AppHeader
+        className="app-header--stack-mobile"
         name="Balance XLSX"
         meta={<span>{contextLabel}</span>}
         metaTools={(

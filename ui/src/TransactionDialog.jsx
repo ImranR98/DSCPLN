@@ -61,7 +61,9 @@ const TransactionDialog = forwardRef(function TransactionDialog({ data, today, o
       setFormError('')
       hideDetailsSuggestions()
       rootRef.current.showModal()
-      requestAnimationFrame(() => detailsInputRef.current?.focus())
+      // Start at Amount: focusing Details opens the suggestion menu, which
+      // would cover the dialog actions before the user has typed anything.
+      requestAnimationFrame(() => amountInputRef.current?.focus())
     },
     showEdit(transaction) {
       setEditing(transaction)

@@ -34,10 +34,10 @@ const ICONS = {
 }
 
 const DEFAULT_FUNCTIONS = [
-  { path: 'balance', icon: 'dollar', name: 'Balance XLSX', description: 'Budget dashboard backed by the live workbook', kind: 'balance' },
-  { path: 'pipelines', icon: 'workflow', name: 'File Pipelines', description: 'Scheduled folder pipelines: standardize, copy, archive', kind: 'pipelines' },
-  { path: 'watxt', icon: 'message', name: 'WhatsApp TXT', description: 'Browse, import and merge WhatsApp exports', kind: 'watxt' },
-  { path: 'tasks', icon: 'wrench', name: 'Task Runner', description: 'Scheduled and on-demand workflows', kind: 'tasks' },
+  { path: 'balance', icon: 'dollar', name: 'Balance XLSX', description: 'Budget dashboard backed by your Excel workbook', kind: 'balance' },
+  { path: 'pipelines', icon: 'workflow', name: 'File Pipelines', description: 'Watch folders, organize media, and keep originals safe', kind: 'pipelines' },
+  { path: 'watxt', icon: 'message', name: 'WhatsApp TXT', description: 'Browse, import and merge WhatsApp chat exports', kind: 'watxt' },
+  { path: 'tasks', icon: 'wrench', name: 'Task Runner', description: 'Run scheduled and on-demand tasks', kind: 'tasks' },
 ]
 
 const EMPTY = {
@@ -360,7 +360,7 @@ export default function App() {
   return (
     <>
       <AppHeader
-        meta="Every backup and sync workflow, one place."
+        meta="Self-hosted apps for your personal data."
         metaTools={(
           <>
             <span className={`portal-attention ${attention ? 'is-over' : 'is-ok'}`} data-testid="attention">

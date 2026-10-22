@@ -1,19 +1,68 @@
 # File Pipelines
 
-Watches configured folders for new media, processes each file with one of the
-file methods below, and **never deletes an original until you explicitly clean
-up** — and then only after verifying the destination copy.
+**Watch folders and move media through safe, repeatable pipelines.**
 
-Configuration can also be mounted from a private `dscpln-config` repo: set `--config` to its `apps/file-pipelines/config.json`; run state stays on the app volume (`DSCPLN_STATE_FILE` for scheduled apps). See `config-template/README.md`.
+File Pipelines watches configured folders for new media, processes each item,
+places the result in a destination, and keeps the original until you explicitly
+clean up. Cleanup only happens after the destination copy is verified.
+
+Use it for phone-sync folders, camera uploads, screenshots, voice notes or any
+tree where files should be standardized or archived without losing originals.
+
+## At a glance
+
+| | |
+|---|---|
+| Runs at | `/pipelines` (or port `8791` locally) |
+| Config | `--config <path>`; `/config/config.json` in the container |
+| State | Staging, review, trash and logs from config |
+| Methods | `standardize`, `snapchat`, `copy`, `reviewed-audio` |
+| Safety | Originals are read-only until verified cleanup; cleanup moves to trash |
+
+## Quick start
+
+```sh
+npm install
+node src/index.js --config config.json
+```
+
+Open <http://127.0.0.1:8791>. A new `config.json` starts with no folders; add
+them from Settings.
+
+With Docker, mount a writable `/config` and your media trees:
+
+```sh
+mkdir -p file-pipelines-data
+docker run --rm -p 8791:8791 \
+  -v "$PWD/file-pipelines-data:/config" \
+  -v "$PWD/file-pipelines-data:/data" \
+  -v /path/to/source:/source:ro \
+  -v /path/to/media:/media \
+  ghcr.io/imranr98/dscpln-file-pipelines:latest
+```
+
+The first start creates an empty `/config/config.json`; add folders in
+Settings. Use container paths such as `/source` and `/media` in the folder
+settings, not host paths.
+
+## How it works
+
+1. **Watch.** A folder is scanned, then watched for settled files.
+2. **Process.** The folder's method standardizes, concatenates, copies or parks
+   the item for review.
+3. **Place.** A finished file is moved into the destination atomically.
+   Existing files are never overwritten without an explicit policy.
+4. **Clean up.** The original is moved to trash only after the destination is
+   verified. Trash has a retention period; it is not an immediate delete.
 
 ## Methods
 
-| method        | what it does |
-|---------------|--------------|
+| Method | What it does |
+|---|---|
 | `standardize` | Picks a date (`DateTimeOriginal`, else the oldest date-like tag), writes all date tags, renames to `YYYY-MM-DD-HH-MM-SS-(<original-name>).ext`, and copies into the destination. |
-| `snapchat`    | Waits until the folder has been quiet for `settleSeconds` (default 30 min), groups `Snapchat-*.mp4` clips whose timestamps are within `groupWindowSeconds` (default 15s), concatenates + re-encodes each group, standardizes the output, and records the input list in a custom `XMP-media-sync:Inputs` tag on the output. |
-| `copy`        | Byte-verified copy, original name preserved (call recordings). Add `recursive: true` to mirror a whole tree (WhatsApp AllMedia archives) and `onChanged` to control what happens when a same-name source changes. |
-| `reviewed-audio` | Approval-only audio. With `datePattern` + `concat: true` (default), groups same-day clips and merges them into one MP4 on approval (a 0.1s tone between clips). With `concat: false` or no `datePattern`, standardizes and moves each file individually. Delete trashes the source instead. See Reviewed audio below. |
+| `snapchat` | Waits until the folder has been quiet for `settleSeconds` (default 30 min), groups `Snapchat-*.mp4` clips whose timestamps are within `groupWindowSeconds` (default 15s), concatenates and re-encodes each group, standardizes the output, and records the input list in a custom `XMP-media-sync:Inputs` tag. |
+| `copy` | Byte-verified copy with the original name preserved (call recordings). Add `recursive: true` to mirror a whole tree and `onChanged` to control what happens when a same-name source changes. |
+| `reviewed-audio` | Approval-only audio. With `datePattern` + `concat: true` (default), groups same-day clips and merges them into one MP4 on approval. With `concat: false` or no `datePattern`, standardizes and moves each file individually. Delete trashes the source instead. See Reviewed audio below. |
 
 ## Reviewed audio (approval only)
 
@@ -27,7 +76,7 @@ Open **Review**, listen to the source clip(s), and choose one action per item:
 - **Per-file mode** (`concat: false`, or no `datePattern`): each file is listed
   separately. **Standardize & move** standardizes and moves that file, then
   moves the source to trash.
-- **Delete** — move the source clip/file to trash; no destination file is
+- **Delete**: move the source clip/file to trash; no destination file is
   written.
 
 The Reviewed audio section also offers **Standardize & move all** (or **Merge &
@@ -72,105 +121,77 @@ when a config is loaded.
 processes items, but instead of writing to the destination it **parks** the
 finished file under `reviewDir` and waits. The Review dialog lists parked
 outputs with audio preview, Place and Discard. Placing is an atomic rename with
-the same never-overwrite rules as automatic placement — a destination file with
-the same name and different content is refused, not clobbered. `autoProcess:
-true` prepares new items continuously instead of only when you press Process.
+the same never-overwrite rules as automatic placement: a destination file with
+the same name and different content is refused, not clobbered.
 
-Parked entries survive restarts (a manifest next to each file), and a group
-whose source clips were deleted after parking stays placeable — the parked
-merge may be the only copy.
+`autoProcess: true` prepares new items continuously instead of only when you
+press Process. Parked entries survive restarts (a manifest next to each file),
+and a group whose source clips were deleted after parking stays placeable — the
+parked merge may be the only copy.
 
 ## Safety model
 
-- Source files are only ever **read** until you press Cleanup, or — for reviewed audio — until you approve/delete an item in Review.
+- Source files are only **read** until you press Cleanup, or, for reviewed
+  audio, until you approve/delete an item in Review.
 - Placements are same-filesystem atomic renames from a staging area; the
   destination never sees partial files. Replacing a changed file (`copy`
   overwrite mode) is also atomic: temp file + rename in the destination
-  directory, never an in-place rewrite.
+  directory.
 - Destination files are **never overwritten without an explicit policy**:
   same name with a plausible size is a duplicate; a very different size is a
   conflict. `copy` folders default to `onChanged: "overwrite"` (the mirror
-  updates, applied atomically); set `onChanged: "conflict"` to flag instead.
-  Every other method never overwrites.
-- `copy` folders with `cleanup: false` (e.g. a forever archive) hide and
-  refuse the Cleanup action, so originals are never removed by File Pipelines.
-- Cleanup verifies before deleting: `copy` files must hash-match; `standardize`
-  files must exist under the standardized/tagged name with a matching embedded
-  date; snap groups must have their output file present, with the input listed
-  in its XMP tag and a matching duration. Anything unverifiable is blocked and
-  surfaced as a conflict.
+  updates atomically); set `onChanged: "conflict"` to flag instead. Every other
+  method never overwrites.
+- `copy` folders with `cleanup: false` hide and refuse the Cleanup action, so
+  originals are never removed by File Pipelines.
+- Cleanup verifies before deleting: `copy` files must hash-match;
+  `standardize` files must exist under the standardized/tagged name with a
+  matching embedded date; snap groups must have their output file present, with
+  the input listed in its XMP tag and a matching duration. Anything
+  unverifiable is blocked and surfaced as a conflict.
 - Cleaned originals move to **trash** (default retention 30 days) instead of
   being deleted outright.
-- A heartbeat lock file in the synced tree prevents two File Pipelines instances
-  (e.g. a server and a laptop) from processing the same mirrored folders at once.
+- A heartbeat lock file in the synced tree prevents two File Pipelines
+  instances from processing the same mirrored folders at once.
 - `dryRun` mode reports what would happen without writing anything.
 
-## Source map
-
-| path | what lives there |
-|---|---|
-| `src/index.js` | CLI entry (`serve`/`standardize`/`snapconcat`/`concataudio`/`clean-synced`) |
-| `src/daemon.js` | wires the store, queue, watchers and API |
-| `src/config.js` | config shape/normalization/validation |
-| `src/store.js` | per-folder file state (scan, dedupe/conflict detection, cleanup previews) |
-| `src/queue.js` / `src/processors/` | the work queue and the standardize/snapchat/copy processors |
-| `src/reviewed-audio-flow.js` | approval-only reviewed-audio listing, per-file standardize/move and grouped merge/delete |
-| `src/watchers.js` | chokidar watchers for watched folders |
-| `src/cleanup.js` | verified cleanup into trash, restore and empty |
-| `src/review.js` / `src/park.js` | manual-placement parking and the review API |
-| `src/api/index.js` | HTTP server setup and route dispatch |
-| `src/api/{state,folders,review,cleanup,trash}.js` | the API route modules |
-| `ui/src/App.jsx` | dashboard orchestration (state, actions, layout) |
-| `ui/src/components/` | folder/overview/trash/activity cards and the dialogs |
-| `ui/src/lib/view.js` | pure view helpers (stats, labels, file sorting, review groups) |
-
-## Running
-
-```sh
-npm install
-
-# watch mode (web UI on http://127.0.0.1:8791)
-node src/index.js --config config.json
-```
-
-`config.json` is created **empty** (no folders) on first start; everything —
-folders, staging/trash paths, tuneables — is editable from the UI (Settings)
-and written back to the file atomically.
-
-### Config
+## Configuration
 
 Paths accept `~` and environment variables. Key fields:
 
-| field | meaning |
+| Field | Meaning |
 |---|---|
-| `folders[].source` / `.destination` | watched folder and the destination |
-| `folders[].method` | `standardize` \| `snapchat` \| `copy` \| `reviewed-audio` |
-| `folders[].settleSeconds` | quiet period before processing (snaps: 1800) |
-| `folders[].groupWindowSeconds` | snap grouping window |
-| `folders[].filePattern` | optional glob (`Snapchat-*.mp4`); non-matching files show as ignored |
-| `folders[].recursive` | mirror subdirectories (implied by `reviewed-audio`); `copy` uses it for whole-tree archives |
-| `folders[].includeHidden` | also ingest dot-files (`copy` archives); sync internals (`.stfolder`, `!sync`, `*.tmp`, `.file-pipelines*`) are always skipped |
+| `folders[].source` / `.destination` | Watched folder and destination |
+| `folders[].method` | `standardize`, `snapchat`, `copy` or `reviewed-audio` |
+| `folders[].settleSeconds` | Quiet period before processing (snaps: 1800) |
+| `folders[].groupWindowSeconds` | Snap grouping window |
+| `folders[].filePattern` | Optional glob (`Snapchat-*.mp4`); non-matching files show as ignored |
+| `folders[].recursive` | Mirror subdirectories (implied by `reviewed-audio`); `copy` uses it for whole-tree archives |
+| `folders[].includeHidden` | Also ingest dot-files (`copy` archives); sync internals (`.stfolder`, `!sync`, `*.tmp`, `.file-pipelines*`) are always skipped |
 | `folders[].onChanged` | `copy` only: `overwrite` (default) replaces a changed destination copy atomically; `conflict` flags it |
 | `folders[].cleanup` | `false` hides and refuses cleanup (forever archives); always false for reviewed audio |
-| `folders[].notify` | `all` (default) notifies on every success; `errors` only notifies failures (use for bulk archives) |
-| `folders[].placement` | `auto` (default) or `manual` — park processed files for review (standardize/snapchat only) |
-| `folders[].autoProcess` | `placement: manual` only (standardize/snapchat): process new items automatically instead of on demand |
+| `folders[].notify` | `all` (default) notifies on every success; `errors` only notifies failures |
+| `folders[].placement` | `auto` (default) or `manual`; park processed files for review (standardize/snapchat only) |
+| `folders[].autoProcess` | `placement: manual` only: process new items automatically instead of on demand |
 | `folders[].datePattern` | `reviewed-audio` only (optional): regex extracting the clip/file date; capture groups are joined, non-digits stripped, result must be `YYYYMMDD` |
 | `folders[].concat` | `reviewed-audio` only (default `true`): group by chat/day and merge. `false` (or no `datePattern`) standardizes each file individually |
-| `stagingDir` / `reviewDir` / `trashDir` | working area (same filesystem as destinations for atomic renames), parked review outputs, and cleaned-original storage |
-| `trashRetentionDays` | days before trash is swept |
-| `concurrency` | parallel jobs (per-folder jobs are serialized) |
-| `notifySuccess` | failures always notify; successes notify unless `notifySuccess` is off |
-| `paused` / `dryRun` | runtime toggles persisted in `<logDir>/../state.json`, not in the declarative `config.json` |
+| `stagingDir` / `reviewDir` / `trashDir` | Working area, parked review outputs and cleaned-original storage |
+| `trashRetentionDays` | Days before trash is swept |
+| `concurrency` | Parallel jobs; per-folder jobs are serialized |
+| `notifySuccess` | Failures always notify; successes notify unless this is off |
+| `paused` / `dryRun` | Runtime toggles persisted in `<logDir>/../state.json`, not in `config.json` |
 
-Notifications are relayed through the portal (`DSCPLN_PORTAL_URL`, e.g.
-`http://portal:8080` in Kubernetes), whose Settings hold the ntfy URL and
-token; without a relay configured they are skipped.
+Point the staging directory at the same filesystem as the destinations so
+placements are atomic renames. Exclude it from any file-sync tool if it lives
+inside a synced tree.
+
+Notifications are relayed through the Portal (`DSCPLN_PORTAL_URL`), whose
+Settings hold the ntfy URL and token. Without a relay configured they are
+skipped.
 
 ## CLI
 
-The same processing core is exposed as a standalone CLI
-(`node bin/file-pipelines.js <cmd>` or `file-pipelines` after `npm link`):
+The same processing core is available as a standalone CLI:
 
 ```sh
 file-pipelines standardize [-n] [-p] [--strict] [--parallel N] <dir>
@@ -190,29 +211,41 @@ file-pipelines serve [--config FILE] [--port N] [--bind HOST] [--force]
 
 ## Container
 
-The image runs the daemon with a hardcoded `--config /config/config.json`,
-listens on `0.0.0.0:8791` (overridable with `--bind`/`--port`), and sets
-`HOME=/config`, so mount a writable volume at `/config` (it holds
-`config.json` and, until you point them elsewhere in Settings, the staging,
-trash and log directories). Mount media trees wherever you like and reference
-those paths in the config. A fresh install starts with no folders and is
-configured entirely from the UI; nothing environment-specific is baked into the
-image or this repo — deployment manifests live with the operator's infra.
+The image runs the daemon with `--config /config/config.json`, listens on
+`0.0.0.0:8791`, and sets `HOME=/config`, so mount a writable volume at
+`/config` for `config.json` and the default staging/trash/log directories.
+Mount media trees wherever you like and reference those paths in the config.
 
-Point the staging directory at the same filesystem as the destinations so
-placements are atomic renames, and exclude it from any file-sync tool if it
-lives inside a synced tree.
+A fresh install starts with no folders and is configured entirely from the UI.
+Deployment manifests belong with your infrastructure, not in this repository.
 
 ## Development
 
 ```sh
-npm run build:ui   # build ui/ (React + Vite) into static/
-npm test           # builds the UI, then runs the unit + e2e suites
+npm run build:ui   # build ui/ into static/
+npm test           # builds the UI, then runs unit and e2e suites
 ```
 
 The front end is a React app under `ui/` (Vite output in `static/`, served by
-the node server). Tests generate their own media with ffmpeg/exiftool and never
-touch real data. Optional parity checks compare `standardize` output against an
-existing implementation when `MEDIA_SYNC_BASH_STANDARDIZE` points at one; the
-browser suite (`test/ui.test.js`) drives the real page through `playwright-core`
-and skips when no Chromium is installed.
+the Node server). Tests generate their own media with ffmpeg/exiftool and never
+touch real data. The browser suite drives the real page through
+`playwright-core` and skips when no Chromium is installed.
+
+## Source map
+
+| Path | What lives there |
+|---|---|
+| `src/index.js` | CLI entry (`serve`, `standardize`, `snapconcat`, `concataudio`, `clean-synced`) |
+| `src/daemon.js` | Wires the store, queue, watchers and API |
+| `src/config.js` | Config shape, normalization and validation |
+| `src/store.js` | Per-folder file state: scan, dedupe/conflict detection, cleanup previews |
+| `src/queue.js` / `src/processors/` | Work queue and the standardize/snapchat/copy processors |
+| `src/reviewed-audio-flow.js` | Approval-only listing, per-file standardize/move and grouped merge/delete |
+| `src/watchers.js` | Chokidar watchers for watched folders |
+| `src/cleanup.js` | Verified cleanup into trash, restore and empty |
+| `src/review.js` / `src/park.js` | Manual-placement parking and the review API |
+| `src/api/index.js` | HTTP server setup and route dispatch |
+| `src/api/{state,folders,review,cleanup,trash}.js` | API route modules |
+| `ui/src/App.jsx` | Dashboard orchestration |
+| `ui/src/components/` | Folder, overview, trash and activity cards, plus dialogs |
+| `ui/src/lib/view.js` | Pure view helpers |

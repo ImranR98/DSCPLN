@@ -1,35 +1,61 @@
 # dscpln-config starter
 
-This folder is a starter for a private configuration repo. Nothing here is
-required to run D$CPLN: the apps work with their built-in defaults. Use it when
-you want all of your paths, tasks, schedules and app settings in one place.
+A starter for a private configuration repository. The apps work without it,
+but a multi-app deployment is easier to manage when paths, tasks, schedules and
+settings live in one place.
+
+**Use it if** you want reproducible configuration and a place for secrets that
+is separate from the public source tree. **Skip it** if you are just trying an
+app with its Settings UI.
+
+## Quick start
+
+From the D$CPLN repository:
 
 ```sh
-cp -r config-template ~/dscpln-config
-cd ~/dscpln-config
-cp secrets.example.json secrets.json   # edit; keep it out of git
-git init && git add . && git commit -m "initial config"
+npm run init-config -- ./dscpln-config
+cd dscpln-config
+cp secrets.example.json secrets.json
 ```
 
-Keep the repo private: `apps/*/config.json` may contain credentials (Nextcloud
-app password, ytmusic cookies, ntfy token). `secrets.json` is gitignored and is
-only read by `config.mjs` for Task Runner tokens. For a shared or public repo,
-keep secrets in your deployment's secret store and leave the blanks here.
+Or copy the directory manually:
+
+```sh
+cp -r config-template dscpln-config
+cd dscpln-config
+cp secrets.example.json secrets.json
+git init
+```
+
+Then:
+
+1. Edit `config.mjs` for Task Runner tasks and schedules.
+2. Edit `apps/*/config.json` for per-app settings.
+3. Fill in `secrets.json` locally.
+4. Keep the repository private and commit everything except `secrets.json`.
+
+Do not commit `secrets.json`. It is already in `.gitignore`.
 
 ## Layout
 
 ```
-config.mjs                 Task Runner tasks + schedules
-secrets.json               gitignored; Task Runner secrets
+config.mjs                 Task Runner tasks and schedules
+secrets.json               gitignored; local secrets
 secrets.example.json       the shape, with blanks
 apps/
-  portal/config.json       ntfy settings + the portal card list
+  portal/config.json       notification settings + the portal card list
   balance-xlsx/config.json workbook path and notifications
   file-pipelines/config.json folder pipelines
 tools/                     helper scripts called by tasks
 ```
 
-The per-app configs are mounted/pointed at with:
+The config files may contain credentials (a Nextcloud app password, an API
+token, an ntfy token, and so on). For a shared deployment, keep secrets in the
+deployment's secret store and leave the blanks in this repository.
+
+## Connect the apps
+
+Point each app at its config file:
 
 | App | Environment variable | Default without this repo |
 |---|---|---|
@@ -39,8 +65,7 @@ The per-app configs are mounted/pointed at with:
 | Task Runner | `BACKUPCTL_CONFIG_FILE` | `apps/task-runner/config.mjs` |
 
 `DSCPLN_STATE_FILE` keeps a scheduled app's run state on its own volume when
-the config file is mounted read-only. Contacts/YTMusic are Task Runner jobs in
-the example config; their tools live under `tools/` in the private repo.
+the config file is mounted read-only.
 
 Example Docker Compose mounts:
 
@@ -65,26 +90,40 @@ services:
     environment:
       APP: task-runner
       BACKUPCTL_CONFIG_FILE: /config-src/config.mjs
-      BACKUPCTL_REPO_DIR: /app
+      BACKUPCTL_STATE_DIR: /data/state
     volumes:
       - ./dscpln-config:/config-src:ro
       - ./data:/data
 ```
 
-If an app's Settings UI writes its config (Portal, File Pipelines), mount that
-app's config directory writable. Balance and Task Runner only read their config.
+Mount an app's config directory writable if its Settings UI writes to it. Read
+the app README before choosing read-only mounts.
 
 ## Schedules and notifications
 
-Tasks with `schedule: {enabled, days, at, catchUp}` run unattended. Put only
-one instance in charge of schedules (`BACKUPCTL_SCHEDULES=1`); set
-`BACKUPCTL_SCHEDULES=0` on any other instance sharing the config. Scheduled
-tasks cannot use uploads, prompts, browser or commit_dir. Failures notify
-through the portal when `DSCPLN_PORTAL_URL` is set; `notify: always` also
-sends successes.
+Tasks can run unattended with:
+
+```js
+schedule: { enabled: true, days: [], at: '02:00', catchUp: true }
+```
+
+- `days` uses JavaScript weekdays (`0` = Sunday); empty means daily.
+- `at` is local `HH:MM`.
+- `catchUp` runs an occurrence missed while the instance was down.
+- Scheduled tasks cannot use uploads, prompts, browser or `commit_dir`.
+
+Run schedules on only one instance. Set `BACKUPCTL_SCHEDULES=0` on any other
+instance that shares this config.
+
+Failures notify through the Portal when `DSCPLN_PORTAL_URL` is set.
+`notify: always` also sends successes; `notify: errors` is the default for
+scheduled tasks.
 
 ## Adding your own tools
 
 Put scripts under `tools/`, make them executable, and point `scriptroot` at
-`/config-src/tools` (or the path where this repo is mounted). See the comments
-in `config.mjs`.
+`/config-src/tools` (or wherever this repository is mounted). The starter's
+`config.mjs` contains examples and comments for the available task fields.
+
+For the full Task Runner reference, see the
+[Task Runner README](../apps/task-runner/README.md).

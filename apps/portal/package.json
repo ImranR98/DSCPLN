@@ -1,7 +1,7 @@
 {
   "name": "dscpln-portal",
   "version": "1.0.0",
-  "description": "D$CPLN portal: links to every function",
+  "description": "D$CPLN portal: one page for your self-hosted apps",
   "private": true,
   "type": "module",
   "main": "server.mjs",

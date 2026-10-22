@@ -95,7 +95,7 @@ function PresetCard({ id, preset, state, duration, onDuration, onOpen, busy }) {
     <article className={`card lockdown-card${active ? ' is-active' : ''}`} data-testid={`preset-${id}`}>
       <div className="card__header">
         <h2>{preset.label}</h2>
-        <span className={`status-tag ${active ? 'status-tag--paused' : ''}`} data-testid={`state-${id}`}>
+        <span className={`status-tag ${active ? 'status-tag--blocked' : ''}`} data-testid={`state-${id}`}>
           {active ? 'Active' : 'Open'}
         </span>
       </div>
@@ -120,7 +120,7 @@ function PresetCard({ id, preset, state, duration, onDuration, onOpen, busy }) {
           </select>
         </label>
         <button
-          className={active ? 'outline secondary' : 'warning'}
+          className={active ? 'outline secondary' : ''}
           type="button"
           disabled={busy}
           onClick={() => onOpen(id)}
@@ -237,7 +237,7 @@ export default function App() {
     <>
       <AppHeader
         name="Lockdown"
-        meta={<span className={`status-tag status-tag--${tone === 'warn' ? 'paused' : tone === 'over' ? 'interrupted' : 'ok'}`} data-testid="status">{meta}</span>}
+        meta={<span className={`status-tag status-tag--${tone === 'warn' ? 'blocked' : tone === 'over' ? 'interrupted' : 'ok'}`} data-testid="status">{meta}</span>}
         metaTools={status ? `checked ${formatDateTime(status.now)}` : null}
         actions={(
           <>
@@ -250,11 +250,6 @@ export default function App() {
       />
 
       <main>
-        <section className="card card--warn lockdown-banner" data-testid="reboot-warning">
-          <strong>Port blocks do not survive a srv0 reboot.</strong>
-          <span className="muted"> A reboot clears the nftables rules. The UI confirms this before every action.</span>
-        </section>
-
         {statusError ? (
           <section className="card card--over" data-testid="blocker-error">
             <div className="card__header"><h2>Port blocker</h2></div>
@@ -305,11 +300,13 @@ export default function App() {
             <p className="muted" data-testid="no-active">No port blocks active.</p>
           )}
           {pending.length ? <p className="muted">Applying: {pending.map((id) => PRESETS[id].label).join(', ')}</p> : null}
-          <div className="lockdown-actions">
-            <button className="outline secondary" type="button" onClick={openClear} disabled={!active.length} data-testid="open-clear">
-              <TimerReset size={16} strokeWidth={1.8} /> Clear all blocks
-            </button>
-          </div>
+          {active.length ? (
+            <div className="lockdown-actions">
+              <button className="outline secondary" type="button" onClick={openClear} data-testid="open-clear">
+                <TimerReset size={16} strokeWidth={1.8} /> Clear all blocks
+              </button>
+            </div>
+          ) : null}
         </section>
 
         <div className="lockdown-grid">
@@ -345,7 +342,9 @@ export default function App() {
             <>
               <button className="outline secondary" type="button" onClick={closeAction} disabled={busy}>Cancel</button>
               <button
-                className={action?.clear ? 'outline secondary' : 'danger'}
+                className={!action?.clear && (action?.preset === 'traefik-off' || action?.preset === 'srv0-tunnel-cut')
+                  ? 'danger'
+                  : action?.clear ? 'outline secondary' : ''}
                 type="button"
                 onClick={confirm}
                 disabled={busy || phrase !== actionInfo.phrase}
@@ -362,7 +361,6 @@ export default function App() {
               <li><strong>Ports:</strong> {presetPortText(action.preset)}</li>
               <li><strong>Duration:</strong> {action.durationSeconds == null ? 'Until cleared' : formatDuration(action.durationSeconds)}</li>
               <li><strong>Expires:</strong> {actionExpiry}</li>
-              <li><strong>Access:</strong> {actionInfo.warning}</li>
               <li><strong>Reboot:</strong> A srv0 reboot clears this block immediately.</li>
             </ul>
           ) : null}

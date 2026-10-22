@@ -68,7 +68,7 @@ the private Infra repo. It creates:
 - the port-blocker Deployment with `hostNetwork`, `CAP_NET_ADMIN` and a PVC-free
   nftables state;
 - a generated token Secret shared by both;
-- a NetworkPolicy allowing only the UI to call the blocker.
+- a token shared only by the UI and blocker; the blocker binds to the flannel bridge address, not the LAN.
 
 The app is routed on both `websecure` and `websecure-proxy`, behind the usual
 D$CPLN geoblock, CrowdSec and Authelia filters.

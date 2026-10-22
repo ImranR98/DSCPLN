@@ -56,6 +56,7 @@ The default ports are:
 | Balance XLSX | `3300` |
 | File Pipelines | `8791` |
 | Task Runner | `8085` |
+| Lockdown | `8086` |
 | WhatsApp TXT | `8787` (when added) |
 
 Each app also exposes `/api/health` under its base path.
@@ -114,6 +115,7 @@ Examples:
 | File Pipelines | `/pipelines` | `https://example.com/pipelines` |
 | WhatsApp TXT | `/watxt` | `https://example.com/watxt` |
 | Task Runner | `/tasks` | `https://example.com/tasks` |
+| Lockdown | `/lockdown` | `https://example.com/lockdown` |
 
 If you use a reverse proxy with authentication, keep each app's API routes
 behind the same protection unless the app documents a token-protected endpoint

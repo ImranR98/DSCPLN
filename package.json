@@ -22,6 +22,7 @@
     "balance-xlsx": "npm start --workspace dscpln-balance-xlsx",
     "file-pipelines": "npm start --workspace dscpln-file-pipelines",
     "portal": "npm start --workspace dscpln-portal",
+    "lockdown": "npm start --workspace dscpln-lockdown",
     "task-runner": "npm start --workspace dscpln-task-runner",
     "whatsapp-txt": "npm start --workspace dscpln-watxt"
   },

@@ -6,7 +6,7 @@
 DEFAULT_REGISTRY=ghcr.io
 DEFAULT_IMAGE_ORG=imranr98
 
-ALL_APPS=(portal balance-xlsx file-pipelines whatsapp-txt task-runner)
+ALL_APPS=(portal balance-xlsx file-pipelines whatsapp-txt task-runner lockdown)
 AGENT_IMAGE=dscpln-agent
 
 # app -> image name (repo under IMAGE_ORG)
@@ -16,6 +16,7 @@ declare -A IMAGE_NAMES=(
     [whatsapp-txt]=dscpln-watxt
     [task-runner]=dscpln-task-runner
     [portal]=dscpln-portal
+    [lockdown]=dscpln-lockdown
 )
 
 # app -> deployment template used by build-all.sh --pin (edit for another repo)
@@ -25,4 +26,5 @@ declare -A TEMPLATES=(
     [whatsapp-txt]=whatsapp-txt-browser.yaml
     [task-runner]=backupctl.yaml
     [portal]=portal.yaml
+    [lockdown]=lockdown.yaml
 )

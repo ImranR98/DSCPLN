@@ -49,6 +49,7 @@ started on its own. See the app pages below.
 | [File Pipelines](apps/file-pipelines/README.md) | Watches folders, standardizes or copies media, and keeps originals until cleanup is verified | `/pipelines` |
 | [WhatsApp TXT](apps/whatsapp-txt/README.md) | Browses, imports and merges WhatsApp chat exports | `/watxt` |
 | [Task Runner](apps/task-runner/README.md) | Runs scheduled and on-demand shell tasks with a web UI | `/tasks` |
+| [Lockdown](apps/lockdown/README.md) | Blocks srv0 host ports for time-limited emergency containment | `/lockdown` |
 
 There is also an optional headless [Agent](apps/agent/README.md). It lets the
 Task Runner pull archives from another machine without a shared filesystem or
@@ -56,7 +57,7 @@ remote shell.
 
 ## How it fits together
 
-- **Every app runs on its own.** Start one container or all five; there is no
+- **Every app runs on its own.** Start one container or all six; there is no
   central database or required service order.
 - **The Portal is optional.** It links the apps together and shows their health.
 - **Configuration is runtime data.** Use each app's Settings UI or mount a

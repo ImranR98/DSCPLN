@@ -88,12 +88,25 @@ async function shootViewport(page, name) {
   for (const p of ['balance', 'pipelines', 'watxt', 'tasks']) {
     await page.route(`**/${p}/api/health`, (route) => route.fulfill(json({ ok: true })))
   }
-  await page.route('**/balance/status', (route) => route.fulfill(json({ overBudget: [] })))
+  await page.route('**/balance/status', (route) => route.fulfill(json({
+    overBudget: [],
+    summary: {
+      period: 'October 2026',
+      code: 'CAD',
+      symbol: '$',
+      budget: 3000,
+      spend: 1842.35,
+      left: 1157.65,
+      overBudget: false,
+      transactions: 42,
+      currencies: 2,
+    },
+  })))
   await page.route('**/pipelines/api/state', (route) => route.fulfill(json({ paused: false, folders: [{ counts: { queued: 2, review: 1 } }] })))
   await page.route('**/watxt/api/state', (route) => route.fulfill(json({ conversations: 12, messages: 8421 })))
   await page.route('**/tasks/api/tasks', (route) => route.fulfill(json({ groups: [{ tasks: [{ state: { ok: true } }, { state: { ok: true } }, { state: { ok: true } }] }] })))
   await page.goto(`${base}/`)
-  await page.waitForSelector('[data-testid="detail-balance"]')
+  await page.waitForSelector('[data-testid="card-balance"]')
   await shoot(page, 'portal')
   await page.close()
   await new Promise((resolve) => server.close(resolve))

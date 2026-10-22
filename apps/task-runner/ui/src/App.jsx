@@ -413,7 +413,7 @@ export default function App() {
     <>
       <AppHeader
         name="Task Runner"
-        meta="Config-driven local backups"
+        meta="Scheduled and on-demand tasks"
         actions={(
           <>
             {missingConfig ? (

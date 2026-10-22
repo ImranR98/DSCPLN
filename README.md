@@ -1,50 +1,124 @@
 # D$CPLN
 
-Every data backup and sync workflow in one place. D$CPLN is a monorepo of
-small always-on Node apps — one per function — served behind a single host
-(or on their own ports) with a portal at `/`.
+**Self-hosted apps for your personal data.**
 
-| Function | Path | Description |
-|---|---|---|
-| [Portal](apps/portal/README.md) | `/` | Landing page linking every function with live status |
-| [Balance XLSX](apps/balance-xlsx/README.md) | `/balance` | Budget dashboard, insights and a live forecast planner backed by an Excel workbook (external, token-protected API at `/balance/api`) |
-| [File Pipelines](apps/file-pipelines/README.md) | `/pipelines` | Watches device folders, standardizes media, queues review/trash |
-| [WhatsApp TXT](apps/whatsapp-txt/README.md) | `/watxt` | Browses, imports and merges WhatsApp chat exports |
-| [Task Runner](apps/task-runner/README.md) | `/tasks` | Config-driven workflows: scheduled and on-demand bash tasks, drop zones, prompts, plus the scheduled Contacts/YTMusic jobs |
+D$CPLN is a set of small web apps that run on your own machine or server. Use
+one app or run several behind a single portal: track a budget in Excel, organize
+photos and voice notes, browse WhatsApp exports, and run scheduled backup or
+sync tasks.
 
-Each app's README covers its configuration fields, defaults and container
-volumes; [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) covers the shared kits
-and the base-path contract.
+Each app is independent and configured at runtime, so your paths, accounts and
+data stay out of the code and images.
 
-Every app is configured at runtime — through its own Settings UI or a mounted
-config file — so nothing user-specific is baked into the apps or their images.
-Run one app or all of them; each is an independent container.
+**In a hurry?**
 
-The headless [Agent](apps/agent/README.md) extends the same model to remote
-hosts: one generic archive-agent image, configured per host, with automatic
-token enrollment. It lets the Task Runner replace broad SSH keys with a narrow
-archive API.
+- [Run it with Docker Compose](#quick-start)
+- [Choose an app](#apps)
+- [Configure it](docs/CONFIGURATION.md)
+- [Deploy and operate it](docs/OPERATIONS.md)
 
-## Keep your configuration in one repo
+## Quick start
 
-The apps work with their built-in defaults. For a multi-app deployment, put
-your paths, tasks, schedules and app settings in a private `dscpln-config`
-repository and mount it into the containers. A starter lives in
-[`config-template/`](config-template/README.md):
+You need Docker with Compose. To develop locally, you also need Node.js 26+.
 
 ```sh
-npm run init-config -- ~/dscpln-config
-# edit config.mjs, apps/*/config.json and secrets.json
+git clone https://github.com/ImranR98/DSCPLN.git
+cd DSCPLN
+
+# Start from the configuration template.
+cp -r config-template dscpln-config
+cp dscpln-config/secrets.example.json dscpln-config/secrets.json
+
+# Edit paths and settings, then start the stack.
+# docker-compose.example.yaml mounts ./dscpln-config.
+docker compose -f docker-compose.example.yaml up -d
 ```
 
-The starter documents the per-app environment variables (`DSCPLN_CONFIG_FILE`,
-`DSCPLN_CONFIG`, `BACKUPCTL_CONFIG_FILE`, `DSCPLN_STATE_FILE`) and a Docker
-Compose mount example. Keep the repo private if it contains credentials, and
-never commit `secrets.json`.
+Open <http://localhost:8080> for the portal. The Compose file is an example:
+remove the apps you do not need and change the sample paths before starting.
+
+Prefer to run a single app? Each app has its own container image and can be
+started on its own. See the app pages below.
+
+## Apps
+
+| App | What it does | Path |
+|---|---|---|
+| [Portal](apps/portal/README.md) | Shows every app you run with live health and status | `/` |
+| [Balance XLSX](apps/balance-xlsx/README.md) | Budget dashboard, insights and forecasts backed by an Excel workbook | `/balance` |
+| [File Pipelines](apps/file-pipelines/README.md) | Watches folders, standardizes or copies media, and keeps originals until cleanup is verified | `/pipelines` |
+| [WhatsApp TXT](apps/whatsapp-txt/README.md) | Browses, imports and merges WhatsApp chat exports | `/watxt` |
+| [Task Runner](apps/task-runner/README.md) | Runs scheduled and on-demand shell tasks with a web UI | `/tasks` |
+
+There is also an optional headless [Agent](apps/agent/README.md). It lets the
+Task Runner pull archives from another machine without a shared filesystem or
+remote shell.
+
+## How it fits together
+
+- **Every app runs on its own.** Start one container or all five; there is no
+  central database or required service order.
+- **The Portal is optional.** It links the apps together and shows their health.
+- **Configuration is runtime data.** Use each app's Settings UI or mount a
+  private config repo. Nothing personal is baked into the images.
+- **State lives with your deployment.** Apps write config, state and logs to
+  the directories you mount.
+
+## Configuration
+
+The apps work with their built-in defaults. For a multi-app setup, keep paths,
+tasks and app settings in a private config repo created from
+[`config-template/`](config-template/README.md). The template includes:
+
+- Task Runner tasks and schedules in `config.mjs`
+- Per-app settings under `apps/*/config.json`
+- Secrets in a gitignored `secrets.json`
+- Optional helper scripts under `tools/`
+
+For the full model, including environment variables and state locations, see
+[Configuration](docs/CONFIGURATION.md).
+
+## Deploy and operate
+
+Images are published to GHCR as
+`ghcr.io/imranr98/dscpln-<app>:latest`; the agent is
+`ghcr.io/imranr98/dscpln-agent`. Pin image digests for reproducible deployments,
+put the apps behind a reverse proxy, and keep runtime data on mounted volumes.
+
+Deployment, upgrades, health checks, logs, backups and the remote agent are
+covered in [Operations](docs/OPERATIONS.md).
+
+## Development
+
+Requires Node.js 26+.
+
+```sh
+npm install            # install every workspace
+npm test               # build every UI and run every test suite
+npm run ui             # build all UIs only
+npm run task-runner    # start one app locally; see package.json for the rest
+```
+
+Each app has a React front end in `apps/<app>/ui/`, built into `static/` and
+served by a small Express server from `packages/server-kit`. To add an app or
+work on the shared kits, read [Architecture](docs/ARCHITECTURE.md).
+
+## Data safety
+
+These apps handle personal data. The safety rules are part of the design:
+
+- Originals are only removed after a verified copy exists, or after an explicit
+  cleanup/approval action.
+- Config and state writes are atomic; secrets are masked in API responses and
+  redacted from task logs.
+- Runtime config, secrets and data belong on mounted volumes. They are never
+  copied into `apps/` or `packages/` or baked into an image.
+- Task Runner executes the commands you configure. Treat its config as code and
+  keep it private.
 
 ## Screenshots
 
-All images use synthetic demo data — regenerate them with
+All screenshots use synthetic demo data. Regenerate them with
 `node scripts/screenshots.mjs`.
 
 | | |
@@ -54,59 +128,12 @@ All images use synthetic demo data — regenerate them with
 | ![Task Runner](docs/screenshots/task-runner.png) | ![Balance insights](docs/screenshots/balance-insights.png) |
 | ![Balance forecasts](docs/screenshots/balance-forecasts.png) | |
 
-## Run with Docker
+## Documentation
 
-Images are published as `ghcr.io/imranr98/dscpln-<app>` (portal, balance,
-file-pipelines, watxt, task-runner). The headless remote agent is
-`ghcr.io/imranr98/dscpln-agent`. All five app tags are built from the same
-unified image; the deployment's `APP` env selects the server. CI publishes them
-after every green `main` build and lists the digest to pin in the run summary.
-`docker-compose.example.yaml` shows the expected volumes and ports for a few of
-them:
-
-```sh
-docker run -p 8080:8080 ghcr.io/imranr98/dscpln-portal:latest
-```
-
-The images contain only the public app code and synthetic examples; runtime
-config and secrets are never baked in. Apps keep their config/state in the
-directories you mount (or on a Docker volume) and can be configured from their
-Settings UI. When you put several apps behind one reverse proxy, set
-`BASE_PATH=/<name>` (for example `/pipelines`) and route `/<name>` to that
-container; otherwise leave it empty.
-
-GHCR creates new packages private by default. After the first publish, make each
-`dscpln-*` package public (package settings → Change visibility), or add an
-`imagePullSecret` with `read:packages` to the deployment. Local builds push to
-GHCR too; authenticate with a personal access token that has `write:packages`
-(`docker login ghcr.io -u <user>`), or set `REGISTRY`/`IMAGE_ORG` to push
-elsewhere.
-
-## Development
-
-Requires Node 26+.
-
-```sh
-npm install            # installs every workspace
-npm test               # builds every UI and runs every test suite
-npm run ui             # build all UIs only
-npm run balance-xlsx   # start Balance XLSX locally (http://localhost:3300)
-npm run task-runner    # ...or any app by name
-```
-
-Each app has an `apps/<app>/ui/` front end (React + Vite, built into the
-app's `static/`) served by a small express server from `packages/server-kit`.
-See `docs/ARCHITECTURE.md` for the kit APIs, the base-path contract, the
-Operations runbook and the new-app recipe.
-
-## Safety
-
-These apps drive backups of personal data, so the conventions matter: never
-delete user data, write config/state atomically (`0600`), verify before
-overwriting, keep on-disk formats stable, and treat secrets as write-only
-(they are masked in API responses and stored on the app's private volume).
-
-Published images contain the public app code and synthetic examples only.
-Runtime config, secrets and data belong on mounted volumes (see
-[`config-template/`](config-template/README.md)) and must never be copied into
-`apps/` or `packages/`; the image build also excludes the usual runtime files.
+| I want to… | Read |
+|---|---|
+| Run the stack for the first time | [Getting started](docs/GETTING-STARTED.md) |
+| Configure apps, secrets or schedules | [Configuration](docs/CONFIGURATION.md) |
+| Deploy, upgrade or troubleshoot | [Operations](docs/OPERATIONS.md) |
+| Understand or extend the code | [Architecture](docs/ARCHITECTURE.md) |
+| Use a specific app | [App READMEs](docs/README.md#apps) |

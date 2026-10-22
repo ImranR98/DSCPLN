@@ -16,14 +16,14 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 // file -> { title, description, entry } (entry relative to ui/, no leading slash)
 const PAGES = {
-  'apps/portal/ui/index.html': { title: 'D$CPLN', description: 'D$CPLN portal', entry: 'main.jsx' },
-  'apps/balance-xlsx/ui/index.html': { title: 'D$CPLN ⋅ Balance XLSX', description: 'D$CPLN Balance XLSX', entry: 'index.jsx' },
-  'apps/balance-xlsx/ui/insights.html': { title: 'D$CPLN ⋅ Balance XLSX — Insights', description: 'D$CPLN Balance XLSX', entry: 'insights.jsx' },
-  'apps/balance-xlsx/ui/forecasts.html': { title: 'D$CPLN ⋅ Balance XLSX — Forecasts', description: 'D$CPLN Balance XLSX', entry: 'forecasts.jsx' },
-  'apps/balance-xlsx/ui/settings.html': { title: 'D$CPLN ⋅ Balance XLSX — Settings', description: 'D$CPLN Balance XLSX', entry: 'settings.jsx' },
-  'apps/file-pipelines/ui/index.html': { title: 'D$CPLN ⋅ File Pipelines', description: 'D$CPLN File Pipelines', entry: 'main.jsx' },
-  'apps/task-runner/ui/index.html': { title: 'D$CPLN ⋅ Task Runner', description: 'D$CPLN Task Runner', entry: 'main.jsx' },
-  'apps/whatsapp-txt/ui/index.html': { title: 'D$CPLN ⋅ WhatsApp TXT', description: 'D$CPLN WhatsApp TXT', entry: 'main.jsx' },
+  'apps/portal/ui/index.html': { title: 'D$CPLN', description: 'Self-hosted apps for your personal data', entry: 'main.jsx' },
+  'apps/balance-xlsx/ui/index.html': { title: 'D$CPLN ⋅ Balance XLSX', description: 'Budget dashboard backed by your Excel workbook', entry: 'index.jsx' },
+  'apps/balance-xlsx/ui/insights.html': { title: 'D$CPLN ⋅ Balance XLSX — Insights', description: 'Budget dashboard backed by your Excel workbook', entry: 'insights.jsx' },
+  'apps/balance-xlsx/ui/forecasts.html': { title: 'D$CPLN ⋅ Balance XLSX — Forecasts', description: 'Budget dashboard backed by your Excel workbook', entry: 'forecasts.jsx' },
+  'apps/balance-xlsx/ui/settings.html': { title: 'D$CPLN ⋅ Balance XLSX — Settings', description: 'Budget dashboard backed by your Excel workbook', entry: 'settings.jsx' },
+  'apps/file-pipelines/ui/index.html': { title: 'D$CPLN ⋅ File Pipelines', description: 'Watch folders, organize media, and keep originals safe', entry: 'main.jsx' },
+  'apps/task-runner/ui/index.html': { title: 'D$CPLN ⋅ Task Runner', description: 'Run scheduled and on-demand tasks', entry: 'main.jsx' },
+  'apps/whatsapp-txt/ui/index.html': { title: 'D$CPLN ⋅ WhatsApp TXT', description: 'Browse, import and merge WhatsApp chat exports', entry: 'main.jsx' },
 }
 
 const page = ({ title, description, entry }) => `<!DOCTYPE html>

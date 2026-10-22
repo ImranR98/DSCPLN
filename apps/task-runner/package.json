@@ -1,7 +1,7 @@
 {
   "name": "dscpln-task-runner",
   "version": "3.0.0",
-  "description": "Task Runner: local web GUI for config-driven backup workflows",
+  "description": "Task Runner: run scheduled and on-demand tasks from a web UI",
   "type": "module",
   "private": true,
   "bin": {

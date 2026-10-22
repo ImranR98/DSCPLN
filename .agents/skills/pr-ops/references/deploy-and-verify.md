@@ -16,9 +16,12 @@ Determine impact from `gh pr diff <n> --name-only`, not from the lockfile alone:
 | `package-lock.json` | follow the manifest that changed (the rows above) |
 | root `package.json` devDeps only (eslint, playwright-core, …), `scripts/`, `docs/`, tests | nothing — image contents are unchanged, though CI still publishes a new digest |
 | `.github/workflows/ci.yml` | nothing in the image; verify a publish-pipeline change with a `workflow_dispatch` run |
+| `apps/agent/**`, `docker/agent.Dockerfile` | publish `dscpln-agent` (CI does this on merge; local fallback `scripts/build-agent.sh`) and update the remote Compose image pin |
 
 Apps: `portal balance-xlsx file-pipelines whatsapp-txt task-runner`
-(`scripts/images.sh`).
+(`scripts/images.sh`). The agent image is deployed through Compose on remote
+hosts, not through this repo's Kubernetes templates; its digest is in the same
+`image-digests-<sha>` artifact.
 
 ## Rebuild & pin
 

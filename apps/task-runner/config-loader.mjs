@@ -111,6 +111,82 @@ function validatePrompts(value, label) {
   });
 }
 
+function validateWebhook(value, taskName) {
+  const label = `Task '${taskName}': webhook`;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ConfigError(`${label} must be an object`);
+  }
+  const url = String(value.url ?? '').trim();
+  if (!/^https?:\/\//i.test(url)) throw new ConfigError(`${label}.url must be an http(s) URL`);
+  const method = String(value.method ?? 'POST').toUpperCase();
+  if (!/^[A-Z]+$/.test(method)) throw new ConfigError(`${label}.method is not a valid HTTP method`);
+
+  const headers = value.headers ?? {};
+  if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
+    throw new ConfigError(`${label}.headers must be an object`);
+  }
+  for (const [key, entry] of Object.entries(headers)) {
+    if (entry == null || !['string', 'number', 'boolean'].includes(typeof entry)) {
+      throw new ConfigError(`${label}.headers.${key} must be a string, number or boolean`);
+    }
+  }
+
+  if (value.body !== undefined && value.body !== null) {
+    const type = typeof value.body;
+    if (!['string', 'number', 'boolean', 'object'].includes(type) || (type === 'object' && Array.isArray(value.body))) {
+      throw new ConfigError(`${label}.body must be a string, number, boolean or object`);
+    }
+  }
+
+  const timeoutMs = value.timeoutMs === undefined ? 300_000 : Number(value.timeoutMs);
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 86_400_000) {
+    throw new ConfigError(`${label}.timeoutMs must be an integer between 1000 and 86400000`);
+  }
+
+  const expectStatus = value.expectStatus;
+  if (expectStatus !== undefined) {
+    const list = Array.isArray(expectStatus) ? expectStatus : [expectStatus];
+    if (!list.length || list.some((entry) => !Number.isInteger(entry) || entry < 100 || entry > 599)) {
+      throw new ConfigError(`${label}.expectStatus must be an HTTP status or list of statuses`);
+    }
+  }
+
+  const maxBytes = value.maxBytes === undefined ? undefined : Number(value.maxBytes);
+  if (maxBytes !== undefined && (!Number.isInteger(maxBytes) || maxBytes <= 0)) {
+    throw new ConfigError(`${label}.maxBytes must be a positive integer`);
+  }
+
+  for (const field of ['downloadTo', 'tokenFile', 'enrollUrl', 'summaryHeader', 'summaryJson', 'caFile', 'certFile', 'keyFile']) {
+    if (value[field] !== undefined && (typeof value[field] !== 'string' || !value[field].trim())) {
+      throw new ConfigError(`${label}.${field} must be a non-empty string`);
+    }
+  }
+  if (value.enrollUrl && !value.tokenFile) {
+    throw new ConfigError(`${label}.enrollUrl requires tokenFile`);
+  }
+  if (value.enrollUrl && !/^https?:\/\//i.test(value.enrollUrl)) {
+    throw new ConfigError(`${label}.enrollUrl must be an http(s) URL`);
+  }
+
+  return {
+    url,
+    method,
+    headers: { ...headers },
+    body: value.body,
+    timeoutMs,
+    expectStatus,
+    maxBytes,
+    downloadTo: value.downloadTo,
+    tokenFile: value.tokenFile,
+    enrollUrl: value.enrollUrl,
+    summaryHeader: value.summaryHeader,
+    summaryJson: value.summaryJson,
+    caFile: value.caFile,
+    certFile: value.certFile,
+    keyFile: value.keyFile,
+  };
+}
+
 function normalizeActions(value, taskName) {
   if (value === undefined) return [];
   const list = Array.isArray(value)
@@ -210,12 +286,20 @@ export async function loadConfig(configPath = CONFIG_FILE) {
       const merged = { ...g.defaults, ...t, group: g.name };
       if (!merged.name) throw new ConfigError("Every task needs a 'name'");
       if (!merged.state_dir) throw new ConfigError(`Task '${merged.name}' needs a 'state_dir' for its run state`);
-      merged.commands ??= shorthandCommands(merged);
+      if (merged.webhook !== undefined) {
+        if (merged.script || merged.move || merged.ingest) {
+          throw new ConfigError(`Task '${merged.name}': webhook cannot be combined with script/move/ingest`);
+        }
+        merged.webhook = validateWebhook(merged.webhook, merged.name);
+        merged.commands ??= [];
+      } else {
+        merged.commands ??= shorthandCommands(merged);
+      }
       delete merged.script;
       delete merged.move;
       delete merged.ingest;
-      if (!merged.commands) {
-        throw new ConfigError(`Task '${merged.name}' needs 'commands' (or 'script'/'move'/'ingest')`);
+      if (!merged.commands && !merged.webhook) {
+        throw new ConfigError(`Task '${merged.name}' needs 'commands', 'webhook' (or 'script'/'move'/'ingest')`);
       }
       if (taskSeen.has(merged.name)) throw new ConfigError(`Duplicate task name: '${merged.name}'`);
       taskSeen.add(merged.name);

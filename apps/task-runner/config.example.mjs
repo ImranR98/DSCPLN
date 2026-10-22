@@ -164,6 +164,31 @@ export default {
       ],
     },
 
+    // A generic HTTP task. With tokenFile set, the app generates the bearer
+    // token on first use (0600), enrolls it at enrollUrl, and sends it to the
+    // webhook. The downloaded file is available to the commands that follow.
+    {
+      name: 'Remote services',
+      defaults: { state_dir: '{{maindir}}/.tasks' },
+      tasks: [
+        {
+          name: 'Remote archive',
+          note: 'Download an archive from a remote D$CPLN agent.',
+          webhook: {
+            url: 'https://agent.example/v1/jobs/example-archive/archive',
+            method: 'POST',
+            enrollUrl: 'https://agent.example/v1/enroll',
+            tokenFile: '{{maindir}}/.tasks/example-agent.token',
+            downloadTo: '{{maindir}}/example-archive.tar.gz',
+            timeoutMs: 1800000,
+            summaryHeader: 'X-DSCPLN-Summary',
+          },
+          commands: [`echo "Downloaded to {{maindir}}/example-archive.tar.gz"`],
+          summary_last_line: true,
+        },
+      ],
+    },
+
     // Pinned to another machine: only runs on the instance named in
     // BACKUPCTL_HOST; shows as "Pinned to desktop" everywhere else.
     {

@@ -1,0 +1,14 @@
+{
+  "name": "dscpln-agent",
+  "version": "0.1.0",
+  "description": "Generic archive agent for D$CPLN Task Runner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

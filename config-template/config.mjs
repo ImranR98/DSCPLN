@@ -34,17 +34,6 @@ export default {
   balance_token: secrets.balance_token ?? '',
   portal_url: process.env.DSCPLN_PORTAL_URL ?? 'http://portal:8080',
 
-  // Optional remote machines; pin a task with `host: 'desktop'` and run the
-  // same config on several instances (BACKUPCTL_HOST names the instance).
-  hosts: {
-    desktop: {
-      user: 'you',
-      host: 'desktop.local',
-      port: 22,
-      ssh: '{{hosts.desktop.user}}@{{hosts.desktop.host}}',
-    },
-  },
-
   // Config tokens listed here are redacted from logged commands and output.
   secrets: ['balance_token'],
 

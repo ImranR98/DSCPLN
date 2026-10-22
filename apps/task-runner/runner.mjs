@@ -1,33 +1,11 @@
 // Subprocess layer: spawn commands in their own process groups with output
 // streaming/capture, secret redaction and cancel-by-pid-group.
 
-import fs from 'node:fs';
 import os from 'node:os';
-import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { STATE_DIR } from './state.mjs';
 import { redactText, shellQuote, splitLines } from './util.mjs';
 
 // subprocess layer -----------------------------------------------------------
-
-const ASKPASS_PATH = path.join(STATE_DIR, 'askpass.sh');
-
-function ensureAskpass() {
-  if (!fs.existsSync(ASKPASS_PATH)) {
-    fs.mkdirSync(path.dirname(ASKPASS_PATH), { recursive: true });
-    fs.writeFileSync(ASKPASS_PATH, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
-  }
-  return ASKPASS_PATH;
-}
-
-// Commands run with stdin closed (interactive prompts fail fast instead of
-// hanging) and SSH forced to use a failing askpass (no password prompts on a
-// hidden terminal).
-export const SAFE_ENV = {
-  ...process.env,
-  SSH_ASKPASS_REQUIRE: 'force',
-  SSH_ASKPASS: ensureAskpass(),
-};
 
 export function killpg(pid, log = () => {}) {
   try {
@@ -59,7 +37,7 @@ function spawnSafe(cmd, opts = {}) {
   return spawn(file, args, {
     cwd,
     detached: true,
-    env: { ...SAFE_ENV, ...env },
+    env: { ...process.env, ...env },
     // A task can opt into the host data owner's UID/GID; the parent retains
     // root + CAP_SETUID/CAP_SETGID so backup tasks can still read all PVCs.
     ...(uid === undefined ? {} : { uid }),

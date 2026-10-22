@@ -15,10 +15,10 @@ WORKDIR /app
 #   file-pipelines: ffmpeg, perl, rsync, tar
 #   whatsapp-txt:   unzip
 #   balance-xlsx:   git (workbook commits)
-#   task-runner:    restic, kubectl, adb, python3, age, jq, openssh-client
+#   task-runner:    restic, kubectl, adb, python3, age, jq
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        bash rsync openssh-client git age jq unzip tar wget \
+        bash rsync git age jq unzip tar wget \
         python3 python3-venv python3-pip ca-certificates adb curl bzip2 \
         ffmpeg perl gzip \
     && curl -fsSL "https://github.com/restic/restic/releases/download/v${RESTIC_VERSION}/restic_${RESTIC_VERSION}_linux_amd64.bz2" -o /tmp/restic.bz2 \

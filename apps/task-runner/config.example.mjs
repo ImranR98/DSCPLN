@@ -31,12 +31,6 @@ export default {
   balance_token: '',
   portal_url: '',
 
-  // Optional remote machines; pin a task with `host: 'desktop'` and run the
-  // same config on several instances (BACKUPCTL_HOST names the instance).
-  hosts: {
-    desktop: { user: 'you', host: 'desktop.local', port: 22, ssh: '{{hosts.desktop.user}}@{{hosts.desktop.host}}' },
-  },
-
   groups: [
     {
       name: 'Everyday',
@@ -189,18 +183,5 @@ export default {
       ],
     },
 
-    // Pinned to another machine: only runs on the instance named in
-    // BACKUPCTL_HOST; shows as "Pinned to desktop" everywhere else.
-    {
-      name: 'Remote',
-      defaults: { state_dir: '{{maindir}}/.tasks', host: 'desktop' },
-      tasks: [
-        {
-          name: 'Desktop uptime',
-          commands: [`ssh {{hosts.desktop.ssh}} 'uptime'`],
-          summary_last_line: true,
-        },
-      ],
-    },
   ],
 }

@@ -65,6 +65,7 @@ Job fields:
 | `root` | Absolute directory to archive |
 | `include` | Optional list of relative glob patterns; when set, only matching paths are archived |
 | `exclude` | Optional list of tar exclude patterns |
+| `ignoreReadErrors` | Continue when live files vanish while tar reads them (tar `--ignore-failed-read`) |
 | `format` | `tar.gz` |
 | `maxBytes` | Maximum archive size; defaults to 1 GiB |
 | `timeoutSeconds` | Maximum tar runtime; defaults to 30 minutes |

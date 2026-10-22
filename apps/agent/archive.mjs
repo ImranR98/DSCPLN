@@ -38,6 +38,7 @@ export async function createArchive(job, workDir, { signal, timeoutSeconds = job
   const cleanup = () => fs.rmSync(dir, { recursive: true, force: true });
   try {
     const args = ['-czf', archive, '-C', root];
+    if (job.ignoreReadErrors) args.push('--ignore-failed-read', '--warning=no-file-removed');
     for (const pattern of job.exclude ?? []) args.push(`--exclude=${pattern}`);
     if (job.include?.length) {
       const matches = new Set();

@@ -98,6 +98,7 @@ export function loadConfig(configPath) {
       root,
       include: [...include],
       exclude: [...exclude],
+      ignoreReadErrors: jobRaw.ignoreReadErrors === true,
       format,
       maxBytes: positiveInteger(jobRaw.maxBytes, `Job '${id}': maxBytes`, DEFAULT_MAX_BYTES),
       timeoutSeconds: positiveInteger(jobRaw.timeoutSeconds, `Job '${id}': timeoutSeconds`, DEFAULT_TIMEOUT_SECONDS),

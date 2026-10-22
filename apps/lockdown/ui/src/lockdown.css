@@ -1,0 +1,138 @@
+/* ---------- Lockdown ---------- */
+
+.lockdown-banner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-bottom: var(--space-4);
+    border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
+    background: var(--warn-soft);
+}
+
+.lockdown-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+}
+
+.lockdown-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.lockdown-card.is-active {
+    border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+    box-shadow: var(--shadow-md);
+}
+
+.lockdown-card__lead {
+    margin: 0;
+    font-weight: 600;
+}
+
+.lockdown-card__ports {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.lockdown-card__active {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: var(--space-2) 0;
+}
+
+.lockdown-card__controls {
+    display: flex;
+    align-items: end;
+    gap: var(--space-2);
+    margin-top: auto;
+    padding-top: var(--space-2);
+}
+
+.lockdown-card__controls label {
+    flex: 1 1 auto;
+    margin: 0;
+    font-size: var(--fs-sm);
+}
+
+.lockdown-card__controls select {
+    margin: 0.2rem 0 0;
+    padding: 0.45rem 0.6rem;
+    font-size: var(--fs-sm);
+}
+
+.lockdown-card__controls button {
+    flex: 0 0 auto;
+    margin: 0;
+    width: auto;
+}
+
+.lockdown-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--space-3);
+}
+
+.lockdown-active-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin: var(--space-2) 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.lockdown-active-list li {
+    display: grid;
+    grid-template-columns: minmax(8rem, 1fr) minmax(7rem, 1fr) auto;
+    gap: var(--space-2);
+    align-items: baseline;
+    padding: var(--space-2) 0;
+    border-top: 1px solid var(--border);
+    font-size: var(--fs-sm);
+}
+
+.lockdown-dialog-list {
+    margin: var(--space-3) 0;
+    padding-left: 1.15rem;
+}
+
+.lockdown-dialog-list li {
+    margin: 0.3rem 0;
+}
+
+.lockdown-note p {
+    display: flex;
+    gap: 0.45rem;
+    align-items: flex-start;
+    margin: 0.4rem 0;
+}
+
+.lockdown-note svg {
+    flex: 0 0 auto;
+    margin-top: 0.15rem;
+}
+
+.dialog-actions button {
+    width: auto;
+}
+
+@media (max-width: 42rem) {
+    .lockdown-card__controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .lockdown-card__controls button {
+        width: 100%;
+    }
+
+    .lockdown-active-list li {
+        grid-template-columns: 1fr;
+        gap: 0.1rem;
+    }
+}

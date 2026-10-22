@@ -29,8 +29,20 @@ case "${APP:-}" in
   task-runner)
     exec node apps/task-runner/server.mjs --host 0.0.0.0 --port "${PORT:-8085}" --no-browser
     ;;
+  lockdown)
+    : "${PORT:=8086}"
+    : "${HOST:=0.0.0.0}"
+    export PORT HOST
+    exec node apps/lockdown/server.mjs
+    ;;
+  port-blocker)
+    : "${PORT:=8794}"
+    : "${HOST:=0.0.0.0}"
+    export PORT HOST
+    exec node apps/lockdown/blocker.mjs
+    ;;
   *)
-    echo "APP must be portal, balance, file-pipelines, whatsapp-txt or task-runner (got '${APP:-}')" >&2
+    echo "APP must be portal, balance, file-pipelines, whatsapp-txt, task-runner, lockdown or port-blocker (got '${APP:-}')" >&2
     exit 2
     ;;
 esac

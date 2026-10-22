@@ -1,0 +1,24 @@
+{
+  "name": "dscpln-lockdown",
+  "version": "1.0.0",
+  "description": "D$CPLN lockdown: time-limited port blocks for srv0",
+  "private": true,
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "build:ui": "vite build",
+    "watch:ui": "vite build --watch",
+    "start": "node server.mjs",
+    "test": "npm run build:ui && node --test"
+  },
+  "dependencies": {
+    "@dscpln/server-kit": "*"
+  },
+  "devDependencies": {
+    "@dscpln/ui-kit": "*",
+    "vite": "^8.3.4",
+    "@vitejs/plugin-react": "^6.1.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
+}

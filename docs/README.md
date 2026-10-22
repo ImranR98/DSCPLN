@@ -22,6 +22,8 @@ Start with what you need. You do not have to read these pages in order.
   WhatsApp chat exports.
 - [Task Runner](../apps/task-runner/README.md) — scheduled and on-demand shell
   tasks with a web UI.
+- [Lockdown](../apps/lockdown/README.md) — time-limited blocks on srv0 host
+  ports, with an internal privileged port blocker.
 - [D$CPLN Agent](../apps/agent/README.md) — an optional archive service for
   other machines.
 

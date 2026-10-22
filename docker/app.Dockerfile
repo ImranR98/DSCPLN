@@ -16,9 +16,10 @@ WORKDIR /app
 #   whatsapp-txt:   unzip
 #   balance-xlsx:   git (workbook commits)
 #   task-runner:    restic, kubectl, adb, python3, age, jq
+#   lockdown:       nftables (privileged port-blocker mode)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        bash rsync git age jq unzip tar wget \
+        bash rsync git age jq unzip tar wget nftables \
         python3 python3-venv python3-pip ca-certificates adb curl bzip2 \
         ffmpeg perl gzip \
     && curl -fsSL "https://github.com/restic/restic/releases/download/v${RESTIC_VERSION}/restic_${RESTIC_VERSION}_linux_amd64.bz2" -o /tmp/restic.bz2 \
@@ -44,7 +45,7 @@ RUN chmod 0755 /usr/local/bin/dscpln-entrypoint
 ENV NODE_ENV=production
 ENV HOME=/home/node
 ENV BACKUPCTL_REPO_DIR=/app
-EXPOSE 3300 8080 8085 8787 8791
+EXPOSE 3300 8080 8085 8086 8787 8791 8794
 
 USER node
 ENTRYPOINT ["/usr/local/bin/dscpln-entrypoint"]

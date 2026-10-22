@@ -31,9 +31,10 @@ Published images:
 | `ghcr.io/imranr98/dscpln-file-pipelines` | File Pipelines |
 | `ghcr.io/imranr98/dscpln-watxt` | WhatsApp TXT |
 | `ghcr.io/imranr98/dscpln-task-runner` | Task Runner |
+| `ghcr.io/imranr98/dscpln-lockdown` | Lockdown |
 | `ghcr.io/imranr98/dscpln-agent` | Remote archive agent |
 
-The five app tags are built from one unified image; the `APP` environment
+The app tags are built from one unified image; the `APP` environment
 variable selects the server at runtime. The agent is a separate image.
 
 CI builds and publishes after every green `main` build. The publish job writes
@@ -56,7 +57,7 @@ token with package-write permission.
 
 ### Private GHCR packages
 
-New GHCR packages are private by default. Either make the six `dscpln-*`
+New GHCR packages are private by default. Either make the seven `dscpln-*`
 packages public, or add an `imagePullSecret` with `read:packages` to the
 deployment. Do not put registry credentials in this repository.
 
@@ -72,6 +73,7 @@ Run apps on separate ports when you are trying them out. For one hostname, set
 | File Pipelines | `/pipelines` |
 | WhatsApp TXT | `/watxt` |
 | Task Runner | `/tasks` |
+| Lockdown | `/lockdown` |
 
 The apps generate links relative to their base path. The Portal intentionally
 ignores `BASE_PATH` and uses absolute subpaths.

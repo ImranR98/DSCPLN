@@ -38,7 +38,7 @@ export async function createArchive(job, workDir, { signal, timeoutSeconds = job
   const cleanup = () => fs.rmSync(dir, { recursive: true, force: true });
   try {
     const args = ['-czf', archive, '-C', root];
-    if (job.ignoreReadErrors) args.push('--ignore-failed-read', '--warning=no-file-removed');
+    if (job.ignoreReadErrors) args.push('--ignore-failed-read', '--warning=no-file-removed', '--warning=no-file-changed');
     for (const pattern of job.exclude ?? []) args.push(`--exclude=${pattern}`);
     if (job.include?.length) {
       const matches = new Set();
@@ -94,6 +94,10 @@ export async function createArchive(job, workDir, { signal, timeoutSeconds = job
           reject(new ArchiveError('archive cancelled', 499));
         } else if (timedOut) {
           reject(new ArchiveError('archive timed out', 504));
+        } else if (code === 1 && job.ignoreReadErrors) {
+          // GNU tar exit 1 means files changed/were removed while reading.
+          // For a live-state snapshot the archive is still usable.
+          resolve();
         } else if (code !== 0) {
           reject(new ArchiveError(`tar failed (exit ${code ?? sig}): ${stderr.trim().slice(0, 500)}`, 500));
         } else {

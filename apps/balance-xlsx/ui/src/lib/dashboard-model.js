@@ -2,13 +2,7 @@
 
 import { formats } from '@dscpln/ui-kit'
 import { number, clean, currencyColor } from './money.js'
-
-function cardState(spent, budget) {
-  if (budget <= 0) return 'card--none'
-  if (spent >= budget) return 'card--over'
-  if (spent / budget >= 0.8) return 'card--warn'
-  return 'card--ok'
-}
+import { expectedSpend, progressState } from './budget-progress.js'
 
 export function buildHero(data, today, money) {
   const currency = (data?.currencies || []).find((entry) => entry.primary) || (data?.currencies || [])[0] || null
@@ -20,7 +14,7 @@ export function buildHero(data, today, money) {
   const day = today.getDate()
   const daysLeft = Math.max(1, daysInMonth - day + 1)
   const remaining = budget - spent
-  const expected = value('monthsExpectedSpend') || budget * (day / daysInMonth)
+  const expected = expectedSpend(currency, budget, today)
 
   const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0
   const paceFraction = budget > 0 ? Math.min(1, Math.max(0, expected / budget)) : 0
@@ -102,17 +96,18 @@ export function buildHero(data, today, money) {
     progressAriaText: budget > 0 ? `${Math.round(pct)}% of budget used` : 'No budget set',
     paceMarkerHidden: budget <= 0,
     paceMarkerLeft: `${(paceFraction * 100).toFixed(1)}%`,
-    cardClass: cardState(spent, budget),
+    cardClass: progressState(spent, budget, expected),
   }
 }
 
-export function buildCurrencyCards(data, money) {
+export function buildCurrencyCards(data, money, today = null) {
   return (data?.currencies || [])
     .filter((currency) => !currency.primary && currency.hasActivity)
     .map((currency) => {
       const code = currency.code
       const budget = number(currency.monthlyBudget)
       const spent = number(currency.monthsSpend)
+      const expected = expectedSpend(currency, budget, today)
       const remaining = budget - spent
       const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0
       const convertedParts = []
@@ -134,7 +129,7 @@ export function buildCurrencyCards(data, money) {
         remainingOver: budget > 0 && remaining < 0,
         earnedText: `+${money(number(currency.monthsIncome), code)} in`,
         convertedText: convertedParts.length ? `${convertedParts.join(' / ')} converted` : null,
-        cardClass: cardState(spent, budget),
+        cardClass: progressState(spent, budget, expected),
       }
     })
 }

@@ -920,6 +920,21 @@ details.card[open] > summary::after {
 
     .layout__side {
         grid-column: 2;
+        min-height: 0;
+        max-height: var(--side-max-height);
+        overflow: hidden;
+    }
+
+    #expensesCard {
+        max-height: var(--side-max-height);
+        overflow: hidden;
+    }
+
+    #expensesCard > .expenses__list {
+        max-height: var(--expenses-list-max-height);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding-right: var(--space-1);
     }
 }
 

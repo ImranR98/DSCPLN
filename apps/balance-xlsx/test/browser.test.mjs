@@ -35,6 +35,10 @@ test('dashboard loads under BASE_PATH with the shared kit', async (t) => {
     })
     assert.equal(await page.title(), 'D$CPLN ⋅ Balance XLSX')
     assert.match(await page.textContent('h1'), /Balance XLSX/)
+    assert.equal(
+        await page.locator('.card--hero').evaluate((el) => el.style.getPropertyValue('--currency')),
+        '#dc2626',
+    )
     assert.deepEqual(errors, [])
 
     // Add transaction starts on Amount, so the details suggestion menu cannot
@@ -73,6 +77,67 @@ test('dashboard loads under BASE_PATH with the shared kit', async (t) => {
     const amount = await page.textContent('#transactionsList .expense__amount')
     assert.match(amount, /\$/)
     assert.deepEqual(errors, [])
+})
+
+test('dashboard caps the transaction column to the main column on desktop', async (t) => {
+    const browser = await launchBrowser()
+    if (!browser) {
+        t.skip('chromium not available (playwright browsers missing)')
+        return
+    }
+    t.after(() => browser.close())
+
+    const { server, baseUrl } = await startServer({ basePath: '/balance' })
+    t.after(() => new Promise((resolve) => server.close(resolve)))
+
+    const raw = await (await fetch(`${baseUrl}/balance/data?date=2026-09-15`)).json()
+    const seed = raw.transactions?.[0] || {
+        id: 'seed',
+        kind: 'expense',
+        date: '2026-09-15',
+        details: 'Test transaction',
+        category: 'Test',
+        currency: 'CAD',
+        expenses: 10,
+    }
+    const many = Array.from({ length: 45 }, (_, index) => ({
+        ...seed,
+        id: `layout-${index}`,
+        date: '2026-09-15',
+        details: `Layout row ${index + 1}`,
+        expenses: 10,
+    }))
+
+    const page = await browser.newPage()
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.route('**/balance/data?*', (route) => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ...raw, transactions: many }),
+    }))
+    await page.goto(`${baseUrl}/balance/`)
+    await page.waitForSelector('#expensesList .expense')
+    await page.waitForFunction(() =>
+        document.querySelector('.layout__side')?.style.getPropertyValue('--side-max-height'))
+
+    const metrics = await page.evaluate(() => {
+        const main = document.querySelector('.layout__main').getBoundingClientRect()
+        const side = document.querySelector('.layout__side').getBoundingClientRect()
+        const list = document.querySelector('#expensesList')
+        return {
+            mainHeight: main.height,
+            sideHeight: side.height,
+            scrollHeight: list.scrollHeight,
+            clientHeight: list.clientHeight,
+            overflowY: getComputedStyle(list).overflowY,
+        }
+    })
+
+    assert.ok(metrics.sideHeight <= metrics.mainHeight + 1,
+        `side column ${metrics.sideHeight}px should not exceed main column ${metrics.mainHeight}px`)
+    assert.ok(metrics.scrollHeight > metrics.clientHeight,
+        'transaction list should scroll when it exceeds the capped card height')
+    assert.equal(metrics.overflowY, 'auto')
 })
 
 test('forecasts preview live and save scenario sheets', async (t) => {

@@ -28,6 +28,8 @@ export default function Dashboard() {
 
   const historyHostRef = useRef(null)
   const historyTooltipRef = useRef(null)
+  const layoutMainRef = useRef(null)
+  const layoutSideRef = useRef(null)
   const budgetDialogRef = useRef(null)
   const categoriesDialogRef = useRef(null)
   const transactionDialogRef = useRef(null)
@@ -49,7 +51,7 @@ export default function Dashboard() {
   const writable = data?.writable !== false
 
   const hero = buildHero(data, today, money)
-  const currencyCards = buildCurrencyCards(data, money)
+  const currencyCards = buildCurrencyCards(data, money, today)
   const expenses = sortNewestFirst(data?.transactions || [])
   const expensesMeta = expenses.length ? formatCount(expenses.length) : ''
 
@@ -143,6 +145,47 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data])
 
+  // Keep the transaction column from growing past the main column on desktop.
+  // The list itself scrolls inside the capped card; mobile keeps the natural
+  // document flow.
+  useLayoutEffect(() => {
+    const main = layoutMainRef.current
+    const side = layoutSideRef.current
+    if (!main || !side) return
+    const desktop = window.matchMedia('(min-width: 64rem)')
+    const sync = () => {
+      if (!desktop.matches) {
+        side.style.removeProperty('--side-max-height')
+        side.querySelector('#expensesList')?.style.removeProperty('--expenses-list-max-height')
+        return
+      }
+      const mainHeight = main.getBoundingClientRect().height
+      side.style.setProperty('--side-max-height', `${Math.ceil(mainHeight)}px`)
+
+      // Chrome renders <details> content in a shadow slot, so a flex column on
+      // the disclosure does not reliably size the list. Cap the list itself
+      // using its measured offset from the card top instead.
+      const card = side.querySelector('#expensesCard')
+      const list = side.querySelector('#expensesList')
+      if (!card || !list) return
+      const cardTop = card.getBoundingClientRect().top
+      const listTop = list.getBoundingClientRect().top
+      const paddingBottom = Number.parseFloat(getComputedStyle(card).paddingBottom) || 0
+      const listHeight = Math.max(0, Math.floor(mainHeight - (listTop - cardTop) - paddingBottom))
+      list.style.setProperty('--expenses-list-max-height', `${listHeight}px`)
+    }
+    sync()
+    const observer = new ResizeObserver(sync)
+    observer.observe(main)
+    desktop.addEventListener('change', sync)
+    return () => {
+      observer.disconnect()
+      desktop.removeEventListener('change', sync)
+      side.style.removeProperty('--side-max-height')
+      side.querySelector('#expensesList')?.style.removeProperty('--expenses-list-max-height')
+    }
+  }, [data])
+
   useEffect(() => {
     fetchData()
     const onVisibility = () => {
@@ -189,7 +232,7 @@ export default function Dashboard() {
       />
 
       <main className="layout">
-        <div className="layout__main">
+        <div className="layout__main" ref={layoutMainRef}>
           <HeroCard
             hero={hero}
             canEditBudget={Boolean(data)}
@@ -199,7 +242,7 @@ export default function Dashboard() {
           <HistoryCard hidden={historyHidden} rangeText={historyRange} hostRef={historyHostRef} tooltipRef={historyTooltipRef} />
         </div>
 
-        <div className="layout__side">
+        <div className="layout__side" ref={layoutSideRef}>
           <ExpensesPanel
             expenses={expenses}
             expensesMeta={expensesMeta}

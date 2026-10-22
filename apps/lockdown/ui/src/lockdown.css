@@ -1,14 +1,5 @@
 /* ---------- Lockdown ---------- */
 
-.lockdown-banner {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-    margin-bottom: var(--space-4);
-    border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
-    background: var(--warn-soft);
-}
-
 .lockdown-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
@@ -24,7 +15,7 @@
 }
 
 .lockdown-card.is-active {
-    border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+    border-color: color-mix(in srgb, var(--over) 45%, var(--border));
     box-shadow: var(--shadow-md);
 }
 
@@ -136,3 +127,21 @@
         gap: 0.1rem;
     }
 }
+
+/* Active blocks use the shared error colour, not Pico's amber warning. */
+.status-tag--blocked::before {
+    background: var(--over);
+}
+
+.lockdown-note {
+    margin-top: var(--space-4);
+}
+
+.lockdown-note p:first-of-type {
+    margin-top: var(--space-2);
+}
+
+.lockdown-dialog-list {
+    margin-bottom: var(--space-4);
+}
+

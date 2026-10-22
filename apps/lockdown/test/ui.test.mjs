@@ -49,7 +49,7 @@ test('the lockdown UI renders presets and confirms an action', async (t) => {
   await page.goto(base)
   await page.waitForSelector('[data-testid="preset-vpn-only"]')
   assert.equal(await page.locator('[data-testid="state-vpn-only"]').textContent(), 'Open')
-  assert.match(await page.locator('body').innerText(), /Port blocks do not survive a srv0 reboot/)
+  assert.match(await page.locator('body').innerText(), /A srv0 reboot clears all blocks/)
 
   await page.click('[data-testid="open-vpn-only"]')
   await page.waitForSelector('[data-testid="confirmation"]')

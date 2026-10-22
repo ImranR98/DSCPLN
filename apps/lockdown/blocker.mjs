@@ -1,26 +1,26 @@
 #!/usr/bin/env node
 // Privileged port blocker. This process runs in a host-network pod with only
 // CAP_NET_ADMIN; it never accepts a port number, path or command from the UI.
+//
+// Presets come from the private Lockdown config. The UI and this process read
+// the same read-only file; the browser only sends a preset ID.
 
 import crypto from 'node:crypto'
 import http from 'node:http'
 import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import {
-  MAX_DURATION_SECONDS,
-  MIN_DURATION_SECONDS,
-  PRESETS,
+  DEFAULT_CONFIG_PATH,
+  loadConfig,
+  setNameFor,
   validateBlockRequest,
   validateClearRequest,
-} from './policy.mjs'
+} from './config.mjs'
 
 const execFileAsync = promisify(execFile)
-const TABLE = 'dscpln_lockdown'
-const SETS = {
-  'vpn-only': 'vpn_only_tcp',
-  'traefik-off': 'traefik_off_tcp',
-  'srv0-tunnel-cut': 'tunnel_udp',
-}
+const CONFIG = loadConfig(process.env.LOCKDOWN_CONFIG || DEFAULT_CONFIG_PATH)
+const TABLE = CONFIG.tableName
+const SETS = Object.fromEntries(CONFIG.presets.map((preset) => [preset.id, setNameFor(preset.id)]))
 const TOKEN = String(process.env.PORT_BLOCKER_TOKEN ?? '')
 const HOST = process.env.PORT_BLOCKER_HOST ?? '0.0.0.0'
 const PORT = Number(process.env.PORT_BLOCKER_PORT ?? process.env.PORT ?? 8794)
@@ -72,47 +72,61 @@ function runNftScript(script) {
   })
 }
 
-async function ensureTable() {
+function createTableScript() {
+  const lines = [
+    `add table inet ${TABLE}`,
+    `add chain inet ${TABLE} input { type filter hook input priority -10; policy accept; }`,
+    `add chain inet ${TABLE} forward { type filter hook forward priority -10; policy accept; }`,
+    `add chain inet ${TABLE} output { type filter hook output priority -10; policy accept; }`,
+  ]
+  for (const preset of CONFIG.presets) {
+    lines.push(`add set inet ${TABLE} ${SETS[preset.id]} { type inet_service; flags timeout; }`)
+  }
+  for (const preset of CONFIG.presets) {
+    const setName = SETS[preset.id]
+    if (preset.direction === 'input') {
+      lines.push(`add rule inet ${TABLE} input ${preset.protocol} dport @${setName} drop`)
+      lines.push(`add rule inet ${TABLE} forward ${preset.protocol} dport @${setName} drop`)
+    } else {
+      lines.push(`add rule inet ${TABLE} output ${preset.protocol} dport @${setName} drop`)
+    }
+  }
+  return `${lines.join('\n')}\n`
+}
+
+async function deleteOldTables() {
+  let output
   try {
-    await runNft(['list', 'table', 'inet', TABLE])
+    output = await runNft(['list', 'tables'])
   } catch {
-    await runNftScript(`
-add table inet ${TABLE}
-add set inet ${TABLE} vpn_only_tcp { type inet_service; flags timeout; }
-add set inet ${TABLE} traefik_off_tcp { type inet_service; flags timeout; }
-add set inet ${TABLE} tunnel_udp { type inet_service; flags timeout; }
-add chain inet ${TABLE} input { type filter hook input priority -10; policy accept; }
-add chain inet ${TABLE} forward { type filter hook forward priority -10; policy accept; }
-add chain inet ${TABLE} output { type filter hook output priority -10; policy accept; }
-add rule inet ${TABLE} input tcp dport @vpn_only_tcp drop
-add rule inet ${TABLE} forward tcp dport @vpn_only_tcp drop
-add rule inet ${TABLE} input tcp dport @traefik_off_tcp drop
-add rule inet ${TABLE} forward tcp dport @traefik_off_tcp drop
-add rule inet ${TABLE} output udp dport @tunnel_udp drop
-`)
     return
   }
-  // Tables created by an earlier version do not have the forward chain; add
-  // it when upgrading so hostPort traffic (DNAT'd to the Traefik pods) is
-  // covered as well as direct host input.
-  try {
-    await runNft(['list', 'chain', 'inet', TABLE, 'forward'])
-  } catch {
-    await runNftScript(`
-add chain inet ${TABLE} forward { type filter hook forward priority -10; policy accept; }
-add rule inet ${TABLE} forward tcp dport @vpn_only_tcp drop
-add rule inet ${TABLE} forward tcp dport @traefik_off_tcp drop
-`)
+  for (const match of output.matchAll(/^table\s+\S+\s+(\S+)$/gm)) {
+    const name = match[1]
+    if (name.startsWith('dscpln_lockdown') && name !== TABLE) {
+      await runNft(['delete', 'table', 'inet', name])
+      log('old-table-removed', { table: name })
+    }
   }
 }
 
+async function ensureTable() {
+  await deleteOldTables()
+  try {
+    await runNft(['list', 'table', 'inet', TABLE])
+    return
+  } catch {
+    // Create the complete table and its per-preset sets/rules.
+  }
+  await runNftScript(createTableScript())
+}
+
 function setScript(preset, durationSeconds) {
-  const setName = SETS[preset]
-  const ports = PRESETS[preset].ports
+  const setName = SETS[preset.id]
   const timeout = durationSeconds == null ? '' : ` timeout ${durationSeconds}s`
   return [
     `flush set inet ${TABLE} ${setName}`,
-    ...ports.map((port) => `add element inet ${TABLE} ${setName} { ${port}${timeout} }`),
+    ...preset.ports.map((port) => `add element inet ${TABLE} ${setName} { ${port}${timeout} }`),
   ].join('\n')
 }
 
@@ -120,55 +134,71 @@ async function applyPreset(preset, durationSeconds) {
   return queueNft(async () => {
     await ensureTable()
     await runNftScript(setScript(preset, durationSeconds))
-    log('block-applied', { preset, durationSeconds, ports: PRESETS[preset].ports })
+    log('block-applied', { preset: preset.id, durationSeconds, ports: preset.ports })
   })
 }
 
 async function clearPreset(preset) {
   return queueNft(async () => {
     await ensureTable()
-    await runNft(['flush', 'set', 'inet', TABLE, SETS[preset]])
-    log('block-cleared', { preset })
+    await runNft(['flush', 'set', 'inet', TABLE, SETS[preset.id]])
+    log('block-cleared', { preset: preset.id })
   })
 }
 
 async function clearAll() {
   return queueNft(async () => {
     await ensureTable()
-    for (const preset of Object.keys(SETS)) {
-      await runNft(['flush', 'set', 'inet', TABLE, SETS[preset]])
+    for (const preset of CONFIG.presets) {
+      await runNft(['flush', 'set', 'inet', TABLE, SETS[preset.id]])
     }
     log('blocks-cleared')
   })
 }
 
 function scheduleBlock(preset, durationSeconds, delaySeconds) {
-  cancelPending(preset)
+  cancelPending(preset.id)
   const applyAt = Date.now() + delaySeconds * 1000
   if (delaySeconds <= 0) {
     return applyPreset(preset, durationSeconds).then(() => ({ applyAt: Date.now() }))
   }
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
-      pendingTimers.delete(preset)
+      pendingTimers.delete(preset.id)
       applyPreset(preset, durationSeconds).catch((err) => {
-        log('block-failed', { preset, error: err.message })
+        log('block-failed', { preset: preset.id, error: err.message })
       })
     }, delaySeconds * 1000)
-    pendingTimers.set(preset, { timer, applyAt })
+    pendingTimers.set(preset.id, { timer, applyAt })
     resolve({ applyAt })
   })
 }
 
-function cancelPending(preset = null) {
-  if (preset) {
-    const entry = pendingTimers.get(preset)
+function cancelPending(presetId = null) {
+  if (presetId) {
+    const entry = pendingTimers.get(presetId)
     if (entry) clearTimeout(entry.timer)
-    pendingTimers.delete(preset)
+    pendingTimers.delete(presetId)
     return
   }
   for (const entry of pendingTimers.values()) clearTimeout(entry.timer)
   pendingTimers.clear()
+}
+
+function emptyStatus() {
+  return {
+    ok: true,
+    now: Date.now(),
+    table: null,
+    presets: Object.fromEntries(CONFIG.presets.map((preset) => [preset.id, {
+      active: false,
+      ports: [],
+      expiresAt: null,
+      remainingSeconds: null,
+    }])),
+    pending: {},
+    limits: CONFIG.limits,
+  }
 }
 
 function parseStatus(tableJson) {
@@ -196,10 +226,10 @@ function parseStatus(tableJson) {
   }
 
   const presets = {}
-  for (const [preset, setName] of Object.entries(SETS)) {
-    const elements = found.get(setName) ?? []
+  for (const preset of CONFIG.presets) {
+    const elements = found.get(SETS[preset.id]) ?? []
     const finite = elements.filter((entry) => entry.expiresAt !== null)
-    presets[preset] = {
+    presets[preset.id] = {
       active: elements.length > 0,
       ports: [...new Set(elements.map((entry) => entry.port).filter(Number.isFinite))].sort((a, b) => a - b),
       expiresAt: elements.length && finite.length === elements.length
@@ -212,18 +242,11 @@ function parseStatus(tableJson) {
   }
 
   const pending = {}
-  for (const [preset, entry] of pendingTimers.entries()) {
-    pending[preset] = { applyAt: entry.applyAt }
+  for (const [presetId, entry] of pendingTimers.entries()) {
+    pending[presetId] = { applyAt: entry.applyAt }
   }
 
-  return {
-    ok: true,
-    now,
-    table,
-    presets,
-    pending,
-    limits: { minDurationSeconds: MIN_DURATION_SECONDS, maxDurationSeconds: MAX_DURATION_SECONDS },
-  }
+  return { ok: true, now, table, presets, pending, limits: CONFIG.limits }
 }
 
 async function getStatus() {
@@ -231,19 +254,7 @@ async function getStatus() {
     const stdout = await runNft(['-j', 'list', 'table', 'inet', TABLE])
     return parseStatus(stdout)
   } catch {
-    return {
-      ok: true,
-      now: Date.now(),
-      table: null,
-      presets: Object.fromEntries(Object.keys(SETS).map((preset) => [preset, {
-        active: false,
-        ports: [],
-        expiresAt: null,
-        remainingSeconds: null,
-      }])),
-      pending: {},
-      limits: { minDurationSeconds: MIN_DURATION_SECONDS, maxDurationSeconds: MAX_DURATION_SECONDS },
-    }
+    return emptyStatus()
   }
 }
 
@@ -307,9 +318,16 @@ async function route(req, res) {
 
   if (req.method === 'POST' && req.url === '/v1/block') {
     const body = await readBody(req)
-    const request = validateBlockRequest(body)
+    let request
+    try {
+      request = validateBlockRequest(CONFIG, body)
+    } catch (err) {
+      err.statusCode = 400
+      throw err
+    }
+    const preset = CONFIG.presetMap[request.preset]
     const delaySeconds = Math.max(0, Math.min(10, Number(body.delaySeconds ?? 0) || 0))
-    const result = await scheduleBlock(request.preset, request.durationSeconds, delaySeconds)
+    const result = await scheduleBlock(preset, request.durationSeconds, delaySeconds)
     sendJson(res, delaySeconds > 0 ? 202 : 200, {
       ok: true,
       preset: request.preset,
@@ -321,9 +339,15 @@ async function route(req, res) {
 
   if (req.method === 'POST' && req.url === '/v1/clear') {
     const body = await readBody(req)
-    const request = validateClearRequest(body)
+    let request
+    try {
+      request = validateClearRequest(CONFIG, body)
+    } catch (err) {
+      err.statusCode = 400
+      throw err
+    }
     cancelPending(request.preset)
-    if (request.preset) await clearPreset(request.preset)
+    if (request.preset) await clearPreset(CONFIG.presetMap[request.preset])
     else await clearAll()
     sendJson(res, 200, { ok: true, cleared: request.preset ?? 'all' })
     return
@@ -342,5 +366,5 @@ const server = http.createServer((req, res) => {
 
 await ensureTable()
 server.listen(PORT, HOST, () => {
-  log('listening', { host: HOST, port: PORT })
+  log('listening', { host: HOST, port: PORT, table: TABLE, presets: CONFIG.presets.map((preset) => preset.id) })
 })

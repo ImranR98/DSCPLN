@@ -48,6 +48,7 @@ use another directory, update the mounts.
 | File Pipelines | `--config <path>` | `/config/config.json` in the container | Paths in the config; default `/data` |
 | WhatsApp TXT | Data directory only | `/data` in the container | Conversation JSON files in the data directory |
 | Task Runner | `BACKUPCTL_CONFIG_FILE` | `apps/task-runner/config.mjs` | `BACKUPCTL_STATE_DIR` |
+| Lockdown | `LOCKDOWN_CONFIG` | `/config/config.json` | nftables host state |
 | D$CPLN Agent | `DSCPLN_AGENT_CONFIG` | `/config/agent.json` | `stateDir` in the agent config |
 
 ### Common environment variables

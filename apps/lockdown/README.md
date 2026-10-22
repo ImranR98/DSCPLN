@@ -1,51 +1,60 @@
 # Lockdown
 
-**Block selected srv0 host ports for a limited time.**
+**Block configured host ports for a limited time.**
 
-Lockdown is a small D$CPLN control app for emergency containment. It sends a
-preset to a privileged port-blocker container, which applies nftables rules in
-the srv0 host network namespace. The browser never talks to the blocker
-directly, and the blocker never accepts arbitrary ports or commands.
+Lockdown sends a named preset to a privileged port-blocker container. The
+blocker applies nftables rules in the host network namespace and expires timed
+rules in the kernel. The browser never talks to the blocker directly, and the
+blocker never accepts arbitrary ports or commands.
+
+Presets are deployment data, not app defaults. The public app contains no host
+names, addresses or personal port choices; mount a private config to define
+them.
 
 ## At a glance
 
 | | |
 |---|---|
 | Runs at | `/lockdown` (or port `8086` locally) |
-| Config | `PORT_BLOCKER_URL`, `PORT_BLOCKER_TOKEN` |
-| Access | D$CPLN ingress, Authelia admin policy |
-| Block duration | 10 minutes to 24 hours; `vpn-only` can be indefinite |
-| Persistence | nftables only; a srv0 reboot clears all blocks |
+| Config | `LOCKDOWN_CONFIG`, default `/config/config.json` |
+| Access | Your existing D$CPLN ingress and auth |
+| Block duration | 10 minutes to 24 hours; individual presets may allow indefinite |
+| Persistence | nftables only; a host reboot clears all blocks |
 
-## Presets
+## Preset config
 
-| Preset | Ports | Indefinite |
-|---|---|---|
-| `vpn-only` | TCP 80, 8443 | Yes |
-| `traefik-off` | TCP 80, 443, 8443 | No |
-| `srv0-tunnel-cut` | UDP 51822 outbound | No |
+See [`config.example.json`](config.example.json) for the full schema. A preset
+defines:
 
-`vpn-only` cuts the public path through vps0 while leaving TCP 443 available
-over VPN or LAN. `traefik-off` cuts all Traefik ingress, so this page is
-unreachable until the timer expires or srv0 reboots. `srv0-tunnel-cut` blocks
-the srv0 side of the public-exposure tunnel, which also removes the VPN path;
-the page remains available only on the LAN.
+- `id`: stable identifier used by the UI and blocker
+- `label`, `short`, `effect`, `warning`: user-facing copy
+- `protocol`: `tcp` or `udp`
+- `direction`: `input` or `output`
+- `ports`: one or more ports
+- `allowIndefinite`: whether “until cleared” is permitted
+- `defaultDurationSeconds`: initial timed duration
+- `confirmation`: exact phrase required before applying
+- `danger`: whether the confirmation uses the danger action style
 
-Every action requires an informational confirmation dialog and an exact
-phrase. The UI warns that nftables rules do not survive a reboot.
+The UI server and blocker read the same read-only config. The browser can only
+submit a preset ID; ports are never accepted from the browser.
 
 ## Quick start
 
-The UI needs the blocker. For local development, run the blocker with a token
-and a local nftables-capable host:
+Run the blocker with a token and a config, then the UI:
 
 ```sh
-PORT_BLOCKER_TOKEN=dev-token node apps/lockdown/blocker.mjs
-PORT_BLOCKER_URL=http://127.0.0.1:8794 PORT_BLOCKER_TOKEN=dev-token npm run lockdown
+LOCKDOWN_CONFIG="$PWD/apps/lockdown/config.example.json" \
+  PORT_BLOCKER_TOKEN=dev-token node apps/lockdown/blocker.mjs
+
+LOCKDOWN_CONFIG="$PWD/apps/lockdown/config.example.json" \
+  PORT_BLOCKER_URL=http://127.0.0.1:8794 \
+  PORT_BLOCKER_TOKEN=dev-token \
+  npm run lockdown
 ```
 
-The blocker requires `nft` and `CAP_NET_ADMIN` on the host network. In the
-Kubernetes deployment it is a separate host-network pod pinned to srv0.
+The blocker requires `nft` and `CAP_NET_ADMIN` on the host network. In a
+Kubernetes deployment it is a separate host-network pod.
 
 ## API
 
@@ -61,20 +70,17 @@ bearer-token protected.
 
 ## Deployment
 
-The Kubernetes template is `targets/srv0/k3s-apps/templates/lockdown.yaml` in
-the private Infra repo. It creates:
+Deploy the UI and the port blocker with a read-only mount of your private
+`apps/lockdown/config.json`, and supply a shared `PORT_BLOCKER_TOKEN` secret.
+The exact deployment manifests belong in your deployment repository, not this
+one.
 
-- the UI Deployment and Service;
-- the port-blocker Deployment with `hostNetwork`, `CAP_NET_ADMIN` and a PVC-free
-  nftables state;
-- a generated token Secret shared by both;
-- a token shared only by the UI and blocker; the blocker binds to the flannel bridge address, not the LAN.
-
-The app is routed on both `websecure` and `websecure-proxy`, behind CrowdSec and Authelia; it deliberately has no geoblock so it
-remains usable while travelling.
+The app is designed to be routed like any other D$CPLN app. Its confirmation
+dialogs explain the ports, duration, access impact and reboot behaviour for the
+preset you configured.
 
 ## Development
 
 ```sh
-npm test   # build the UI and run policy/server tests
+npm test   # build the UI and run config/server/UI tests
 ```

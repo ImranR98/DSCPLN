@@ -23,7 +23,7 @@ const PAGES = {
   'apps/balance-xlsx/ui/settings.html': { title: 'D$CPLN ⋅ Balance XLSX — Settings', description: 'Budget dashboard backed by your Excel workbook', entry: 'settings.jsx' },
   'apps/file-pipelines/ui/index.html': { title: 'D$CPLN ⋅ File Pipelines', description: 'Watch folders, organize media, and keep originals safe', entry: 'main.jsx' },
   'apps/task-runner/ui/index.html': { title: 'D$CPLN ⋅ Task Runner', description: 'Run scheduled and on-demand tasks', entry: 'main.jsx' },
-  'apps/lockdown/ui/index.html': { title: 'D$CPLN ⋅ Lockdown', description: 'Block srv0 ports for a limited time', entry: 'main.jsx' },
+  'apps/lockdown/ui/index.html': { title: 'D$CPLN ⋅ Lockdown', description: 'Block configured host ports for a limited time', entry: 'main.jsx' },
   'apps/whatsapp-txt/ui/index.html': { title: 'D$CPLN ⋅ WhatsApp TXT', description: 'Browse, import and merge WhatsApp chat exports', entry: 'main.jsx' },
 }
 

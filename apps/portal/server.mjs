@@ -22,6 +22,7 @@ export const DEFAULT_FUNCTIONS = [
   { path: 'pipelines', icon: 'workflow', name: 'File Pipelines', description: 'Watch folders, organize media, and keep originals safe', kind: 'pipelines' },
   { path: 'watxt', icon: 'message', name: 'WhatsApp TXT', description: 'Browse, import and merge WhatsApp chat exports', kind: 'watxt' },
   { path: 'tasks', icon: 'wrench', name: 'Task Runner', description: 'Run scheduled and on-demand tasks', kind: 'tasks' },
+  { path: 'lockdown', icon: 'lock', name: 'Lockdown', description: 'Temporarily block configured host ports', kind: 'lockdown' },
 ]
 
 export const DEFAULT_CONFIG = {
@@ -34,7 +35,7 @@ const MAX_TITLE = 200
 const MAX_TAGS = 10
 const PRIORITIES = new Set(['max', 'urgent', 'high', 'default', 'low', 'min'])
 
-const FUNCTION_KINDS = new Set(['scheduled', 'pipelines', 'watxt', 'tasks', 'balance'])
+const FUNCTION_KINDS = new Set(['scheduled', 'pipelines', 'watxt', 'tasks', 'balance', 'lockdown'])
 
 export function normalizeFunctions(value) {
   if (!Array.isArray(value)) return DEFAULT_FUNCTIONS

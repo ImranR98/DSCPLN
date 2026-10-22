@@ -3,20 +3,52 @@ import assert from 'node:assert/strict'
 import { launchBrowser, listen } from '@dscpln/test-kit'
 import { createLockdownApp } from '../server.mjs'
 
+const presets = [
+  {
+    id: 'public-web',
+    label: 'Public web',
+    short: 'Block public web ports',
+    protocol: 'tcp',
+    direction: 'input',
+    ports: [80, 8443],
+    allowIndefinite: true,
+    defaultDurationSeconds: 1800,
+    confirmation: 'BLOCK PUBLIC',
+    danger: false,
+    effect: 'Blocks public web ports.',
+    warning: 'You may lose this page.',
+  },
+  {
+    id: 'uplink-cut',
+    label: 'Uplink cut',
+    protocol: 'udp',
+    direction: 'output',
+    ports: [51820],
+    allowIndefinite: false,
+    defaultDurationSeconds: 600,
+    confirmation: 'CUT UPLINK',
+    danger: true,
+    effect: 'Blocks the uplink.',
+    warning: 'Remote access may stop.',
+  },
+]
+
 const status = {
   ok: true,
   now: Date.now(),
-  table: { name: 'dscpln_lockdown' },
-  presets: {
-    'vpn-only': { active: false, ports: [], expiresAt: null, remainingSeconds: null },
-    'traefik-off': { active: false, ports: [], expiresAt: null, remainingSeconds: null },
-    'srv0-tunnel-cut': { active: false, ports: [], expiresAt: null, remainingSeconds: null },
-  },
+  table: { name: 'dscpln_lockdown_test' },
+  presets: presets.map((preset) => ({
+    ...preset,
+    active: false,
+    activePorts: [],
+    expiresAt: null,
+    remainingSeconds: null,
+  })),
   pending: {},
   limits: { minDurationSeconds: 600, maxDurationSeconds: 86400 },
 }
 
-test('the lockdown UI renders presets and confirms an action', async (t) => {
+test('the lockdown UI renders configured presets and confirms an action', async (t) => {
   const browser = await launchBrowser()
   if (!browser) {
     t.skip('Chromium is not available')
@@ -35,6 +67,7 @@ test('the lockdown UI renders presets and confirms an action', async (t) => {
   }
   const { app } = createLockdownApp({
     auth: null,
+    presets,
     blockerUrl: 'http://blocker.test',
     blockerToken: 'test-token',
     fetchImpl,
@@ -47,11 +80,11 @@ test('the lockdown UI renders presets and confirms an action', async (t) => {
   const errors = []
   page.on('pageerror', (err) => errors.push(err))
   await page.goto(base)
-  await page.waitForSelector('[data-testid="preset-vpn-only"]')
-  assert.equal(await page.locator('[data-testid="state-vpn-only"]').textContent(), 'Open')
-  assert.match(await page.locator('body').innerText(), /A srv0 reboot clears all blocks/)
+  await page.waitForSelector('[data-testid="preset-public-web"]')
+  assert.equal(await page.locator('[data-testid="state-public-web"]').textContent(), 'Open')
+  assert.match(await page.locator('body').innerText(), /A host reboot clears all blocks/)
 
-  await page.click('[data-testid="open-vpn-only"]')
+  await page.click('[data-testid="open-public-web"]')
   await page.waitForSelector('[data-testid="confirmation"]')
   const confirm = page.locator('[data-testid="confirm-action"]')
   assert.equal(await confirm.isDisabled(), true)

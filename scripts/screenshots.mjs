@@ -85,7 +85,7 @@ async function shootViewport(page, name) {
   await once(server, 'listening')
   const base = `http://127.0.0.1:${server.address().port}`
   const page = await newPage()
-  for (const p of ['balance', 'pipelines', 'watxt', 'tasks']) {
+  for (const p of ['balance', 'pipelines', 'watxt', 'tasks', 'lockdown']) {
     await page.route(`**/${p}/api/health`, (route) => route.fulfill(json({ ok: true })))
   }
   await page.route('**/balance/status', (route) => route.fulfill(json({
@@ -105,6 +105,14 @@ async function shootViewport(page, name) {
   await page.route('**/pipelines/api/state', (route) => route.fulfill(json({ paused: false, folders: [{ counts: { queued: 2, review: 1 } }] })))
   await page.route('**/watxt/api/state', (route) => route.fulfill(json({ conversations: 12, messages: 8421 })))
   await page.route('**/tasks/api/tasks', (route) => route.fulfill(json({ groups: [{ tasks: [{ state: { ok: true } }, { state: { ok: true } }, { state: { ok: true } }] }] })))
+  await page.route('**/lockdown/api/status', (route) => route.fulfill(json({
+    presets: [
+      { id: 'public-web', label: 'Public web', active: false },
+      { id: 'all-web', label: 'All web ingress', active: false },
+      { id: 'uplink-cut', label: 'Uplink cut', active: false },
+    ],
+    limits: { minDurationSeconds: 600, maxDurationSeconds: 86400 },
+  })))
   await page.goto(`${base}/`)
   await page.waitForSelector('[data-testid="card-balance"]')
   await shoot(page, 'portal')

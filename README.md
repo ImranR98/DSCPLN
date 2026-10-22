@@ -1,27 +1,50 @@
 # Balance XLSX
 
-A simple web app that shows whether you've gone over your budget this month, and sends push notifications when a limit is reached.
+**Track your budget in an Excel workbook.**
 
-It reads your expenses from an Excel workbook (the source of truth) and writes changes straight back to it. The dashboard covers the current month and adding transactions; the insights page is a historical viewer with date ranges and comparisons; the forecasts page is a live projection planner.
+Balance XLSX reads your expenses from an `.xlsx` workbook, writes changes
+straight back to it, and gives you a dashboard, historical insights and a live
+forecast planner. The workbook stays the source of truth; the app is a UI over
+your data, not a separate database.
 
-Configuration can also be mounted from a private `dscpln-config` repo: set `DSCPLN_CONFIG` to its `apps/balance-xlsx/config.json`; run state stays on the app volume (`DSCPLN_STATE_FILE` for scheduled apps). See `config-template/README.md`.
+Use it if you already keep a budget in Excel and want a faster way to see
+monthly spending, explore trends, or project a cash-flow plan.
 
-## Setup
+## At a glance
 
-1. Install dependencies:
-   ```sh
-   npm install
-   ```
-2. Copy the example config and edit it:
-   ```sh
-   cp config.example.json config.json
-   ```
-3. Start the app:
-   ```sh
-   npm start
-   ```
+| | |
+|---|---|
+| Runs at | `/balance` (or port `3300` locally) |
+| Data | An Excel workbook in a git repository |
+| Config | `DSCPLN_CONFIG`, default `./config.json` |
+| Needs | A workbook with the expected sheets; git for automatic commits |
+| Notifications | Monthly budget alerts through the Portal |
 
-The app reads `config.json` from its directory by default; set `DSCPLN_CONFIG` to use a different path. The example config points at the included `mock-data.xlsx`, so you can try it immediately; `npm run mock` regenerates that file.
+## Quick start
+
+From the D$CPLN repository root:
+
+```sh
+npm install
+cp apps/balance-xlsx/config.example.json apps/balance-xlsx/config.json
+npm run balance-xlsx
+```
+
+Open <http://localhost:3300>. The example config uses the included
+`mock-data.xlsx`, so you can try the app immediately. Replace `workbookFile`
+with your own workbook when you are ready.
+
+The workbook must live in a git repository. Every write is committed
+automatically; see [Backups and version control](#backups-and-version-control).
+
+## How it works
+
+- The dashboard covers the current month and adding transactions.
+- The insights page is a historical viewer with date ranges and comparisons.
+- The forecasts page is a live projection planner; changes are only written
+  when you press Save.
+- Budget checks run periodically and send a notification through the Portal
+  when a limit is reached.
 
 ## Configuration
 

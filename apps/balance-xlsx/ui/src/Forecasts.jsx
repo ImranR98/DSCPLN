@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChartNoAxesColumn, LayoutDashboard, RefreshCw, Wrench } from 'lucide-react'
+import { ChartNoAxesColumn, LayoutDashboard, Plug, RefreshCw } from 'lucide-react'
 import {
   AppHeader,
   formats,
@@ -456,7 +456,7 @@ export default function Forecasts() {
               <ChartNoAxesColumn size={16} strokeWidth={1.8} />
             </a>
             <a role="button" className="outline secondary icon-button" href="settings" title="API settings" aria-label="API settings">
-              <Wrench size={16} strokeWidth={1.8} />
+              <Plug size={16} strokeWidth={1.8} />
             </a>
             <button className="outline secondary icon-button" title="Reload from workbook" aria-label="Reload from workbook" onClick={reload}>
               <RefreshCw size={16} strokeWidth={1.8} />

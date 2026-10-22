@@ -70,8 +70,8 @@ the private Infra repo. It creates:
 - a generated token Secret shared by both;
 - a token shared only by the UI and blocker; the blocker binds to the flannel bridge address, not the LAN.
 
-The app is routed on both `websecure` and `websecure-proxy`, behind the usual
-D$CPLN geoblock, CrowdSec and Authelia filters.
+The app is routed on both `websecure` and `websecure-proxy`, behind CrowdSec and Authelia; it deliberately has no geoblock so it
+remains usable while travelling.
 
 ## Development
 

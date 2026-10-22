@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { LayoutDashboard, TrendingUp, Wrench } from 'lucide-react'
+import { LayoutDashboard, Plug, TrendingUp } from 'lucide-react'
 import {
   AppHeader,
   formats,
@@ -319,7 +319,7 @@ export default function Insights() {
               <TrendingUp size={16} strokeWidth={1.8} />
             </a>
             <a role="button" className="outline secondary icon-button" href="settings" title="API settings" aria-label="API settings">
-              <Wrench size={16} strokeWidth={1.8} />
+              <Plug size={16} strokeWidth={1.8} />
             </a>
             <ThemeToggle />
           </>

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ChartNoAxesColumn, RefreshCw, SlidersHorizontal, TrendingUp, Wrench } from 'lucide-react'
+import { ChartNoAxesColumn, Plug, RefreshCw, SlidersHorizontal, TrendingUp } from 'lucide-react'
 import { AppHeader, formats, getJson, postJson, startOfDay, toIso, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
 import { moneyFor } from './lib/money.js'
 import { renderMonthly } from './lib/chart.js'
@@ -218,7 +218,7 @@ export default function Dashboard() {
               <ChartNoAxesColumn size={16} strokeWidth={1.8} />
             </a>
             <a role="button" className="outline secondary icon-button" href="settings" title="API settings" aria-label="API settings">
-              <Wrench size={16} strokeWidth={1.8} />
+              <Plug size={16} strokeWidth={1.8} />
             </a>
             <button className="outline secondary icon-button" title="Counted categories" aria-label="Counted categories" disabled={!data} onClick={() => categoriesDialogRef.current.show()}>
               <SlidersHorizontal size={16} strokeWidth={1.8} />

@@ -42,7 +42,7 @@ export function killpg(pid, log = () => {}) {
 }
 
 function spawnSafe(cmd, opts = {}) {
-  const { cwd, shell = false, env = {} } = opts;
+  const { cwd, shell = false, env = {}, uid, gid } = opts;
   let file;
   let args;
   if (Array.isArray(cmd)) {
@@ -60,6 +60,10 @@ function spawnSafe(cmd, opts = {}) {
     cwd,
     detached: true,
     env: { ...SAFE_ENV, ...env },
+    // A task can opt into the host data owner's UID/GID; the parent retains
+    // root + CAP_SETUID/CAP_SETGID so backup tasks can still read all PVCs.
+    ...(uid === undefined ? {} : { uid }),
+    ...(gid === undefined ? {} : { gid }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
@@ -72,14 +76,14 @@ function spawnSafe(cmd, opts = {}) {
  * secrets in the logged command and output. No automatic timeout — runs
  * end when the command exits or is cancelled. */
 export function run(cmd, opts = {}) {
-  const { shell = false, cwd, log = () => {}, redact = [], capture = false, env = {}, groups = new Set() } = opts;
+  const { shell = false, cwd, log = () => {}, redact = [], capture = false, env = {}, groups = new Set(), uid, gid } = opts;
   log(`$ ${redactText(shell ? cmd : cmd.map(shellQuote).join(' '), redact)}`);
   let proc;
   const outBuf = [];
   const errBuf = [];
   const done = (rc) => (capture ? { rc, out: redactText(outBuf.join(''), redact), err: redactText(errBuf.join(''), redact) } : rc);
   try {
-    proc = spawnSafe(cmd, { cwd, shell, env });
+    proc = spawnSafe(cmd, { cwd, shell, env, uid, gid });
   } catch (e) {
     log(`ERROR: could not start: ${e.message}`);
     return Promise.resolve(capture ? { rc: 127, out: '', err: String(e) } : 127);

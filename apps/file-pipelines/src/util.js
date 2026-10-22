@@ -1,17 +1,8 @@
 import fs from "node:fs";
-import fsp from "node:fs/promises";
-import path from "node:path";
-import os from "node:os";
 import crypto from "node:crypto";
 
-export function expandPath(p) {
-  if (!p) return p;
-  let out = p;
-  if (out === "~") out = os.homedir();
-  else if (out.startsWith("~/")) out = path.join(os.homedir(), out.slice(2));
-  out = out.replace(/\$(\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))/g, (_, _m, a, b) => process.env[a ?? b] ?? "");
-  return path.resolve(out);
-}
+// App-specific helpers. Filesystem/config primitives (expandPath, atomic
+// writes, stat/path checks) come from @dscpln/server-kit.
 
 export function sha256File(file) {
   return new Promise((resolve, reject) => {
@@ -22,40 +13,6 @@ export function sha256File(file) {
     stream.on("end", () => resolve(hash.digest("hex")));
   });
 }
-
-
-export async function atomicWriteFile(file, data) {
-  const dir = path.dirname(file);
-  await fsp.mkdir(dir, { recursive: true });
-  const tmp = path.join(dir, `.${path.basename(file)}.tmp-${process.pid}-${Date.now()}`);
-  // Config/manifests/lock carry tokens and private paths; never world-readable.
-  const handle = await fsp.open(tmp, "w", 0o600);
-  try {
-    await handle.writeFile(data);
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  await fsp.rename(tmp, file);
-}
-
-export async function pathExists(p) {
-  try {
-    await fsp.access(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function statOrNull(p) {
-  try {
-    return fs.statSync(p);
-  } catch {
-    return null;
-  }
-}
-
 
 export function isHiddenName(name) {
   return name.startsWith(".");

@@ -1,15 +1,8 @@
-import Modal from '../Modal.jsx'
+import { Dialog } from '@dscpln/ui-kit'
 
 export default function RestoreDialog({ dialog, onDirChange, onRestore, onClose }) {
   return (
-    <Modal onClose={onClose} className="narrow-dialog">
-      <article>
-        <header className="card__header">
-          <h2>Restore files</h2>
-          <span className="card__header-tools">
-            <button className="outline secondary icon-button" aria-label="Close" onClick={onClose}>&times;</button>
-          </span>
-        </header>
+          <Dialog onClose={onClose} className="narrow-dialog" title="Restore files">
         <p className="hint">Files with a recorded origin return to their original folder. Files without one are restored to the directory you enter here.</p>
         <div className="native-fields">
           <label className="native-field">
@@ -22,7 +15,6 @@ export default function RestoreDialog({ dialog, onDirChange, onRestore, onClose 
           <button className="outline secondary" onClick={onClose}>Cancel</button>
           <button onClick={onRestore}>Restore</button>
         </div>
-      </article>
-    </Modal>
+    </Dialog>
   )
 }

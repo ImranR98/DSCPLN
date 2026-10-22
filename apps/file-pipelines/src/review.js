@@ -96,7 +96,7 @@ async function markInputs(ctx, folder, manifest, status, message) {
 // file-pipelines XMP input list and every listed input must be in the new manifest.
 // Any other same-name destination file is never a replace candidate.
 async function supersedesExisting(ctx, folder, destPath, manifest) {
-  if (folder.def.method !== "voicenotes" && folder.def.method !== "snapchat") return false;
+  if (folder.def.method !== "snapchat") return false;
   const tags = await ctx.exiftool.readRaw(destPath, ["-m", "-api", "LargeFileSupport=1"]).catch(() => null);
   const inputs = parseSnapInputs(tags?.Inputs);
   if (!inputs || inputs.length === 0) return false;

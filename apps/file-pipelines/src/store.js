@@ -1,12 +1,10 @@
-import { EventEmitter } from "node:events";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { findRealExifDate, standardNameFor } from "./exif.js";
-import { listParked } from "./park.js";
-import { voiceNoteGroupOf, voiceNoteDestName } from "./voicenotes.js";
+import { reviewedAudioGroupOf } from "./reviewed-audio.js";
 import { DirCache, classifyDestMatch, findExpectedDestName, mapSnapInputs, readSnapOutputs, statSize } from "./verify.js";
-import { shouldSkipName, isSyncConflictName, matchesPattern, statOrNull } from "./util.js";
-import { isSnapshotFolder } from "./snapshot.js";
+import { statOrNull } from "@dscpln/server-kit";
+import { shouldSkipName, isSyncConflictName, matchesPattern } from "./util.js";
 
 export const STATUS = {
   PENDING: "pending",
@@ -25,9 +23,8 @@ export const STATUS = {
 const AUTO_RESETTABLE = new Set([STATUS.ERROR, STATUS.CONFLICT, STATUS.DISCARDED]);
 const RESETTABLE_WHEN_CHANGED = new Set([STATUS.DONE, STATUS.DUPLICATE, STATUS.REVIEW]);
 
-export class Store extends EventEmitter {
+export class Store {
   constructor(config, exiftool) {
-    super();
     this.config = config;
     this.exiftool = exiftool;
     this.cache = new DirCache();
@@ -74,14 +71,13 @@ export class Store extends EventEmitter {
     return this.folders.get(folderName)?.files.get(fileName) ?? null;
   }
 
-  updateFile(folderName, fileName, patch, { emit = true } = {}) {
+  updateFile(folderName, fileName, patch) {
     const folder = this.folders.get(folderName);
     if (!folder) return null;
     const file = folder.files.get(fileName);
     if (!file) return null;
     Object.assign(file, patch);
     file.updatedAt = Date.now();
-    if (emit) this.emit("update");
     return file;
   }
 
@@ -89,25 +85,15 @@ export class Store extends EventEmitter {
     const folder = this.folders.get(folderName);
     if (!folder) return;
     const { def } = folder;
-    if (isSnapshotFolder(def)) {
-      // Snapshot copies run on demand/schedule instead of scanning a source.
-      if (!folder.exists) {
-        folder.exists = true;
-        this.emit("update");
-      }
-      return;
-    }
     const names = await this.#listFiles(def);
     if (names === null) {
       if (folder.exists) {
         folder.exists = false;
-        this.emit("update");
       }
       return;
     }
     if (!folder.exists) {
       folder.exists = true;
-      this.emit("update");
     }
     const seen = new Set();
     for (const name of names) {
@@ -163,7 +149,9 @@ export class Store extends EventEmitter {
     if (!folder) return;
     const base = path.basename(name);
     const patternOk = matchesPattern(base, folder.def.filePattern);
-    const dateOk = folder.def.method !== "voicenotes" || voiceNoteGroupOf(name, folder.def.datePattern) !== null;
+    const dateOk = folder.def.method !== "reviewed-audio"
+      || !folder.def.datePattern
+      || reviewedAudioGroupOf(name, folder.def.datePattern) !== null;
     const matches = patternOk && dateOk;
     const mismatchMessage = !patternOk
       ? `does not match ${folder.def.filePattern}`
@@ -192,7 +180,6 @@ export class Store extends EventEmitter {
       };
       folder.files.set(name, file);
       folder.lastEventAt = Date.now();
-      this.emit("update");
       return file;
     }
     const changed = existing.size !== stat.size || existing.mtimeMs !== stat.mtimeMs;
@@ -203,14 +190,12 @@ export class Store extends EventEmitter {
         existing.status = STATUS.IGNORED;
         existing.message = mismatchMessage;
         existing.destName = null;
-        this.emit("update");
       }
       return existing;
     }
     if (existing.status === STATUS.IGNORED) {
       existing.status = STATUS.PENDING;
       existing.message = null;
-      this.emit("update");
     }
     if (changed) {
       folder.lastEventAt = Date.now();
@@ -227,7 +212,6 @@ export class Store extends EventEmitter {
         existing.status = STATUS.PENDING;
         existing.destName = null;
       }
-      this.emit("update");
     }
     return existing;
   }
@@ -245,7 +229,6 @@ export class Store extends EventEmitter {
       folder.files.delete(name);
     }
     folder.lastEventAt = Date.now();
-    this.emit("update");
   }
 
   pruneCleaned(maxAgeMs = 24 * 3600 * 1000) {
@@ -285,8 +268,9 @@ export class Store extends EventEmitter {
       await this.deriveCopyProcessed(folder);
       return;
     }
-    if (def.method === "voicenotes") {
-      await this.deriveVoiceNotesProcessed(folder);
+    if (def.method === "reviewed-audio") {
+      // Approval-only: the source files are the queue, so there is no derived
+      // processed/duplicate state to recompute.
       return;
     }
     const names = await this.cache.list(def.destination).catch(() => []);
@@ -314,7 +298,6 @@ export class Store extends EventEmitter {
         file.updatedAt = Date.now();
       }
     }
-    this.emit("update");
   }
 
   // Copy folders are adopted without traversing or hashing the destination:
@@ -342,35 +325,6 @@ export class Store extends EventEmitter {
       }
       file.updatedAt = Date.now();
     }
-    this.emit("update");
-  }
-
-  async deriveVoiceNotesProcessed(folder) {
-    const { def } = folder;
-    const parked = await listParked(this.config, def.name).catch(() => []);
-    for (const entry of parked) {
-      for (const input of entry.inputs) {
-        const file = folder.files.get(input);
-        if (!file) continue;
-        file.status = STATUS.REVIEW;
-        file.destName = entry.destName;
-        file.message = "awaiting review";
-        file.updatedAt = Date.now();
-      }
-    }
-    for (const file of folder.files.values()) {
-      if (file.status !== STATUS.PENDING) continue;
-      const group = voiceNoteGroupOf(file.name, def.datePattern);
-      if (!group) continue;
-      const destName = voiceNoteDestName(group.chat, group.date);
-      const stat = await fsp.stat(path.join(def.destination, destName)).catch(() => null);
-      if (!stat || !stat.isFile() || stat.size === 0) continue;
-      file.status = STATUS.DUPLICATE;
-      file.destName = destName;
-      file.message = "already merged and placed";
-      file.updatedAt = Date.now();
-    }
-    this.emit("update");
   }
 
   async refreshSnapOutputs(folder, { force = false } = {}) {
@@ -392,7 +346,6 @@ export class Store extends EventEmitter {
       file.message = "already part of a concatenated destination file";
       file.updatedAt = Date.now();
     }
-    this.emit("update");
   }
 
   async deriveAll() {
@@ -434,15 +387,11 @@ export class Store extends EventEmitter {
       return {
         name: folder.def.name,
         source: folder.def.source,
-        sources: folder.def.sources,
         destination: folder.def.destination,
         method: folder.def.method,
-        snapshot: Boolean(folder.def.snapshot),
-        subdir: folder.def.subdir ?? null,
-        nameSuffix: folder.def.nameSuffix ?? "",
-        touch: folder.def.touch ?? null,
         filePattern: folder.def.filePattern,
         datePattern: folder.def.datePattern,
+        concat: folder.def.concat !== false,
         settleSeconds: folder.def.settleSeconds,
         groupWindowSeconds: folder.def.groupWindowSeconds,
         recursive: folder.def.recursive,
@@ -452,9 +401,6 @@ export class Store extends EventEmitter {
         placement: folder.def.placement,
         autoProcess: folder.def.autoProcess,
         notify: folder.def.notify,
-        command: folder.def.command ?? null,
-        runner: folder.def.runner ?? { node: null },
-        schedule: folder.def.schedule ?? null,
         exists: folder.exists,
         lastEventAt: folder.lastEventAt,
         counts,

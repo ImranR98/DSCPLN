@@ -11,8 +11,16 @@ const formatElapsed = (seconds) => {
 
 const browserSrc = './browser/?autoconnect=1&resize=scale&reconnect=1&path=websockify'
 
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const scheduleText = (schedule) => {
+  const days = schedule?.days?.length ? schedule.days.map((day) => DAY_NAMES[day] ?? day).join(', ') : 'daily'
+  return `${days} at ${schedule?.at ?? '—'}`
+}
+
 export default function TaskCard({
   task,
+  attributes,
+  groupBy,
   now,
   uploading,
   queues,
@@ -21,10 +29,16 @@ export default function TaskCard({
   onToggleBrowser,
   onQueueFiles,
   onRemoveQueued,
+  onSettings,
+  onAction,
   onRun,
   onCancel,
   onLog,
 }) {
+  const chips = (attributes ?? [])
+    .filter((attribute) => attribute.name !== groupBy)
+    .map((attribute) => ({ name: attribute.name, value: task.attributes?.[attribute.name] }))
+    .filter((chip) => chip.value)
   const dropRef = useDropzone((dropped) => onQueueFiles(task, dropped))
   const running = task.running
   const isUploading = uploading[task.name] != null
@@ -51,6 +65,25 @@ export default function TaskCard({
 
       {running && task.live ? (
         <div className="card-live">{task.live}</div>
+      ) : null}
+
+      {chips.length ? (
+        <div className="attribute-chips">
+          {chips.map((chip) => (
+            <span className="attribute-chip" key={chip.name} data-attribute={chip.name}>
+              <span className="attribute-chip__name">{chip.name}</span>
+              <span>{chip.value}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {task.schedule?.enabled ? (
+        <div className="card-note">
+          Scheduled {scheduleText(task.schedule)}
+          {task.next_run ? ` · next ${new Date(task.next_run).toLocaleString()}` : ''}
+          {task.schedule_missed ? ` · ${task.schedule_missed} missed` : ''}
+        </div>
       ) : null}
 
       {isUploading ? (
@@ -88,6 +121,19 @@ export default function TaskCard({
         {task.export_url ? (
           <a role="button" className="outline secondary" href={task.export_url} target="_blank" rel="noreferrer">Generate Export</a>
         ) : null}
+        {(task.schedulable || attributes?.length) ? (
+          <button className="outline secondary" onClick={() => onSettings(task)}>
+            Settings
+          </button>
+        ) : null}
+        {(task.actions ?? []).map((action) => (
+          <button
+            key={action.key}
+            className="outline secondary"
+            disabled={busy}
+            onClick={() => onAction(task, action)}
+          >{action.label}</button>
+        ))}
         <button
           className={busy ? 'outline secondary' : ''}
           disabled={!busy && (!task.avail || (task.uploads && !files.length))}
@@ -95,6 +141,22 @@ export default function TaskCard({
         >{busy ? 'Stop' : 'Run'}</button>
         <button className="outline secondary" onClick={() => onLog(task)}>Log</button>
       </div>
+
+      {(task.actions ?? []).some((action) => action.state) ? (
+        <div className="action-status-list">
+          {(task.actions ?? []).filter((action) => action.state).map((action) => (
+            <div
+              key={action.key}
+              className={`action-status action-status--${action.state.ok ? 'ok' : 'fail'}`}
+              title={action.state.summary}
+            >
+              <span className="action-status__label">{action.label}:</span>
+              <span className="action-status__summary">{action.state.summary || action.state.last_run_text}</span>
+              <span className="action-status__time">{action.state.last_run_text.split(' · ').at(-1)}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {task.browser && browserAvailable ? (
         <div className="browser-block">

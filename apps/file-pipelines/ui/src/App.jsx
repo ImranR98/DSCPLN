@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { FlaskConical, Pause, Play, RefreshCw, Settings } from 'lucide-react'
-import { formatTime, getJson, postJson, putJson, showToast, ThemeToggle, Toasts, usePolling } from '@dscpln/ui-kit'
-import { reviewGroups } from './lib/view.js'
+import { AppHeader, formatTime, getJson, postJson, putJson, showToast, ThemeToggle, Toasts, usePolling } from '@dscpln/ui-kit'
 import ActivityCard from './components/ActivityCard.jsx'
 import FolderCard from './components/FolderCard.jsx'
 import OverviewCard from './components/OverviewCard.jsx'
@@ -28,6 +27,8 @@ export default function App() {
   const [setDateDialog, setSetDateDialog] = useState(null)
   const [restoreDialog, setRestoreDialog] = useState(null)
   const [reviewDialog, setReviewDialog] = useState(null)
+  const [reviewBusy, setReviewBusy] = useState('')
+  const [reviewBulkBusy, setReviewBulkBusy] = useState('')
   const [settingsDraft, setSettingsDraft] = useState(null)
 
   const notify = (message, tone = 'success') => showToast(message, tone)
@@ -116,7 +117,6 @@ export default function App() {
   }
 
   const processNow = (folderName, files) => act(`api/process/${encodeURIComponent(folderName)}`, files ? { files } : {})
-  const runSnapshot = (folderName) => act(`api/snapshot/${encodeURIComponent(folderName)}`)
   const fileAction = (folder, file, action, extra = {}) => act(`api/actions/${encodeURIComponent(folder)}/${encodeURIComponent(file)}`, { action, ...extra })
   const togglePaused = () => act('api/pause', { paused: !state.paused })
   const toggleDryRun = () => act('api/dry-run', { dryRun: !state.dryRun })
@@ -176,41 +176,140 @@ export default function App() {
 
   /* ---------- review ---------- */
 
-  const reviewFolders = (state?.folders ?? []).filter((folder) => folder.placement === 'manual' || (folder.counts.review ?? 0) > 0)
+  const reviewFolders = (state?.folders ?? []).filter((folder) => folder.method === 'reviewed-audio' ? (folder.counts.review ?? 0) > 0 : (folder.placement === 'manual' || (folder.counts.review ?? 0) > 0))
 
   const openReview = async () => {
     try {
-      const { entries } = await getJson('api/review')
-      const selectedGroups = new Set()
-      for (const folder of state?.folders ?? []) {
-        if (folder.method === 'voicenotes') {
-          for (const group of reviewGroups(folder)) selectedGroups.add(group.key)
-        }
-      }
-      setReviewDialog({ entries, selectedGroups })
+      const { entries, reviewedAudio } = await getJson('api/review')
+      setReviewDialog({ entries, reviewedAudio })
     } catch (err) {
       notify(err.message, 'error')
     }
   }
 
-  const toggleGroup = (key, checked) => {
-    setReviewDialog((current) => {
-      const next = new Set(current.selectedGroups)
-      if (checked) next.add(key)
-      else next.delete(key)
-      return { ...current, selectedGroups: next }
-    })
+  const reviewedAudioGroupKey = (group) => group.file
+    ? `${group.folder}\u0000file\u0000${group.file}`
+    : `${group.folder}\u0000${group.chat}\u0000${group.date}`
+
+  const reviewedAudioItemLabel = (group) => group.file || `${group.chat || '(root)'} / ${group.date}`
+
+  const reviewedAudioRequest = (group, action) => postJson(`api/review/reviewed-audio/${action}`, group.file
+    ? { folder: group.folder, file: group.file }
+    : { folder: group.folder, chat: group.chat, date: group.date })
+
+  const approveReviewedAudio = async (group) => {
+    const key = reviewedAudioGroupKey(group)
+    setReviewBusy(key)
+    try {
+      const result = await reviewedAudioRequest(group, 'approve')
+      notify(result?.alreadyPlaced
+        ? 'Already merged; source clips moved to trash.'
+        : group.file
+          ? 'Standardized and moved to the destination.'
+          : 'Merged and moved to the destination.')
+      await openReview()
+      refresh()
+      refreshTrash()
+    } catch (err) {
+      notify(`Approve failed: ${err.message}`, 'error')
+    } finally {
+      setReviewBusy('')
+    }
   }
 
-  const processSelectedGroups = async (folder) => {
-    const groups = reviewGroups(folder).filter((group) => reviewDialog.selectedGroups.has(group.key))
-    if (!groups.length) {
-      notify('No groups selected.', 'error')
+  const deleteReviewedAudio = async (group) => {
+    const label = group.file || `${group.chat || '(root)'} / ${group.date}`
+    const message = group.file
+      ? `Move ${label} to trash?`
+      : `Move ${group.count} audio clip(s) for ${label} to trash?`
+    if (!(await askConfirm('Confirm', message, 'Delete'))) return
+    const key = reviewedAudioGroupKey(group)
+    setReviewBusy(key)
+    try {
+      await reviewedAudioRequest(group, 'delete')
+      notify(group.file ? 'File moved to trash.' : 'Audio clips moved to trash.')
+      await openReview()
+      refresh()
+      refreshTrash()
+    } catch (err) {
+      notify(`Delete failed: ${err.message}`, 'error')
+    } finally {
+      setReviewBusy('')
+    }
+  }
+
+  const approveAllReviewedAudio = async (groups) => {
+    if (!groups.length) return
+    if (groups.some((group) => group.settling)) {
+      notify('Wait for all items to settle before approving them.', 'error')
       return
     }
-    await processNow(folder.name, groups.flatMap((group) => group.files))
-    const { entries } = await getJson('api/review')
-    setReviewDialog((current) => ({ ...current, entries }))
+    const allFiles = groups.every((group) => group.file)
+    const allGroups = groups.every((group) => !group.file)
+    const actionLabel = allFiles ? 'Standardize & move all' : allGroups ? 'Merge & move all' : 'Approve all'
+    const message = allFiles
+      ? `Standardize and move all ${groups.length} files to the destination?`
+      : allGroups
+        ? `Merge and move all ${groups.length} groups to the destination?`
+        : `Approve all ${groups.length} reviewed audio items and move them to the destination?`
+    if (!(await askConfirm('Confirm', message, actionLabel, 'primary'))) return
+    setReviewBulkBusy('approve')
+    const failures = []
+    let done = 0
+    try {
+      for (const group of groups) {
+        try {
+          await reviewedAudioRequest(group, 'approve')
+          done += 1
+        } catch (err) {
+          failures.push(`${reviewedAudioItemLabel(group)}: ${err.message}`)
+        }
+      }
+      await openReview()
+      refresh()
+      refreshTrash()
+      if (failures.length) {
+        notify(`${done} of ${groups.length} approved. ${failures.length} failed: ${failures[0]}`, 'error')
+      } else {
+        notify(`${done} reviewed audio ${done === 1 ? 'item' : 'items'} moved to the destination.`)
+      }
+    } finally {
+      setReviewBulkBusy('')
+    }
+  }
+
+  const deleteAllReviewedAudio = async (groups) => {
+    if (!groups.length) return
+    if (groups.some((group) => group.settling)) {
+      notify('Wait for all items to settle before deleting them.', 'error')
+      return
+    }
+    const fileCount = groups.reduce((sum, group) => sum + (group.files?.length ?? 1), 0)
+    const message = `Move ${fileCount} source file${fileCount === 1 ? '' : 's'} from ${groups.length} reviewed audio item${groups.length === 1 ? '' : 's'} to trash?`
+    if (!(await askConfirm('Confirm', message, 'Delete all'))) return
+    setReviewBulkBusy('delete')
+    const failures = []
+    let done = 0
+    try {
+      for (const group of groups) {
+        try {
+          await reviewedAudioRequest(group, 'delete')
+          done += 1
+        } catch (err) {
+          failures.push(`${reviewedAudioItemLabel(group)}: ${err.message}`)
+        }
+      }
+      await openReview()
+      refresh()
+      refreshTrash()
+      if (failures.length) {
+        notify(`${done} of ${groups.length} deleted. ${failures.length} failed: ${failures[0]}`, 'error')
+      } else {
+        notify(`${fileCount} source file${fileCount === 1 ? '' : 's'} moved to trash.`)
+      }
+    } finally {
+      setReviewBulkBusy('')
+    }
   }
 
   const reviewAction = async (folder, id, place) => {
@@ -295,8 +394,6 @@ export default function App() {
       draft.folders = [...draft.folders, {
         name: '', source: '', destination: '', method: 'standardize', settleSeconds: 60,
         groupWindowSeconds: 15, placement: 'auto', onChanged: 'overwrite', notify: 'all',
-        snapshot: false, sources: [], subdir: '', nameSuffix: '', touch: '',
-        command: '', runner: { node: '' }, schedule: { enabled: false, days: [], at: '03:00', catchUp: true },
       }]
     })
   }
@@ -307,21 +404,10 @@ export default function App() {
     config.trashRetentionDays = Number(config.trashRetentionDays)
     config.settleSeconds = Number(config.settleSeconds)
     for (const folder of config.folders) {
-      if (folder.method === 'copy' && folder.snapshot) {
-        folder.sources = (Array.isArray(folder.sources) ? folder.sources : []).map((source) => String(source).trim()).filter(Boolean)
-        folder.source = folder.sources[0] ?? ''
-        folder.runner = { node: String(folder.runner?.node ?? '').trim() || null }
-        folder.subdir = String(folder.subdir ?? '').trim() || null
-        folder.nameSuffix = String(folder.nameSuffix ?? '')
-        folder.touch = String(folder.touch ?? '').trim() || null
-        folder.command = String(folder.command ?? '').trim() || null
-        folder.cleanup = false
-        continue
-      }
       folder.settleSeconds = Number(folder.settleSeconds)
       folder.groupWindowSeconds = Number(folder.groupWindowSeconds)
       folder.filePattern ||= null
-      if (folder.method === 'voicenotes') folder.recursive = true
+      if (folder.method === 'reviewed-audio') folder.recursive = true
       if (folder.method === 'copy') folder.placement = 'auto'
     }
     try {
@@ -337,10 +423,18 @@ export default function App() {
   /* ---------- render ---------- */
   return (
     <>
-      <header className="app-header">
-        <div className="app-header__top">
-          <h1><a className="app-header__brand" href="/">D<span className="accent">$</span>CPLN</a> <span className="app-header__app">⋅ File Pipelines</span></h1>
-          <div className="app-header__actions">
+      <AppHeader
+        className="app-header--stack-mobile"
+        name="File Pipelines"
+        meta={<span className={`status-tag status-tag--${statusTone}`}><span>{statusText}</span></span>}
+        metaTools={(
+          <>
+            <span className="muted">{totals.pending} pending · {totals.issues} issue{totals.issues === 1 ? '' : 's'}</span>
+            <span className="muted">{state ? `updated ${formatTime(now)}` : ''}</span>
+          </>
+        )}
+        actions={(
+          <>
             <button className="outline secondary icon-button" title={state?.paused ? 'Resume processing' : 'Pause processing'} aria-label="Pause/Resume" onClick={togglePaused}>
               {state?.paused ? <Play size={16} strokeWidth={1.8} /> : <Pause size={16} strokeWidth={1.8} />}
             </button>
@@ -354,16 +448,9 @@ export default function App() {
               <RefreshCw size={16} strokeWidth={1.8} />
             </button>
             <ThemeToggle />
-          </div>
-        </div>
-        <div className="app-header__meta">
-          <span className={`status-tag status-tag--${statusTone}`}><span>{statusText}</span></span>
-          <span className="app-header__meta-tools">
-            <span className="muted">{totals.pending} pending · {totals.issues} issue{totals.issues === 1 ? '' : 's'}</span>
-            <span className="muted">{state ? `updated ${formatTime(now)}` : ''}</span>
-          </span>
-        </div>
-      </header>
+          </>
+        )}
+      />
 
       <main>
         <OverviewCard
@@ -379,8 +466,6 @@ export default function App() {
             <FolderCard
               key={folder.name}
               folder={folder}
-              run={state?.runs?.[folder.name] ?? null}
-              dryRun={state?.dryRun}
               expanded={expanded}
               onToggleExpanded={(open) => {
                 setExpanded((current) => {
@@ -390,7 +475,6 @@ export default function App() {
                   return next
                 })
               }}
-              onRunSnapshot={() => runSnapshot(folder.name)}
               onProcessNow={() => processNow(folder.name)}
               onOpenReview={openReview}
               onOpenCleanup={() => openCleanup(folder.name)}
@@ -472,9 +556,13 @@ export default function App() {
         <ReviewDialog
           entries={reviewDialog.entries}
           reviewFolders={reviewFolders}
-          selectedGroups={reviewDialog.selectedGroups}
-          onToggleGroup={toggleGroup}
-          onProcessSelected={processSelectedGroups}
+          reviewedAudio={reviewDialog.reviewedAudio ?? []}
+          busy={reviewBusy}
+          bulkBusy={reviewBulkBusy}
+          onApproveReviewedAudio={approveReviewedAudio}
+          onDeleteReviewedAudio={deleteReviewedAudio}
+          onApproveAllReviewedAudio={approveAllReviewedAudio}
+          onDeleteAllReviewedAudio={deleteAllReviewedAudio}
           onReviewAction={reviewAction}
           onReviewActionAll={reviewActionAll}
           onClose={() => setReviewDialog(null)}

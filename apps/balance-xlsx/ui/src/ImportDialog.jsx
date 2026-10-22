@@ -1,3 +1,4 @@
+import { Dialog } from '@dscpln/ui-kit'
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 import { postJson, toIso, showToast } from '@dscpln/ui-kit'
 
@@ -86,14 +87,7 @@ const ImportDialog = forwardRef(function ImportDialog({ data, today, onrefresh }
   }
 
   return (
-    <dialog ref={rootRef} className="wide-dialog">
-      <article>
-        <header className="card__header">
-          <h2>Import transactions</h2>
-          <span className="card__header-tools">
-            <button className="outline secondary icon-button" type="button" aria-label="Close" onClick={() => rootRef.current.close()}>&times;</button>
-          </span>
-        </header>
+    <Dialog dialogRef={rootRef} autoOpen={false} className="wide-dialog" title="Import transactions">
 
         <form id="importForm" onSubmit={submit}>
           <p className="hint">{hint}</p>
@@ -123,8 +117,7 @@ const ImportDialog = forwardRef(function ImportDialog({ data, today, onrefresh }
           <button className="outline secondary" type="button" onClick={() => rootRef.current.close()}>Cancel</button>
           <button type="submit" form="importForm" disabled={submitting}>{pastConfirmed ? 'Import anyway' : 'Import'}</button>
         </div>
-      </article>
-    </dialog>
+    </Dialog>
   )
 })
 

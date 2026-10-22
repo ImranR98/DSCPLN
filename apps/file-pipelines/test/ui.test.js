@@ -26,17 +26,19 @@ async function waitFor(fn, timeoutMs = 30_000, intervalMs = 200) {
   return false;
 }
 
-async function makeSetup() {
+async function makeSetup({ datePattern = "(\\d{4})-(\\d{2})-(\\d{2})", clips = 1 } = {}) {
   const root = await fsp.mkdtemp(path.join(os.tmpdir(), "file-pipelines-ui-"));
   const src = path.join(root, "src");
   const dest = path.join(root, "dest");
   await fsp.mkdir(path.join(src, "201301"), { recursive: true });
   await fsp.mkdir(dest, { recursive: true });
-  execFileSync("ffmpeg", [
-    "-loglevel", "error", "-y",
-    "-f", "lavfi", "-i", "sine=frequency=440:duration=0.5",
-    "-c:a", "libopus", path.join(src, "201301", "voice 2019-05-29 take1.opus"),
-  ]);
+  for (let index = 1; index <= clips; index += 1) {
+    execFileSync("ffmpeg", [
+      "-loglevel", "error", "-y",
+      "-f", "lavfi", "-i", "sine=frequency=440:duration=0.5",
+      "-c:a", "libopus", path.join(src, "201301", `voice 2019-05-29 take${index}.opus`),
+    ]);
+  }
   const configPath = path.join(root, "config.json");
   const config = {
     configVersion: 1,
@@ -58,11 +60,11 @@ async function makeSetup() {
     notifySuccess: true,
     folders: [
       {
-        name: "voicenotes",
+        name: "reviewed-audio",
         source: src,
         destination: dest,
-        method: "voicenotes",
-        datePattern: "(\\d{4})-(\\d{2})-(\\d{2})",
+        method: "reviewed-audio",
+        ...(datePattern ? { datePattern } : {}),
         placement: "manual",
         settleSeconds: 0,
       },
@@ -75,35 +77,117 @@ async function makeSetup() {
   return { root, daemon, dest, base: `http://127.0.0.1:${port}` };
 }
 
-test("ui: review a parked voice note from the browser and place it", { skip: !CAN_RUN }, async () => {
-  const { root, daemon, dest, base } = await makeSetup();
+test("ui: review a reviewed-audio group and merge it into the destination", { skip: !CAN_RUN }, async () => {
+  const { root, daemon, dest, base } = await makeSetup({ clips: 2 });
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
     await page.goto(base);
 
-    const card = page.locator(".folder-card", { hasText: "voicenotes" }).first();
+    const card = page.locator(".folder-card", { hasText: "reviewed-audio" }).first();
     const reviewButton = card.getByRole("button", { name: /^Review/ });
     await reviewButton.waitFor({ state: "visible" });
     await reviewButton.click();
 
     const dialog = page.locator('[data-testid="review-dialog"]');
-    await dialog.locator(".review-groups input[type=checkbox]").first().waitFor({ state: "visible", timeout: 30_000 });
-    await dialog.getByRole("button", { name: "Process selected" }).click();
+    const group = dialog.locator('[data-testid="review-group-reviewed-audio-20190529"]');
+    await group.waitFor({ state: "visible", timeout: 30_000 });
+    assert.match(await group.textContent(), /201301 · 20190529/);
+    assert.match(await dialog.getByTestId("review-approve-all").textContent(), /Merge & move all \(1\)/);
+    assert.equal(await group.locator("audio").count(), 2, "each clip in a group gets an audio player");
+    assert.match(await group.locator("audio").first().getAttribute("src"), /review\/audio\/reviewed-audio\//);
+    await group.getByRole("button", { name: "Merge & move" }).click();
 
-    const entry = dialog.locator(".review-row").first();
-    await entry.waitFor({ state: "visible", timeout: 60_000 });
-    assert.match(await entry.textContent(), /2019-05-29-00-00-00-\(20190529-merged-201301\)\.mp4/);
-
-    // Preview stream is reachable and range-capable.
-    const audioSrc = await entry.locator("audio").getAttribute("src");
-    const preview = await page.request.get(new URL(audioSrc, base).toString());
-    assert.equal(preview.status(), 200);
-
-    await entry.getByRole("button", { name: "Place" }).click();
     const destName = "2019-05-29-00-00-00-(20190529-merged-201301).mp4";
     const placed = await waitFor(() => fsp.stat(path.join(dest, destName)).then(() => true).catch(() => false));
-    assert.equal(placed, true, "the placed file must land in the destination");
+    assert.equal(placed, true, "the approved merge must land in the destination");
+  } finally {
+    await browser.close();
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ui: per-file reviewed-audio review standardizes and moves one file", { skip: !CAN_RUN }, async () => {
+  const { root, daemon, dest, base } = await makeSetup({ datePattern: null });
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.goto(base);
+    const card = page.locator(".folder-card", { hasText: "reviewed-audio" }).first();
+    await card.getByRole("button", { name: /^Review/ }).click();
+    const dialog = page.locator('[data-testid="review-dialog"]');
+    const row = dialog.locator(".review-row", { hasText: "voice 2019-05-29 take1.opus" }).first();
+    await row.waitFor({ state: "visible", timeout: 30_000 });
+    assert.equal(await row.locator("audio").count(), 1, "per-file review gets an audio player");
+    assert.match(await row.locator("audio").getAttribute("src"), /review\/audio\/reviewed-audio\//);
+    await row.getByRole("button", { name: "Standardize & move" }).click();
+
+    const placed = await waitFor(async () => (await fsp.readdir(dest)).length === 1);
+    assert.equal(placed, true, "the standardized file must land in the destination");
+    assert.deepEqual(await fsp.readdir(path.join(root, "src", "201301")), []);
+  } finally {
+    await browser.close();
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ui: standardize and move all reviewed-audio files asks for confirmation", { skip: !CAN_RUN }, async () => {
+  const { root, daemon, dest, base } = await makeSetup({ datePattern: null, clips: 2 });
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.goto(base);
+    const card = page.locator(".folder-card", { hasText: "reviewed-audio" }).first();
+    await card.getByRole("button", { name: /^Review/ }).click();
+    const dialog = page.locator('[data-testid="review-dialog"]');
+    const approveAll = dialog.getByTestId("review-approve-all");
+    await approveAll.waitFor({ state: "visible", timeout: 30_000 });
+    assert.match(await approveAll.textContent(), /Standardize & move all \(2\)/);
+    await approveAll.click();
+
+    const confirm = page.locator('[data-testid="confirm-dialog"]');
+    await confirm.waitFor({ state: "visible" });
+    assert.match(await confirm.textContent(), /Standardize and move all 2 files/);
+    await confirm.getByRole("button", { name: "Standardize & move all" }).click();
+
+    const moved = await waitFor(async () => (await fsp.readdir(dest)).length === 2);
+    assert.equal(moved, true, "both files must land in the destination");
+    assert.deepEqual(await fsp.readdir(path.join(root, "src", "201301")), []);
+  } finally {
+    await browser.close();
+    await daemon.stop();
+    await fsp.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ui: delete all reviewed-audio files asks for confirmation", { skip: !CAN_RUN }, async () => {
+  const { root, daemon, dest, base } = await makeSetup({ datePattern: null, clips: 2 });
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.goto(base);
+    const card = page.locator(".folder-card", { hasText: "reviewed-audio" }).first();
+    await card.getByRole("button", { name: /^Review/ }).click();
+    const dialog = page.locator('[data-testid="review-dialog"]');
+    const deleteAll = dialog.getByTestId("review-delete-all");
+    await deleteAll.waitFor({ state: "visible", timeout: 30_000 });
+    assert.match(await deleteAll.textContent(), /Delete all \(2\)/);
+    await deleteAll.click();
+
+    const confirm = page.locator('[data-testid="confirm-dialog"]');
+    await confirm.waitFor({ state: "visible" });
+    assert.match(await confirm.textContent(), /Move 2 source files from 2 reviewed audio items to trash/);
+    await confirm.getByRole("button", { name: "Delete all" }).click();
+
+    const deleted = await waitFor(async () => {
+      const files = await fsp.readdir(path.join(root, "src", "201301"));
+      const review = await (await fetch(`${base}/api/review`)).json();
+      return files.length === 0 && review.reviewedAudio.length === 0;
+    });
+    assert.equal(deleted, true, "all source files must be moved to trash");
+    assert.deepEqual(await fsp.readdir(dest), []);
   } finally {
     await browser.close();
     await daemon.stop();
@@ -155,32 +239,30 @@ test("ui: settings editor round-trips the new folder options", { skip: !CAN_RUN 
   }
 });
 
-test("ui: discard requires confirmation and leaves the destination untouched", { skip: !CAN_RUN }, async () => {
+test("ui: delete requires confirmation and moves the source clips to trash", { skip: !CAN_RUN }, async () => {
   const { root, daemon, dest, base } = await makeSetup();
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
     await page.goto(base);
-    const card = page.locator(".folder-card", { hasText: "voicenotes" }).first();
+    const card = page.locator(".folder-card", { hasText: "reviewed-audio" }).first();
     await card.getByRole("button", { name: /^Review/ }).click();
     const dialog = page.locator('[data-testid="review-dialog"]');
-    await dialog.locator(".review-groups input[type=checkbox]").first().waitFor({ state: "visible", timeout: 30_000 });
-    await dialog.getByRole("button", { name: "Process selected" }).click();
-    const entry = dialog.locator(".review-row").first();
-    await entry.waitFor({ state: "visible", timeout: 60_000 });
+    const group = dialog.locator('[data-testid="review-group-reviewed-audio-20190529"]');
+    await group.waitFor({ state: "visible", timeout: 30_000 });
 
-    await entry.getByRole("button", { name: "Discard" }).click();
+    await group.getByRole("button", { name: "Delete" }).click();
     const confirm = page.locator('[data-testid="confirm-dialog"]');
     await confirm.waitFor({ state: "visible" });
-    await confirm.getByRole("button", { name: "Discard" }).click();
+    await confirm.getByRole("button", { name: "Delete" }).click();
 
-    const discarded = await waitFor(async () => {
-      const state = await (await fetch(`${base}/api/state`)).json();
-      return state.folders[0].counts.discarded === 1;
+    const gone = await waitFor(async () => {
+      const files = await fsp.readdir(path.join(root, "src", "201301"));
+      const review = await (await fetch(`${base}/api/review`)).json();
+      return files.length === 0 && review.reviewedAudio.length === 0;
     });
-    assert.equal(discarded, true, "the clip must be marked discarded");
-    assert.deepEqual(await fsp.readdir(dest), [], "discard must never write to the destination");
-    assert.deepEqual((await (await fetch(`${base}/api/review`)).json()).entries, []);
+    assert.equal(gone, true, "the source clips must be moved to trash");
+    assert.deepEqual(await fsp.readdir(dest), [], "delete must never write to the destination");
   } finally {
     await browser.close();
     await daemon.stop();
@@ -217,8 +299,8 @@ test("ui: archive folders (cleanup disabled) expose no Cleanup button", { skip: 
     const archiveCard = page.locator(".folder-card", { hasText: "archive" }).first();
     await archiveCard.waitFor({ state: "visible" });
     assert.equal(await archiveCard.getByRole("button", { name: /Cleanup/ }).count(), 0, "cleanup must be hidden for cleanup:false folders");
-    const voicenotesCard = page.locator(".folder-card", { hasText: "voicenotes" }).first();
-    assert.equal(await voicenotesCard.getByRole("button", { name: /^Review/ }).count(), 1, "manual folders expose Review");
+    const reviewedAudioCard = page.locator(".folder-card", { hasText: "reviewed-audio" }).first();
+    assert.equal(await reviewedAudioCard.getByRole("button", { name: /^Review/ }).count(), 1, "manual folders expose Review");
   } finally {
     await browser.close();
     await daemon.stop();

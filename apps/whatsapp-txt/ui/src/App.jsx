@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Import as ImportIcon, Menu, RefreshCw, X } from 'lucide-react'
-import { getJson, postJson, ThemeToggle, uploadFile, usePolling } from '@dscpln/ui-kit'
+import { AppHeader, getJson, postJson, ThemeToggle, uploadFile, usePolling } from '@dscpln/ui-kit'
 import { buildSenderPalette, dateLabel, relativeTime } from './lib/format.js'
 import Banner from './components/Banner.jsx'
 import ConversationView from './components/ConversationView.jsx'
@@ -643,25 +643,11 @@ export default function App() {
 
   return (
     <>
-      <header className="topbar app-header">
-        <div className="app-header__top">
-          <h1><a className="app-header__brand" href="/">D<span className="accent">$</span>CPLN</a> <span className="app-header__app">⋅ WhatsApp TXT</span></h1>
-          <button id="sidebar-toggle" className="outline secondary icon-button" aria-label="Toggle conversation list" onClick={() => setSidebarOpen((open) => !open)}>
-            <Menu size={16} strokeWidth={1.8} />
-          </button>
-          <form id="search-form" className="search-form" role="search" onSubmit={submitSearch}>
-            <span className="search-box">
-              <input id="search-input" ref={searchInputRef} type="search" placeholder="Search messages…  /" autoComplete="off" spellCheck="false"
-                aria-label="Search messages" onInput={onSearchInput} />
-              {searchQuery ? (
-                <button type="button" id="search-clear" className="clear-btn" aria-label="Clear search" onClick={clearSearch}>
-                  <X size={15} strokeWidth={1.8} />
-                </button>
-              ) : null}
-            </span>
-          </form>
-          <span id="status" className="status muted" role="status" title={statusTitle}>{statusText}</span>
-          <span className="app-header__actions">
+      <AppHeader
+        className="topbar"
+        name="WhatsApp TXT"
+        actions={(
+          <>
             <button id="import" className="outline secondary icon-button" aria-label="Import chat exports" title="Import exports" onClick={openImport}>
               <ImportIcon size={16} strokeWidth={1.8} />
             </button>
@@ -669,9 +655,25 @@ export default function App() {
               <RefreshCw size={16} strokeWidth={1.8} />
             </button>
             <ThemeToggle />
+          </>
+        )}
+      >
+        <button id="sidebar-toggle" className="outline secondary icon-button" aria-label="Toggle conversation list" onClick={() => setSidebarOpen((open) => !open)}>
+          <Menu size={16} strokeWidth={1.8} />
+        </button>
+        <form id="search-form" className="search-form" role="search" onSubmit={submitSearch}>
+          <span className="search-box">
+            <input id="search-input" ref={searchInputRef} type="search" placeholder="Search messages…  /" autoComplete="off" spellCheck="false"
+              aria-label="Search messages" onInput={onSearchInput} />
+            {searchQuery ? (
+              <button type="button" id="search-clear" className="clear-btn" aria-label="Clear search" onClick={clearSearch}>
+                <X size={15} strokeWidth={1.8} />
+              </button>
+            ) : null}
           </span>
-        </div>
-      </header>
+        </form>
+        <span id="status" className="status muted" role="status" title={statusTitle}>{statusText}</span>
+      </AppHeader>
 
       <Banner text={bannerText} visible={bannerVisible} onDismiss={hideBanner} />
 

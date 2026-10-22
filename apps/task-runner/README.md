@@ -35,43 +35,135 @@ machine and `BACKUPCTL_HOST` names the instance (default `pc`). Tasks with
 
 A **drop zone at the top** detects which task a dropped file belongs to from
 its filename (per-task `glob:` patterns) and asks before running it; ambiguous
-matches open a picker. Task cards are grouped by their group name and each has:
+matches open a picker. Above the cards, choose the **Group by** attribute
+(default **Best run from**) and optionally filter to one value. Cards show chips
+for every non-grouping attribute, and each has:
 
 - a **drop zone** to stage files for that task; staged files live in browser
   memory until you press Run
 - a **Run** button (disabled while the task is unavailable, e.g. its `root:`
   directory is missing) that becomes **Stop** while running
+- a **Settings** button for the schedule and attribute values
+- optional **card actions** (e.g. Test auth, Pair Quest, Discover) with their
+  own prompts and last-result status
 - a **Log** button (last run's output; the live line streams under the title)
 - a **Generate Export** link when the task sets `export_url:`
-- a status line (last run time/result) stored in the task's `state_dir` as
-  `.backup-state-<task>.json`
+- a status line (last run time/result) stored in `BACKUPCTL_STATE_DIR/tasks/<slug>.json`
 
 There are no automatic timeouts — a run goes until it finishes or you stop it.
 Any number of tasks run in parallel; tasks sharing a `serial_key` are queued
 and run one at a time. Runs interrupted by a server crash show as
 "Interrupted" instead of a false success.
 
+## Scheduled tasks
+
+Add `schedule: {enabled, days, at, catchUp}` to a task and the Task Runner
+becomes its scheduler: `days` uses JS weekdays (0 = Sunday, empty = daily),
+`at` is local `HH:MM`, and `catchUp` runs an occurrence missed while the
+instance was down. Schedules persist their last handled occurrence and missed
+count under `BACKUPCTL_STATE_DIR/schedules/`; the card shows the next run and
+the portal sees the task through `/api/tasks`.
+
+Every task that can run unattended has a **Settings** dialog with its
+schedule and attribute values. The UI can enable/disable the schedule, choose
+daily or specific weekdays, set the local time, and toggle catch-up. Changes
+are written to `task-meta.json` next to `config.mjs` and take effect
+immediately. `config.mjs` can still declare a fallback `schedule`; a metadata
+entry overrides it. The API is
+`PUT /api/tasks/:taskName/settings` with `{schedule, attributes}`.
+
+Scheduled runs are unattended, so the loader rejects `uploads`, `prompts`,
+`require`, `browser` and `commit_dir` on scheduled tasks. A task that is
+already running, unavailable (host/root/check), or blocked by its `serial_key`
+is counted as missed rather than queued. Set `BACKUPCTL_SCHEDULES=0` on a
+second instance so only one machine fires shared schedules. Notifications go
+through the portal (`DSCPLN_PORTAL_URL`) with `notify: never|errors|always`
+(default `errors` for scheduled tasks) and `notify_name` for the title.
+
+Secrets belong in `env` or in config tokens listed under `secrets`; both are
+redacted from the logged command and output. Prefer `env` over argv:
+
+```js
+{
+  name: 'Nightly export',
+  state_dir: '{{maindir}}/.tasks',
+  schedule: { enabled: true, days: [], at: '02:00', catchUp: true },
+  secrets: ['api_token'],
+  env: { API_TOKEN: '{{api_token}}' },
+  commands: [`backup-tool --token "$API_TOKEN" '{{maindir}}/export'`],
+  summary_last_line: true,
+  notify: 'errors',
+}
+```
+
 ## Configuration
 
 Copy `config.example.mjs` to `config.mjs` (gitignored) and edit it. It exports
-machine values plus a `groups:` array; groups and tasks render in array order
-and a group's `defaults` merge under its tasks.
+machine values plus a `groups:` array; a group's `defaults` merge under its
+tasks and the group supplies the default Category. The UI renders grouping and
+order from `task-meta.json`, not from the config array. `secrets` is a top-level
+list of config tokens that should never appear in a logged command/output.
 
 `{{token}}` placeholders are resolved from the file's values at run time
 (values may reference other tokens; resolution loops until stable). Built-in
 tokens: `{{repo_dir}}` (repo root, override with `BACKUPCTL_REPO_DIR`) and
 `{{lib}}` (the packaged `lib.sh`). `~` and env vars expand on resolved paths.
-Every task needs `state_dir:` — run state is stored there.
+Every task needs `state_dir:` — it is the default `move`/`ingest` destination. Run state itself is centralized under `BACKUPCTL_STATE_DIR/tasks/`.
 
 If you keep your own helper scripts, place them somewhere on the machine or
 mount them into the container and reference them from the config (for example
 `scriptroot: '/path/to/scripts'` + `bash '{{scriptroot}}/parse.py'`).
 
+### Task metadata (`task-meta.json`)
+
+Schedule and attribute edits are committed next to `config.mjs`:
+
+```json
+{
+  "version": 1,
+  "attributes": [
+    { "name": "Category", "values": ["Finance", "Media and Files"] },
+    { "name": "Best run from", "values": ["Phone", "PC"] }
+  ],
+  "default_group_by": "Best run from",
+  "tasks": {
+    "Bank Statements": {
+      "attributes": { "Category": "Finance", "Best run from": "PC" },
+      "schedule": { "enabled": true, "days": [0], "at": "04:00", "catchUp": true }
+    }
+  }
+}
+```
+
+The **Attributes** dialog manages the definitions and default grouping. The
+per-task **Settings** dialog edits values and the schedule. `Category` is
+required; other attributes are arbitrary. Removing an attribute or value
+removes it from tasks. The file is read at startup and rewritten atomically by
+the server. Keep its directory writable by the Task Runner (the deployment
+mounts the private config checkout read-write for this and for Contacts
+Discover); it is committed with the rest of the config repo.
+
 ### Task fields
 
 Common: `name`, `note` (help text in the drop zone), `state_dir` (required),
 `serial_key` (tasks sharing a key run one at a time), `host` (`any`, or the
-instance name), `prompts`, `export_url`.
+instance name), `prompts`, `export_url`, `schedule`, `env`, `secrets`,
+`run_as` (optional `{ uid, gid }`; user-data tasks run as the host owner),
+`notify` (`never|errors|always`) and `notify_name`.
+
+`actions:` adds named card buttons that share the task's host/environment but
+have their own `commands`, `prompts`, `require` and result state. Actions bypass
+`check:` (Pair Quest must run while the device is disconnected) and never
+overwrite the task's last-run state. Example:
+
+```js
+actions: [{
+  key: 'test-auth',
+  label: 'Test auth',
+  commands: ['run-auth-test'],
+  summary_last_line: true,
+}]
+```
 
 Runner: exactly one of `commands` (bash string or list), `script:`, `move:`,
 or `ingest:`. Optional: `cwd`, `uploads: true` + `glob` (drop zone; a string
@@ -82,7 +174,9 @@ directory the card requires; glob-aware), `check:` (bash gate: the task is
 unavailable while it exits non-zero, with its first output line as the card's
 badge; results are cached ~15s), `browser: true` (the card gets an embedded
 login-browser section; it auto-opens when the task starts), `summary_last_line:
-true` (summary = last non-command log line).
+true` (summary = last non-command log line). `run_as: { uid: '{{app_uid}}', gid:
+'{{app_gid}}' }` drops the task shell to the host data owner; leave it unset for
+tasks that need root (PV backups, SSH keys).
 
 - `script: 'bash body'` — wrapped in a temp-file heredoc so inner processes
   can't consume the rest of the script from stdin.
@@ -119,25 +213,27 @@ container the tools default it under `/home/seluser/.config`, which a volume
 can persist). Runs that drive the browser use a shared `serial_key` so only
 one session is active at a time.
 
-### Wealthsimple import
+### Balance import
 
-`examples/wealthsimple-import.mjs` bridges a Wealthsimple scraper to the
-Balance XLSX app: it extracts the scraper's trailing tab-separated transaction
-lines, asks the Balance XLSX external API which ones the workbook already has,
-and imports only the missing ones. A scrape where **nothing** matched the
-workbook warns that the scrape may not reach back far enough, prints the date
-to check manually from, and (when a relay is configured) pushes that warning.
+`examples/balance-import.mjs` bridges any scraper that prints tab-separated
+transaction rows to the Balance XLSX app: it extracts the trailing rows, asks
+the Balance XLSX external API which ones the workbook already has, and imports
+only the missing ones. A scrape where **nothing** matched the workbook warns
+that the scrape may not reach back far enough, prints the date to check
+manually from, and (when a relay is configured) pushes that warning.
 
 ```js
 {
-  name: 'Wealthsimple import',
+  name: 'Balance import',
   state_dir: '{{maindir}}/.tasks',
-  serial_key: 'wealthsimple',
+  serial_key: 'balance-import',
   browser: true,
+  secrets: ['balance_token'],
+  env: { BALANCE_TOKEN: '{{balance_token}}' },
   commands: [
-    `wealthsimpleton > "$TMPDIR/wealthsimple.txt"`,
-    `node '{{scriptroot}}/wealthsimple-import.mjs' --input "$TMPDIR/wealthsimple.txt" ` +
-      `--balance-url '{{balance_url}}' --balance-token '{{balance_token}}' --notify-url '{{portal_url}}'`,
+    `your-scraper > "$TMPDIR/transactions.txt"`,
+    `node '{{scriptroot}}/balance-import.mjs' --input "$TMPDIR/transactions.txt" ` +
+      `--balance-url '{{balance_url}}' --balance-token "$BALANCE_TOKEN" --notify-url '{{portal_url}}'`,
   ],
   summary_last_line: true,
 }
@@ -145,19 +241,21 @@ to check manually from, and (when a relay is configured) pushes that warning.
 
 - `--input` — the scraper output (a file, or `-` for stdin).
 - The tool ships with the image; reference it as
-  `'{{repo_dir}}/apps/task-runner/examples/wealthsimple-import.mjs'` unless
-  your `scriptroot` already points at the bundled `examples/` folder.
+  `'{{repo_dir}}/apps/task-runner/examples/balance-import.mjs'` unless your
+  `scriptroot` already points at the bundled `examples/` folder.
 - `--balance-url` / `--balance-token` — the Balance XLSX external API base
-  path (`/balance`) and the bearer token from its Settings page. Keep the
-  token in your gitignored `config.mjs` only.
-- `--notify-url` (optional) — the portal relay (`http://portal:8080`); the
-  zero-duplicate warning is pushed there (priority high, `warning` tag).
+  path (`/balance`) and the bearer token from its Settings page. Pass it via
+  `env` (or the `BALANCE_TOKEN` variable) and list it in `secrets` so it is
+  redacted from logs, rather than putting it directly in `commands`.
+- `--notify-url` (optional) — the portal relay (`http://portal:8080`) or
+  `DSCPLN_PORTAL_URL`; the zero-duplicate warning is pushed there (priority
+  high, `warning` tag).
 - `--after <regex>` (optional) — only consider lines after the last line
   matching the regex, e.g. `--after 'Scraped \d+ transactions'`; by default
   every import-shaped TSV line is taken.
 - `--dry-run` — check and report without writing anything.
 
-The scraper's `Scraped N transactions` report is pre-filter (it counts
+The scraper's optional `Scraped N transactions` report is pre-filter (it counts
 everything it saw, not just the printed rows), so fewer extracted lines than N
 is normal; more than N fails the run. A fully-overlapping scrape reports
 "Nothing new"; a partial overlap reports the imported/skipped counts.
@@ -166,11 +264,11 @@ is normal; more than N fails the run. A fully-overlapping scrape reports
 
 1. **Write the tool.** Anything executable works — bash, `python3`, `node`.
    The image already provides `bash`, `python3`, `node`, `rsync`, `git`,
-   `age`, `jq`, `unzip`/`tar` and `wget`, and the app tree is writable, so a
+   `age`, `jq`, `unzip`/`tar`, `wget`, `restic` and `kubectl`, and the app tree is writable, so a
    task can    `apt-get`/`pip`/`npm` install more at run time. Give it a shebang
    and the executable bit. A bundled example lives in
-   `apps/task-runner/examples/hello-tool.sh`; the Wealthsimple import tool
-   (`examples/wealthsimple-import.mjs`, see above) is a fuller Node one.
+   `apps/task-runner/examples/hello-tool.sh`; the Balance import tool
+   (`examples/balance-import.mjs`, see above) is a fuller Node one.
 
 2. **Make it visible to the app.**
    - Local runs: keep it anywhere on disk and reference it by absolute path.
@@ -230,8 +328,9 @@ bash '{{lib}}' move --git --rename bookmarks.html '{{maindir}}/Manual' {{uploads
 
 or sourced inside a `script:` for anything with logic. Subcommands:
 `move`, `copy`, `ingest`, `encrypt`, `git-commit`, `validate-fresh`,
-`prune-exports`; sourceable helpers: `bctl_extract`, `bctl_rsync`,
-`bctl_git_commit`, `bctl_standardize_into`, `bctl_import_pair`,
+`prune-exports`, `remote-subdirs`, `python-venv`; sourceable helpers:
+`bctl_extract`, `bctl_rsync`, `bctl_git_commit`, `bctl_standardize_into`,
+`bctl_import_pair`, `bctl_remote_subdirs`, `bctl_python_venv`,
 `bctl_first_glob`, `bctl_export_dirs` (see `lib.sh` for the full list).
 
 Service-specific concerns (installing a CLI, validating an export is fresh,
@@ -243,13 +342,18 @@ Config loading/tokens live in `config-loader.mjs`/`template.mjs`, run state in
 `state.mjs`, the subprocess layer in `runner.mjs`, and the HTTP server + run
 orchestration in `server.mjs` (config loads once at boot; restart to reload).
 
-**API**: `GET /api/tasks` (groups in config order, availability + reason,
-last-run state or *Interrupted*, `running`/`live`/`pill`, `missing_config`);
+**API**: `GET /api/tasks` (flat `tasks` list, legacy `groups`, attribute
+definitions + `default_group_by`, availability + reason, last-run state or
+*Interrupted*, `running`/`live`/`pill`, `schedule`, `next_run`,
+`schedule_missed`, `last_scheduled_run`, `actions`, `missing_config`);
+`PUT /api/tasks/{task}/settings` (`{schedule, attributes}`);
+`PUT /api/attributes` (`{attributes, default_group_by}`);
 `POST /api/detect?name=` (most-specific pattern wins; ties are `ambiguous`);
 `POST /api/upload/{task}?name=` (body streamed to a `.part` file, renamed on
 completion after glob validation); `POST /api/run/{task}` (JSON `extra`; 409
 when already running, 400 when unavailable; queues when the task's
-`serial_key` is held); `GET /api/status` (new log lines + one-shot `done`);
+`serial_key` is held); `POST /api/actions/{task}/{action}` (JSON prompt values;
+bypasses `check:`); `GET /api/status` (new log lines + one-shot `done`);
 `GET /api/log/{task}`; `POST /api/cancel` (kills only that run's process
 groups, or dequeues it); `POST /api/paste_done/{task}` (git-commits the task's
 `commit_dir`). Mutating `/api/*` requests are CSRF-checked.
@@ -269,22 +373,32 @@ only) gives tools that refuse non-TTY stdin a pseudo-terminal when
 
 ### State
 
-- `<state_dir>/.backup-state-<slug>.json` — `{task, ts, ok, summary, output}`,
-  written atomically.
+- `<BACKUPCTL_STATE_DIR>/tasks/<slug>.json` — `{task, ts, ok, summary, output}`; legacy `<state_dir>/.backup-state-<slug>.json` is read once during the upgrade. Written atomically.
 - `bctl_git_commit` stages with `git add -A . ':(exclude).backup-state-*'`, so
   state files never churn backup repos.
 - `running.json` (in `BACKUPCTL_STATE_DIR`, default `~/.backupctl`) marks an
   in-flight task; after a crash it shows as `Interrupted`.
+- `schedules/<task>.json` (same directory) stores the last scheduled occurrence
+  and missed count for catch-up across restarts.
+- `<task>.<action>.json` (under `tasks/`) stores an action's last result; it is
+  separate from the task's normal state.
 - `staging/<task>/` is transient scratch space, cleared when a run ends; run
   commands get a per-run `TMPDIR` (under `BACKUPCTL_TMP_DIR`, default
   `~/Downloads/backupctl-tmp`) so large extractions don't fill `/tmp`.
 
+In the deployment, `BACKUPCTL_STATE_DIR` points at the gitignored
+`.task-runner/` folder inside the config repo. The server runs as root for PVC
+backups but hands state files to `BACKUPCTL_STATE_UID`/`GID` (the host owner)
+so Syncthing and editors can keep using them.
+
 ## Frontend
 
 `ui/` is a React + Vite app (built into `static/`, served by the node
-server): group/card grid, global drop zone with server-side detection, staged
-queues, generic prompt dialog, XHR upload progress, live logs via `/api/status`
-polling, paste dialog for `capture:` tasks, and toasts. Built with
+server): attribute-driven group/card grid with filter, attribute chips, task
+settings and attribute-manager dialogs, card actions, global drop zone with
+server-side detection, staged queues, generic prompt dialog, XHR upload
+progress, live logs via `/api/status` polling, paste dialog for `capture:`
+tasks, and toasts. Built with
 `npm run build:ui --workspace dscpln-task-runner` (or `npm run ui` at the
 root); `npm test` builds first.
 
@@ -303,7 +417,8 @@ root); `npm test` builds first.
 
 - Node.js 22+ (npm dependency: `express` only)
 - System tools tasks commonly use: `bash`, `rsync`, `ssh`, `unzip`/`tar`,
-  `git`, `age`, `jq`, `wget`, ImageMagick — whatever your tasks need
+  `git`, `age`, `jq`, `wget`, `restic`, `kubectl`, ImageMagick — whatever your
+  tasks need. The image ships restic and kubectl for scheduled backup tasks.
 - `python3` (stdlib only) for `lib.sh encrypt` via `pty_runner.py`
 
 ## Structure

@@ -2,9 +2,33 @@ node_modules
 .git
 .gitignore
 **/node_modules
+
+# Build outputs are regenerated inside the image; tests and docs are not runtime.
 **/test
+**/tests
 **/docs
-*.log
-logs
-data
-tmp
+**/static
+**/DEPLOY.md
+
+# Runtime state, logs and temporary files.
+**/*.log
+**/logs
+**/data
+**/tmp
+**/*.sync-conflict*
+
+# Runtime config, credentials and app state: never bake these into an image.
+**/.env
+**/.env.*
+**/secrets*
+**/config.json
+**/api-state.json
+**/browser.json
+**/oauth.json
+**/*.pem
+**/*.key
+apps/task-runner/config.mjs
+
+# YTMusic downloader's local virtualenv and library (created at runtime).
+apps/task-runner/tools/ytmusic/downloader/venv
+apps/task-runner/tools/ytmusic/downloader/music

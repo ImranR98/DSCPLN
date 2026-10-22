@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { deleteJson, showToast } from '@dscpln/ui-kit'
+import { deleteJson, Dialog, showToast } from '@dscpln/ui-kit'
 
 
 const DeleteDialog = forwardRef(function DeleteDialog({ money, onrefresh }, ref) {
@@ -54,24 +54,21 @@ const DeleteDialog = forwardRef(function DeleteDialog({ money, onrefresh }, ref)
   }
 
   return (
-    <dialog ref={rootRef} className="narrow-dialog">
-      <article>
-        <header className="card__header">
-          <h2>Delete transaction</h2>
-          <span className="card__header-tools">
-            <button className="outline secondary icon-button" type="button" aria-label="Close" onClick={() => rootRef.current.close()}>&times;</button>
-          </span>
-        </header>
-
-        <p className="muted">{description}</p>
-        {formError ? <p className="form-error">{formError}</p> : null}
-
-        <div className="dialog-actions">
+    <Dialog
+      dialogRef={rootRef}
+      autoOpen={false}
+      className="narrow-dialog"
+      title="Delete transaction"
+      actions={(
+        <>
           <button className="outline secondary" type="button" onClick={() => rootRef.current.close()}>Cancel</button>
           <button className="danger" type="button" disabled={deleting} onClick={confirm}>Delete</button>
-        </div>
-      </article>
-    </dialog>
+        </>
+      )}
+    >
+      <p className="muted">{description}</p>
+      {formError ? <p className="form-error">{formError}</p> : null}
+    </Dialog>
   )
 })
 

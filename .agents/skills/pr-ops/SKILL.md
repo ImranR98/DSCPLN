@@ -1,6 +1,6 @@
 ---
 name: pr-ops
-description: Triage, merge, and ship open dependency-update PRs in the D$CPLN monorepo. Use when asked to review or merge dependency PRs (label deps), handle npm/docker version bumps, or rebuild and pin the affected app images after such a merge. Covers risk tiering (patch/minor vs major and 0.x, runtime vs build-only vs tooling deps, the node base image), changelog research for risky bumps, consent gates for risky merges and all image rebuilds/pins, per-app image impact mapping, and reporting.
+description: Triage, merge, and ship open dependency-update PRs in the D$CPLN monorepo. Use when asked to review or merge dependency PRs (label deps), handle npm/docker version bumps, or pin and deploy the affected app images after such a merge. Covers risk tiering (patch/minor vs major and 0.x, runtime vs build-only vs tooling deps, the node base image), changelog research for risky bumps, consent gates for risky merges and all pins/deploys (CI publishes images on merge), per-app image impact mapping, and reporting.
 ---
 
 # PR ops (dependency updates)
@@ -24,8 +24,8 @@ of them.
 - Never merge on red or pending CI; never bypass or admin-merge past checks.
 - One merge at a time: land it on `main` (and confirm `main` CI) before the next.
 - Never commit generated files (`apps/*/static/`) or runtime files.
-- Never rebuild/re-pin images or deploy without explicit user consent, asked once
-  per batch.
+- Merging to `main` publishes new images automatically. Never pin or deploy them
+  without explicit user consent, asked once per batch.
 - Never push to a dependency PR branch; conflicts wait for a refresh (or are
   applied on `main` with consent).
 - Never leave a floating tag unpinned in the deployment repo.
@@ -38,11 +38,12 @@ of them.
 |---|---|---|---|
 | Research | none | changelog skim | required, with evidence |
 | Merge | autonomous when CI green | autonomous when CI green + local tests | user consent required |
-| Ship (rebuild/pin/deploy) | n/a — never ships | user consent | user consent, separate from the merge ask |
+| Ship (pin/deploy) | n/a — never ships | user consent | user consent, separate from the merge ask |
 
 - Tier A/B merges proceed without prompting once their gate passes.
-- Every image rebuild/pin/deploy waits for explicit go-ahead, asked once per
-  batch: apps, exact commands, verification plan, and rollback.
+- Every pin/deploy waits for explicit go-ahead, asked once per batch: apps,
+  exact commands, verification plan, and rollback. (CI rebuild/publish runs
+  automatically on merge; the gate is on making it live.)
 - Tier C asks present findings, risk, recommendation, then wait.
 - An explicit pre-authorization ("merge and ship whatever is safe") overrides
   these gates for the named items.
@@ -98,8 +99,8 @@ git checkout main && git pull --ff-only
 - Tier B/C: run the full local suite above on the PR checkout before merging.
 - `npm test` builds every UI and runs every suite; browser tests skip when no
   Chromium is available, so they are a bonus, not a gate.
-- After each merge, confirm the `main` push CI passes:
-  `gh run list --branch main --limit 1`.
+- After each merge, confirm the `main` push CI passes (both `test` and
+  `publish`): `gh run list --branch main --limit 1`.
 - `gh` unusable? Fallback: `git fetch origin pull/<n>/head:pr/<n>`, validate,
   `git merge --no-ff -m "Merge pull request #<n> from <owner>/<branch>" -m "<title>" pr/<n>`,
   `git push origin main`.
@@ -117,9 +118,11 @@ one consolidated ask, then:
 
 1. Confirm `INFRA_DIR` (the deployment-repo checkout; ask if unset) and that it
    is clean.
-2. `scripts/build-all.sh --pin <apps...>` — rebuilds the shared base first,
-   pushes the app images, prints the digest table, and rewrites the deployment
-   templates' digests.
+2. Get the digest for the merge commit from the green `publish` job's summary or
+   the `image-digests-<sha>` artifact, and pin those lines in the deployment
+   templates. Do not rebuild just to obtain a digest. Only if CI did not publish
+   (or a local rebuild is explicitly approved), run
+   `scripts/build-all.sh --pin <apps...>`.
 3. Review `git -C "$INFRA_DIR" diff` — only the intended image lines.
 4. Roll out via the deployment repo's runbook (helm + rollout status), or print
    the pending commands if this machine lacks deploy access.
@@ -132,6 +135,6 @@ deploy reference.
 Report format:
 
 - **Merged** — PR number and one-line title.
-- **Shipped** — apps rebuilt/pinned; deploy done or pending.
+- **Shipped** — apps pinned; deploy done or pending.
 - **Held** — PR plus reason, evidence, and what the next run re-checks.
 - **Pending commands** — anything this agent could not run.

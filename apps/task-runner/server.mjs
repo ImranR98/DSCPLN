@@ -15,14 +15,32 @@ import { spawn, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import express from 'express';
-import { authFromEnv, createApp as createKitApp, isAuthorized } from '@dscpln/server-kit';
 import {
+  authFromEnv,
+  clickFor,
+  createApp as createKitApp,
+  isAuthorized,
+  Notifier,
+  normalizeSpec,
+  occurrenceAfter,
+  occurrenceBefore,
+  Scheduler,
+} from '@dscpln/server-kit';
+import {
+  CONFIG_FILE,
   ConfigError,
   ConfigMissingError,
   LIB_PATH,
   REPO_DIR,
   loadConfig,
+  validateSchedule,
 } from './config-loader.mjs';
+import {
+  normalizeAttributeDefinitions,
+  TaskMetaError,
+  taskMetaFileFor,
+  writeTaskMeta,
+} from './task-meta.mjs';
 import { expand, resolve, shellSafe } from './template.mjs';
 import {
   attachBrowserWebSocket,
@@ -34,10 +52,13 @@ import {
 export { attachBrowserWebSocket };
 import {
   clearRunning,
+  ensureStateDir,
+  loadScheduleState,
   loadTaskState,
   markRunning,
   runningMarker,
   saveTaskState,
+  scheduleStore,
   slugify,
   stagingDir,
   tmpRoot,
@@ -54,6 +75,40 @@ export * from './util.mjs';
 export * from './runner.mjs';
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024 * 1024;
+
+// Schedules are off by default on a second instance
+// (BACKUPCTL_SCHEDULES=0); the instance that owns the cron-like work sets 1.
+const SCHEDULES_ENABLED = process.env.BACKUPCTL_SCHEDULES !== '0';
+const SCHEDULERS = new Map();
+const NOTIFY_RELAY = String(process.env.DSCPLN_PORTAL_URL ?? '').trim();
+
+// Fields that make a task require a person at the keyboard; such tasks cannot
+// be put on a schedule. Kept in sync with config-loader's scheduled validation.
+const SCHEDULE_BLOCKERS = ['uploads', 'prompts', 'require', 'browser', 'commit_dir'];
+
+export function isSchedulable(task) {
+  return !SCHEDULE_BLOCKERS.some((field) => Boolean(task[field]));
+}
+
+async function notifyTask(task, ok, summary) {
+  const mode = task.notify ?? 'never';
+  if (mode === 'never' || !NOTIFY_RELAY) return;
+  if (ok && mode !== 'always') return;
+  try {
+    const notifier = new Notifier(
+      {
+        app: task.notify_name ?? task.name,
+        relayUrl: NOTIFY_RELAY,
+        notifySuccess: true,
+        click: clickFor(process.env.BASE_PATH ?? ''),
+      },
+      (line) => console.error(line),
+    );
+    await notifier.notifyResult({ ok, app: task.notify_name ?? task.name, summary });
+  } catch (err) {
+    console.error(`notification failed: ${err.message}`);
+  }
+}
 
 function clearStaging(ctx) {
   const d = stagingDir(ctx.task.name);
@@ -79,24 +134,62 @@ export async function runCommands(ctx) {
     uploads: shellSafe(ctx.files.map((f) => shellQuote(String(f))).join(' ')),
     ...Object.fromEntries(Object.entries(ctx.extra).map(([k, v]) => [k, String(v)])),
   };
-  const redact = Object.values(ctx.extra).filter((v) => v).map(String);
+  const secretKeys = [...(ctx.local?.secrets ?? []), ...(task.secrets ?? [])];
+  const secretValues = secretKeys
+    .map((key) => resolve(`{{${key}}}`, ctx.local ?? {}))
+    .filter((value) => value !== undefined && !/^\{\{[^}]+\}\}$/.test(String(value)))
+    .map(String);
+  const redact = [...new Set([...Object.values(ctx.extra).filter((v) => v).map(String), ...secretValues])];
   const output = [];
   const cwd = expand(resolve(task.cwd ?? '.', ctx.local));
   const groups = ctx.groups ?? new Set();
   const env = { TMPDIR: ctx.tmpdir };
+  // Per-task environment values are config tokens (not prompt inputs). Keep
+  // secrets in the environment instead of argv so the logged command is clean.
+  for (const [key, value] of Object.entries(task.env ?? {})) {
+    env[key] = String(resolve(value, ctx.local ?? {}));
+  }
+  // Optional per-task identity: user-data tasks run as the host owner while
+  // the server stays root for backup/recovery tasks. The deployment grants
+  // CAP_SETUID/CAP_SETGID only for this drop-privilege path.
+  const runAs = {};
+  if (task.run_as !== undefined) {
+    const spec = typeof task.run_as === 'object' && task.run_as !== null ? task.run_as : { uid: task.run_as, gid: task.run_as };
+    const uid = Number(resolve(spec.uid, ctx.local ?? {}));
+    const gid = Number(resolve(spec.gid ?? spec.uid, ctx.local ?? {}));
+    if (!Number.isInteger(uid) || uid < 0 || !Number.isInteger(gid) || gid < 0) {
+      return [false, `Invalid run_as identity: uid=${spec.uid} gid=${spec.gid}`];
+    }
+    runAs.uid = uid;
+    runAs.gid = gid;
+    try {
+      fs.chownSync(ctx.tmpdir, uid, gid);
+      fs.chmodSync(ctx.tmpdir, 0o700);
+      // Drop-zone uploads are written by the root server; hand the staged
+      // tree to the task user so upload tasks can read/rename their inputs.
+      for (const file of ctx.files ?? []) fs.chownSync(file, uid, gid);
+      const staging = ctx.files?.length ? path.dirname(ctx.files[0]) : null;
+      if (staging) {
+        fs.chownSync(staging, uid, gid);
+        fs.chmodSync(staging, 0o700);
+      }
+    } catch (err) {
+      return [false, `Could not prepare task files for uid ${uid}: ${err.message}`];
+    }
+  }
   const cmds = Array.isArray(task.commands) ? task.commands : [task.commands];
   for (const cmd of cmds) {
     const resolved = resolve(cmd, ctx.local, extra);
     let rc;
     if (capture) {
-      const { rc: r, out, err } = await shCapture(resolved, { cwd, redact, env, groups });
+      const { rc: r, out, err } = await shCapture(resolved, { cwd, redact, env, groups, ...runAs });
       rc = r;
       const lines = splitLines(out);
       for (const line of lines) ctx.log(line);
       if (err.trim()) ctx.log(err.trim());
       output.push(...lines);
     } else {
-      rc = await sh(resolved, { cwd, log: ctx.log, redact, env, groups });
+      rc = await sh(resolved, { cwd, log: ctx.log, redact, env, groups, ...runAs });
     }
     if (rc !== 0) return failRun(rc);
   }
@@ -216,10 +309,69 @@ export async function runTask(task, local, files, log = null, extra = null, opts
     [ok, summary] = [false, String(e.message ?? e)];
   } finally {
     if (task.uploads) clearStaging(ctx);
-    fs.rmSync(tmpdir, { recursive: true, force: true });
+    // The per-run temp dir may still be held by a child process or a network
+    // filesystem; failing to delete it must not lose the run result.
+    try {
+      fs.rmSync(tmpdir, { recursive: true, force: true });
+    } catch (err) {
+      collectLog(`WARNING: could not remove per-run temp dir ${tmpdir}: ${err.message}`);
+    }
   }
   saveTaskState(task, local, ok, summary, lines.join('\n'));
   return [ok, summary];
+}
+
+// A card action is a small, person-triggered command attached to a task
+// (test auth, pair a device, discover collections). It inherits the task's
+// identity, environment and host pin but its result is stored under a suffixed
+// state file so it never overwrites the task's last-run status.
+export function actionTaskFor(task, action) {
+  return {
+    ...task,
+    commands: action.commands,
+    prompts: action.prompts ?? [],
+    require: action.require ?? [],
+    uploads: false,
+    browser: false,
+    capture: false,
+    commit_dir: undefined,
+    summary_last_line: action.summary_last_line !== false,
+    notify: 'never',
+    state_suffix: `action-${action.key}`,
+    actions: [],
+    schedule: null,
+  }
+}
+
+function taskMeta() {
+  const meta = LOCAL.task_meta ?? {}
+  meta.version ??= 1
+  meta.attributes = LOCAL.attributes ?? []
+  meta.default_group_by = LOCAL.default_group_by ?? LOCAL.attributes?.[0]?.name ?? 'Category'
+  meta.tasks ??= {}
+  return meta
+}
+
+function persistTaskMeta() {
+  writeTaskMeta(TASK_META_FILE, taskMeta())
+}
+
+function cleanTaskAttributes(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new TaskMetaError('attributes must be an object')
+  }
+  const definitions = new Map((LOCAL.attributes ?? []).map((attribute) => [attribute.name, new Set(attribute.values)]))
+  const clean = {}
+  for (const [name, value] of Object.entries(raw)) {
+    if (!definitions.has(name)) throw new TaskMetaError(`Unknown attribute: '${name}'`)
+    if (value == null || value === '') continue
+    if (typeof value !== 'string') throw new TaskMetaError(`Attribute '${name}' must be a string`)
+    if (!definitions.get(name).has(value)) {
+      throw new TaskMetaError(`Attribute '${name}' has no value '${value}'`)
+    }
+    clean[name] = value
+  }
+  return clean
 }
 
 // server ---------------------------------------------------------------------
@@ -228,11 +380,14 @@ export let LOCAL = {};
 export let TASK_LIST = [];
 export let MISSING_CONFIG = false;
 export let TASK_MAP = new Map();
+export let TASK_META_FILE = taskMetaFileFor(CONFIG_FILE);
 
 export async function boot(configPath = undefined) {
+  TASK_META_FILE = taskMetaFileFor(configPath ?? CONFIG_FILE);
   try {
     [LOCAL, TASK_LIST] = await loadConfig(configPath);
     LOCAL.host = instanceHost();
+    ensureStateDir();
   } catch (e) {
     if (e instanceof ConfigMissingError) {
       console.warn(`WARNING: ${e.message}`);
@@ -251,6 +406,7 @@ export async function boot(configPath = undefined) {
 // `serial_key` are queued and run one at a time (FIFO per key).
 export const RUNS = new Map(); // taskName -> { task, log, read, cancelled, groups: Set, ts, tmpdir }
 export const DONE = []; // completed runs awaiting delivery to /api/status
+const DONE_LIMIT = 200; // bound memory if no UI is polling /api/status
 const SERIAL_QUEUES = new Map(); // serial_key -> [{ taskName, payload }]
 
 function serialKeyHeld(key) {
@@ -272,20 +428,28 @@ export function isQueued(taskName, serialKey) {
   return Boolean(serialKey && (SERIAL_QUEUES.get(serialKey) ?? []).some((q) => q.taskName === taskName));
 }
 
-function startRun(taskName, payload = {}) {
-  const task = TASK_MAP.get(taskName);
+function startRun(taskName, payload = {}, trigger = 'manual', actionKey = null) {
+  const baseTask = TASK_MAP.get(taskName);
+  const action = actionKey ? (baseTask.actions ?? []).find((entry) => entry.key === actionKey) : null;
+  if (actionKey && !action) throw new Error(`Unknown action '${actionKey}' for ${taskName}`);
+  const task = action ? actionTaskFor(baseTask, action) : baseTask;
   const staging = stagingDir(taskName);
-  const files = fs
-    .readdirSync(staging)
-    .filter((p) => !p.endsWith('.part') && fs.statSync(path.join(staging, p)).isFile())
-    .map((p) => path.join(staging, p));
+  const files = action
+    ? []
+    : fs
+      .readdirSync(staging)
+      .filter((p) => !p.endsWith('.part') && fs.statSync(path.join(staging, p)).isFile())
+      .map((p) => path.join(staging, p));
   const logger = makeLogger();
   const rec = {
     task: taskName,
+    action: action?.key ?? null,
+    action_label: action?.label ?? null,
     log: logger.lines,
     read: 0,
     cancelled: false,
     groups: new Set(),
+    trigger,
     ts: Date.now() / 1000,
     tmpdir: path.join(tmpRoot(), `${slugify(taskName)}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`),
   };
@@ -304,10 +468,99 @@ function startRun(taskName, payload = {}) {
     } finally {
       RUNS.delete(taskName);
       clearRunning(taskName);
-      DONE.push({ task: taskName, ok, summary, paste: Boolean(task.capture) });
+      // Pairing/auth actions can change whether the task itself is available.
+      if (action) CHECK_CACHE.clear()
+      DONE.push({
+        task: taskName,
+        action: action?.key ?? null,
+        action_label: action?.label ?? null,
+        ok,
+        summary,
+        paste: Boolean(task.capture),
+        trigger,
+      });
+      if (DONE.length > DONE_LIMIT) DONE.splice(0, DONE.length - DONE_LIMIT);
       drainSerialQueue(task.serial_key);
+      notifyTask(task, ok, summary).catch((err) => console.error(`notification failed: ${err.message}`));
     }
   })().catch((e) => console.error('worker error:', e));
+}
+
+/* Scheduler-side entry point: never queues behind a serial key, and never
+ * throws into the Scheduler tick. A busy/unavailable task counts as missed. */
+function runScheduledTask(task) {
+  if (RUNS.has(task.name) || isQueued(task.name, task.serial_key) || serialKeyHeld(task.serial_key)) {
+    console.warn(`[schedule] ${task.name} skipped: already running`);
+    return;
+  }
+  const [avail, reason] = availability(task, LOCAL);
+  if (!avail) {
+    console.warn(`[schedule] ${task.name} skipped: ${reason}`);
+    scheduleStore(task.name).markMissed();
+    return;
+  }
+  startRun(task.name, {}, 'schedule');
+}
+
+export function startSchedulerForTask(task) {
+  stopSchedulerForTask(task.name);
+  if (!SCHEDULES_ENABLED) return false;
+  const schedule = task.schedule ? normalizeSpec(task.schedule) : null;
+  if (!schedule?.enabled) return false;
+  if (task.host !== 'any' && task.host !== instanceHost()) return false;
+  const store = scheduleStore(task.name);
+  const scheduler = new Scheduler({
+    getSpec: () => task.schedule,
+    onDue: () => runScheduledTask(task),
+    isBusy: () => RUNS.has(task.name) || isQueued(task.name, task.serial_key) || serialKeyHeld(task.serial_key),
+    onMissed: () => store.markMissed(),
+    store,
+    log: (line) => console.log(`[schedule] ${task.name}: ${line}`),
+  });
+  scheduler.start();
+  SCHEDULERS.set(task.name, scheduler);
+  return true;
+}
+
+export function stopSchedulerForTask(taskName) {
+  const scheduler = SCHEDULERS.get(taskName);
+  if (!scheduler) return false;
+  scheduler.stop();
+  SCHEDULERS.delete(taskName);
+  return true;
+}
+
+export function startSchedulers() {
+  if (!SCHEDULES_ENABLED) return [];
+  const started = [];
+  for (const task of TASK_LIST) {
+    if (startSchedulerForTask(task)) started.push(task.name);
+  }
+  if (started.length) console.log(`Schedules enabled: ${started.join(', ')}`);
+  return started;
+}
+
+export function stopSchedulers() {
+  for (const scheduler of SCHEDULERS.values()) scheduler.stop();
+  SCHEDULERS.clear();
+}
+
+function actionJson(task, action) {
+  const rec = loadTaskState(actionTaskFor(task, action), LOCAL)
+  return {
+    key: action.key,
+    label: action.label,
+    prompts: action.prompts ?? [],
+    require: action.require ?? [],
+    state: rec
+      ? {
+          ts: rec.ts,
+          ok: Boolean(rec.ok),
+          summary: rec.summary ?? '',
+          last_run_text: `${rec.ok ? 'OK' : 'FAILED'} · ${humanAgo(rec.ts)}`,
+        }
+      : null,
+  }
 }
 
 export function taskJson(t) {
@@ -335,15 +588,19 @@ export function taskJson(t) {
       };
     }
   }
-  // staleness policy: ok(<24h) > neutral(<=7d) > fail
+  // A successful run turns neutral once it is a day old and stays neutral
+  // after that: red is reserved for real failures, matching the portal's
+  // attention count. Staleness is still visible in the last-run text.
   let pill = 'fail';
   if (stateJson && stateJson.ok) {
     const age = Date.now() / 1000 - stateJson.ts;
-    pill = age < DAY_SECONDS ? 'ok' : age <= 7 * DAY_SECONDS ? 'neutral' : 'fail';
+    pill = age < DAY_SECONDS ? 'ok' : 'neutral';
   }
   const run = RUNS.get(t.name);
   const running = Boolean(run);
   const queued = isQueued(t.name, t.serial_key);
+  const schedule = t.schedule ? normalizeSpec(t.schedule) : null;
+  const scheduleState = schedule ? loadScheduleState(t.name) : null;
   return {
     name: t.name,
     group: t.group,
@@ -355,13 +612,62 @@ export function taskJson(t) {
     export_url: t.export_url,
     avail,
     avail_reason: reason,
+    schedulable: isSchedulable(t),
     queued,
     state: stateJson,
     pill: running ? 'running' : pill,
     running,
     started: running ? run.ts : null,
     live: running && run.log.length ? run.log.at(-1).slice(0, 120) : '',
+    schedule,
+    next_run: schedule?.enabled ? occurrenceAfter(schedule, new Date()) : null,
+    schedule_missed: scheduleState?.missed ?? 0,
+    last_scheduled_run: scheduleState?.lastScheduledRun ?? null,
+    notify: t.notify ?? 'never',
+    attributes: { ...(t.attributes ?? {}) },
+    actions: (t.actions ?? []).map((action) => actionJson(t, action)),
   };
+}
+
+const metricEscape = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')
+
+// Prometheus text format for the scheduled-task dead-man switch. Keep this
+// dependency-free: the values already exist in taskJson/state.
+export function metricsText() {
+  const lines = [
+    '# HELP task_runner_configured_tasks Number of tasks loaded from config.mjs',
+    '# TYPE task_runner_configured_tasks gauge',
+    `task_runner_configured_tasks ${TASK_LIST.length}`,
+    '# HELP task_runner_schedules_enabled Whether this instance fires schedules',
+    '# TYPE task_runner_schedules_enabled gauge',
+    `task_runner_schedules_enabled ${SCHEDULES_ENABLED ? 1 : 0}`,
+    '# HELP task_runner_task_last_run_timestamp_seconds Unix timestamp of the last completed run',
+    '# TYPE task_runner_task_last_run_timestamp_seconds gauge',
+    '# HELP task_runner_task_last_run_ok Whether the last completed run succeeded',
+    '# TYPE task_runner_task_last_run_ok gauge',
+    '# HELP task_runner_task_next_run_timestamp_seconds Unix timestamp of the next scheduled run',
+    '# TYPE task_runner_task_next_run_timestamp_seconds gauge',
+    '# HELP task_runner_task_schedule_enabled Whether the task has an enabled schedule',
+    '# TYPE task_runner_task_schedule_enabled gauge',
+    '# HELP task_runner_task_missed Number of missed scheduled occurrences',
+    '# TYPE task_runner_task_missed gauge',
+    '# HELP task_runner_task_running Whether the task is currently running',
+    '# TYPE task_runner_task_running gauge',
+    '# HELP task_runner_task_available Whether the task is available on this instance',
+    '# TYPE task_runner_task_available gauge',
+  ]
+  for (const task of TASK_LIST) {
+    const t = taskJson(task)
+    const labels = `task="${metricEscape(t.name)}",group="${metricEscape(t.group ?? '')}"`
+    lines.push(`task_runner_task_last_run_timestamp_seconds{${labels}} ${t.state?.ts ?? 0}`)
+    lines.push(`task_runner_task_last_run_ok{${labels}} ${t.state?.ok ? 1 : 0}`)
+    lines.push(`task_runner_task_next_run_timestamp_seconds{${labels}} ${t.next_run ?? 0}`)
+    lines.push(`task_runner_task_schedule_enabled{${labels}} ${t.schedule?.enabled ? 1 : 0}`)
+    lines.push(`task_runner_task_missed{${labels}} ${t.schedule_missed ?? 0}`)
+    lines.push(`task_runner_task_running{${labels}} ${t.running ? 1 : 0}`)
+    lines.push(`task_runner_task_available{${labels}} ${t.avail ? 1 : 0}`)
+  }
+  return `${lines.join('\n')}\n`
 }
 
 export function createApp(options = {}) {
@@ -372,7 +678,13 @@ export function createApp(options = {}) {
     basePath,
     staticDir: path.join(REPO_DIR, 'static'),
     jsonBody: false, // /api/upload streams raw bytes, JSON-typed uploads included
-    healthExtra: () => ({ tasks: TASK_LIST.length, missingConfig: MISSING_CONFIG, browser: Boolean(browserRemote) }),
+    healthExtra: () => ({
+      tasks: TASK_LIST.length,
+      missingConfig: MISSING_CONFIG,
+      browser: Boolean(browserRemote),
+      schedules: SCHEDULERS.size,
+      schedulesEnabled: SCHEDULES_ENABLED,
+    }),
     routes: (router) => {
       // Login-browser viewer (the Selenium sidecar's noVNC) on the same origin.
       // The kit mounts this router at basePath, so the path is base-relative;
@@ -382,7 +694,10 @@ export function createApp(options = {}) {
 
       // JSON body parsing only for the endpoints that need it; /api/upload
       // streams raw bytes straight to disk (JSON-typed uploads included).
-      router.use(['/api/run', '/api/cancel', '/api/paste_done'], express.json({ limit: '1mb' }))
+      router.use(
+        ['/api/run', '/api/cancel', '/api/paste_done', '/api/tasks', '/api/attributes', '/api/actions'],
+        express.json({ limit: '1mb' }),
+      )
 
       // most-specific pattern wins; ties listed as `ambiguous`
       router.post('/api/detect', (req, res) => {
@@ -400,10 +715,117 @@ export function createApp(options = {}) {
         res.json({ result: { task: tied[0], ambiguous: tied } })
       })
 
+      router.put('/api/tasks/:taskName/settings', async (req, res) => {
+        const task = TASK_MAP.get(req.params.taskName)
+        if (!task) return res.status(404).json({ detail: 'Unknown task' })
+        const raw = req.body && typeof req.body === 'object' ? req.body : {}
+        try {
+          let spec = task.schedule ? normalizeSpec(task.schedule) : null
+          if (raw.schedule !== undefined) {
+            if (!isSchedulable(task)) {
+              return res.status(400).json({ detail: 'This task needs manual input or browser interaction and cannot be scheduled' })
+            }
+            spec = normalizeSpec({
+              enabled: raw.schedule?.enabled === true,
+              days: raw.schedule?.days,
+              at: raw.schedule?.at,
+              catchUp: raw.schedule?.catchUp !== false,
+            })
+            if (spec.enabled && !spec.at) {
+              return res.status(400).json({ detail: 'A time (HH:MM) is required when the schedule is enabled' })
+            }
+            spec = validateSchedule(task, spec)
+          }
+          let attributes = task.attributes ?? {}
+          if (raw.attributes !== undefined) attributes = cleanTaskAttributes(raw.attributes)
+
+          const meta = taskMeta()
+          meta.tasks[task.name] ??= {}
+          if (raw.schedule !== undefined) meta.tasks[task.name].schedule = spec
+          if (raw.attributes !== undefined) meta.tasks[task.name].attributes = attributes
+          persistTaskMeta()
+
+          task.attributes = attributes
+          let scheduled = SCHEDULERS.has(task.name)
+          if (raw.schedule !== undefined) {
+            task.schedule = spec
+            // Do not replay occurrences from before the edit. The next new
+            // occurrence after the chosen time is the first one that fires.
+            if (spec?.enabled) {
+              const latest = occurrenceBefore(spec, new Date())
+              if (latest != null) await scheduleStore(task.name).setLastScheduledRun(latest)
+            }
+            stopSchedulerForTask(task.name)
+            scheduled = startSchedulerForTask(task)
+            console.log(`[schedule] ${task.name}: ${spec?.enabled ? 'enabled' : 'disabled'}${spec?.at ? ` at ${spec.at}` : ''}`)
+          }
+          res.json({
+            schedule: spec,
+            attributes,
+            next_run: spec?.enabled ? occurrenceAfter(spec, new Date()) : null,
+            scheduled,
+            task: taskJson(task),
+          })
+        } catch (err) {
+          const status = err instanceof TaskMetaError || err instanceof ConfigError ? 400 : 500
+          res.status(status).json({ detail: err.message })
+        }
+      })
+
+      router.put('/api/attributes', (req, res) => {
+        const raw = req.body && typeof req.body === 'object' ? req.body : {}
+        try {
+          const definitions = normalizeAttributeDefinitions(raw.attributes)
+          if (!definitions.some((attribute) => attribute.name === 'Category')) {
+            throw new TaskMetaError("The built-in 'Category' attribute is required")
+          }
+          const defaultBy = String(raw.default_group_by ?? LOCAL.default_group_by ?? '').trim()
+          if (!definitions.some((attribute) => attribute.name === defaultBy)) {
+            throw new TaskMetaError(`Default grouping attribute '${defaultBy}' does not exist`)
+          }
+
+          const valid = new Map(definitions.map((attribute) => [attribute.name, new Set(attribute.values)]))
+          const prune = (values) => {
+            const clean = {}
+            for (const [name, value] of Object.entries(values ?? {})) {
+              if (valid.get(name)?.has(value)) clean[name] = value
+            }
+            return clean
+          }
+
+          const meta = taskMeta()
+          meta.attributes = definitions
+          meta.default_group_by = defaultBy
+          for (const entry of Object.values(meta.tasks)) {
+            if (entry.attributes) entry.attributes = prune(entry.attributes)
+          }
+          for (const task of TASK_LIST) task.attributes = prune(task.attributes)
+          LOCAL.attributes = definitions
+          LOCAL.default_group_by = defaultBy
+          persistTaskMeta()
+          res.json({ attributes: definitions, default_group_by: defaultBy })
+        } catch (err) {
+          const status = err instanceof TaskMetaError ? 400 : 500
+          res.status(status).json({ detail: err.message })
+        }
+      })
+
+      router.get('/api/metrics', (req, res) => {
+        res.type('text/plain; version=0.0.4; charset=utf-8')
+        res.send(metricsText())
+      })
+
       router.get('/api/tasks', (req, res) => {
         const names = [...new Set(TASK_LIST.map((t) => t.group))]
+        const tasks = TASK_LIST.map(taskJson)
         res.json({
-          groups: names.map((name) => ({ name, tasks: TASK_LIST.filter((t) => t.group === name).map(taskJson) })),
+          groups: names.map((name) => ({
+            name,
+            tasks: tasks.filter((task) => task.group === name),
+          })),
+          tasks,
+          attributes: LOCAL.attributes ?? [],
+          default_group_by: LOCAL.default_group_by ?? 'Category',
           missing_config: MISSING_CONFIG,
           browser: Boolean(browserRemote),
         })
@@ -480,12 +902,34 @@ export function createApp(options = {}) {
         res.json({ started: true })
       })
 
+      // Card actions deliberately bypass `check:` (pairing exists to fix an
+      // unavailable device) but still respect host pinning and busy tasks.
+      router.post('/api/actions/:taskName/:actionKey', (req, res) => {
+        const task = TASK_MAP.get(req.params.taskName)
+        if (!task) return res.status(404).json({ detail: 'Unknown task' })
+        const action = (task.actions ?? []).find((entry) => entry.key === req.params.actionKey)
+        if (!action) return res.status(404).json({ detail: 'Unknown action' })
+        if (task.host !== 'any' && task.host !== instanceHost()) {
+          return res.status(400).json({ detail: `Pinned to ${task.host}` })
+        }
+        if (RUNS.has(task.name)) return res.status(409).json({ detail: 'This task is already running' })
+        if (serialKeyHeld(task.serial_key)) {
+          return res.status(409).json({ detail: 'Another task sharing this destination is running' })
+        }
+        const extra = req.body && typeof req.body === 'object' ? req.body : {}
+        for (const key of action.require ?? []) {
+          if (!extra[key]) return res.status(400).json({ detail: `Missing required input: ${key}` })
+        }
+        startRun(task.name, extra, 'action', action.key)
+        res.json({ started: true })
+      })
+
       router.get('/api/status', (req, res) => {
         const runs = []
         for (const [taskName, rec] of RUNS) {
           const newLines = rec.log.slice(rec.read)
           rec.read = rec.log.length
-          runs.push({ task: taskName, log: newLines })
+          runs.push({ task: taskName, action: rec.action, action_label: rec.action_label, log: newLines })
         }
         res.json({ runs, done: DONE.splice(0) })
       })
@@ -568,5 +1012,6 @@ export function main() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   await boot();
+  startSchedulers();
   main();
 }

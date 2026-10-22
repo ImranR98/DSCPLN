@@ -28,8 +28,6 @@ async function makeDaemon(options = {}) {
     bindHost: "127.0.0.1",
     port: 0,
     concurrency: 1,
-    paused: false,
-    dryRun: false,
     trashRetentionDays: 30,
     settleSeconds: 60,
     maxAutoRetries: 3,
@@ -74,6 +72,10 @@ test("api: health, state, pause, process-now, config validation", async () => {
       body: JSON.stringify({ paused: true }),
     });
     assert.equal(daemon.config.paused, true);
+    const persisted = JSON.parse(await fsp.readFile(path.join(root, "config.json"), "utf8"));
+    assert.equal("paused" in persisted, false, "runtime toggles stay out of config.json");
+    const runtime = JSON.parse(await fsp.readFile(path.join(root, "state.json"), "utf8"));
+    assert.equal(runtime.paused, true);
     await fetch(`${base}/api/pause`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -161,8 +163,6 @@ async function makeReviewDaemon(options = {}) {
     bindHost: "127.0.0.1",
     port: 0,
     concurrency: 1,
-    paused: false,
-    dryRun: false,
     trashRetentionDays: 30,
     settleSeconds: 0,
     maxAutoRetries: 3,
@@ -186,10 +186,10 @@ async function makeReviewDaemon(options = {}) {
         settleSeconds: 0,
       },
       {
-        name: "voicenotes",
+        name: "reviewed-audio",
         source: path.join(root, "src"),
         destination: path.join(root, "dest"),
-        method: "voicenotes",
+        method: "reviewed-audio",
         datePattern: "-(\\d{8})-",
         placement: "manual",
         settleSeconds: 0,
@@ -217,15 +217,17 @@ test("api: state exposes the new folder options and disabled cleanup preview", a
   try {
     const state = await (await fetch(`${base}/api/state`)).json();
     const archive = state.folders.find((f) => f.name === "archive");
-    const voicenotes = state.folders.find((f) => f.name === "voicenotes");
+    const reviewedAudioFolder = state.folders.find((f) => f.name === "reviewed-audio");
     assert.equal(archive.recursive, true);
     assert.equal(archive.onChanged, "overwrite");
     assert.equal(archive.cleanup, false);
     assert.equal(archive.notify, "errors");
-    assert.equal(voicenotes.method, "voicenotes");
-    assert.equal(voicenotes.placement, "manual");
-    assert.equal(voicenotes.recursive, true);
-    assert.equal(voicenotes.datePattern, "-(\\d{8})-");
+    assert.equal(reviewedAudioFolder.method, "reviewed-audio");
+    assert.equal(reviewedAudioFolder.placement, "manual");
+    assert.equal(reviewedAudioFolder.recursive, true);
+    assert.equal(reviewedAudioFolder.cleanup, false);
+    assert.equal(reviewedAudioFolder.autoProcess, false);
+    assert.equal(reviewedAudioFolder.datePattern, "-(\\d{8})-");
     assert.equal(state.config.reviewDir, daemon.config.reviewDir);
 
     const preview = await (await fetch(`${base}/api/cleanup/archive`)).json();
@@ -237,159 +239,83 @@ test("api: state exposes the new folder options and disabled cleanup preview", a
   }
 });
 
-test("api: review list, range-served preview, selective process, place and discard", { skip: !CAN_RUN }, async () => {
+test("api: reviewed audio list, approve and delete groups", { skip: !CAN_RUN }, async () => {
   const { root, daemon, base, src, dest } = await makeReviewDaemon();
   try {
-    execFileSync("ffmpeg", [
+    const makeClip = (day, n) => execFileSync("ffmpeg", [
       "-loglevel", "error", "-y",
       "-f", "lavfi", "-i", "sine=frequency=440:duration=0.5",
-      "-c:a", "libopus", path.join(src, "201301", "PTT-20190529-WA0001.opus"),
+      "-c:a", "libopus", path.join(src, "201301", `PTT-201905${day}-WA000${n}.opus`),
     ]);
-    await waitFor(() => daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0001.opus")?.status === STATUS.PENDING);
-
-    const processed = await (await fetch(`${base}/api/process/voicenotes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ files: ["201301/PTT-20190529-WA0001.opus"] }),
-    })).json();
-    assert.equal(processed.ok, true);
-    assert.equal(processed.processed, 1);
-    await waitFor(() => daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0001.opus")?.status === STATUS.REVIEW);
+    makeClip("29", 1);
+    makeClip("29", 2);
+    await waitFor(async () => {
+      const review = await (await fetch(`${base}/api/review`)).json();
+      return review.reviewedAudio.length === 1 && review.reviewedAudio[0].count === 2;
+    });
 
     const review = await (await fetch(`${base}/api/review`)).json();
-    assert.equal(review.entries.length, 1);
-    const entry = review.entries[0];
-    assert.equal(entry.folder, "voicenotes");
-    assert.match(entry.destName, /^2019-05-29-00-00-00-\(20190529-merged-201301\)\.mp4$/);
+    const group = review.reviewedAudio[0];
+    assert.equal(group.folder, "reviewed-audio");
+    assert.equal(group.chat, "201301");
+    assert.equal(group.date, "20190529");
+    assert.equal(group.destName, "2019-05-29-00-00-00-(20190529-merged-201301).mp4");
 
-    const full = await fetch(`${base}/api/review/file/voicenotes/${encodeURIComponent(entry.destName)}`);
-    assert.equal(full.status, 200);
-    assert.equal(full.headers.get("accept-ranges"), "bytes");
-    const fullBytes = new Uint8Array(await full.arrayBuffer());
-    assert.equal(fullBytes.length, entry.size);
-
-    const ranged = await fetch(`${base}/api/review/file/voicenotes/${encodeURIComponent(entry.destName)}`, {
-      headers: { Range: "bytes=0-9" },
+    const audioResponse = await fetch(`${base}/api/review/audio/reviewed-audio/${encodeURIComponent(group.files[0])}`, {
+      headers: { Range: "bytes=0-15" },
     });
-    assert.equal(ranged.status, 206);
-    assert.equal(ranged.headers.get("content-range"), `bytes 0-9/${entry.size}`);
-    const rangedBytes = new Uint8Array(await ranged.arrayBuffer());
-    assert.equal(rangedBytes.length, 10);
-    assert.deepEqual(rangedBytes, fullBytes.slice(0, 10));
+    assert.equal(audioResponse.status, 206);
+    assert.equal(audioResponse.headers.get("content-type"), "audio/ogg");
+    assert.equal(audioResponse.headers.get("accept-ranges"), "bytes");
+    assert.equal((await audioResponse.arrayBuffer()).byteLength, 16);
 
-    const placed = await (await fetch(`${base}/api/review/place`, {
+    const badAudio = await fetch(`${base}/api/review/audio/reviewed-audio/${encodeURIComponent("../../etc/passwd")}`);
+    assert.equal(badAudio.status, 404);
+
+    const approved = await (await fetch(`${base}/api/review/reviewed-audio/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ folder: "voicenotes", id: entry.destName }),
+      body: JSON.stringify({ folder: "reviewed-audio", chat: group.chat, date: group.date }),
     })).json();
-    assert.equal(placed.results[0].ok, true);
-    assert.equal(await fsp.stat(path.join(dest, entry.destName)).then(() => true).catch(() => false), true);
-    assert.deepEqual((await (await fetch(`${base}/api/review`)).json()).entries, []);
+    assert.equal(approved.ok, true, JSON.stringify(approved));
+    assert.equal(await fsp.stat(path.join(dest, group.destName)).then(() => true).catch(() => false), true);
+    assert.deepEqual(await fsp.readdir(path.join(src, "201301")), [], "approved source clips move to trash");
+    assert.deepEqual((await (await fetch(`${base}/api/review`)).json()).reviewedAudio, []);
 
-    // Discard flow on a second clip.
-    execFileSync("ffmpeg", [
-      "-loglevel", "error", "-y",
-      "-f", "lavfi", "-i", "sine=frequency=440:duration=0.5",
-      "-c:a", "libopus", path.join(src, "201301", "PTT-20190530-WA0001.opus"),
-    ]);
-    await waitFor(() => daemon.store.fileFor("voicenotes", "201301/PTT-20190530-WA0001.opus")?.status === STATUS.PENDING);
-    await fetch(`${base}/api/process/voicenotes`, { method: "POST" });
-    await waitFor(() => daemon.store.fileFor("voicenotes", "201301/PTT-20190530-WA0001.opus")?.status === STATUS.REVIEW);
-    const second = (await (await fetch(`${base}/api/review`)).json()).entries[0];
-    const discarded = await (await fetch(`${base}/api/review/discard`, {
+    // A second group is deleted without touching the destination.
+    makeClip("30", 1);
+    await waitFor(async () => (await (await fetch(`${base}/api/review`)).json()).reviewedAudio.length === 1);
+    const second = (await (await fetch(`${base}/api/review`)).json()).reviewedAudio[0];
+    const deleted = await (await fetch(`${base}/api/review/reviewed-audio/delete`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ folder: "voicenotes", ids: [second.destName] }),
+      body: JSON.stringify({ folder: "reviewed-audio", chat: second.chat, date: second.date }),
     })).json();
-    assert.equal(discarded.results[0].ok, true);
-    assert.equal(daemon.store.fileFor("voicenotes", "201301/PTT-20190530-WA0001.opus").status, STATUS.DISCARDED);
-    assert.equal(await fsp.stat(path.join(dest, second.destName)).then(() => true).catch(() => false), false);
+    assert.equal(deleted.ok, true, JSON.stringify(deleted));
+    assert.deepEqual(await fsp.readdir(path.join(src, "201301")), [], "deleted source clips move to trash");
+    assert.deepEqual(await fsp.readdir(dest), [group.destName], "delete must not write to the destination");
 
-    const missing = await fetch(`${base}/api/review/file/voicenotes/nope.mp4`);
+    const missing = await fetch(`${base}/api/review/reviewed-audio/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folder: "reviewed-audio", chat: "201301", date: "20990101" }),
+    });
     assert.equal(missing.status, 404);
-    const badPlace = await (await fetch(`${base}/api/review/place`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ folder: "voicenotes" }),
-    })).json();
-    assert.equal(badPlace.error, "id or ids required");
   } finally {
     await daemon.stop();
     await fsp.rm(root, { recursive: true, force: true });
   }
 });
 
-test("api: review mutations are protected by the origin check", async () => {
+test("api: reviewed audio mutations are protected by the origin check", async () => {
   const { root, daemon, base } = await makeReviewDaemon();
   try {
-    const response = await fetch(`${base}/api/review/discard`, {
+    const response = await fetch(`${base}/api/review/reviewed-audio/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Origin: "http://evil.example" },
-      body: JSON.stringify({ folder: "voicenotes", id: "x" }),
+      body: JSON.stringify({ folder: "reviewed-audio", chat: "x", date: "20240101" }),
     });
     assert.equal(response.status, 403);
-  } finally {
-    await daemon.stop();
-    await fsp.rm(root, { recursive: true, force: true });
-  }
-});
-
-test("api: place-all moves every parked entry at once", { skip: !CAN_RUN }, async () => {
-  const { root, daemon, base, src, dest } = await makeReviewDaemon();
-  try {
-    for (const day of ["29", "30"]) {
-      execFileSync("ffmpeg", [
-        "-loglevel", "error", "-y",
-        "-f", "lavfi", "-i", "sine=frequency=440:duration=0.5",
-        "-c:a", "libopus", path.join(src, "201301", `PTT-201905${day}-WA0001.opus`),
-      ]);
-    }
-    await waitFor(() => daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0001.opus")?.status === STATUS.PENDING
-      && daemon.store.fileFor("voicenotes", "201301/PTT-20190530-WA0001.opus")?.status === STATUS.PENDING);
-    await fetch(`${base}/api/process/voicenotes`, { method: "POST" });
-    await waitFor(async () => (await (await fetch(`${base}/api/review`)).json()).entries.length === 2);
-
-    const result = await (await fetch(`${base}/api/review/place-all`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ folder: "voicenotes" }),
-    })).json();
-    assert.equal(result.results.length, 2);
-    assert.equal(result.results.every((entry) => entry.ok), true, JSON.stringify(result.results));
-    assert.equal((await fsp.readdir(dest)).length, 2);
-    assert.deepEqual((await (await fetch(`${base}/api/review`)).json()).entries, []);
-  } finally {
-    await daemon.stop();
-    await fsp.rm(root, { recursive: true, force: true });
-  }
-});
-
-test("api: discard-all clears every parked entry without touching the destination", { skip: !CAN_RUN }, async () => {
-  const { root, daemon, base, src, dest } = await makeReviewDaemon();
-  try {
-    for (const day of ["29", "30"]) {
-      execFileSync("ffmpeg", [
-        "-loglevel", "error", "-y",
-        "-f", "lavfi", "-i", "sine=frequency=440:duration=0.5",
-        "-c:a", "libopus", path.join(src, "201301", `PTT-201905${day}-WA0001.opus`),
-      ]);
-    }
-    await waitFor(() => daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0001.opus")?.status === STATUS.PENDING
-      && daemon.store.fileFor("voicenotes", "201301/PTT-20190530-WA0001.opus")?.status === STATUS.PENDING);
-    await fetch(`${base}/api/process/voicenotes`, { method: "POST" });
-    await waitFor(async () => (await (await fetch(`${base}/api/review`)).json()).entries.length === 2);
-
-    const result = await (await fetch(`${base}/api/review/discard-all`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ folder: "voicenotes" }),
-    })).json();
-    assert.equal(result.results.length, 2);
-    assert.equal(result.results.every((entry) => entry.ok), true, JSON.stringify(result.results));
-    assert.deepEqual((await (await fetch(`${base}/api/review`)).json()).entries, []);
-    assert.deepEqual(await fsp.readdir(dest), []);
-    assert.equal(daemon.store.fileFor("voicenotes", "201301/PTT-20190529-WA0001.opus").status, STATUS.DISCARDED);
-    assert.equal(daemon.store.fileFor("voicenotes", "201301/PTT-20190530-WA0001.opus").status, STATUS.DISCARDED);
   } finally {
     await daemon.stop();
     await fsp.rm(root, { recursive: true, force: true });

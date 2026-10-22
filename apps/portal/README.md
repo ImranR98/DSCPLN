@@ -3,18 +3,20 @@
 The D$CPLN landing page: one card per app with a non-blocking health pill, a
 detail line, and an "N need attention" count. Served at the host root (`/`).
 
-Each card links to the app's subpath (`/balance`, `/pipelines`, ...). Health and
-details are fetched client-side, best-effort — if an app is down the link still
-works:
+The card list is config-driven (`functions` in the portal config), so a
+deployment only shows the apps it runs. Each card links to the app's subpath
+(`/balance`, `/pipelines`, ...). Health and details are fetched client-side,
+best-effort — if an app is down the link still works:
 
 | Card data | Source |
 |---|---|
 | `online` / `unreachable` | `GET /<path>/api/health` |
-| Scheduled apps (last run, next run, missed, paused) | `GET /<path>/api/state` |
 | File Pipelines (queue/error counts) | `GET /pipelines/api/state` |
 | WhatsApp TXT (conversation/message counts) | `GET /watxt/api/state` |
-| Task Runner (per-task last run) | `GET /tasks/api/tasks` |
+| Task Runner (stale/recent/error counts; next run and missed) | `GET /tasks/api/tasks` |
 | Balance (budget overage) | `GET /balance/status` |
+
+Configuration can also be mounted from a private `dscpln-config` repo: set `DSCPLN_CONFIG_FILE` to its `apps/portal/config.json`; run state stays on the app volume (`DSCPLN_STATE_FILE` for scheduled apps). See `config-template/README.md`.
 
 ## Notifications
 

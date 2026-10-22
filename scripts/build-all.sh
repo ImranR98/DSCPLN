@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
-# Build and push every D$CPLN app image (or the ones given), print a digest
-# table, and optionally pin the digests into the Infra templates.
+# Build the unified D$CPLN image once, tag/push every app tag, print a digest
+# table, and optionally pin the digests (and registry/org reference) into a
+# deployment repo's templates.
 #
 #   scripts/build-all.sh                 # build all
-#   scripts/build-all.sh ytmusic portal  # build a subset
-#   scripts/build-all.sh --pin           # build all + rewrite Infra templates
+#   scripts/build-all.sh portal balance  # build a subset (one image, two tags)
+#   scripts/build-all.sh --pin           # build all + rewrite deployment templates
 #
-# REGISTRY/IMAGE_ORG choose where images are pushed (default docker.io/imranrdev);
-# --pin rewrites a deployment repo via INFRA_DIR and refuses a dirty checkout.
+# REGISTRY/IMAGE_ORG choose where images are pushed (default ghcr.io/imranr98).
+# --pin needs DEPLOY_DIR (or the legacy INFRA_DIR) and TEMPLATES_DIR (default
+# targets/srv0/k3s-apps/templates) and refuses a dirty checkout.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-INFRA_DIR="${INFRA_DIR:-}"
+DEPLOY_DIR="${DEPLOY_DIR:-${INFRA_DIR:-}}"
+TEMPLATES_DIR="${TEMPLATES_DIR:-targets/srv0/k3s-apps/templates}"
 
 source "$ROOT/scripts/images.sh"
 
@@ -20,7 +23,7 @@ APPS=()
 for arg in "$@"; do
     case "$arg" in
         --pin) PIN=1 ;;
-        -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
         *) APPS+=("$arg") ;;
     esac
 done
@@ -28,25 +31,45 @@ if [ "${#APPS[@]}" -eq 0 ]; then
     APPS=("${ALL_APPS[@]}")
 fi
 
-if [ "$PIN" = 1 ] && [ -z "$INFRA_DIR" ]; then
-    echo "Error: --pin needs INFRA_DIR pointing at your deployment repo" >&2
+if [ "$PIN" = 1 ] && [ -z "$DEPLOY_DIR" ]; then
+    echo "Error: --pin needs DEPLOY_DIR (or INFRA_DIR) pointing at your deployment repo" >&2
     exit 1
 fi
-if [ "$PIN" = 1 ] && [ -n "$(git -C "$INFRA_DIR" status --porcelain 2>/dev/null)" ]; then
-    echo "Error: $INFRA_DIR has uncommitted changes; commit or stash before --pin" >&2
+if [ "$PIN" = 1 ] && [ -n "$(git -C "$DEPLOY_DIR" status --porcelain 2>/dev/null)" ]; then
+    echo "Error: $DEPLOY_DIR has uncommitted changes; commit or stash before --pin" >&2
     exit 1
 fi
 
-# Every app image builds FROM the shared base, so refresh it first.
-"$ROOT/scripts/build-base.sh"
+ENGINE="${ENGINE:-}"
+if [ -z "$ENGINE" ]; then
+    if command -v podman >/dev/null 2>&1; then ENGINE=podman
+    elif command -v docker >/dev/null 2>&1; then ENGINE=docker
+    else echo "Error: neither podman nor docker found" >&2; exit 1
+    fi
+fi
+
+IMAGE_ORG="${IMAGE_ORG:-$DEFAULT_IMAGE_ORG}"
+REGISTRY="${REGISTRY:-$DEFAULT_REGISTRY}"
+# Docker references are lowercase; registry hosts and GitHub owners are
+# case-insensitive.
+IMAGE_ORG="${IMAGE_ORG,,}"
+REGISTRY="${REGISTRY,,}"
+BUILD_IMAGE="${REGISTRY}/${IMAGE_ORG}/dscpln-app:latest"
+
+echo "==> Building unified image ($ENGINE, linux/amd64)"
+"$ENGINE" build --platform linux/amd64 -f "$ROOT/docker/app.Dockerfile" -t "$BUILD_IMAGE" "$ROOT"
 
 declare -A DIGESTS=()
 for app in "${APPS[@]}"; do
-    image="${REGISTRY:-docker.io}/${IMAGE_ORG:-imranrdev}/${IMAGE_NAMES[$app]:-dscpln-$app}:latest"
+    [[ -n "${IMAGE_NAMES[$app]:-}" ]] || { echo "Error: unknown app '$app'" >&2; exit 1; }
+    image="${REGISTRY}/${IMAGE_ORG}/${IMAGE_NAMES[$app]}:latest"
     echo "=================== $app ==================="
-    output="$("$ROOT/scripts/build.sh" "$app")"
-    digest="$(grep -oE 'sha256:[0-9a-f]{64}' <<<"$output" | tail -1)"
-    [ -n "$digest" ] || { echo "Error: could not parse digest for $app" >&2; exit 1; }
+    "$ENGINE" tag "$BUILD_IMAGE" "$image"
+    digest_file="$(mktemp)"
+    "$ENGINE" push --digestfile "$digest_file" "$image" >/dev/null
+    digest="$(cat "$digest_file")"
+    rm -f "$digest_file"
+    [ -n "$digest" ] || { echo "Error: push produced no digest for $app" >&2; exit 1; }
     DIGESTS[$app]="$digest"
 done
 
@@ -58,23 +81,28 @@ done
 
 if [ "$PIN" = 1 ]; then
     echo
-    echo "==> Pinning digests in $INFRA_DIR"
+    echo "==> Pinning digests in $DEPLOY_DIR"
     for app in "${APPS[@]}"; do
-        template="$INFRA_DIR/targets/srv0/k3s-apps/templates/${TEMPLATES[$app]:-}"
+        template="$DEPLOY_DIR/$TEMPLATES_DIR/${TEMPLATES[$app]:-}"
         [ -n "${TEMPLATES[$app]:-}" ] && [ -f "$template" ] || { echo "Error: no template for $app" >&2; exit 1; }
-        APP="$app" DIGEST="${DIGESTS[$app]#sha256:}" TEMPLATE="$template" node -e '
+        image_ref="${REGISTRY}/${IMAGE_ORG}/${IMAGE_NAMES[$app]}:latest"
+        IMAGE_REF="$image_ref" APP="$app" IMAGE_NAME="${IMAGE_NAMES[$app]}" DIGEST="${DIGESTS[$app]}" TEMPLATE="$template" node -e '
             const fs = require("fs");
             const file = process.env.TEMPLATE;
             const text = fs.readFileSync(file, "utf8");
-            // Keep the existing image reference; swap only the digest.
-            const next = text.replace(/(          image: \S+?@sha256:)[0-9a-f]+/, `$1${process.env.DIGEST}`);
+            // Match the app image specifically: templates can also have init or
+            // sidecar images (busybox, selenium) before the app container.
+            // Rewrite the full reference so a registry/org change lands too.
+            const name = process.env.IMAGE_NAME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const re = new RegExp(`(^[ \\t]*image: )\\S*/${name}:latest@sha256:[0-9a-f]+`, "m");
+            const next = text.replace(re, `$1${process.env.IMAGE_REF}@${process.env.DIGEST}`);
             if (next === text) {
-                console.error(`Error: ${process.env.APP}: image line not found in ${file}`);
+                console.error(`Error: ${process.env.APP}: image line for ${process.env.IMAGE_NAME} not found in ${file}`);
                 process.exit(1);
             }
             fs.writeFileSync(file, next);
             console.log(`pinned ${process.env.APP} -> ${file}`);
         '
     done
-    echo "==> Review and commit the digest changes in $INFRA_DIR, then deploy as usual."
+    echo "==> Review and commit the digest changes in $DEPLOY_DIR, then deploy as usual."
 fi

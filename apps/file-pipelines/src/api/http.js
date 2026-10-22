@@ -1,21 +1,19 @@
-// Small HTTP helpers shared by the API route modules.
+// Small HTTP helpers shared by the API route modules. The raw body reader
+// and JSON response live in server-kit; file-pipelines parses JSON bodies.
+
+import { readBody as readText, sendJson } from "@dscpln/server-kit";
 
 export function json(res, code, body) {
-  const data = JSON.stringify(body);
-  res.writeHead(code, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
-  res.end(data);
+  res.setHeader("Cache-Control", "no-store");
+  sendJson(res, code, body);
 }
 
 export async function readBody(req, limit = 1024 * 1024) {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += chunk.length;
-    if (size > limit) {
-      throw Object.assign(new Error("request body too large"), { statusCode: 413 });
-    }
-    chunks.push(chunk);
+  const text = (await readText(req, limit)).trim();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw Object.assign(new Error("Invalid JSON body"), { statusCode: 400 });
   }
-  if (chunks.length === 0) return {};
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }

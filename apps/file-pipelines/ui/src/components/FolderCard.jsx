@@ -1,14 +1,11 @@
 import { CalendarDays, Import, RefreshCw, Wrench } from 'lucide-react'
 import { formatBytes, formatDateTime } from '@dscpln/ui-kit'
-import { FILE_LIMIT, METHOD_LABEL, folderContext, folderStats, isSnapshot, scheduleLabel, sortedFiles } from '../lib/view.js'
+import { FILE_LIMIT, METHOD_LABEL, folderContext, folderStats, reviewGroups, sortedFiles } from '../lib/view.js'
 
 export default function FolderCard({
   folder,
-  run,
-  dryRun,
   expanded,
   onToggleExpanded,
-  onRunSnapshot,
   onProcessNow,
   onOpenReview,
   onOpenCleanup,
@@ -16,10 +13,10 @@ export default function FolderCard({
   onSetDate,
 }) {
   const stats = folderStats(folder)
+  const reviewedAudioGroups = folder.method === 'reviewed-audio' ? reviewGroups(folder) : []
+  const reviewCount = folder.method === 'reviewed-audio' ? reviewedAudioGroups.length : stats.review
   const cardClass = `card folder-card folder-card--${folder.method}` +
     (folder.counts.conflict ? ' card--over' : !folder.counts.conflict && stats.issues ? ' card--warn' : '')
-  const snapshot = isSnapshot(folder)
-
   return (
     <section className={cardClass}>
       <div className="card__header">
@@ -31,51 +28,7 @@ export default function FolderCard({
         <span className="card__context">{folderContext(folder)}</span>
       </div>
 
-      {snapshot ? (
-        <>
-          <p className="folder-paths">
-            <code>{(folder.sources?.length ? folder.sources : [folder.source]).join(' · ')}</code>
-            <span className="folder-paths__arrow">→</span>
-            <code>{folder.destination}</code>
-          </p>
-
-          <div className="pipeline-meta">
-            <div className="pipeline-meta__row">
-              <span className="muted">Schedule</span>
-              <span>{scheduleLabel(folder.schedule)}</span>
-            </div>
-            <div className="pipeline-meta__row">
-              <span className="muted">Next run</span>
-              <span>{run?.nextRun ? formatDateTime(run.nextRun) : '—'}</span>
-            </div>
-            <div className="pipeline-meta__row">
-              <span className="muted">Last run</span>
-              <span>
-                {run?.running ? (
-                  <span className="pill pill--running">running…</span>
-                ) : run?.lastRunAt ? (
-                  <>
-                    <span className={`pill pill--${run.ok === false ? 'fail' : 'ok'}`}>{run.ok === false ? 'failed' : 'ok'}</span>
-                    <span className="muted"> {formatDateTime(run.lastRunAt)}</span>
-                  </>
-                ) : (
-                  <span className="muted">never</span>
-                )}
-              </span>
-            </div>
-            {run?.summary ? (
-              <p className="muted pipeline-meta__summary">{run.summary}</p>
-            ) : null}
-          </div>
-
-          <div className="folder-card__actions">
-            <button disabled={run?.running || dryRun} onClick={onRunSnapshot}>
-              {run?.running ? 'Running…' : 'Run copy'}
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
+      <>
           <p className="figure">
             <span className="figure__spend">{stats.pending}</span>
             <span className="figure__meta">
@@ -106,10 +59,12 @@ export default function FolderCard({
           </p>
 
           <div className="folder-card__actions">
-            <button className="outline secondary" onClick={onProcessNow}>Process now</button>
-            {folder.placement === 'manual' || stats.review > 0 ? (
-              <button className={stats.review > 0 ? '' : 'outline secondary'} onClick={onOpenReview}>
-                Review{stats.review > 0 ? ` (${stats.review})` : ''}
+            {folder.method !== 'reviewed-audio' ? (
+              <button className="outline secondary" onClick={onProcessNow}>Process now</button>
+            ) : null}
+            {folder.method === 'reviewed-audio' || folder.placement === 'manual' || stats.review > 0 ? (
+              <button className={reviewCount > 0 ? '' : 'outline secondary'} onClick={onOpenReview}>
+                Review{reviewCount > 0 ? ` (${reviewCount})` : ''}
               </button>
             ) : null}
             {stats.processed > 0 && folder.cleanup !== false ? (
@@ -140,12 +95,12 @@ export default function FolderCard({
                         <span className={`pill pill--${file.status === 'done' ? 'ok' : file.status === 'error' ? 'fail' : file.status === 'conflict' ? 'neutral' : 'running'}`}>{file.status}</span>
                       </div>
                       <div className="file__actions">
-                        {file.status === 'error' || file.status === 'conflict' ? (
+                        {folder.method !== 'reviewed-audio' && (file.status === 'error' || file.status === 'conflict') ? (
                           <button className="outline secondary icon-button icon-button--small" title="Retry" aria-label={`Retry ${file.name}`} onClick={() => onFileAction(file.name, 'retry')}>
                             <RefreshCw size={14} strokeWidth={1.8} />
                           </button>
                         ) : null}
-                        {file.status === 'error' ? (
+                        {folder.method !== 'reviewed-audio' && file.status === 'error' ? (
                           <>
                             <button className="outline secondary icon-button icon-button--small" title="Repair (ffmpeg remux)" aria-label={`Repair ${file.name}`} onClick={() => onFileAction(file.name, 'repair')}>
                               <Wrench size={14} strokeWidth={1.8} />
@@ -155,7 +110,7 @@ export default function FolderCard({
                             </button>
                           </>
                         ) : null}
-                        {file.status === 'error' || file.status === 'conflict' || file.status === 'pending' ? (
+                        {folder.method !== 'reviewed-audio' && (file.status === 'error' || file.status === 'conflict' || file.status === 'pending') ? (
                           <button className="outline secondary icon-button icon-button--small" title="Import as-is" aria-label={`Import ${file.name} as-is`} onClick={() => onFileAction(file.name, 'import')}>
                             <Import size={14} strokeWidth={1.8} />
                           </button>
@@ -171,7 +126,6 @@ export default function FolderCard({
             )}
           </details>
         </>
-      )}
     </section>
   )
 }

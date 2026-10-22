@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# App registry shared by scripts/build.sh and scripts/build-all.sh.
+# App registry shared by scripts/build.sh, scripts/build-all.sh and CI.
 # Sourced, never executed directly.
 
-ALL_APPS=(portal balance-xlsx file-pipelines whatsapp-txt task-runner contacts-calendar compose-state ytmusic)
+# Defaults used by local builds; CI overrides IMAGE_ORG with the repository owner.
+DEFAULT_REGISTRY=ghcr.io
+DEFAULT_IMAGE_ORG=imranr98
+
+ALL_APPS=(portal balance-xlsx file-pipelines whatsapp-txt task-runner)
 
 # app -> image name (repo under IMAGE_ORG)
 declare -A IMAGE_NAMES=(
@@ -10,9 +14,6 @@ declare -A IMAGE_NAMES=(
     [file-pipelines]=dscpln-file-pipelines
     [whatsapp-txt]=dscpln-watxt
     [task-runner]=dscpln-task-runner
-    [contacts-calendar]=dscpln-contacts
-    [compose-state]=dscpln-compose
-    [ytmusic]=dscpln-ytmusic
     [portal]=dscpln-portal
 )
 
@@ -22,8 +23,5 @@ declare -A TEMPLATES=(
     [file-pipelines]=file-pipelines.yaml
     [whatsapp-txt]=whatsapp-txt-browser.yaml
     [task-runner]=backupctl.yaml
-    [contacts-calendar]=contacts-calendar.yaml
-    [compose-state]=compose-state.yaml
-    [ytmusic]=ytmusic.yaml
     [portal]=portal.yaml
 )

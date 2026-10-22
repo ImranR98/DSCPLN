@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChartNoAxesColumn, LayoutDashboard, TrendingUp } from 'lucide-react'
-import { getJson, postJson, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
+import { AppHeader, apiUrl, getJson, postJson, showToast, ThemeToggle, Toasts } from '@dscpln/ui-kit'
 
 
 /* ---------- API reference export ---------- */
@@ -33,14 +33,15 @@ export default function Settings() {
   const [token, setToken] = useState('')
   const [regenerating, setRegenerating] = useState(false)
 
-  const origin = typeof location !== 'undefined' ? location.origin : ''
-  const example = `curl -X POST ${origin}/api/transactions \\
+  const apiBase = apiUrl('api')
+  const apiPath = new URL(apiBase).pathname.replace(/\/$/, '')
+  const example = `curl -X POST ${apiBase}/transactions \\
   -H "Authorization: Bearer ${token}" \\
   -H "Content-Type: application/json" \\
   -d '{"amount":-12.34,"details":"Groceries","currency":"CAD","category":"Food Weekly"}'`
-  const listExampleText = `curl ${origin}/api/categories \\
+  const listExampleText = `curl ${apiBase}/categories \\
   -H "Authorization: Bearer $API_TOKEN"`
-  const scoreExampleText = `curl -G ${origin}/api/categories \\
+  const scoreExampleText = `curl -G ${apiBase}/categories \\
   -H "Authorization: Bearer $API_TOKEN" \\
   --data-urlencode "details=Coffee beans" \\
   --data-urlencode "kind=expense"`
@@ -119,10 +120,12 @@ export default function Settings() {
 
   return (
     <>
-      <header className="app-header">
-        <div className="app-header__top">
-          <h1><a className="app-header__brand" href="/">D<span className="accent">$</span>CPLN <span className="app-header__app">⋅ Balance XLSX</span></a></h1>
-          <div className="app-header__actions">
+      <AppHeader
+        className="app-header--stack-mobile"
+        name="Balance XLSX"
+        meta="API settings"
+        actions={(
+          <>
             <a role="button" className="outline secondary icon-button" href="./" title="Dashboard" aria-label="Dashboard">
               <LayoutDashboard size={16} strokeWidth={1.8} />
             </a>
@@ -133,14 +136,11 @@ export default function Settings() {
               <ChartNoAxesColumn size={16} strokeWidth={1.8} />
             </a>
             <ThemeToggle />
-          </div>
-        </div>
-        <div className="app-header__meta">
-          <span>API settings</span>
-        </div>
-      </header>
+          </>
+        )}
+      />
 
-      <main>
+      <main className="settings-page">
         <section className="card">
           <div className="card__header">
             <h2>API token</h2>
@@ -164,9 +164,8 @@ export default function Settings() {
             </span>
           </div>
           <p className="hint">
-            The external API lives under <code>/api/</code> (reachable without SSO). Every request needs
-            <code>Authorization: Bearer &lt;token&gt;</code> and uses JSON bodies; it only supports these two
-            calls.
+            The external API lives under <code>{apiPath}/</code> (reachable without SSO). Every request needs
+            <code>Authorization: Bearer &lt;token&gt;</code> and uses JSON bodies; these are the core calls.
           </p>
 
           <h3 className="api-heading">Find a category</h3>

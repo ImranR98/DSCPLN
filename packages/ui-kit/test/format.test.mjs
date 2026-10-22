@@ -25,9 +25,10 @@ test('humanAgo buckets by elapsed time', () => {
   assert.equal(humanAgo(now - 5_000), 'just now')
   assert.equal(humanAgo(now - 5 * 60_000), '5 min ago')
   assert.equal(humanAgo(now - 3 * 3_600_000), '3 hr ago')
+  assert.equal(humanAgo(now - 1 * 86_400_000), '1 day ago')
   assert.equal(humanAgo(now - 2 * 86_400_000), '2 days ago')
   assert.equal(humanAgo(now - 90 * 86_400_000), '3 months ago')
-  assert.equal(humanAgo(now - 400 * 86_400_000), '1 years ago')
+  assert.equal(humanAgo(now - 400 * 86_400_000), '1 year ago')
   assert.equal(humanAgo('nope'), '—')
 })
 

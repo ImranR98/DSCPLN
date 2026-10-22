@@ -1,6 +1,6 @@
 import fsp from "node:fs/promises";
 import os from "node:os";
-import { atomicWriteFile, pathExists } from "./util.js";
+import { atomicWriteFile, pathExists } from "@dscpln/server-kit";
 
 export class SyncLock {
   constructor(config, log) {

@@ -1,7 +1,6 @@
-// Per-folder actions: run the watched queue now, run a snapshot Job, and the
-// per-file actions (retry/repair/import/setDate).
+// Per-folder actions: run the watched queue now and the per-file actions
+// (retry/repair/import/setDate).
 
-import { isSnapshotFolder } from "../snapshot.js";
 import { runAction } from "../actions.js";
 import { json, readBody } from "./http.js";
 
@@ -15,20 +14,9 @@ export async function handleFolders(ctx, method, pathname) {
       json(res, 404, { error: "unknown folder" });
       return true;
     }
-    if (isSnapshotFolder(folder.def)) {
-      json(res, 409, { error: "snapshot copies run via /api/snapshot" });
-      return true;
-    }
     const body = await readBody(ctx.req).catch(() => ({}));
     const result = await daemon.queue.processNow(folderName, { files: body.files });
     json(res, result.ok ? 200 : 409, result);
-    return true;
-  }
-
-  if (method === "POST" && pathname.startsWith("/snapshot/")) {
-    const folderName = decodeURIComponent(pathname.slice("/snapshot/".length));
-    const result = await daemon.snapshot.run(folderName, { trigger: "manual" });
-    json(res, result.ok ? 200 : result.busy ? 409 : 400, result);
     return true;
   }
 

@@ -1,12 +1,11 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { atomicWriteJson, readJsonFile } from "@dscpln/server-kit";
 import { normalizeConfig, saveConfig, validateConfig, ensureRuntimeDirs, loadConfig } from "./config.js";
 import { createExifTool } from "./exif.js";
 import { Logger } from "./log.js";
 import { Notifier } from "./notify.js";
 import { Queue } from "./queue.js";
-import { SnapshotRunner } from "./snapshot.js";
-import { Scheduler } from "./scheduler.js";
 import { Store } from "./store.js";
 import { SyncLock } from "./lock.js";
 import { Watchers } from "./watchers.js";
@@ -35,6 +34,11 @@ export class Daemon {
     if (this.options.port) this.config.port = Number(this.options.port);
     if (this.options.bind) this.config.bindHost = this.options.bind;
     validateConfig(this.config);
+    // Runtime toggles live beside the logs, not in the declarative config.
+    this.runtimeFile = path.join(path.dirname(this.config.logDir), "state.json");
+    const runtime = await readJsonFile(this.runtimeFile, null);
+    if (runtime && typeof runtime.paused === "boolean") this.config.paused = runtime.paused;
+    if (runtime && typeof runtime.dryRun === "boolean") this.config.dryRun = runtime.dryRun;
 
     this.log = new Logger(this.config.logDir);
     await this.log.init();
@@ -58,11 +62,7 @@ export class Daemon {
     await this.lock.acquire({ force: this.options.force });
 
     this.queue = new Queue(this.ctx);
-    this.snapshot = new SnapshotRunner(this.ctx);
-    this.ctx.snapshot = this.snapshot;
-    this.ctx.snapshotChanged = () => this.store.emit("update");
-    this.scheduler = new Scheduler(this.ctx, { historyFile: path.join(path.dirname(this.configPath), "pipeline-runs.json") });
-    await this.scheduler.init();
+    this.ctx.queue = this.queue;
     this.watchers = new Watchers(this.store, this.log);
 
     await this.#cleanStaleStaging();
@@ -80,7 +80,6 @@ export class Daemon {
     }
 
     this.queue.start();
-    this.scheduler.start();
     this.rescanTimer = setInterval(() => this.#rescan(), 60_000);
     this.rescanTimer.unref?.();
     this.sweepTimer = setInterval(() => sweepTrash(this.ctx).catch(() => {}), 3600_000);
@@ -102,7 +101,6 @@ export class Daemon {
     } catch {
       // ignore
     }
-    this.scheduler?.stop();
     clearInterval(this.rescanTimer);
     clearInterval(this.sweepTimer);
     await this.api?.close().catch(() => {});
@@ -137,16 +135,18 @@ export class Daemon {
   }
 
   async applyConfig(raw) {
+    const paused = this.config.paused;
+    const dryRun = this.config.dryRun;
     const incoming = { ...raw, folders: raw.folders ?? [] };
     const next = normalizeConfig(incoming);
     validateConfig(next);
     await ensureRuntimeDirs(next, (message) => this.log.log(`WARN: ${message}`));
     await saveConfig(this.configPath, next);
-    this.config = next;
-    this.ctx.config = next;
-    this.store.setConfig(next);
-    this.notify.setConfig(next);
-    this.watchers.rebuild(next);
+    this.config = { ...next, paused, dryRun };
+    this.ctx.config = this.config;
+    this.store.setConfig(this.config);
+    this.notify.setConfig(this.config);
+    this.watchers.rebuild(this.config);
     for (const folder of this.store.listFolders()) {
       await this.store.scanFolder(folder.def.name);
     }
@@ -158,14 +158,21 @@ export class Daemon {
     }).catch(() => {});
     this.log.log("config updated");
     this.queue.tick();
-    return next;
+    return this.config;
+  }
+
+  async #saveRuntime() {
+    await atomicWriteJson(this.runtimeFile, {
+      paused: Boolean(this.config.paused),
+      dryRun: Boolean(this.config.dryRun),
+    });
   }
 
   async setPaused(paused) {
     this.config.paused = Boolean(paused);
     this.ctx.config = this.config;
     this.store.config = this.config;
-    await saveConfig(this.configPath, this.config);
+    await this.#saveRuntime();
     this.log.log(paused ? "processing paused" : "processing resumed");
     if (!paused) this.queue.tick();
   }
@@ -174,7 +181,7 @@ export class Daemon {
     this.config.dryRun = Boolean(dryRun);
     this.ctx.config = this.config;
     this.store.config = this.config;
-    await saveConfig(this.configPath, this.config);
+    await this.#saveRuntime();
     this.log.log(dryRun ? "dry-run enabled" : "dry-run disabled");
     this.queue.tick();
   }

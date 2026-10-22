@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { Dialog } from '@dscpln/ui-kit'
 import { formatSize } from '../lib/format.js'
 
 // The import dialog hosts all of its own DOM behavior (showModal/close,
@@ -40,13 +41,16 @@ export default function ImportDialog({
   }, [open])
 
   return (
-    <dialog id="import-dialog" className="import-dialog" ref={dialogRef}
-      onClick={(event) => { if (event.target === dialogRef.current) onClose() }}>
-      <article>
-        <header className="card__header">
-          <h2>Import chat exports</h2>
-          <button className="outline secondary icon-button" aria-label="Close" onClick={onClose}>&times;</button>
-        </header>
+    <Dialog
+      dialogRef={dialogRef}
+      autoOpen={false}
+      id="import-dialog"
+      className="import-dialog"
+      title="Import chat exports"
+      onClose={onClose}
+      requestClose={onClose}
+      onClick={(event) => { if (event.target === dialogRef.current) onClose() }}
+    >
         <p className="import-hint">Upload WhatsApp exports (<code>.zip</code> or <code>.txt</code>). They are merged with the conversations stored here; nothing changes until you press Import. Preview shows the plan without writing anything.</p>
         <div id="import-drop" className="import-drop"
           onDragOver={(event) => { event.preventDefault(); event.currentTarget.classList.add('import-drop--over') }}
@@ -55,7 +59,7 @@ export default function ImportDialog({
         >
           <input id="import-files" type="file" multiple accept=".zip,.txt,application/zip,text/plain" hidden
             onChange={(event) => { onChooseFiles(event.target.files); event.target.value = '' }} />
-          <button type="button" id="import-browse" onClick={(event) => event.currentTarget.parentElement.querySelector('input').click()}>Choose files</button>
+          <button type="button" id="import-browse" className="outline secondary" onClick={(event) => event.currentTarget.parentElement.querySelector('input').click()}>Choose files</button>
           <span className="import-drop__hint">or drop them here</span>
         </div>
         <ul id="import-list" className="import-list">
@@ -73,11 +77,10 @@ export default function ImportDialog({
         <div className="import-actions">
           <button type="button" id="import-discard" className="outline secondary" hidden={!(files.length > 0 && !busy && !imported)} onClick={onDiscard}>Discard uploads</button>
           <span className="import-actions__spacer"></span>
-          <button type="button" id="import-preview" disabled={!uploaded || busy || imported} onClick={() => onRun(true)}>Preview</button>
+          <button type="button" id="import-preview" className="outline secondary" disabled={!uploaded || busy || imported} onClick={() => onRun(true)}>Preview</button>
           <button type="button" id="import-run" disabled={!uploaded || busy || imported} onClick={() => onRun(false)}>Import</button>
           <button type="button" id="import-done" hidden={!imported} onClick={onClose}>Done</button>
         </div>
-      </article>
-    </dialog>
+    </Dialog>
   )
 }

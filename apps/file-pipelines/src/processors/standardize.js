@@ -32,17 +32,23 @@ export async function stageCopy(sourcePath, stagingDir, fileName) {
   return staged;
 }
 
-export async function standardizePath(ctx, folder, file, stagedPath, { forcedDate = null } = {}) {
+export async function standardizePath(ctx, folder, file, stagedPath, { forcedDate = null, bestEffortDates = false } = {}) {
   const { exiftool, store, log } = ctx;
   const date = forcedDate ?? (await findRealExifDate(exiftool, stagedPath));
   if (!date) return { status: "error", kind: "nodate", message: "no usable date metadata found" };
 
-  await applyDates(exiftool, stagedPath, date);
+  try {
+    await applyDates(exiftool, stagedPath, date);
+  } catch (err) {
+    if (!bestEffortDates) throw err;
+    log(`could not write date tags for ${file.name}; using ${date}`);
+  }
 
   let dto = await readBackDateTimeOriginal(exiftool, stagedPath);
   if (!dto && /^PXL_/i.test(file.name) && /\.mp4$/i.test(file.name)) {
     dto = await readMediaCreateDate(exiftool, stagedPath);
   }
+  if (!dto && bestEffortDates) dto = date;
   if (!dto) return { status: "error", kind: "nodate", message: "failed to write date metadata" };
 
   const destName = standardNameFor(file.name.split("/").pop(), dto);
@@ -78,7 +84,7 @@ export async function standardizePath(ctx, folder, file, stagedPath, { forcedDat
   return { status: "done", destName };
 }
 
-export async function processStandardize(ctx, folder, file, { forcedDate = null } = {}) {
+export async function processStandardize(ctx, folder, file, { forcedDate = null, bestEffortDates = false } = {}) {
   const { config, exiftool } = ctx;
   const sourcePath = path.join(folder.def.source, file.name);
   const before = await fsp.stat(sourcePath).catch(() => null);
@@ -94,12 +100,12 @@ export async function processStandardize(ctx, folder, file, { forcedDate = null 
   const jobDir = path.join(config.stagingDir, "jobs", `${folder.def.name}-${uniqueSuffix()}`);
   let staged = null;
   try {
-    staged = await stageCopy(sourcePath, jobDir, file.name);
+    staged = await stageCopy(sourcePath, jobDir, path.basename(file.name));
     const after = await fsp.stat(sourcePath).catch(() => null);
     if (!after || after.size !== before.size || after.mtimeMs !== before.mtimeMs) {
       return { status: "error", kind: "changed", message: "source changed while copying; will retry" };
     }
-    const result = await standardizePath(ctx, folder, file, staged, { forcedDate });
+    const result = await standardizePath(ctx, folder, file, staged, { forcedDate, bestEffortDates });
     return result;
   } finally {
     if (staged) await fsp.rm(staged, { force: true });

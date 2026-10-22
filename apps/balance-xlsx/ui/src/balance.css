@@ -115,21 +115,6 @@
 
 /* ---------- Figure + progress ---------- */
 
-.figure {
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: var(--space-1) var(--space-3);
-    margin: 0 0 var(--space-3);
-}
-
-.figure__spend {
-    font-size: var(--fs-2xl);
-    font-weight: 750;
-    letter-spacing: -0.03em;
-    line-height: 1.15;
-}
-
 .progress__pace {
     position: absolute;
     top: -3px;
@@ -673,7 +658,8 @@ details.card[open] > summary::after {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-md);
-    max-height: 14rem;
+    /* Keep the menu above the dialog action row in the transaction form. */
+    max-height: 10rem;
     overflow: auto;
     overscroll-behavior: contain;
     touch-action: pan-y;
@@ -1468,6 +1454,12 @@ details.card[open] > summary::after {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
     gap: var(--space-3);
+}
+
+/* The import box is tab-separated data; proportional text hides bad columns. */
+#importForm textarea {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: var(--fs-sm);
 }
 
 /* Categories dialog: the insights checkbox panels laid out as a picker grid,
@@ -2887,5 +2879,22 @@ details.card[open] > summary::after {
     .forecast-baseline__legend dl > div {
         grid-template-columns: minmax(0, 1fr);
         gap: 2px;
+    }
+}
+
+
+/* API settings page: keep the reference readable and the tables scrollable. */
+.settings-page {
+    width: min(100%, 56rem);
+    margin: 0 auto;
+}
+
+@media (max-width: 44rem) {
+    .settings-page {
+        padding-inline: var(--space-2);
+    }
+
+    .api-table {
+        min-width: 34rem;
     }
 }

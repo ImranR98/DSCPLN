@@ -25,9 +25,18 @@ const maindir = DATA;
 const PTY_HELPER = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'pty_runner.py');
 
 function writeConfig(name, data) {
-  const p = path.join(SANDBOX, name);
+  // Each config gets its own folder so task-meta.json from one test never
+  // leaks into another test's config.
+  const dir = fs.mkdtempSync(path.join(SANDBOX, 'cfg-'));
+  const p = path.join(dir, name);
   fs.writeFileSync(p, `export default ${JSON.stringify(data)};`);
   return p;
+}
+
+function writeMeta(configPath, meta) {
+  const file = path.join(path.dirname(configPath), 'task-meta.json');
+  fs.writeFileSync(file, JSON.stringify(meta, null, 2));
+  return file;
 }
 
 function makeConfig(tasks, extraValues = {}) {
@@ -186,6 +195,83 @@ test('loadConfig: script/move/ingest shorthands normalize into commands', async 
   assert.equal(bctl.resolve(tasks[4].commands, local), `bash ${lib} ingest '/tmp/G' 'jq -r ".id" actor.json' {{uploads}}`);
 });
 
+test('loadConfig: task-meta supplies attributes, schedules and grouping', async () => {
+  const configPath = makeConfig([task('Meta Task', { commands: 'true' })])
+  writeMeta(configPath, {
+    version: 1,
+    attributes: [
+      { name: 'Category', values: ['G', 'Elsewhere'] },
+      { name: 'Best run from', values: ['Phone', 'PC'] },
+    ],
+    default_group_by: 'Best run from',
+    tasks: {
+      'Meta Task': {
+        attributes: { Category: 'Elsewhere', 'Best run from': 'Phone' },
+        schedule: { enabled: true, days: [1], at: '6:15', catchUp: false },
+      },
+    },
+  })
+  const [local, tasks] = await bctl.loadConfig(configPath)
+  assert.deepEqual(local.attributes, [
+    { name: 'Category', values: ['G', 'Elsewhere'] },
+    { name: 'Best run from', values: ['Phone', 'PC'] },
+  ])
+  assert.equal(local.default_group_by, 'Best run from')
+  assert.deepEqual(tasks[0].attributes, { Category: 'Elsewhere', 'Best run from': 'Phone' })
+  assert.deepEqual(tasks[0].schedule, { enabled: true, days: [1], at: '06:15', catchUp: false })
+
+  // Metadata schedules obey the same unattended-only rule as config ones.
+  const badConfig = makeConfig([task('Meta Upload', { commands: 'true', uploads: true, glob: '*.txt' })])
+  writeMeta(badConfig, {
+    version: 1,
+    attributes: [{ name: 'Category', values: ['G'] }],
+    default_group_by: 'Category',
+    tasks: { 'Meta Upload': { schedule: { enabled: true, days: [], at: '04:00' } } },
+  })
+  await assert.rejects(bctl.loadConfig(badConfig), /scheduled tasks cannot use 'uploads'/)
+
+  // A task entry that explicitly has an attributes object can clear Category.
+  const clearedConfig = makeConfig([task('Cleared Meta', { commands: 'true' })])
+  writeMeta(clearedConfig, {
+    version: 1,
+    attributes: [{ name: 'Category', values: ['G'] }],
+    default_group_by: 'Category',
+    tasks: { 'Cleared Meta': { attributes: {} } },
+  })
+  const [, cleared] = await bctl.loadConfig(clearedConfig)
+  assert.deepEqual(cleared[0].attributes, {})
+})
+
+test('loadConfig: actions normalize and validate', async () => {
+  const configPath = makeConfig([
+    task('Action Task', {
+      commands: 'true',
+      actions: [
+        {
+          key: 'test',
+          label: 'Test it',
+          commands: ['echo ok'],
+          prompts: [{ key: 'code', label: 'Code', type: 'secret' }],
+          require: ['code'],
+        },
+      ],
+    }),
+  ])
+  const [, tasks] = await bctl.loadConfig(configPath)
+  assert.deepEqual(tasks[0].actions, [{
+    key: 'test',
+    label: 'Test it',
+    commands: ['echo ok'],
+    prompts: [{ key: 'code', label: 'Code', type: 'secret' }],
+    require: ['code'],
+    summary_last_line: true,
+  }])
+  await assert.rejects(
+    bctl.loadConfig(makeConfig([task('Bad Action', { commands: 'true', actions: [{ key: 'x' }] })])),
+    /needs 'commands'/,
+  )
+})
+
 test('script shorthand runs through the heredoc wrapper (stdin-safe)', async () => {
   const t = task('Script Task', {
     group: 'G',
@@ -225,15 +311,15 @@ test('resolve: nested lookup, typed values, loops, tildes', () => {
     repo_dir: bctl.REPO_DIR,
     maindir: '~/Main',
     scriptroot: '{{repo_dir}}/scripts',
-    hosts: { bigpc: { user: 'user', port: 22 } },
+    hosts: { desktop: { user: 'user', port: 22 } },
     list: [1, 2],
   };
   assert.equal(bctl.resolve('{{maindir}}/Backups', local), `${os.homedir()}/Main/Backups`);
   assert.equal(bctl.resolve('{{scriptroot}}', local), `${bctl.REPO_DIR}/scripts`); // loops to stable
-  assert.equal(bctl.resolve('{{hosts.bigpc.user}}', local), 'user');
-  assert.equal(bctl.resolve('{{hosts.bigpc.port}}', local), 22); // typed value
-  assert.equal(bctl.resolve('port={{hosts.bigpc.port}}', local), 'port=22'); // embedded: stringified
-  assert.deepEqual(bctl.resolve('{{hosts.bigpc}}', local), local.hosts.bigpc); // typed
+  assert.equal(bctl.resolve('{{hosts.desktop.user}}', local), 'user');
+  assert.equal(bctl.resolve('{{hosts.desktop.port}}', local), 22); // typed value
+  assert.equal(bctl.resolve('port={{hosts.desktop.port}}', local), 'port=22'); // embedded: stringified
+  assert.deepEqual(bctl.resolve('{{hosts.desktop}}', local), local.hosts.desktop); // typed
   assert.deepEqual(bctl.resolve('{{list}}', local), [1, 2]); // typed
   assert.equal(bctl.resolve('{{missing}}', local), '{{missing}}'); // unresolved literal
   assert.equal(bctl.resolve('{{missing}}/x', local), '{{missing}}/x');
@@ -250,7 +336,17 @@ test('slugify + state file round-trip (atomic, full output preserved)', () => {
   assert.equal(rec.ok, true);
   assert.equal(rec.summary, 'summary');
   assert.equal(rec.output.length, 25000);
-  assert.ok(fs.existsSync(path.join(SANDBOX, 'data/Dest', '.backup-state-Test_Task_.json')));
+  assert.ok(fs.existsSync(bctl.stateFileFor(t)), 'state is stored under BACKUPCTL_STATE_DIR/tasks');
+});
+
+test('legacy per-destination state is read once after the move to BACKUPCTL_STATE_DIR/tasks', () => {
+  const local = { maindir: path.join(SANDBOX, 'data') };
+  const t = { name: 'Legacy Task', state_dir: '{{maindir}}/LegacyDest' };
+  const legacy = bctl.legacyStateFileFor(t, local);
+  fs.mkdirSync(path.dirname(legacy), { recursive: true });
+  fs.writeFileSync(legacy, JSON.stringify({ ok: true, summary: 'legacy', output: 'old' }));
+  const rec = bctl.loadTaskState(t, local);
+  assert.equal(rec.summary, 'legacy');
 });
 
 test('running marker + staging', () => {
@@ -660,6 +756,46 @@ test('capture: output becomes the summary; paste_done commits', async () => {
   assert.equal(rc, 0);
 });
 
+test('run_as: task shell runs with the requested uid/gid', async (t) => {
+  const uid = process.getuid?.()
+  const gid = process.getgid?.()
+  if (uid === undefined || gid === undefined) {
+    t.skip('POSIX uid/gid not available')
+    return
+  }
+  const run = task('Run As Test', {
+    run_as: { uid, gid },
+    capture: true,
+    commands: 'id -u; id -g',
+  });
+  const [local, tasks] = await bctl.loadConfig(makeConfig([run]))
+  const [ok, summary] = await bctl.runTask(tasks[0], local, [])
+  assert.equal(ok, true, summary)
+  assert.equal(summary, `${uid}\n${gid}`)
+})
+
+test('run_as: staged uploads are readable by the task user', async (t) => {
+  const uid = process.getuid?.()
+  const gid = process.getgid?.()
+  if (uid === undefined || gid === undefined) {
+    t.skip('POSIX uid/gid not available')
+    return
+  }
+  const up = task('Run As Upload', {
+    run_as: { uid, gid },
+    uploads: true,
+    glob: '*.txt',
+    capture: true,
+    commands: 'cat {{uploads}}',
+  })
+  const [local, tasks] = await bctl.loadConfig(makeConfig([up]))
+  await stage(up.name, 'input.txt', 'staged content')
+  const file = path.join(bctl.stagingDir(up.name), 'input.txt')
+  const [ok, summary] = await bctl.runTask(tasks[0], local, [file])
+  assert.equal(ok, true, summary)
+  assert.equal(summary, 'staged content')
+})
+
 test('summary_last_line: last non-command log line', async () => {
   const t = task('SumLast', {
     group: 'G',
@@ -758,6 +894,29 @@ test('validate-fresh: stale newest export fails the run', async () => {
 
 // ---- API-level suites ------------------------------------------------------
 
+test('metrics: exposes scheduled task gauges', async () => {
+  const t = task('Scheduled Metric', {
+    commands: 'true',
+    schedule: { enabled: true, days: [0], at: '04:00', catchUp: true },
+  })
+  await bctl.boot(makeConfig([t]))
+  const text = bctl.metricsText()
+  assert.match(text, /task_runner_configured_tasks 1/)
+  assert.match(text, /task_runner_task_schedule_enabled\{task="Scheduled Metric"/)
+  assert.match(text, /task_runner_task_last_run_timestamp_seconds\{task="Scheduled Metric"/)
+})
+
+test('taskJson: stale successful runs stay neutral, not failure-red', async () => {
+  await bootWith(makeConfig([task('Stale Success', { commands: 'true' })]))
+  const entry = bctl.TASK_LIST.find((item) => item.name === 'Stale Success')
+  bctl.saveTaskState(entry, bctl.LOCAL, true, 'completed', '')
+  const file = bctl.stateFileFor(entry)
+  const state = JSON.parse(fs.readFileSync(file, 'utf8'))
+  state.ts = Date.now() / 1000 - 8 * 24 * 60 * 60
+  fs.writeFileSync(file, JSON.stringify(state))
+  assert.equal(bctl.taskJson(entry).pill, 'neutral')
+})
+
 test('API: /api/tasks returns groups in config order', async () => {
   await bootWith(writeConfig('groups-order.mjs', {
     maindir,
@@ -773,6 +932,161 @@ test('API: /api/tasks returns groups in config order', async () => {
   assert.equal(res.json.missing_config, false);
   await close();
 });
+
+test('API: task settings persist schedules and attributes to task-meta.json', async () => {
+  const name = 'Schedule UI Test'
+  const t = task(name, { commands: 'true' })
+  const configPath = makeConfig([t])
+  const metaFile = writeMeta(configPath, {
+    version: 1,
+    attributes: [
+      { name: 'Category', values: ['G', 'Other'] },
+      { name: 'Best run from', values: ['Phone', 'PC'] },
+    ],
+    default_group_by: 'Best run from',
+    tasks: { [name]: { attributes: { Category: 'G', 'Best run from': 'Phone' } } },
+  })
+  await bootWith(configPath)
+  const { req, close } = await api()
+  try {
+    const saved = await req('PUT', `/api/tasks/${encodeURIComponent(name)}/settings`, {
+      schedule: { enabled: true, days: [1, 3], at: '07:30', catchUp: false },
+      attributes: { Category: 'Other', 'Best run from': 'PC' },
+    })
+    assert.equal(saved.status, 200)
+    assert.deepEqual(saved.json.schedule, { enabled: true, days: [1, 3], at: '07:30', catchUp: false })
+    assert.ok(saved.json.next_run)
+    assert.equal(saved.json.scheduled, true)
+    assert.deepEqual(saved.json.attributes, { Category: 'Other', 'Best run from': 'PC' })
+
+    const list = await req('GET', '/api/tasks')
+    const shown = list.json.tasks.find((entry) => entry.name === name)
+    assert.equal(shown.schedulable, true)
+    assert.equal(shown.schedule.enabled, true)
+    assert.equal(shown.schedule.at, '07:30')
+    assert.equal(shown.attributes['Best run from'], 'PC')
+    assert.equal(list.json.default_group_by, 'Best run from')
+
+    const persisted = JSON.parse(fs.readFileSync(metaFile, 'utf8'))
+    assert.equal(persisted.tasks[name].schedule.at, '07:30')
+    assert.equal(persisted.tasks[name].attributes.Category, 'Other')
+
+    const disabled = await req('PUT', `/api/tasks/${encodeURIComponent(name)}/settings`, {
+      schedule: { enabled: false, at: '07:30' },
+    })
+    assert.equal(disabled.status, 200)
+    assert.equal(disabled.json.schedule.enabled, false)
+    assert.equal(disabled.json.next_run, null)
+    const afterDisable = JSON.parse(fs.readFileSync(metaFile, 'utf8'))
+    assert.equal(afterDisable.tasks[name].schedule.enabled, false)
+    assert.equal(afterDisable.tasks[name].attributes['Best run from'], 'PC')
+  } finally {
+    bctl.stopSchedulers()
+    await close()
+  }
+
+  const uploadTask = task('Schedule Needs Upload', {
+    uploads: true,
+    glob: '*.txt',
+    commands: 'true',
+  })
+  await bootWith(makeConfig([uploadTask]))
+  const second = await api()
+  try {
+    const rejected = await second.req('PUT', `/api/tasks/${encodeURIComponent('Schedule Needs Upload')}/settings`, {
+      schedule: { enabled: true, at: '07:30' },
+    })
+    assert.equal(rejected.status, 400)
+    assert.match(rejected.json.detail, /cannot be scheduled/)
+  } finally {
+    await second.close()
+  }
+})
+
+test('API: attributes manager updates definitions and prunes task values', async () => {
+  const t1 = task('Attr One', { commands: 'true' })
+  const t2 = task('Attr Two', { commands: 'true' })
+  const configPath = makeConfig([t1, t2])
+  const metaFile = writeMeta(configPath, {
+    version: 1,
+    attributes: [
+      { name: 'Category', values: ['G'] },
+      { name: 'Best run from', values: ['Phone', 'PC'] },
+    ],
+    default_group_by: 'Best run from',
+    tasks: {
+      'Attr One': { attributes: { Category: 'G', 'Best run from': 'Phone' } },
+      'Attr Two': { attributes: { Category: 'G', 'Best run from': 'PC' } },
+    },
+  })
+  await bootWith(configPath)
+  const { req, close } = await api()
+  try {
+    const saved = await req('PUT', '/api/attributes', {
+      attributes: [
+        { name: 'Category', values: ['G'] },
+        { name: 'Best run from', values: ['Phone'] },
+        { name: 'Frequency', values: ['Weekly'] },
+      ],
+      default_group_by: 'Category',
+    })
+    assert.equal(saved.status, 200)
+    assert.equal(saved.json.default_group_by, 'Category')
+
+    const list = await req('GET', '/api/tasks')
+    const one = list.json.tasks.find((entry) => entry.name === 'Attr One')
+    const two = list.json.tasks.find((entry) => entry.name === 'Attr Two')
+    assert.deepEqual(one.attributes, { Category: 'G', 'Best run from': 'Phone' })
+    assert.deepEqual(two.attributes, { Category: 'G' })
+
+    const persisted = JSON.parse(fs.readFileSync(metaFile, 'utf8'))
+    assert.deepEqual(persisted.attributes.map((entry) => entry.name), ['Category', 'Best run from', 'Frequency'])
+    assert.equal(persisted.tasks['Attr Two'].attributes['Best run from'], undefined)
+
+    const rejected = await req('PUT', '/api/attributes', {
+      attributes: [{ name: 'Best run from', values: ['Phone'] }],
+      default_group_by: 'Best run from',
+    })
+    assert.equal(rejected.status, 400)
+    assert.match(rejected.json.detail, /Category/)
+  } finally {
+    await close()
+  }
+})
+
+test('API: card actions run without check gating and keep separate state', async () => {
+  const name = 'Action Task'
+  const t = task(name, {
+    commands: 'true',
+    check: 'false',
+    actions: [
+      { key: 'hello', label: 'Say hello', commands: ['echo hello-action'], summary_last_line: true },
+      { key: 'needs', label: 'Needs input', commands: ['echo {{value}}'], prompts: [{ key: 'value', label: 'Value' }], require: ['value'] },
+    ],
+  })
+  await bootWith(makeConfig([t]))
+  const { req, close } = await api()
+  try {
+    const missing = await req('POST', `/api/actions/${encodeURIComponent(name)}/needs`, {})
+    assert.equal(missing.status, 400)
+    assert.match(missing.json.detail, /Missing required input/)
+
+    const started = await req('POST', `/api/actions/${encodeURIComponent(name)}/hello`, {})
+    assert.equal(started.status, 200)
+    await pollUntil(async () => {
+      const status = await req('GET', '/api/status')
+      return (status.json.done ?? []).some((done) => done.action === 'hello')
+    })
+    const list = await req('GET', '/api/tasks')
+    const shown = list.json.tasks.find((entry) => entry.name === name)
+    assert.equal(shown.state, null, 'action state does not overwrite the task state')
+    const hello = shown.actions.find((action) => action.key === 'hello')
+    assert.equal(hello.state.ok, true)
+    assert.equal(hello.state.summary, 'hello-action')
+  } finally {
+    await close()
+  }
+})
 
 test('API: upload validation, detect scoring + ambiguity, CSRF guard', async () => {
   const t1 = task('Detect A', { group: 'G', uploads: true, glob: 'takeout-*.zip', commands: 'true' });
@@ -1163,4 +1477,77 @@ test('browser proxy: HTTP and WebSocket bridge to the sidecar viewer', async () 
     await new Promise((resolve) => srv.close(resolve));
     await new Promise((resolve) => upstream.close(resolve));
   }
+});
+
+test('schedule: normalized defaults and unattended-only validation', async () => {
+  const configPath = makeConfig([
+    task('Scheduled', {
+      commands: 'true',
+      schedule: { enabled: true, days: [1], at: '2:30' },
+    }),
+  ]);
+  await bootWith(configPath);
+  const scheduled = bctl.TASK_LIST.find((entry) => entry.name === 'Scheduled');
+  assert.deepEqual(scheduled.schedule, { enabled: true, days: [1], at: '02:30', catchUp: true });
+  assert.equal(scheduled.notify, 'errors');
+
+  await assert.rejects(
+    bctl.loadConfig(makeConfig([
+      task('Bad', {
+        commands: 'true',
+        uploads: true,
+        schedule: { enabled: true, at: '02:00' },
+      }),
+    ])),
+    /scheduled tasks cannot use 'uploads'/,
+  );
+  await assert.rejects(
+    bctl.loadConfig(makeConfig([
+      task('Bad2', { commands: 'true', schedule: { enabled: true, at: '25:00' } }),
+    ])),
+    /valid time/,
+  );
+});
+
+test('schedule state: persists the catch-up marker and missed count', async () => {
+  const store = bctl.scheduleStore('ScheduledStateTest');
+  await store.setLastScheduledRun(123456);
+  await store.markMissed();
+  await store.markMissed();
+  assert.deepEqual(bctl.loadScheduleState('ScheduledStateTest'), {
+    lastScheduledRun: 123456,
+    missed: 2,
+  });
+});
+
+test('API: scheduled tasks expose the next run and missed count', async () => {
+  const configPath = makeConfig([
+    task('Future', {
+      commands: 'true',
+      schedule: { enabled: true, days: [], at: '23:59', catchUp: true },
+    }),
+  ]);
+  const [, tasks] = await bctl.loadConfig(configPath);
+  await bootWith(configPath);
+  const json = bctl.taskJson(tasks[0]);
+  assert.equal(json.schedule.enabled, true);
+  assert.ok(json.next_run > Date.now());
+  assert.equal(json.schedule_missed, 0);
+});
+
+test('redaction: config-level secrets are masked in command and output', async () => {
+  const configPath = makeConfig(
+    [task('SecretTask', {
+      commands: `echo '{{api_token}}'`,
+      secrets: ['api_token'],
+    })],
+    { api_token: 'super-secret-value' },
+  );
+  const [local, tasks] = await bctl.loadConfig(configPath);
+  const lines = [];
+  const [ok] = await bctl.runTask(tasks[0], local, [], (line) => lines.push(line));
+  assert.equal(ok, true);
+  const text = lines.join('\n');
+  assert.ok(!text.includes('super-secret-value'), text);
+  assert.match(text, /\*\*\*/);
 });

@@ -4,17 +4,8 @@
 import { formatDuration } from '@dscpln/ui-kit'
 
 export const STATUS_RANK = { error: 0, conflict: 1, queued: 2, processing: 3, pending: 4, review: 5, done: 6, duplicate: 7, discarded: 8, cleaned: 9, ignored: 10 }
-export const METHOD_LABEL = { standardize: 'standardize', snapchat: 'snapchat', copy: 'copy', voicenotes: 'voicenotes' }
-export const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+export const METHOD_LABEL = { standardize: 'standardize', snapchat: 'snapchat', copy: 'copy', 'reviewed-audio': 'Reviewed audio' }
 export const FILE_LIMIT = 300
-
-export const isSnapshot = (folder) => folder.method === 'copy' && folder.snapshot === true
-
-export function scheduleLabel(schedule) {
-  if (!schedule?.enabled) return 'manual'
-  const days = schedule.days?.length ? schedule.days.map((day) => DAY_NAMES[day]).join(', ') : 'every day'
-  return `${days} at ${schedule.at}`
-}
 
 export function folderStats(folder) {
   const counts = folder.counts ?? {}
@@ -35,8 +26,11 @@ export function folderStats(folder) {
 }
 
 export function folderContext(folder) {
-  if (isSnapshot(folder)) {
-    return ['snapshot copy', folder.runner?.node ? `node ${folder.runner.node}` : 'this server', scheduleLabel(folder.schedule)].join(' · ')
+  if (folder.method === 'reviewed-audio') {
+    const grouped = folder.concat !== false && Boolean(folder.datePattern)
+    const parts = ['approval only', grouped ? 'grouped by date' : 'per-file standardize', `settle ${formatDuration(folder.settleSeconds)}`]
+    if (folder.datePattern) parts.push(folder.datePattern)
+    return parts.join(' · ')
   }
   const parts = [`settle ${formatDuration(folder.settleSeconds)}`]
   if (folder.method === 'snapchat') parts.push(`window ${formatDuration(folder.groupWindowSeconds)}`)
@@ -58,9 +52,21 @@ export function sortedFiles(folder) {
     .slice(0, FILE_LIMIT)
 }
 
-// Groups pending/errored voicenote clips per chat and day, mirroring the
-// server's grouping so the review dialog can offer "Process selected".
+// Groups pending/errored reviewed-audio items the same way the server does:
+// one file per row in per-file mode, or chat/day groups for merged folders.
 export function reviewGroups(folder) {
+  if (folder.method === 'reviewed-audio' && (folder.concat === false || !folder.datePattern)) {
+    return folder.files
+      .filter((file) => file.status === 'pending' || file.status === 'error')
+      .map((file) => ({
+        key: `file\u0000${file.name}`,
+        file: file.name,
+        chat: null,
+        date: null,
+        files: [file.name],
+        bytes: file.size || 0,
+      }))
+  }
   const groups = new Map()
   for (const file of folder.files) {
     if (file.status !== 'pending' && file.status !== 'error') continue

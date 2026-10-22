@@ -1,8 +1,10 @@
-# D$CPLN
+# Balance XLSX
 
 A simple web app that shows whether you've gone over your budget this month, and sends push notifications when a limit is reached.
 
 It reads your expenses from an Excel workbook (the source of truth) and writes changes straight back to it. The dashboard covers the current month and adding transactions; the insights page is a historical viewer with date ranges and comparisons; the forecasts page is a live projection planner.
+
+Configuration can also be mounted from a private `dscpln-config` repo: set `DSCPLN_CONFIG` to its `apps/balance-xlsx/config.json`; run state stays on the app volume (`DSCPLN_STATE_FILE` for scheduled apps). See `config-template/README.md`.
 
 ## Setup
 
@@ -244,7 +246,7 @@ currency:
 
 ```sh
 # from the monorepo root (the build context is the repo root):
-docker build -f apps/balance-xlsx/Dockerfile -t dscpln-balance .
+scripts/build.sh balance-xlsx
 docker run -p 3300:3300 -v ./config.json:/app/config.json -v ./balance-data:/data dscpln-balance
 ```
 
@@ -277,7 +279,7 @@ the API; the workbook stays the source of truth.
 | `ui/src/components/ForecastToolbar.jsx` | Base plan header and reset/discard/save controls. |
 | `ui/src/components/ForecastSaveBar.jsx` | Sticky unsaved-changes actions. |
 | `ui/src/components/ForecastDrivers.jsx` | Monthly composition and largest income/expense explanation. |
-| `ui/src/lib/chart.js` | Chart.js setup shared by both pages. |
+| `ui/src/lib/chart.js` | SVG chart renderers shared by the dashboard/insights pages. |
 | `ui/src/lib/money.js` | Money formatting and stable per-currency colors. |
 | `server.mjs` | Routes and error handling; `notifications.mjs` sends budget-limit pushes. |
 | `api-auth.mjs` | The external API's bearer token and edit-token signing, persisted in `api.stateFile`. |

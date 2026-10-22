@@ -17,8 +17,16 @@ import {
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 
+export const DEFAULT_FUNCTIONS = [
+  { path: 'balance', icon: 'dollar', name: 'Balance XLSX', description: 'Budget dashboard backed by the live workbook', kind: 'balance' },
+  { path: 'pipelines', icon: 'workflow', name: 'File Pipelines', description: 'Scheduled folder pipelines: standardize, copy, archive', kind: 'pipelines' },
+  { path: 'watxt', icon: 'message', name: 'WhatsApp TXT', description: 'Browse, import and merge WhatsApp exports', kind: 'watxt' },
+  { path: 'tasks', icon: 'wrench', name: 'Task Runner', description: 'Scheduled and on-demand workflows', kind: 'tasks' },
+]
+
 export const DEFAULT_CONFIG = {
   ntfy: { url: '', token: '' },
+  functions: DEFAULT_FUNCTIONS,
 }
 
 const MAX_MESSAGE = 4096
@@ -26,10 +34,27 @@ const MAX_TITLE = 200
 const MAX_TAGS = 10
 const PRIORITIES = new Set(['max', 'urgent', 'high', 'default', 'low', 'min'])
 
+const FUNCTION_KINDS = new Set(['scheduled', 'pipelines', 'watxt', 'tasks', 'balance'])
+
+export function normalizeFunctions(value) {
+  if (!Array.isArray(value)) return DEFAULT_FUNCTIONS
+  return value
+    .map((entry) => (entry && typeof entry === 'object' ? entry : null))
+    .filter(Boolean)
+    .map((entry) => ({
+      path: String(entry.path ?? '').replace(/^\/+|\/+$/g, ''),
+      icon: String(entry.icon ?? 'boxes'),
+      name: String(entry.name ?? entry.path ?? ''),
+      description: String(entry.description ?? ''),
+      kind: FUNCTION_KINDS.has(entry.kind) ? entry.kind : 'scheduled',
+    }))
+}
+
 export function normalizeConfig(raw) {
   return {
     ...raw,
     ntfy: { url: '', token: '', ...(raw?.ntfy ?? {}) },
+    functions: normalizeFunctions(raw?.functions),
   }
 }
 
@@ -37,6 +62,13 @@ export function validateConfig(cfg) {
   const url = String(cfg.ntfy?.url ?? '').trim()
   if (url && !/^https?:\/\//i.test(url)) {
     throw new ValidationError('ntfy URL must start with http:// or https://')
+  }
+  const seen = new Set()
+  for (const fn of cfg.functions ?? []) {
+    if (!fn.path || !fn.name) throw new ValidationError('every function needs a path and a name')
+    if (!/^[A-Za-z0-9._-]+$/.test(fn.path)) throw new ValidationError(`function path is invalid: ${fn.path}`)
+    if (seen.has(fn.path)) throw new ValidationError(`duplicate function path: ${fn.path}`)
+    seen.add(fn.path)
   }
 }
 
@@ -55,7 +87,7 @@ function normalizeTags(value) {
 
 export function createPortalApp(options = {}) {
   const dataDir = options.dataDir ?? process.env.DSCPLN_DATA_DIR ?? '/data'
-  const configFile = options.configFile ?? path.join(dataDir, 'config.json')
+  const configFile = options.configFile ?? process.env.DSCPLN_CONFIG_FILE ?? path.join(dataDir, 'config.json')
   const log = options.log ?? ((line) => console.log(line))
   const port = Number(process.env.PORT ?? 8080)
   const host = process.env.HOST ?? '0.0.0.0'
@@ -97,6 +129,12 @@ export function createPortalApp(options = {}) {
   }
 
   const routes = (router) => {
+    // The card grid is deployment-specific: show only the apps this host
+    // actually runs. The default list is the full generic suite.
+    router.get('/api/functions', (req, res) => {
+      res.json({ functions: config.get()?.functions ?? DEFAULT_FUNCTIONS })
+    })
+
     // Apps relay every notification through here; the portal is the only
     // component that knows the ntfy URL and token.
     router.post('/api/notify', asyncRoute(async (req, res) => {

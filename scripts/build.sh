@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Build and push one D$CPLN app image, then print the registry digest to pin
-# in the Infra template. The build context is the monorepo root.
+# Build and push one D$CPLN app tag from the unified image, then print the
+# registry digest to pin in the Infra template. The build context is the
+# monorepo root; every app uses docker/app.Dockerfile and selects its entry
+# point with APP=<app> at runtime.
 #
 #   scripts/build.sh file-pipelines
 #   ENGINE=docker scripts/build.sh balance-xlsx
@@ -11,13 +13,20 @@ set -euo pipefail
 
 APP="${1:?usage: scripts/build.sh <app> [image:tag]}"
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-DOCKERFILE="$ROOT/apps/$APP/Dockerfile"
-[ -f "$DOCKERFILE" ] || { echo "Error: $DOCKERFILE not found" >&2; exit 1; }
+DOCKERFILE="$ROOT/docker/app.Dockerfile"
 
 source "$ROOT/scripts/images.sh"
-REGISTRY="${REGISTRY:-docker.io}"
-IMAGE_ORG="${IMAGE_ORG:-imranrdev}"
-IMAGE="${2:-${REGISTRY}/${IMAGE_ORG}/${IMAGE_NAMES[$APP]:-dscpln-$APP}:latest}"
+[[ -n "${IMAGE_NAMES[$APP]:-}" ]] || {
+    echo "Error: unknown app '$APP' (known: ${ALL_APPS[*]})" >&2
+    exit 1
+}
+REGISTRY="${REGISTRY:-$DEFAULT_REGISTRY}"
+IMAGE_ORG="${IMAGE_ORG:-$DEFAULT_IMAGE_ORG}"
+# Docker references are lowercase; registry hosts and GitHub owners are
+# case-insensitive.
+REGISTRY="${REGISTRY,,}"
+IMAGE_ORG="${IMAGE_ORG,,}"
+IMAGE="${2:-${REGISTRY}/${IMAGE_ORG}/${IMAGE_NAMES[$APP]}:latest}"
 
 ENGINE="${ENGINE:-}"
 if [ -z "$ENGINE" ]; then

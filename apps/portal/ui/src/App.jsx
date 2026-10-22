@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Boxes,
-  Contact,
   DollarSign,
   MessageSquareText,
-  Music,
   RefreshCw,
   Settings,
   Workflow,
   Wrench,
 } from 'lucide-react'
 import {
+  AppHeader,
+  formatBytes,
   formatDateTime,
+  formatNumber,
   formatTime,
   getJson,
   humanAgo,
@@ -22,18 +23,47 @@ import {
   ThemeToggle,
 } from '@dscpln/ui-kit'
 import FunctionCard from './FunctionCard.jsx'
+import { taskBucket } from './taskBuckets.js'
 
-const FUNCTIONS = [
-  { path: 'balance', icon: DollarSign, name: 'Balance XLSX', description: 'Budget dashboard backed by the live workbook', kind: 'balance' },
-  { path: 'pipelines', icon: Workflow, name: 'File Pipelines', description: 'Scheduled folder pipelines: standardize, copy, archive', kind: 'pipelines' },
-  { path: 'watxt', icon: MessageSquareText, name: 'WhatsApp TXT', description: 'Browse, import and merge WhatsApp exports', kind: 'watxt' },
-  { path: 'tasks', icon: Wrench, name: 'Task Runner', description: 'Config-driven backup and export workflows', kind: 'tasks' },
-  { path: 'contacts', icon: Contact, name: 'Contacts + Calendar', description: 'Scheduled Nextcloud exports', kind: 'scheduled' },
-  { path: 'state-backup', icon: Boxes, name: 'State Backups', description: 'Scheduled restic backups of app data and Compose state', kind: 'scheduled' },
-  { path: 'ytmusic', icon: Music, name: 'YTMusic Downloads', description: 'Scheduled YouTube Music library downloads', kind: 'scheduled' },
+const ICONS = {
+  boxes: Boxes,
+  dollar: DollarSign,
+  message: MessageSquareText,
+  workflow: Workflow,
+  wrench: Wrench,
+}
+
+const DEFAULT_FUNCTIONS = [
+  { path: 'balance', icon: 'dollar', name: 'Balance XLSX', description: 'Budget dashboard backed by the live workbook', kind: 'balance' },
+  { path: 'pipelines', icon: 'workflow', name: 'File Pipelines', description: 'Scheduled folder pipelines: standardize, copy, archive', kind: 'pipelines' },
+  { path: 'watxt', icon: 'message', name: 'WhatsApp TXT', description: 'Browse, import and merge WhatsApp exports', kind: 'watxt' },
+  { path: 'tasks', icon: 'wrench', name: 'Task Runner', description: 'Scheduled and on-demand workflows', kind: 'tasks' },
 ]
 
-const EMPTY = { loaded: false, online: true, detail: '', tone: '', next: '', nextTone: '', issue: false }
+const EMPTY = {
+  loaded: false,
+  online: true,
+  issue: false,
+  kicker: '',
+  primary: { value: '—', label: '', tone: '' },
+  progress: null,
+  stats: [],
+  footer: { text: '', tone: '' },
+}
+
+const asNumber = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback
+
+const moneyText = (value, code, symbol = '') => {
+  const amount = asNumber(value)
+  const prefix = symbol || (code ? `${code} ` : '')
+  const formatted = new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Math.abs(amount))
+  return `${amount < 0 ? '−' : ''}${prefix}${formatted}`
+}
+
+const stat = (label, value, tone = '') => ({ label, value: String(value), tone })
 
 const SETTINGS_FIELDS = [
   {
@@ -53,82 +83,156 @@ const SETTINGS_FIELDS = [
 async function scheduledDetail(fn) {
   const state = await getJson(`${fn.path}/api/state`)
   const last = state.lastRun
-  let detail = 'never run'
-  let tone = ''
+  let primary = { value: 'Never', label: 'last run', tone: '' }
   let issue = false
-  if (state.runMarker) {
-    detail = 'running now'
-    tone = 'ok'
-  } else if (last) {
-    detail = `last ${humanAgo(last.endedAt)} · ${last.ok ? 'OK' : 'Failed'}`
-    tone = last.ok ? 'ok' : 'over'
+  if (state.runMarker) primary = { value: 'Running', label: 'now', tone: 'ok' }
+  else if (last) {
+    primary = { value: last.ok ? 'OK' : 'Failed', label: `last ${humanAgo(last.endedAt)}`, tone: last.ok ? 'ok' : 'over' }
     issue = !last.ok
   }
-  let next = 'manual only'
-  let nextTone = ''
-  if (state.paused) {
-    next = 'paused'
-    nextTone = 'warn'
-  } else if (Number.isFinite(state.nextRun)) {
-    next = `next ${formatDateTime(state.nextRun)}`
-    if (state.missed) {
-      next += ` · ${state.missed} missed`
-      nextTone = 'warn'
-      issue = true
-    }
+  const stats = [
+    stat('Next', state.paused ? 'Paused' : Number.isFinite(state.nextRun) ? formatDateTime(state.nextRun) : 'Manual', state.paused ? 'warn' : ''),
+    stat('Missed', state.missed ?? 0, state.missed ? 'warn' : ''),
+    stat('Status', state.paused ? 'Paused' : 'Scheduled', state.paused ? 'warn' : 'ok'),
+  ]
+  return {
+    issue,
+    kicker: fn.name,
+    primary,
+    stats,
+    footer: { text: state.paused ? 'Scheduled runs are paused' : 'Scheduled workflow', tone: state.paused ? 'warn' : '' },
   }
-  return { detail, tone, next, nextTone, issue }
 }
 
 async function pipelinesDetail(fn) {
   const state = await getJson(`${fn.path}/api/state`)
-  if (state.paused) return { detail: 'paused', tone: 'warn', issue: false }
   let active = 0
   let review = 0
   let errors = 0
-  for (const folder of state.folders ?? []) {
+  let lastEventAt = 0
+  const folders = state.folders ?? []
+  for (const folder of folders) {
     const counts = folder.counts ?? {}
     active += (counts.pending ?? 0) + (counts.queued ?? 0) + (counts.processing ?? 0)
     review += counts.review ?? 0
     errors += (counts.error ?? 0) + (counts.conflict ?? 0)
+    lastEventAt = Math.max(lastEventAt, asNumber(folder.lastEventAt))
   }
-  const parts = []
-  if (active) parts.push(`${active} active`)
-  if (review) parts.push(`${review} in review`)
-  if (errors) parts.push(`${errors} errors`)
+  const paused = Boolean(state.paused)
+  const dryRun = Boolean(state.dryRun)
+  const footer = paused
+    ? { text: 'Paused', tone: 'warn' }
+    : dryRun
+      ? { text: 'Dry run · no files are written', tone: 'warn' }
+      : lastEventAt
+        ? { text: `Last change ${humanAgo(lastEventAt)}`, tone: '' }
+        : { text: 'Watching for changes', tone: '' }
   return {
-    detail: parts.join(' · ') || 'idle',
-    tone: errors ? 'over' : review ? 'warn' : 'ok',
     issue: errors > 0,
+    kicker: `${folders.length} folder${folders.length === 1 ? '' : 's'}`,
+    primary: {
+      value: active ? formatNumber(active) : 'Idle',
+      label: active ? 'in flight' : 'queue',
+      tone: active ? 'ok' : '',
+    },
+    stats: [
+      stat('Review', formatNumber(review), review ? 'warn' : ''),
+      stat('Errors', formatNumber(errors), errors ? 'over' : ''),
+      stat('Folders', formatNumber(folders.length)),
+    ],
+    footer,
   }
 }
 
 async function watxtDetail(fn) {
   const state = await getJson(`${fn.path}/api/state`)
+  const skipped = Array.isArray(state.skipped) ? state.skipped.length : asNumber(state.skipped)
+  const indexed = state.indexedAt ? `Indexed ${humanAgo(Date.parse(state.indexedAt))}` : 'Not indexed yet'
   return {
-    detail: `${state.conversations ?? 0} conversations · ${state.messages ?? 0} messages`,
-    tone: '',
     issue: false,
+    kicker: state.watching ? 'Watching for exports' : 'Indexed library',
+    primary: { value: formatNumber(state.conversations ?? 0), label: 'conversations', tone: 'ok' },
+    stats: [
+      stat('Messages', formatNumber(state.messages ?? 0)),
+      stat('Size', state.bytes == null ? '—' : formatBytes(state.bytes)),
+      stat('Skipped', formatNumber(skipped), skipped ? 'warn' : ''),
+    ],
+    footer: { text: indexed, tone: state.watching ? 'ok' : '' },
   }
 }
 
 async function tasksDetail(fn) {
   const data = await getJson(`${fn.path}/api/tasks`)
   const tasks = (data.groups ?? []).flatMap((group) => group.tasks ?? [])
-  const running = tasks.filter((task) => task.running).length
-  const failing = tasks.filter((task) => task.state && task.state.ok === false && !task.running).length
-  let detail = `${tasks.length} tasks`
-  if (running) detail += ` · ${running} running`
-  if (failing) detail += ` · ${failing} failing`
-  return { detail, tone: failing ? 'over' : 'ok', issue: failing > 0 }
+  const scheduled = tasks.filter((task) => task.schedule?.enabled)
+  const counts = { stale: 0, recent: 0, errors: 0 }
+  for (const task of tasks) counts[taskBucket(task)] += 1
+  const stale = counts.stale
+  const recent = counts.recent
+  const errors = counts.errors
+  const next = scheduled
+    .filter((task) => Number.isFinite(task.next_run))
+    .sort((a, b) => a.next_run - b.next_run)[0] ?? null
+  return {
+    issue: errors > 0,
+    kicker: `${tasks.length} task${tasks.length === 1 ? '' : 's'}`,
+    primary: { value: formatNumber(scheduled.length), label: 'scheduled', tone: scheduled.length ? 'ok' : '' },
+    stats: [
+      stat('Stale', formatNumber(stale), stale ? 'warn' : ''),
+      stat('Recent', formatNumber(recent), recent ? 'ok' : ''),
+      stat('Errors', formatNumber(errors), errors ? 'over' : ''),
+    ],
+    footer: next
+      ? { text: `Next: ${next.name} · ${formatDateTime(next.next_run)}`, tone: '' }
+      : { text: 'No active schedules', tone: '' },
+  }
 }
 
 async function balanceDetail(fn) {
   const status = await getJson(`${fn.path}/status`)
-  if (status.overBudget?.length) {
-    return { detail: `${status.overBudget.join(', ')} over budget`, tone: 'over', issue: true }
+  const summary = status.summary
+  if (!summary) {
+    const over = status.overBudget ?? []
+    return {
+      issue: false,
+      kicker: 'Budget overview',
+      primary: { value: '—', label: 'summary unavailable', tone: '' },
+      stats: [{ label: 'Over budget', value: over.join(', ') || 'None', tone: over.length ? 'over' : '' }],
+      footer: { text: over.length ? 'Open Balance to review the budget' : 'Within budget', tone: over.length ? 'over' : 'ok' },
+    }
   }
-  return { detail: 'within budget', tone: 'ok', issue: false }
+  const budget = asNumber(summary.budget)
+  const spend = asNumber(summary.spend)
+  const left = summary.left == null ? null : asNumber(summary.left)
+  const hasBudget = budget > 0 && left != null
+  const pct = hasBudget ? Math.min(100, (spend / budget) * 100) : null
+  const over = Boolean(summary.overBudget)
+  const tone = over ? 'over' : 'ok'
+  const code = summary.code || ''
+  const symbol = summary.symbol || ''
+  const stats = hasBudget
+    ? [
+        stat('Budget', moneyText(budget, code, symbol)),
+        stat('Left', moneyText(left, code, symbol), left < 0 ? 'over' : ''),
+        stat('Transactions', formatNumber(summary.transactions ?? 0)),
+      ]
+    : [
+        stat('Transactions', formatNumber(summary.transactions ?? 0)),
+        stat('Currencies', formatNumber(summary.currencies ?? 0)),
+        stat('Budget', 'Not set', 'warn'),
+      ]
+  return {
+    issue: false,
+    kicker: [summary.period, code].filter(Boolean).join(' · '),
+    primary: { value: moneyText(spend, code, symbol), label: hasBudget ? 'spent this month' : 'spent', tone },
+    progress: pct == null ? null : { pct, tone: over ? 'over' : 'ok' },
+    stats,
+    footer: over
+      ? { text: `Over budget by ${moneyText(Math.abs(left ?? 0), code, symbol)}`, tone: 'over' }
+      : hasBudget
+        ? { text: `${moneyText(left, code, symbol)} left this month`, tone: 'ok' }
+        : { text: 'No budget set', tone: 'warn' },
+  }
 }
 
 const DETAILS = {
@@ -139,10 +243,14 @@ const DETAILS = {
   balance: balanceDetail,
 }
 
-const emptyCards = () => Object.fromEntries(FUNCTIONS.map((fn) => [fn.path, { ...EMPTY }]))
+const withIcons = (list) => list.map((fn) => ({ ...fn, icon: ICONS[fn.icon] ?? Boxes }))
+const emptyCards = (list = DEFAULT_FUNCTIONS) => Object.fromEntries(list.map((fn) => [fn.path, { ...EMPTY }]))
 
 export default function App() {
-  const [cards, setCards] = useState(emptyCards)
+  const [functions, setFunctions] = useState(() => withIcons(DEFAULT_FUNCTIONS))
+  const [cards, setCards] = useState(() => emptyCards())
+  const cardsRef = useRef(cards)
+  cardsRef.current = cards
   const [checkedAt, setCheckedAt] = useState(null)
   const [busy, setBusy] = useState(false)
   const settingsRef = useRef(null)
@@ -194,51 +302,75 @@ export default function App() {
     </section>
   )
 
-  const refresh = async () => {
+  const refresh = async (list = functions) => {
     setBusy(true)
     const next = {}
     await Promise.all(
-      FUNCTIONS.map(async (fn) => {
+      list.map(async (fn) => {
         const online = await ping(`${fn.path}/api/health`)
-        const previous = cards[fn.path]
+        const previous = cardsRef.current[fn.path]
         let card = { ...EMPTY, loaded: true, online }
         if (online) {
           try {
-            card = { ...card, ...(await DETAILS[fn.kind](fn)) }
+            card = { ...card, ...(await (DETAILS[fn.kind] ?? scheduledDetail)(fn)) }
           } catch {
-            // detail is best-effort; the card still links to the app
+            card = { ...card, footer: { text: 'Summary unavailable', tone: 'warn' } }
           }
         } else {
-          // Keep the last known detail so an offline tile can explain itself.
-          card = {
-            ...card,
-            detail: previous?.detail ?? '',
-            tone: previous?.tone ?? '',
-            next: previous?.next ?? '',
-            nextTone: previous?.nextTone ?? '',
-          }
+          // Keep the last known summary so an offline tile can explain itself.
+          card = { ...EMPTY, ...(previous ?? {}), loaded: true, online: false, issue: true }
         }
         next[fn.path] = card
       }),
     )
+    cardsRef.current = next
     setCards(next)
     setCheckedAt(Date.now())
     setBusy(false)
   }
 
   useEffect(() => {
-    refresh()
-    const timer = setInterval(refresh, 60_000)
-    return () => clearInterval(timer)
+    let cancelled = false
+    let currentList = withIcons(DEFAULT_FUNCTIONS)
+    const loadFunctions = async () => {
+      let list = DEFAULT_FUNCTIONS
+      try {
+        const data = await getJson('api/functions')
+        if (Array.isArray(data.functions) && data.functions.length) list = data.functions
+      } catch {
+        // Keep the built-in list when the portal has no config yet.
+      }
+      if (cancelled) return
+      currentList = withIcons(list)
+      setFunctions(currentList)
+      setCards(emptyCards(currentList))
+      refresh(currentList)
+    }
+    loadFunctions()
+    const timer = setInterval(() => refresh(currentList), 60_000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const attention = Object.values(cards).filter((card) => card.loaded && (!card.online || card.issue)).length
+
   return (
     <>
-      <header className="app-header">
-        <div className="app-header__top">
-          <h1><a className="app-header__brand" href="/">D<span className="accent">$</span>CPLN</a></h1>
-          <div className="app-header__actions">
+      <AppHeader
+        meta="Every backup and sync workflow, one place."
+        metaTools={(
+          <>
+            <span className={`portal-attention ${attention ? 'is-over' : 'is-ok'}`} data-testid="attention">
+              {checkedAt ? (attention ? `${attention} need attention` : 'all healthy') : 'checking…'}
+            </span>
+            {checkedAt ? <span className="muted" data-testid="checked">checked {formatTime(checkedAt)}</span> : null}
+          </>
+        )}
+        actions={(
+          <>
             <button className="outline secondary icon-button" type="button" aria-label="Notification settings" title="Notification settings"
               onClick={openSettings} data-testid="settings-open">
               <Settings size={16} strokeWidth={1.8} />
@@ -248,19 +380,13 @@ export default function App() {
               <RefreshCw size={16} strokeWidth={1.8} />
             </button>
             <ThemeToggle />
-          </div>
-        </div>
-        <div className="app-header__meta">
-          <span className="muted">Every backup and sync workflow, one place.</span>
-          <span className="app-header__meta-tools">
-            {checkedAt ? <span className="muted" data-testid="checked">checked {formatTime(checkedAt)}</span> : null}
-          </span>
-        </div>
-      </header>
+          </>
+        )}
+      />
 
       <main>
         <div className="portal-grid">
-          {FUNCTIONS.map((fn) => (
+          {functions.map((fn) => (
             <FunctionCard key={fn.path} fn={fn} card={cards[fn.path]} />
           ))}
         </div>

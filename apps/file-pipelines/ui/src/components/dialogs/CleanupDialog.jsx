@@ -1,17 +1,10 @@
 import { formatBytes } from '@dscpln/ui-kit'
-import Modal from '../Modal.jsx'
+import { Dialog } from '@dscpln/ui-kit'
 
 export default function CleanupDialog({ dialog, onSelectAll, onToggle, onMove, onClose }) {
   const { folder, files, totalBytes, selected } = dialog
   return (
-    <Modal onClose={onClose} className="wide-dialog">
-      <article>
-        <header className="card__header">
-          <h2>Cleanup {folder}</h2>
-          <span className="card__header-tools">
-            <button className="outline secondary icon-button" aria-label="Close" onClick={onClose}>&times;</button>
-          </span>
-        </header>
+    <Dialog onClose={onClose} className="wide-dialog" title={`Cleanup ${folder}`}>
         <p className="hint">{files.length} processed file(s), {formatBytes(totalBytes)}. Each destination copy is verified before the original is moved to trash.</p>
         <label className="checklist__row">
           <input type="checkbox" checked={selected.size === files.length} onChange={(event) => onSelectAll(event.target.checked)} />
@@ -30,7 +23,6 @@ export default function CleanupDialog({ dialog, onSelectAll, onToggle, onMove, o
           <button className="outline secondary" onClick={onClose}>Cancel</button>
           <button className="danger" onClick={onMove}>Move to trash</button>
         </div>
-      </article>
-    </Modal>
+    </Dialog>
   )
 }

@@ -75,21 +75,35 @@ function runNftScript(script) {
 async function ensureTable() {
   try {
     await runNft(['list', 'table', 'inet', TABLE])
-    return
   } catch {
-    // Create the complete table in one transaction below.
-  }
-  await runNftScript(`
+    await runNftScript(`
 add table inet ${TABLE}
 add set inet ${TABLE} vpn_only_tcp { type inet_service; flags timeout; }
 add set inet ${TABLE} traefik_off_tcp { type inet_service; flags timeout; }
 add set inet ${TABLE} tunnel_udp { type inet_service; flags timeout; }
 add chain inet ${TABLE} input { type filter hook input priority -10; policy accept; }
+add chain inet ${TABLE} forward { type filter hook forward priority -10; policy accept; }
 add chain inet ${TABLE} output { type filter hook output priority -10; policy accept; }
 add rule inet ${TABLE} input tcp dport @vpn_only_tcp drop
+add rule inet ${TABLE} forward tcp dport @vpn_only_tcp drop
 add rule inet ${TABLE} input tcp dport @traefik_off_tcp drop
+add rule inet ${TABLE} forward tcp dport @traefik_off_tcp drop
 add rule inet ${TABLE} output udp dport @tunnel_udp drop
 `)
+    return
+  }
+  // Tables created by an earlier version do not have the forward chain; add
+  // it when upgrading so hostPort traffic (DNAT'd to the Traefik pods) is
+  // covered as well as direct host input.
+  try {
+    await runNft(['list', 'chain', 'inet', TABLE, 'forward'])
+  } catch {
+    await runNftScript(`
+add chain inet ${TABLE} forward { type filter hook forward priority -10; policy accept; }
+add rule inet ${TABLE} forward tcp dport @vpn_only_tcp drop
+add rule inet ${TABLE} forward tcp dport @traefik_off_tcp drop
+`)
+  }
 }
 
 function setScript(preset, durationSeconds) {

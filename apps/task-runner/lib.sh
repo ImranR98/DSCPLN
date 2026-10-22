@@ -26,8 +26,6 @@ Subcommands (rc-checked; run with `bash lib.sh <cmd> ...`):
   git-commit DIR [MSG]                        init/add/commit (state files excluded)
   validate-fresh DIR [MAX_AGE_SECONDS]        fail unless the newest export is fresh
   prune-exports DIR [--keep-newer]            delete all but the newest export dir
-  remote-subdirs DEST SUFFIX SUBDIR SSH_TARGET MARKER ROOT...
-                                              sync <entry>/<subdir> from remote roots
   python-venv DIR REQUIREMENTS               create/refresh a reusable Python venv
 
 Or `source lib.sh` and call the bctl_* functions directly (see the task config
@@ -98,37 +96,6 @@ bctl_python_venv() {  # DIR REQUIREMENTS — create/refresh a reusable venv
     python3 -m venv --clear "$dir"
   fi
   "$dir/bin/pip" install -q -r "$req" >/dev/null
-}
-
-bctl_remote_subdirs() {  # DEST SUFFIX SUBDIR SSH_TARGET MARKER ROOT... — sync remote tree entries
-  # Copy <entry>/<subdir> for every top-level directory under each remote ROOT
-  # into DEST/<entry><SUFFIX> over rsync/ssh, optionally writing MARKER.
-  # Set RSYNC_RSH (e.g. "ssh -i /ssh/id_ed25519 -o BatchMode=yes") in the task.
-  local dest="$1" suffix="$2" subdir="$3" target="$4" marker="$5"; shift 5
-  local ssh_cmd="${RSYNC_RSH:-ssh}" root name out tmp found=0
-  [[ $# -gt 0 ]] || { log "bctl_remote_subdirs: no remote roots" >&2; return 2; }
-  mkdir -p "$dest"
-  for root in "$@"; do
-    while IFS= read -r name; do
-      [[ -n "$name" ]] || continue
-      found=1
-      out="$dest/$name$suffix"
-      # Stage the remote copy next to the destination, then merge locally:
-      # a dropped SSH connection never leaves a half-updated backup entry.
-      tmp=$(mktemp -d "$dest/.bctl-sync.XXXXXX")
-      log "Syncing $target:$root/$name/$subdir → $out"
-      if ! rsync -a -e "$ssh_cmd" "$target:$root/$name/$subdir/" "$tmp/"; then
-        rm -rf "$tmp"
-        log "rsync failed for $target:$root/$name/$subdir" >&2
-        return 1
-      fi
-      mkdir -p "$out"
-      rsync -a "$tmp/" "$out/"
-      rm -rf "$tmp"
-      [[ -z "$marker" ]] || date > "$out/$marker"
-    done < <($ssh_cmd "$target" "find '$root' -mindepth 1 -maxdepth 1 -type d -exec test -d '{}/$subdir' \\; -printf '%f\\n'" 2>/dev/null)
-  done
-  [[ $found -eq 1 ]] || { log "bctl_remote_subdirs: no matching entries under $*" >&2; return 1; }
 }
 
 bctl_ensure_pipelines() {  # CLI — install the CLI's dependencies once
@@ -284,12 +251,6 @@ case "${1:-}" in
       exit 1
     fi
     log "Synced sources → $dest"
-    ;;
-
-  remote-subdirs)
-    # lib.sh remote-subdirs DEST SUFFIX SUBDIR SSH_TARGET MARKER ROOT...
-    shift
-    bctl_remote_subdirs "$@"
     ;;
 
   python-venv)

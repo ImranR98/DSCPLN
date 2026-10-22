@@ -364,7 +364,7 @@ is normal; more than N fails the run. A fully-overlapping scrape reports
    shorthands that generate the command for you.
 
 5. **Tokens** resolve inside commands and paths: your config's own values
-   (`{{maindir}}`, `{{hosts.desktop.ssh}}`, ...), the built-ins `{{repo_dir}}`
+   (`{{maindir}}`, `{{balance_url}}`, ...), the built-ins `{{repo_dir}}`
    and `{{lib}}` (the packaged `lib.sh`), `{{scriptroot}}` once set, and
    per-run `{{uploads}}` plus one `{{key}}` per prompt value.
 
@@ -380,9 +380,9 @@ bash '{{lib}}' move --git --rename bookmarks.html '{{maindir}}/Manual' {{uploads
 
 or sourced inside a `script:` for anything with logic. Subcommands:
 `move`, `copy`, `ingest`, `encrypt`, `git-commit`, `validate-fresh`,
-`prune-exports`, `remote-subdirs`, `python-venv`; sourceable helpers:
+`prune-exports`, `python-venv`; sourceable helpers:
 `bctl_extract`, `bctl_rsync`, `bctl_git_commit`, `bctl_standardize_into`,
-`bctl_import_pair`, `bctl_remote_subdirs`, `bctl_python_venv`,
+`bctl_import_pair`, `bctl_python_venv`,
 `bctl_first_glob`, `bctl_export_dirs` (see `lib.sh` for the full list).
 
 Service-specific concerns (installing a CLI, validating an export is fresh,
@@ -416,9 +416,8 @@ honest.
 
 **Process safety**: each command gets its own process group (`detached`), and
 Stop kills exactly that run's pids (`SIGTERM` then `SIGKILL`). `stdin:
-'ignore'` makes interactive prompts fail fast; `SSH_ASKPASS_REQUIRE=force`
-with a failing askpass means ssh can never prompt; prompt values are redacted
-from the logged command and output. Output is streamed terminal-faithfully
+'ignore'` makes interactive prompts fail fast; prompt values are redacted from
+the logged command and output. Output is streamed terminal-faithfully
 (`\r` and `\n` end lines; stderr is flushed at close). `pty_runner.py` (stdlib
 only) gives tools that refuse non-TTY stdin a pseudo-terminal when
 `lib.sh encrypt` needs one.
@@ -469,7 +468,7 @@ root); `npm test` builds first.
 
 - Node.js 22+ (npm dependency: `express` only; the task-runner image uses
   Node 26 from the unified image)
-- System tools tasks commonly use: `bash`, `rsync`, `ssh`, `unzip`/`tar`,
+- System tools tasks commonly use: `bash`, `rsync`, `unzip`/`tar`,
   `git`, `age`, `jq`, `wget`, `restic`, `kubectl`, ImageMagick — whatever your
   tasks need. The image ships restic and kubectl for scheduled backup tasks.
 - `python3` (stdlib only) for `lib.sh encrypt` via `pty_runner.py`

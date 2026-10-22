@@ -311,15 +311,15 @@ test('resolve: nested lookup, typed values, loops, tildes', () => {
     repo_dir: bctl.REPO_DIR,
     maindir: '~/Main',
     scriptroot: '{{repo_dir}}/scripts',
-    hosts: { desktop: { user: 'user', port: 22 } },
+    nested: { desktop: { user: 'user', port: 8080 } },
     list: [1, 2],
   };
   assert.equal(bctl.resolve('{{maindir}}/Backups', local), `${os.homedir()}/Main/Backups`);
   assert.equal(bctl.resolve('{{scriptroot}}', local), `${bctl.REPO_DIR}/scripts`); // loops to stable
-  assert.equal(bctl.resolve('{{hosts.desktop.user}}', local), 'user');
-  assert.equal(bctl.resolve('{{hosts.desktop.port}}', local), 22); // typed value
-  assert.equal(bctl.resolve('port={{hosts.desktop.port}}', local), 'port=22'); // embedded: stringified
-  assert.deepEqual(bctl.resolve('{{hosts.desktop}}', local), local.hosts.desktop); // typed
+  assert.equal(bctl.resolve('{{nested.desktop.user}}', local), 'user');
+  assert.equal(bctl.resolve('{{nested.desktop.port}}', local), 8080); // typed value
+  assert.equal(bctl.resolve('port={{nested.desktop.port}}', local), 'port=8080'); // embedded: stringified
+  assert.deepEqual(bctl.resolve('{{nested.desktop}}', local), local.nested.desktop); // typed
   assert.deepEqual(bctl.resolve('{{list}}', local), [1, 2]); // typed
   assert.equal(bctl.resolve('{{missing}}', local), '{{missing}}'); // unresolved literal
   assert.equal(bctl.resolve('{{missing}}/x', local), '{{missing}}/x');

@@ -165,18 +165,19 @@ actions: [{
 }]
 ```
 
-Runner: exactly one of `commands` (bash string or list), `script:`, `move:`,
-or `ingest:`. Optional: `cwd`, `uploads: true` + `glob` (drop zone; a string
-or list of patterns), `require: [key...]` (fail unless each prompt key has a
-value), `capture: true` + `commit_dir` (output becomes the summary, shown in a
-copy/paste dialog whose Done button git-commits `commit_dir`), `root:` (source
-directory the card requires; glob-aware), `check:` (bash gate: the task is
-unavailable while it exits non-zero, with its first output line as the card's
-badge; results are cached ~15s), `browser: true` (the card gets an embedded
-login-browser section; it auto-opens when the task starts), `summary_last_line:
-true` (summary = last non-command log line). `run_as: { uid: '{{app_uid}}', gid:
-'{{app_gid}}' }` drops the task shell to the host data owner; leave it unset for
-tasks that need root (PV backups, SSH keys).
+Runner: `commands` (bash string or list), `webhook:` with optional `commands`
+after it, or exactly one of `script:`, `move:`, or `ingest:`. Optional: `cwd`,
+`uploads: true` + `glob` (drop zone; a string or list of patterns),
+`require: [key...]` (fail unless each prompt key has a value), `capture: true` +
+`commit_dir` (output becomes the summary, shown in a copy/paste dialog whose
+Done button git-commits `commit_dir`), `root:` (source directory the card
+requires; glob-aware), `check:` (bash gate: the task is unavailable while it
+exits non-zero, with its first output line as the card's badge; results are
+cached ~15s), `browser: true` (the card gets an embedded login-browser section;
+it auto-opens when the task starts), `summary_last_line: true` (summary = last
+non-command log line). `run_as: { uid: '{{app_uid}}', gid: '{{app_gid}}' }`
+drops the task shell to the host data owner; leave it unset for tasks that need
+root (PV backups, remote agent archives).
 
 - `script: 'bash body'` — wrapped in a temp-file heredoc so inner processes
   can't consume the rest of the script from stdin.
@@ -185,6 +186,57 @@ tasks that need root (PV backups, SSH keys).
 - `ingest: { suffix, dest? }` — extract archives into a temp dir, derive an
   account name with `suffix` (a shell snippet run inside the temp dir), sync
   into `dest/<name>` (default `state_dir`), and git-commit.
+
+### Webhook tasks
+
+`webhook:` runs one HTTP request; it is generic and is not agent-specific. It
+can be combined with `commands`, which run after a successful request/download.
+It cannot be combined with `script`/`move`/`ingest`.
+
+```js
+{
+  name: 'Remote archive',
+  state_dir: '{{maindir}}/.tasks',
+  webhook: {
+    url: 'https://agent.example/v1/jobs/example-archive/archive',
+    method: 'POST',
+    enrollUrl: 'https://agent.example/v1/enroll',
+    tokenFile: '{{maindir}}/.tasks/example-agent.token',
+    downloadTo: '{{maindir}}/example-archive.tar.gz',
+    timeoutMs: 1800000,
+    expectStatus: [200],
+    summaryHeader: 'X-DSCPLN-Summary',
+  },
+  commands: [`echo "Downloaded to {{maindir}}/example-archive.tar.gz"`],
+  summary_last_line: true,
+}
+```
+
+Fields:
+
+| Field | Description |
+|---|---|
+| `url` | Required HTTP(S) endpoint |
+| `method` | HTTP method; defaults to `POST` |
+| `headers` | Header object; supports config tokens |
+| `body` | Raw string or JSON object |
+| `timeoutMs` | Request timeout; defaults to 300000 |
+| `expectStatus` | Expected status or list; defaults to 2xx |
+| `downloadTo` | Save the response body to a file (binary-safe); secrets/checksums are handled by the server |
+| `maxBytes` | Maximum downloaded bytes; default 2 GiB |
+| `summaryHeader` | Use a response header as the run summary |
+| `summaryJson` | Use a dot path in a JSON response as the summary |
+| `tokenFile` | Auto-generate a bearer token on first use, store it `0600`, and add `Authorization: Bearer ...` unless a header already sets it |
+| `enrollUrl` | Optional enrollment endpoint called before the request; requires `tokenFile` |
+| `caFile`, `certFile`, `keyFile` | Optional TLS CA/client certificate paths |
+
+With `tokenFile` + `enrollUrl`, no token is created by hand: the first run
+generates a random token, enrolls it with the agent, and the agent stores only
+its SHA-256 hash. Enrollment can be limited by source CIDR and a startup window
+on the agent. Keep `tokenFile` on persistent storage (for example under
+`state_dir` or the private config checkout), not in the per-run `$TMPDIR`; the
+agent must recognize the same token on later runs. Tokens and configured secret
+values are redacted from logs.
 
 Per-run tokens: `{{uploads}}` (shell-quoted staged file paths) plus one
 `{{key}}` per prompt value. Both are substituted as shell-quoted literals —
@@ -415,7 +467,8 @@ root); `npm test` builds first.
 
 ## Dependencies
 
-- Node.js 22+ (npm dependency: `express` only)
+- Node.js 22+ (npm dependency: `express` only; the task-runner image uses
+  Node 26 from the unified image)
 - System tools tasks commonly use: `bash`, `rsync`, `ssh`, `unzip`/`tar`,
   `git`, `age`, `jq`, `wget`, `restic`, `kubectl`, ImageMagick — whatever your
   tasks need. The image ships restic and kubectl for scheduled backup tasks.
@@ -425,7 +478,9 @@ root); `npm test` builds first.
 
 - `server.mjs` — HTTP server + run orchestration
 - `config-loader.mjs` / `template.mjs` — config loading, `script:`/`move:`/
-  `ingest:` normalization, token resolution
+  `ingest:`/`webhook:` normalization, token resolution
+- `webhook.mjs` — generic HTTP task execution, auto-generated token files,
+  enrollment, downloads and TLS options
 - `state.mjs` — run state, running markers, staging/tmp dirs
 - `runner.mjs` / `util.mjs` — subprocess layer (groups, streaming, redaction)
 - `lib.sh` / `pty_runner.py` — bash helpers + pty helper

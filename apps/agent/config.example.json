@@ -1,0 +1,25 @@
+{
+  "listen": "0.0.0.0",
+  "port": 8788,
+  "stateDir": "/state",
+  "enrollment": {
+    "windowSeconds": 0,
+    "allowFrom": [
+      "127.0.0.1/32",
+      "10.0.0.0/8",
+      "172.16.0.0/12",
+      "192.168.0.0/16"
+    ]
+  },
+  "jobs": {
+    "example-archive": {
+      "type": "archive",
+      "root": "/data/example",
+      "exclude": [
+        "**/*.log"
+      ],
+      "format": "tar.gz",
+      "maxBytes": 1073741824
+    }
+  }
+}

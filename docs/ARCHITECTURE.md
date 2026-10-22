@@ -14,6 +14,7 @@ DSCPLN/
     file-pipelines/     File Pipelines            /pipelines
     whatsapp-txt/   WhatsApp TXT          /watxt
     task-runner/    Task Runner           /tasks (scheduled Contacts/YTMusic jobs, on-demand tasks)
+    agent/          generic remote archive agent (headless, one image for every host)
   config-template/  starter for a private dscpln-config repo
   scripts/          build/publish helpers (one unified image)
 ```
@@ -24,6 +25,7 @@ DSCPLN/
 |---|---|
 | UI header / document title | `D$CPLN ⋅ <Function>` (`⋅` = U+22C5) |
 | images | `ghcr.io/imranr98/dscpln-<app>` |
+| remote agent image | `ghcr.io/imranr98/dscpln-agent` |
 | config/state on a PVC | `config.json`, `.dscpln-*-state.json`, mode `0600`, atomic writes |
 | app state files excluded from git commits | `.backup-state-*` (Task Runner), keep the exclusion pattern |
 | media XMP tags | `XMP-media-sync:*` (written on concatenated outputs) |
@@ -237,9 +239,10 @@ reverse proxy works — the apps only need `BASE_PATH` set per subpath.
 
 **Building & deploying an image**
 
-CI (`.github/workflows/ci.yml`) publishes all five tags after every green
-`main` build: one unified image, tagged as
-`ghcr.io/imranr98/dscpln-<app>:latest`. The `publish` job writes the digest
+CI (`.github/workflows/ci.yml`) publishes all five app tags plus the generic
+agent image after every green `main` build. The app tags are one unified image,
+tagged as `ghcr.io/imranr98/dscpln-<app>:latest`; the agent is
+`ghcr.io/imranr98/dscpln-agent:latest`. The `publish` job writes the digest
 table to the run summary and uploads it as `image-digests-<sha>`; deploy by
 pinning those digests. Publishing `:latest` does not change a running
 deployment.
@@ -253,6 +256,9 @@ scripts/build.sh <app>
 
 # or build once and push every app tag (prints the digest table):
 scripts/build-all.sh
+
+# or build/push the generic remote agent image:
+scripts/build-agent.sh
 
 # pin the digest in your deployment repo's template for the app, then deploy:
 helm upgrade --install <release> <chart> -n apps
@@ -270,9 +276,24 @@ workflow from `main`. The example Kubernetes templates share a
 `_helpers.tpl` (pod/container security contexts, readiness probe, Service) so
 the hardening posture and Service shape stay uniform.
 
-New GHCR packages are private by default. Make the five packages public once, or
+New GHCR packages are private by default. Make the six packages public once, or
 add an `imagePullSecret` with `read:packages` to the deployment. Renovate bumps
 the pinned digests; never leave a floating tag unpinned.
+
+**Remote archive agent**
+
+The headless [Agent](../apps/agent/README.md) is one generic image for remote
+hosts. It exposes only configured archive jobs; a job is a root path, optional
+excludes, `tar.gz`, and a size limit. The Task Runner invokes it through a
+generic `webhook` task, downloads the archive, and runs follow-up commands such
+as restic.
+
+On first use the Task Runner generates the bearer token locally, enrolls it
+with the agent, and the agent stores only a SHA-256 hash. No token is created by
+hand. Enrollment is trust-on-first-use, limited by source CIDR and a startup
+window; bind the agent to the private network and firewall it to the Task
+Runner. Agent jobs and tokens live in the private config/deployment, never in
+this repo or the image.
 
 **Balance API**
 

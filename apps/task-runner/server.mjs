@@ -65,6 +65,7 @@ import {
 } from './state.mjs';
 import { DAY_SECONDS, humanAgo, pathFound, shellQuote, splitLines } from './util.mjs';
 import { killpg, makeLogger, sh, shCapture } from './runner.mjs';
+import { runWebhook } from './webhook.mjs';
 
 // The modules above also implement the documented test surface; re-export them
 // so `import * as bctl from '../server.mjs'` keeps working.
@@ -177,7 +178,26 @@ export async function runCommands(ctx) {
       return [false, `Could not prepare task files for uid ${uid}: ${err.message}`];
     }
   }
-  const cmds = Array.isArray(task.commands) ? task.commands : [task.commands];
+  const cmds = task.commands === undefined ? [] : (Array.isArray(task.commands) ? task.commands : [task.commands]);
+  let webhookSummary = null;
+  if (task.webhook) {
+    const result = await runWebhook({
+      webhook: task.webhook,
+      local: ctx.local,
+      log: ctx.log,
+      redact,
+      cwd,
+      runAs,
+      signal: ctx.signal,
+      extra: ctx.extra,
+    });
+    if (!result.ok) return [false, result.summary];
+    webhookSummary = result.summary;
+    if (capture) output.push(result.summary);
+  }
+  if (!cmds.length && webhookSummary !== null) {
+    return [true, webhookSummary];
+  }
   for (const cmd of cmds) {
     const resolved = resolve(cmd, ctx.local, extra);
     let rc;
@@ -299,7 +319,7 @@ export async function runTask(task, local, files, log = null, extra = null, opts
     tmpdir = fs.mkdtempSync(path.join(tmpRoot(), `${slugify(task.name)}-`));
   }
   fs.mkdirSync(tmpdir, { recursive: true });
-  const ctx = { task, local, files, log: collectLog, extra: extra ?? {}, groups, tmpdir };
+  const ctx = { task, local, files, log: collectLog, extra: extra ?? {}, groups, tmpdir, signal: opts.signal };
   let ok;
   let summary;
   try {
@@ -452,6 +472,7 @@ function startRun(taskName, payload = {}, trigger = 'manual', actionKey = null) 
     trigger,
     ts: Date.now() / 1000,
     tmpdir: path.join(tmpRoot(), `${slugify(taskName)}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`),
+    abort: new AbortController(),
   };
   RUNS.set(taskName, rec);
   markRunning(taskName);
@@ -460,7 +481,7 @@ function startRun(taskName, payload = {}, trigger = 'manual', actionKey = null) 
     let ok = false;
     let summary = 'Internal error';
     try {
-      [ok, summary] = await runTask(task, LOCAL, files, logger, payload, { groups: rec.groups, tmpdir: rec.tmpdir });
+      [ok, summary] = await runTask(task, LOCAL, files, logger, payload, { groups: rec.groups, tmpdir: rec.tmpdir, signal: rec.abort.signal });
       if (rec.cancelled) {
         [ok, summary] = [false, 'Cancelled by user'];
         saveTaskState(task, LOCAL, false, summary, logger.text());
@@ -947,6 +968,7 @@ export function createApp(options = {}) {
         const rec = RUNS.get(taskName)
         if (rec) {
           rec.cancelled = true
+          rec.abort?.abort()
           for (const pid of [...rec.groups]) killpg(pid)
           return res.json({ cancelled: true })
         }

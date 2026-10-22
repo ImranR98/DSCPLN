@@ -7,6 +7,7 @@ DEFAULT_REGISTRY=ghcr.io
 DEFAULT_IMAGE_ORG=imranr98
 
 ALL_APPS=(portal balance-xlsx file-pipelines whatsapp-txt task-runner)
+AGENT_IMAGE=dscpln-agent
 
 # app -> image name (repo under IMAGE_ORG)
 declare -A IMAGE_NAMES=(

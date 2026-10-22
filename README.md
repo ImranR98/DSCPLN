@@ -20,6 +20,11 @@ Every app is configured at runtime — through its own Settings UI or a mounted
 config file — so nothing user-specific is baked into the apps or their images.
 Run one app or all of them; each is an independent container.
 
+The headless [Agent](apps/agent/README.md) extends the same model to remote
+hosts: one generic archive-agent image, configured per host, with automatic
+token enrollment. It lets the Task Runner replace broad SSH keys with a narrow
+archive API.
+
 ## Keep your configuration in one repo
 
 The apps work with their built-in defaults. For a multi-app deployment, put
@@ -52,7 +57,8 @@ All images use synthetic demo data — regenerate them with
 ## Run with Docker
 
 Images are published as `ghcr.io/imranr98/dscpln-<app>` (portal, balance,
-file-pipelines, watxt, task-runner). All five tags are built from the same
+file-pipelines, watxt, task-runner). The headless remote agent is
+`ghcr.io/imranr98/dscpln-agent`. All five app tags are built from the same
 unified image; the deployment's `APP` env selects the server. CI publishes them
 after every green `main` build and lists the digest to pin in the run summary.
 `docker-compose.example.yaml` shows the expected volumes and ports for a few of

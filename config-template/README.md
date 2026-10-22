@@ -46,6 +46,7 @@ apps/
   portal/config.json       notification settings + the portal card list
   balance-xlsx/config.json workbook path and notifications
   file-pipelines/config.json folder pipelines
+  lockdown/config.json       port-blocker presets
 tools/                     helper scripts called by tasks
 ```
 
@@ -63,6 +64,7 @@ Point each app at its config file:
 | Balance XLSX | `DSCPLN_CONFIG` | `./config.json` |
 | File Pipelines | `--config <path>` | `/config/config.json` |
 | Task Runner | `BACKUPCTL_CONFIG_FILE` | `apps/task-runner/config.mjs` |
+| Lockdown | `LOCKDOWN_CONFIG` | `/config/config.json` |
 
 `DSCPLN_STATE_FILE` keeps a scheduled app's run state on its own volume when
 the config file is mounted read-only.

@@ -1,0 +1,46 @@
+{
+  "presets": [
+    {
+      "id": "public-web",
+      "label": "Public web",
+      "short": "Block public web ports",
+      "protocol": "tcp",
+      "direction": "input",
+      "ports": [80, 443],
+      "allowIndefinite": true,
+      "defaultDurationSeconds": 1800,
+      "confirmation": "BLOCK PUBLIC",
+      "danger": false,
+      "effect": "Blocks the configured public web ports while leaving the control page reachable over another path.",
+      "warning": "If this page uses one of these ports, your current session will disconnect."
+    },
+    {
+      "id": "all-web",
+      "label": "All web ingress",
+      "short": "Block every configured web port",
+      "protocol": "tcp",
+      "direction": "input",
+      "ports": [80, 443, 8443],
+      "allowIndefinite": false,
+      "defaultDurationSeconds": 600,
+      "confirmation": "CUT WEB",
+      "danger": true,
+      "effect": "Blocks every configured web ingress port, including the control page.",
+      "warning": "You may not be able to undo this remotely. The timer is the recovery path."
+    },
+    {
+      "id": "uplink-cut",
+      "label": "Uplink cut",
+      "short": "Block an outbound uplink port",
+      "protocol": "udp",
+      "direction": "output",
+      "ports": [51820],
+      "allowIndefinite": false,
+      "defaultDurationSeconds": 600,
+      "confirmation": "CUT UPLINK",
+      "danger": true,
+      "effect": "Blocks traffic to the configured outbound uplink port.",
+      "warning": "This may remove the path you use to reach the control page. The timer is the recovery path."
+    }
+  ]
+}

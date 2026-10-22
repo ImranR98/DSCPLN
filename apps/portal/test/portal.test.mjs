@@ -5,7 +5,7 @@ import http from 'node:http'
 import { once } from 'node:events'
 import { createPortalApp } from '../server.mjs'
 
-const EXPECTED_LINKS = ['/balance', '/pipelines', '/watxt', '/tasks']
+const EXPECTED_LINKS = ['/balance', '/pipelines', '/watxt', '/tasks', '/lockdown']
 
 async function portalFixture(t) {
   const portal = createPortalApp({ dataDir: tempDir('portal-test-'), log: () => {} })
@@ -248,7 +248,7 @@ test('portal cards show app summaries', async (t) => {
   const { base } = await portalFixture(t)
   const page = await browser.newPage()
   const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
-  for (const path of ['balance', 'pipelines', 'watxt', 'tasks']) {
+  for (const path of ['balance', 'pipelines', 'watxt', 'tasks', 'lockdown']) {
     await page.route(`**/${path}/api/health`, (route) => route.fulfill(json({ ok: true })))
   }
   await page.route('**/balance/status', (route) => route.fulfill(json({
@@ -341,7 +341,7 @@ test('portal attention ignores over-budget', async (t) => {
   const { base } = await portalFixture(t)
   const page = await browser.newPage()
   const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
-  for (const path of ['balance', 'pipelines', 'watxt', 'tasks']) {
+  for (const path of ['balance', 'pipelines', 'watxt', 'tasks', 'lockdown']) {
     await page.route(`**/${path}/api/health`, (route) => route.fulfill(json({ ok: true })))
   }
   await page.route('**/balance/status', (route) => route.fulfill(json({
@@ -358,6 +358,7 @@ test('portal attention ignores over-budget', async (t) => {
     conversations: 3, messages: 42, bytes: 1024, skipped: [], indexedAt: new Date().toISOString(), watching: true,
   })))
   await page.route('**/tasks/api/tasks', (route) => route.fulfill(json({ groups: [{ tasks: [] }] })))
+  await page.route('**/lockdown/api/status', (route) => route.fulfill(json({ presets: [], limits: { minDurationSeconds: 600, maxDurationSeconds: 86400 } })))
 
   await page.goto(`${base}/`)
   await page.waitForFunction(() =>
@@ -376,7 +377,7 @@ test('portal attention counts processing errors', async (t) => {
   const { base } = await portalFixture(t)
   const page = await browser.newPage()
   const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
-  for (const path of ['balance', 'pipelines', 'watxt', 'tasks']) {
+  for (const path of ['balance', 'pipelines', 'watxt', 'tasks', 'lockdown']) {
     await page.route(`**/${path}/api/health`, (route) => route.fulfill(json({ ok: true })))
   }
   await page.route('**/balance/status', (route) => route.fulfill(json({
@@ -393,6 +394,7 @@ test('portal attention counts processing errors', async (t) => {
     conversations: 3, messages: 42, bytes: 1024, skipped: [], indexedAt: new Date().toISOString(), watching: true,
   })))
   await page.route('**/tasks/api/tasks', (route) => route.fulfill(json({ groups: [{ tasks: [] }] })))
+  await page.route('**/lockdown/api/status', (route) => route.fulfill(json({ presets: [], limits: { minDurationSeconds: 600, maxDurationSeconds: 86400 } })))
 
   await page.goto(`${base}/`)
   await page.waitForFunction(() =>

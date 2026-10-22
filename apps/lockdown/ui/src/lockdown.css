@@ -4,7 +4,13 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
     gap: var(--space-3);
-    margin-top: var(--space-4);
+}
+
+.lockdown-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+    gap: var(--space-2);
+    margin-top: var(--space-3);
 }
 
 .lockdown-card {
@@ -131,10 +137,6 @@
 /* Active blocks use the shared error colour, not Pico's amber warning. */
 .status-tag--blocked::before {
     background: var(--over);
-}
-
-.lockdown-note {
-    margin-top: var(--space-4);
 }
 
 .lockdown-note p:first-of-type {

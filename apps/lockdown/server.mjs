@@ -2,7 +2,14 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { asyncRoute, createApp } from '@dscpln/server-kit'
-import { validateBlockRequest, validateClearRequest } from './policy.mjs'
+import {
+  DEFAULT_CONFIG_PATH,
+  addDerived,
+  loadConfig,
+  validateBlockRequest,
+  validateClearRequest,
+  validateConfig,
+} from './config.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 
@@ -16,6 +23,9 @@ export function createLockdownApp(options = {}) {
   const log = options.log ?? ((line) => console.log(line))
   const port = Number(options.port ?? process.env.PORT ?? 8086)
   const host = options.host ?? process.env.HOST ?? '0.0.0.0'
+  const config = options.config ?? (options.presets
+    ? addDerived(validateConfig({ presets: options.presets }))
+    : loadConfig(options.configFile ?? process.env.LOCKDOWN_CONFIG ?? DEFAULT_CONFIG_PATH))
 
   if (!blockerToken) throw new Error('PORT_BLOCKER_TOKEN is required')
 
@@ -53,13 +63,25 @@ export function createLockdownApp(options = {}) {
 
   const routes = (router) => {
     router.get('/api/status', asyncRoute(async (req, res) => {
-      res.json(await callBlocker('/v1/status'))
+      const result = await callBlocker('/v1/status')
+      const active = result.presets ?? {}
+      res.json({
+        ...result,
+        limits: config.limits,
+        presets: config.presets.map((preset) => ({
+          ...preset,
+          active: Boolean(active[preset.id]?.active),
+          activePorts: active[preset.id]?.ports ?? [],
+          expiresAt: active[preset.id]?.expiresAt ?? null,
+          remainingSeconds: active[preset.id]?.remainingSeconds ?? null,
+        })),
+      })
     }))
 
     router.post('/api/block', asyncRoute(async (req, res) => {
       let request
       try {
-        request = validateBlockRequest(req.body ?? {})
+        request = validateBlockRequest(config, req.body ?? {})
       } catch (err) {
         err.statusCode = 400
         throw err
@@ -71,7 +93,7 @@ export function createLockdownApp(options = {}) {
     router.post('/api/clear', asyncRoute(async (req, res) => {
       let request
       try {
-        request = validateClearRequest(req.body ?? {})
+        request = validateClearRequest(config, req.body ?? {})
       } catch (err) {
         err.statusCode = 400
         throw err
@@ -88,10 +110,10 @@ export function createLockdownApp(options = {}) {
     routes,
     auth: options.auth,
     log,
-    healthExtra: () => ({ blocker: 'configured' }),
+    healthExtra: () => ({ blocker: 'configured', presets: config.presets.length }),
   })
 
-  return { app, port, host, start: async () => {} }
+  return { app, port, host, config, start: async () => {} }
 }
 
 if (process.argv[1] && import.meta.url === `file://${path.resolve(process.argv[1])}`) {

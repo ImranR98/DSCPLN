@@ -14,7 +14,7 @@ DSCPLN/
     file-pipelines/  folder watcher and media pipelines
     whatsapp-txt/    chat export browser and merger
     task-runner/     scheduled and on-demand tasks
-    lockdown/        time-limited host-port blocks + internal blocker
+    lockdown/        configured host-port blocks + internal blocker
     agent/           optional remote archive service
   packages/
     server-kit/      shared Node/Express primitives

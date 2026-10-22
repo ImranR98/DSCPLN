@@ -1,7 +1,7 @@
 {
   "name": "dscpln-lockdown",
   "version": "1.0.0",
-  "description": "D$CPLN lockdown: time-limited port blocks for srv0",
+  "description": "D$CPLN lockdown: time-limited blocks for configured host ports",
   "private": true,
   "type": "module",
   "main": "server.mjs",

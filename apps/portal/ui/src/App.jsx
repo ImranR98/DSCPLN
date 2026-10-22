@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Boxes,
   DollarSign,
+  Lock,
   MessageSquareText,
   RefreshCw,
   Settings,
@@ -31,6 +32,7 @@ const ICONS = {
   message: MessageSquareText,
   workflow: Workflow,
   wrench: Wrench,
+  lock: Lock,
 }
 
 const DEFAULT_FUNCTIONS = [
@@ -38,6 +40,7 @@ const DEFAULT_FUNCTIONS = [
   { path: 'pipelines', icon: 'workflow', name: 'File Pipelines', description: 'Watch folders, organize media, and keep originals safe', kind: 'pipelines' },
   { path: 'watxt', icon: 'message', name: 'WhatsApp TXT', description: 'Browse, import and merge WhatsApp chat exports', kind: 'watxt' },
   { path: 'tasks', icon: 'wrench', name: 'Task Runner', description: 'Run scheduled and on-demand tasks', kind: 'tasks' },
+  { path: 'lockdown', icon: 'lock', name: 'Lockdown', description: 'Temporarily block configured host ports', kind: 'lockdown' },
 ]
 
 const EMPTY = {
@@ -235,12 +238,38 @@ async function balanceDetail(fn) {
   }
 }
 
+async function lockdownDetail(fn) {
+  const state = await getJson(`${fn.path}/api/status`)
+  const presets = state.presets ?? []
+  const active = presets.filter((preset) => preset.active)
+  const expiries = active
+    .map((preset) => preset.expiresAt)
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b)
+  return {
+    issue: false,
+    kicker: `${presets.length} preset${presets.length === 1 ? '' : 's'}`,
+    primary: active.length
+      ? { value: String(active.length), label: `active block${active.length === 1 ? '' : 's'}`, tone: 'over' }
+      : { value: 'Open', label: 'no blocks', tone: 'ok' },
+    stats: [
+      stat('Active', formatNumber(active.length), active.length ? 'over' : ''),
+      stat('Next expiry', expiries.length ? formatDateTime(expiries[0]) : '—'),
+      stat('Presets', formatNumber(presets.length)),
+    ],
+    footer: active.length
+      ? { text: 'Open Lockdown to review or clear blocks', tone: 'over' }
+      : { text: 'No port blocks active', tone: 'ok' },
+  }
+}
+
 const DETAILS = {
   scheduled: scheduledDetail,
   pipelines: pipelinesDetail,
   watxt: watxtDetail,
   tasks: tasksDetail,
   balance: balanceDetail,
+  lockdown: lockdownDetail,
 }
 
 const withIcons = (list) => list.map((fn) => ({ ...fn, icon: ICONS[fn.icon] ?? Boxes }))

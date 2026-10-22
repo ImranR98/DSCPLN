@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RefreshCw, ShieldAlert, ShieldCheck, TimerReset } from 'lucide-react'
 import {
   AppHeader,
@@ -14,42 +14,6 @@ import {
 } from '@dscpln/ui-kit'
 import './lockdown.css'
 
-const PRESET_ORDER = ['vpn-only', 'traefik-off', 'srv0-tunnel-cut']
-
-const PRESETS = {
-  'vpn-only': {
-    label: 'VPN-only',
-    short: 'Block public ports',
-    ports: [80, 8443],
-    phrase: 'BLOCK PUBLIC',
-    allowIndefinite: true,
-    defaultDuration: 30 * 60,
-    effect: 'Stops public HTTP and HTTPS access through vps0. TCP 443 remains available over VPN and LAN.',
-    warning: 'If you are using the public path, this page will disconnect. Reconnect over VPN or LAN to undo it.',
-  },
-  'traefik-off': {
-    label: 'Cut Traefik',
-    short: 'Block all Traefik ingress',
-    ports: [80, 443, 8443],
-    phrase: 'CUT TRAEFIK',
-    allowIndefinite: false,
-    defaultDuration: 10 * 60,
-    effect: 'Stops all Traefik ingress on srv0, including this page over VPN and LAN.',
-    warning: 'You cannot undo this remotely. The timer is the only recovery path unless srv0 reboots.',
-  },
-  'srv0-tunnel-cut': {
-    label: 'Cut srv0 tunnel',
-    short: 'Block the public-exposure tunnel',
-    ports: [51822],
-    protocol: 'udp',
-    phrase: 'CUT TUNNEL',
-    allowIndefinite: false,
-    defaultDuration: 10 * 60,
-    effect: 'Blocks srv0 from reaching the vps0 public-exposure hub, which also carries the VPN endpoint.',
-    warning: 'Public and VPN access to srv0 will stop. This page remains reachable only from the LAN until the timer expires.',
-  },
-}
-
 const DURATIONS = [
   { value: '600', label: '10 minutes' },
   { value: '900', label: '15 minutes' },
@@ -60,51 +24,43 @@ const DURATIONS = [
   { value: '86400', label: '24 hours' },
 ]
 
-const portText = (ports = []) => ports.map((port) => `TCP ${port}`).join(', ')
-
-function presetPortText(preset) {
-  if (preset === 'srv0-tunnel-cut') return 'UDP 51822'
-  return portText(PRESETS[preset].ports)
-}
+const portText = (preset) => preset.ports.map((port) => `${preset.protocol.toUpperCase()} ${port}`).join(', ')
 
 function activeLabel(status) {
-  if (!status) return 'Waiting for blocker'
-  const active = PRESET_ORDER.filter((id) => status.presets?.[id]?.active)
+  if (!status) return 'Waiting for port blocker'
+  const presets = status.presets ?? []
+  if (!presets.length) return 'No presets configured'
+  const active = presets.filter((preset) => preset.active)
   if (!active.length) return 'All ports open'
-  return active.map((id) => PRESETS[id].label).join(' + ')
+  return active.map((preset) => preset.label).join(' + ')
 }
 
-function expiryText(presetStatus) {
-  if (!presetStatus?.active) return ''
-  if (!presetStatus.expiresAt) return 'Until cleared'
-  return `Expires ${formatDateTime(presetStatus.expiresAt)}`
+function expiryText(preset) {
+  if (!preset?.active) return ''
+  if (!preset.expiresAt) return 'Until cleared'
+  return `Expires ${formatDateTime(preset.expiresAt)}`
 }
 
-function remainingText(presetStatus) {
-  if (!presetStatus?.active || !presetStatus.remainingSeconds) return ''
-  return `${formatDuration(presetStatus.remainingSeconds)} remaining`
+function remainingText(preset) {
+  if (!preset?.active || !preset.remainingSeconds) return ''
+  return `${formatDuration(preset.remainingSeconds)} remaining`
 }
 
-function presetState(status, id) {
-  return status?.presets?.[id] ?? { active: false, ports: [], expiresAt: null, remainingSeconds: null }
-}
-
-function PresetCard({ id, preset, state, duration, onDuration, onOpen, busy }) {
-  const active = Boolean(state.active)
+function PresetCard({ preset, duration, onDuration, onOpen, busy }) {
   return (
-    <article className={`card lockdown-card${active ? ' is-active' : ''}`} data-testid={`preset-${id}`}>
+    <article className={`card lockdown-card${preset.active ? ' is-active' : ''}`} data-testid={`preset-${preset.id}`}>
       <div className="card__header">
         <h2>{preset.label}</h2>
-        <span className={`status-tag ${active ? 'status-tag--blocked' : ''}`} data-testid={`state-${id}`}>
-          {active ? 'Active' : 'Open'}
+        <span className={`status-tag ${preset.active ? 'status-tag--blocked' : ''}`} data-testid={`state-${preset.id}`}>
+          {preset.active ? 'Active' : 'Open'}
         </span>
       </div>
       <p className="lockdown-card__lead">{preset.short}</p>
-      <p className="muted lockdown-card__ports">{presetPortText(id)}</p>
-      {active ? (
+      <p className="muted lockdown-card__ports">{portText(preset)}</p>
+      {preset.active ? (
         <div className="lockdown-card__active">
-          <strong>{expiryText(state)}</strong>
-          <span className="muted">{remainingText(state)}</span>
+          <strong>{expiryText(preset)}</strong>
+          <span className="muted">{remainingText(preset)}</span>
         </div>
       ) : (
         <p className="muted">{preset.effect}</p>
@@ -120,13 +76,13 @@ function PresetCard({ id, preset, state, duration, onDuration, onOpen, busy }) {
           </select>
         </label>
         <button
-          className={active ? 'outline secondary' : ''}
+          className={preset.active ? 'outline secondary' : ''}
           type="button"
           disabled={busy}
-          onClick={() => onOpen(id)}
-          data-testid={`open-${id}`}
+          onClick={() => onOpen(preset)}
+          data-testid={`open-${preset.id}`}
         >
-          {active ? 'Replace block' : 'Block'}
+          {preset.active ? 'Replace block' : 'Block'}
         </button>
       </div>
     </article>
@@ -136,9 +92,7 @@ function PresetCard({ id, preset, state, duration, onDuration, onOpen, busy }) {
 export default function App() {
   const [status, setStatus] = useState(null)
   const [statusError, setStatusError] = useState('')
-  const [durations, setDurations] = useState(() => Object.fromEntries(
-    PRESET_ORDER.map((id) => [id, String(PRESETS[id].defaultDuration)]),
-  ))
+  const [durations, setDurations] = useState({})
   const [action, setAction] = useState(null)
   const [phrase, setPhrase] = useState('')
   const [busy, setBusy] = useState(false)
@@ -155,22 +109,33 @@ export default function App() {
 
   usePolling(refresh, 5_000)
 
-  const active = useMemo(
-    () => PRESET_ORDER.filter((id) => presetState(status, id).active),
-    [status],
-  )
-  const pending = useMemo(
-    () => Object.keys(status?.pending ?? {}),
-    [status],
-  )
+  const presets = useMemo(() => status?.presets ?? [], [status])
+  const active = presets.filter((preset) => preset.active)
+  const pending = Object.keys(status?.pending ?? {})
   const tone = statusError ? 'over' : active.length ? 'warn' : 'ok'
   const meta = statusError ? 'Port blocker unavailable' : activeLabel(status)
 
-  const openAction = (id) => {
-    const raw = durations[id]
+  useEffect(() => {
+    if (!presets.length) return
+    setDurations((current) => {
+      let changed = false
+      const next = { ...current }
+      for (const preset of presets) {
+        if (next[preset.id] !== undefined) continue
+        next[preset.id] = preset.allowIndefinite && preset.defaultDurationSeconds == null
+          ? 'indefinite'
+          : String(preset.defaultDurationSeconds ?? 600)
+        changed = true
+      }
+      return changed ? next : current
+    })
+  }, [presets])
+
+  const openAction = (preset) => {
+    const raw = durations[preset.id] ?? (preset.allowIndefinite ? 'indefinite' : '600')
     setPhrase('')
     setAction({
-      preset: id,
+      preset,
       durationSeconds: raw === 'indefinite' ? null : Number(raw),
     })
   }
@@ -196,14 +161,14 @@ export default function App() {
         showToast('All port blocks cleared')
       } else {
         await postJson('api/block', {
-          preset: action.preset,
+          preset: action.preset.id,
           durationSeconds: action.durationSeconds,
           confirmation: phrase,
         })
         showToast(
-          action.preset === 'vpn-only'
-            ? 'Public port block scheduled. Use VPN or LAN if this page disconnects.'
-            : 'Block scheduled. The page will disconnect; the timer will restore access.',
+          action.preset.allowIndefinite && action.durationSeconds == null
+            ? 'Indefinite block scheduled. Confirm you can still reach this page.'
+            : 'Block scheduled. The page may disconnect; the timer is the recovery path.',
         )
       }
       setAction(null)
@@ -219,13 +184,12 @@ export default function App() {
   const actionInfo = action?.clear
     ? {
         label: 'Clear all port blocks',
-        effect: 'Removes every active block from the srv0 port blocker. Public access returns immediately.',
+        effect: 'Removes every active block from the port blocker. Public access returns immediately.',
         warning: 'This only clears the port blocker. It does not undo any other change on the host.',
-        phrase: 'CLEAR',
+        confirmation: 'CLEAR',
+        danger: false,
       }
-    : action
-      ? PRESETS[action.preset]
-      : null
+    : action?.preset
 
   const actionExpiry = action?.clear
     ? 'Immediately'
@@ -263,43 +227,38 @@ export default function App() {
             <h2>Overview</h2>
             <span className="card__context">{status?.limits ? `${status.limits.minDurationSeconds / 60} min – ${status.limits.maxDurationSeconds / 3600} h timed` : ''}</span>
           </div>
-          <div className="stat-tiles">
-            <div className="stat-tile">
-              <span className="stat-tile__label">Public path</span>
-              <span className={`stat-tile__value${active.includes('vpn-only') || active.includes('traefik-off') ? ' is-over' : ' is-ok'}`}>
-                {active.includes('vpn-only') || active.includes('traefik-off') ? 'Blocked' : 'Open'}
-              </span>
+          {presets.length ? (
+            <div className="lockdown-tiles">
+              {presets.map((preset) => (
+                <div className="stat-tile" key={preset.id}>
+                  <span className="stat-tile__label">{preset.label}</span>
+                  <span className={`stat-tile__value${preset.active ? ' is-over' : ' is-ok'}`}>
+                    {preset.active ? 'Blocked' : 'Open'}
+                  </span>
+                </div>
+              ))}
             </div>
-            <div className="stat-tile">
-              <span className="stat-tile__label">Traefik 443</span>
-              <span className={`stat-tile__value${active.includes('traefik-off') ? ' is-over' : ' is-ok'}`}>
-                {active.includes('traefik-off') ? 'Blocked' : 'Open'}
-              </span>
-            </div>
-            <div className="stat-tile">
-              <span className="stat-tile__label">srv0 tunnel</span>
-              <span className={`stat-tile__value${active.includes('srv0-tunnel-cut') ? ' is-over' : ' is-ok'}`}>
-                {active.includes('srv0-tunnel-cut') ? 'Cut' : 'Open'}
-              </span>
-            </div>
-          </div>
+          ) : (
+            <p className="muted">No presets configured. Mount a Lockdown config in the deployment.</p>
+          )}
           {active.length ? (
             <ul className="lockdown-active-list" data-testid="active-list">
-              {active.map((id) => {
-                const state = presetState(status, id)
-                return (
-                  <li key={id}>
-                    <strong>{PRESETS[id].label}</strong>
-                    <span>{presetPortText(id)}</span>
-                    <span>{expiryText(state)}</span>
-                  </li>
-                )
-              })}
+              {active.map((preset) => (
+                <li key={preset.id}>
+                  <strong>{preset.label}</strong>
+                  <span>{portText(preset)}</span>
+                  <span>{expiryText(preset)}</span>
+                </li>
+              ))}
             </ul>
           ) : (
             <p className="muted" data-testid="no-active">No port blocks active.</p>
           )}
-          {pending.length ? <p className="muted">Applying: {pending.map((id) => PRESETS[id].label).join(', ')}</p> : null}
+          {pending.length ? (
+            <p className="muted">
+              Applying: {pending.map((id) => presets.find((preset) => preset.id === id)?.label ?? id).join(', ')}
+            </p>
+          ) : null}
           {active.length ? (
             <div className="lockdown-actions">
               <button className="outline secondary" type="button" onClick={openClear} data-testid="open-clear">
@@ -309,26 +268,26 @@ export default function App() {
           ) : null}
         </section>
 
-        <div className="lockdown-grid">
-          {PRESET_ORDER.map((id) => (
-            <PresetCard
-              key={id}
-              id={id}
-              preset={PRESETS[id]}
-              state={presetState(status, id)}
-              duration={durations[id]}
-              onDuration={(value) => setDurations((current) => ({ ...current, [id]: value }))}
-              onOpen={openAction}
-              busy={busy}
-            />
-          ))}
-        </div>
+        {presets.length ? (
+          <div className="lockdown-grid">
+            {presets.map((preset) => (
+              <PresetCard
+                key={preset.id}
+                preset={preset}
+                duration={durations[preset.id] ?? (preset.allowIndefinite ? 'indefinite' : '600')}
+                onDuration={(value) => setDurations((current) => ({ ...current, [preset.id]: value }))}
+                onOpen={openAction}
+                busy={busy}
+              />
+            ))}
+          </div>
+        ) : null}
 
         <section className="card lockdown-note">
           <div className="card__header"><h2>What survives</h2></div>
-          <p><ShieldAlert size={16} strokeWidth={1.8} /> A srv0 reboot clears all blocks. A timed block also clears when its nftables timeout expires.</p>
-          <p><ShieldCheck size={16} strokeWidth={1.8} /> Removing a block is possible while 443 is reachable. Cut Traefik and srv0 tunnel blocks can only be undone by their timer or a reboot.</p>
-          <p className="muted">Traefik host ports: TCP 80, 443 and 8443. The public path uses 8443; VPN/LAN uses 443.</p>
+          <p><ShieldAlert size={16} strokeWidth={1.8} /> A host reboot clears all blocks. A timed block also clears when its nftables timeout expires.</p>
+          <p><ShieldCheck size={16} strokeWidth={1.8} /> Removing a block is possible while the control page is reachable. Some presets may not be undoable remotely.</p>
+          <p className="muted">Presets, ports and descriptions come from the deployment config. The browser can only submit a configured preset ID.</p>
         </section>
       </main>
 
@@ -342,12 +301,10 @@ export default function App() {
             <>
               <button className="outline secondary" type="button" onClick={closeAction} disabled={busy}>Cancel</button>
               <button
-                className={!action?.clear && (action?.preset === 'traefik-off' || action?.preset === 'srv0-tunnel-cut')
-                  ? 'danger'
-                  : action?.clear ? 'outline secondary' : ''}
+                className={!action?.clear && actionInfo.danger ? 'danger' : action?.clear ? 'outline secondary' : ''}
                 type="button"
                 onClick={confirm}
-                disabled={busy || phrase !== actionInfo.phrase}
+                disabled={busy || phrase !== actionInfo.confirmation}
                 data-testid="confirm-action"
               >
                 {busy ? 'Applying…' : action?.clear ? 'Clear blocks' : 'Apply block'}
@@ -358,16 +315,16 @@ export default function App() {
           <p>{actionInfo.effect}</p>
           {!action?.clear ? (
             <ul className="lockdown-dialog-list">
-              <li><strong>Ports:</strong> {presetPortText(action.preset)}</li>
+              <li><strong>Ports:</strong> {portText(action.preset)}</li>
               <li><strong>Duration:</strong> {action.durationSeconds == null ? 'Until cleared' : formatDuration(action.durationSeconds)}</li>
               <li><strong>Expires:</strong> {actionExpiry}</li>
-              <li><strong>Reboot:</strong> A srv0 reboot clears this block immediately.</li>
+              <li><strong>Reboot:</strong> A host reboot clears this block immediately.</li>
             </ul>
           ) : null}
-          <p className="form-error">{actionInfo.warning}</p>
+          {actionInfo.warning ? <p className="form-error">{actionInfo.warning}</p> : null}
           <p className="muted">
             The action is sent to the port blocker with a short delay so this response can return.
-            Type <code>{actionInfo.phrase}</code> to confirm.
+            Type <code>{actionInfo.confirmation}</code> to confirm.
           </p>
           <label>
             Confirmation
@@ -375,7 +332,7 @@ export default function App() {
               autoFocus
               value={phrase}
               onChange={(event) => setPhrase(event.target.value)}
-              placeholder={actionInfo.phrase}
+              placeholder={actionInfo.confirmation}
               data-testid="confirmation"
             />
           </label>

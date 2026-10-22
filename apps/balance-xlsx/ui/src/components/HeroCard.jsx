@@ -3,9 +3,13 @@ import { Breakable } from '@dscpln/ui-kit'
 
 export default function HeroCard({ hero, canEditBudget, onEditBudget }) {
   return (
-    <section className={`card card--hero ${hero.cardClass}`} aria-labelledby="monthHeading">
+    <section
+      className={`card card--hero ${hero.cardClass}`}
+      aria-labelledby="monthHeading"
+      style={hero.accent ? { '--currency': hero.accent } : undefined}
+    >
       <div className="card__header">
-        <h2 className="currency-badge" style={hero.accent ? { '--currency': hero.accent } : undefined}>
+        <h2 className="currency-badge">
           <span id="monthHeading">{hero.heading}</span>
         </h2>
         <span className="card__header-tools">

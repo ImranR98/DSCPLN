@@ -115,6 +115,44 @@ test('agent refuses enrollment from a source outside allowFrom', async () => {
   }
 });
 
+test('agent archives only include-matched paths when include is configured', async () => {
+  const root = tempRoot();
+  const data = path.join(root, 'data');
+  const saves = path.join(data, 'Synced', 'Game', 'drive_c', 'users', 'steamuser');
+  fs.mkdirSync(saves, { recursive: true });
+  fs.writeFileSync(path.join(saves, 'save.dat'), 'save');
+  fs.writeFileSync(path.join(data, 'Synced', 'Game', 'other.bin'), 'other');
+  const configFile = path.join(root, 'agent.json');
+  fs.writeFileSync(configFile, JSON.stringify({
+    stateDir: path.join(root, 'state'),
+    enrollment: { allowFrom: ['127.0.0.1/32'], windowSeconds: 60 },
+    jobs: {
+      saves: {
+        type: 'archive',
+        root: data,
+        include: ['Synced/*/drive_c/users/steamuser'],
+      },
+    },
+  }));
+  const { base, close } = await startServer(loadConfig(configFile));
+  try {
+    assert.equal((await post(base, '/v1/enroll', TOKEN)).status, 204);
+    const response = await post(base, '/v1/jobs/saves/archive', TOKEN);
+    assert.equal(response.status, 200);
+    const archive = path.join(root, 'included.tar.gz');
+    fs.writeFileSync(archive, Buffer.from(await response.arrayBuffer()));
+    const extracted = path.join(root, 'extracted');
+    fs.mkdirSync(extracted);
+    const tar = spawnSync('tar', ['-xzf', archive, '-C', extracted], { encoding: 'utf8' });
+    assert.equal(tar.status, 0, tar.stderr);
+    assert.equal(fs.readFileSync(path.join(extracted, 'Synced/Game/drive_c/users/steamuser/save.dat'), 'utf8'), 'save');
+    assert.equal(fs.existsSync(path.join(extracted, 'Synced/Game/other.bin')), false);
+  } finally {
+    await close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('config rejects relative roots and unsupported job types', () => {
   const root = tempRoot();
   try {
@@ -131,6 +169,13 @@ test('config rejects relative roots and unsupported job types', () => {
       jobs: { example: { type: 'command', root: root } },
     }));
     assert.throws(() => loadConfig(badType), /unsupported type/);
+
+    const badInclude = path.join(root, 'bad-include.json');
+    fs.writeFileSync(badInclude, JSON.stringify({
+      stateDir: path.join(root, 'state'),
+      jobs: { example: { type: 'archive', root, include: ['../outside'] } },
+    }));
+    assert.throws(() => loadConfig(badInclude), /relative and contain no/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

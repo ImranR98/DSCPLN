@@ -83,10 +83,20 @@ export function loadConfig(configPath) {
     if (!Array.isArray(exclude) || exclude.some((entry) => typeof entry !== 'string' || !entry)) {
       throw new ConfigError(`Job '${id}': exclude must be a list of non-empty strings`);
     }
+    const include = jobRaw.include ?? [];
+    if (!Array.isArray(include) || include.some((entry) => typeof entry !== 'string' || !entry)) {
+      throw new ConfigError(`Job '${id}': include must be a list of non-empty relative patterns`);
+    }
+    for (const pattern of include) {
+      if (path.isAbsolute(pattern) || pattern.split(/[\\/]/).includes('..') || pattern.includes('\0') || /[\r\n]/.test(pattern)) {
+        throw new ConfigError(`Job '${id}': include pattern must be relative and contain no '..': ${pattern}`);
+      }
+    }
     jobs[id] = {
       id,
       type,
       root,
+      include: [...include],
       exclude: [...exclude],
       format,
       maxBytes: positiveInteger(jobRaw.maxBytes, `Job '${id}': maxBytes`, DEFAULT_MAX_BYTES),

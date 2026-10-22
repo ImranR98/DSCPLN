@@ -63,6 +63,7 @@ Job fields:
 |---|---|
 | `type` | `archive` (the only type for now) |
 | `root` | Absolute directory to archive |
+| `include` | Optional list of relative glob patterns; when set, only matching paths are archived |
 | `exclude` | Optional list of tar exclude patterns |
 | `format` | `tar.gz` |
 | `maxBytes` | Maximum archive size; defaults to 1 GiB |

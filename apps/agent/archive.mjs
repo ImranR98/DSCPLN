@@ -2,7 +2,7 @@
 // request-supplied paths. The configured root is resolved once per run.
 
 import crypto from 'node:crypto';
-import fs from 'node:fs';
+import fs, { globSync } from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
@@ -35,12 +35,31 @@ export async function createArchive(job, workDir, { signal, timeoutSeconds = job
   fs.mkdirSync(workDir, { recursive: true, mode: 0o700 });
   const dir = fs.mkdtempSync(path.join(workDir, `${job.id}-`));
   const archive = path.join(dir, 'archive.tar.gz');
-  const args = ['-czf', archive, '-C', root];
-  for (const pattern of job.exclude ?? []) args.push(`--exclude=${pattern}`);
-  args.push('.');
-
   const cleanup = () => fs.rmSync(dir, { recursive: true, force: true });
   try {
+    const args = ['-czf', archive, '-C', root];
+    for (const pattern of job.exclude ?? []) args.push(`--exclude=${pattern}`);
+    if (job.include?.length) {
+      const matches = new Set();
+      for (const pattern of job.include) {
+        for (const match of globSync(pattern, { cwd: root })) {
+          if (path.isAbsolute(match) || match.split(path.sep).includes('..')) {
+            throw new ArchiveError(`include pattern resolved outside the root: ${match}`, 500);
+          }
+          matches.add(match);
+        }
+      }
+      const list = [...matches].sort();
+      if (!list.length) {
+        throw new ArchiveError('no files matched the include patterns', 404);
+      }
+      const listFile = path.join(dir, 'files.list');
+      fs.writeFileSync(listFile, `${list.join('\0')}\0`, { mode: 0o600 });
+      args.push('--null', '--files-from', listFile);
+    } else {
+      args.push('.');
+    }
+
     await new Promise((resolve, reject) => {
       const child = spawn('tar', args, {
         env: { ...process.env, LC_ALL: 'C' },

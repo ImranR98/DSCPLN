@@ -21,7 +21,7 @@ jobs:
       REQUIRE_BROWSER: "1"
       REQUIRE_TEST_TOOLS: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Resolve Node version from the production image
         id: node
         run: |
@@ -29,7 +29,7 @@ jobs:
           [ -n "$version" ] || { echo "::error::Could not parse the Node major from docker/app.Dockerfile"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           # Always test the same Node major the image is built on. Renovate
           # updates the Dockerfile (majors are manual) and CI follows.
@@ -91,10 +91,10 @@ jobs:
           print("python-dotenv", version("python-dotenv"))
           PY
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Build unified app image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: docker/app.Dockerfile
@@ -106,7 +106,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build agent image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: docker/agent.Dockerfile
@@ -142,11 +142,11 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -175,7 +175,7 @@ jobs:
 
       - name: Build and push
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: docker/app.Dockerfile
@@ -190,7 +190,7 @@ jobs:
 
       - name: Build and push agent
         id: build-agent
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: docker/agent.Dockerfile
@@ -258,7 +258,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload digest table
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: image-digests-${{ github.sha }}
           path: image-digests.txt

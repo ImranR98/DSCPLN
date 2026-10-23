@@ -42,6 +42,12 @@ the image digests to the run summary and uploads them as an
 `image-digests-<sha>` artifact. Pin those digests in your deployment; a
 floating `latest` tag does not update a running container.
 
+Renovate refreshes the pinned digests, the Node `26-*` base image digests,
+the restic/kubectl versions and every package dependency. Node Docker majors
+are proposed as PRs but not auto-merged until the new major is the project's
+chosen LTS. Digest PRs from this repo are what eventually move the deployment
+templates in the infra repo.
+
 For a local or offline build:
 
 ```sh

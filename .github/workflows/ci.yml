@@ -118,6 +118,10 @@ jobs:
           cache-to: type=gha,scope=agent,mode=max
 
       - name: Smoke test production images
+        env:
+          # buildx loaded the images into Docker's store; podman is also
+          # installed on the runner and would look in a different store.
+          ENGINE: docker
         run: bash scripts/smoke-image.sh dscpln-app:ci dscpln-agent:ci
 
   publish:

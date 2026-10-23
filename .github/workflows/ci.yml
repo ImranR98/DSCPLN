@@ -13,8 +13,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     # The full suite (file-pipelines e2e + production image smoke) needs more
-    # than the old 15-minute ceiling.
-    timeout-minutes: 30
+    # than the old 15-minute ceiling; a cold GHA cache can push a main run past
+    # 20 minutes, so leave headroom.
+    timeout-minutes: 45
     env:
       # A missing browser or system tool must fail the job instead of silently
       # skipping tests (packages/test-kit honors these).

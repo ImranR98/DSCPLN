@@ -1,5 +1,8 @@
 # Generic D$CPLN archive agent. This image is intentionally small: the agent
 # uses Node built-ins and GNU tar, and contains no host-specific config.
+#
+# Track the Node 26 line (the app's minimum) and let Renovate pin/refresh the
+# digest, matching the unified app image (see docker/app.Dockerfile).
 FROM node:26-alpine
 
 RUN apk add --no-cache tar gzip \

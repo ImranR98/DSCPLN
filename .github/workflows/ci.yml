@@ -12,18 +12,117 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # A hung test must fail fast instead of burning the 6h default limit.
-    timeout-minutes: 15
+    # The full suite (file-pipelines e2e + production image smoke) needs more
+    # than the old 15-minute ceiling.
+    timeout-minutes: 30
+    env:
+      # A missing browser or system tool must fail the job instead of silently
+      # skipping tests (packages/test-kit honors these).
+      REQUIRE_BROWSER: "1"
+      REQUIRE_TEST_TOOLS: "1"
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve Node version from the production image
+        id: node
+        run: |
+          version="$(sed -nE 's/^FROM node:([0-9]+)(-|@).*/\1/p' docker/app.Dockerfile | head -1)"
+          [ -n "$version" ] || { echo "::error::Could not parse the Node major from docker/app.Dockerfile"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 26
+          # Always test the same Node major the image is built on. Renovate
+          # updates the Dockerfile (majors are manual) and CI follows.
+          node-version: ${{ steps.node.outputs.version }}
           cache: npm
+
+      - name: Install test system tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg libimage-exiftool-perl age python3-venv
+
+      - name: Show runtime versions
+        run: |
+          node --version
+          npm --version
+          node -p "'Node ' + process.versions.node + ' (LTS: ' + (process.release.lts || 'no') + ')'"
+          ffmpeg -version | head -1
+          exiftool -ver
+          age --version
+
       - run: npm ci
       - run: npm run lint
       - run: npm run check:html
-      - run: npm test
+
+      - name: Test
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test-output.log
+
+      - name: Reject skipped tests
+        # The suite must not green-by-skip. REQUIRE_TEST_TOOLS/REQUIRE_BROWSER
+        # already throw for missing tools; this also catches any
+        # platform-conditional skip that sneaks in later.
+        run: |
+          if grep -q '# SKIP' test-output.log; then
+            echo "::error::Tests were skipped; install the missing tool or fix the test."
+            grep '# SKIP' test-output.log
+            exit 1
+          fi
+
+      - name: Python downloader smoke
+        run: |
+          python3 -m venv /tmp/ytmusic-venv
+          /tmp/ytmusic-venv/bin/pip install --disable-pip-version-check -q \
+            -r apps/task-runner/tools/ytmusic/downloader/requirements.txt
+          /tmp/ytmusic-venv/bin/python - <<'PY'
+          from importlib.metadata import version
+
+          import yt_dlp
+          import ytmusicapi
+          from dotenv import load_dotenv
+
+          assert ytmusicapi
+          assert yt_dlp
+          assert load_dotenv
+          print("ytmusicapi", version("ytmusicapi"))
+          print("yt-dlp", version("yt-dlp"))
+          print("python-dotenv", version("python-dotenv"))
+          PY
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build unified app image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/app.Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: dscpln-app:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build agent image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/agent.Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: dscpln-agent:ci
+          cache-from: type=gha,scope=agent
+          cache-to: type=gha,scope=agent,mode=max
+
+      - name: Smoke test production images
+        env:
+          # buildx loaded the images into Docker's store; podman is also
+          # installed on the runner and would look in a different store.
+          ENGINE: docker
+        run: bash scripts/smoke-image.sh dscpln-app:ci dscpln-agent:ci
 
   publish:
     needs: test

@@ -18,7 +18,7 @@
     "express": "^5.0.0"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=26"
   },
   "devDependencies": {
     "@dscpln/ui-kit": "*",

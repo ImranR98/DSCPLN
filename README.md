@@ -91,7 +91,9 @@ covered in [Operations](docs/OPERATIONS.md).
 
 ## Development
 
-Requires Node.js 26+.
+Requires Node.js 26+. The production images pin the Node 26 base image by
+digest and Renovate refreshes it; Node majors are adopted manually when a new
+version becomes the project's chosen LTS.
 
 ```sh
 npm install            # install every workspace

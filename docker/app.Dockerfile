@@ -1,9 +1,13 @@
-# D$CPLN unified app image: one build, five tags.
+# D$CPLN unified app image: one build, six tags.
 #
 # The image contains the whole monorepo, every app's production dependencies
 # and the superset of runtime tools. Deployments select the app with APP=...
 # (see docker/entrypoint.sh); system packages are therefore shared instead of
-# copied into five near-identical images.
+# copied into six near-identical images.
+#
+# The app requires Node 26+, so pin the 26 line rather than `lts` (which still
+# points at Node 24 until 26 reaches LTS). Renovate pins/refreshes the digest;
+# Node majors are proposed as PRs but not auto-merged (see renovate.json).
 FROM node:26-slim
 
 ARG RESTIC_VERSION=0.19.1
@@ -33,8 +37,10 @@ COPY package.json package-lock.json ./
 COPY packages ./packages
 COPY apps ./apps
 
-# Build every UI before pruning the build-time workspace dependencies.
-RUN npm install --no-audit --no-fund \
+# Install from the lockfile, build every UI, then prune the build-time
+# workspace dependencies. `npm ci` guarantees the image uses exactly the
+# versions CI tested (a drifted lockfile fails the build instead).
+RUN npm ci --no-audit --no-fund \
     && npm run build:ui --workspaces --if-present \
     && npm prune --omit=dev \
     && chown -R node:node /app

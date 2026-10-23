@@ -47,11 +47,16 @@ export async function waitFor(probe, predicate = (value) => Boolean(value), { ti
 // Launches Chromium, or returns null when Playwright/Chromium is unavailable.
 // Playwright's bundled browser is preferred; a system Chromium is a useful
 // fallback in CI images where the browser payload has not been installed.
+// CI sets REQUIRE_BROWSER=1 so a missing browser fails the job instead of
+// silently skipping every UI test.
 export async function launchBrowser(options = { headless: true }) {
   let chromium
   try {
     ({ chromium } = await import('playwright-core'))
   } catch {
+    if (process.env.REQUIRE_BROWSER === '1') {
+      throw new Error('playwright-core is required (REQUIRE_BROWSER=1) but is not installed')
+    }
     return null
   }
   const args = [...(options.args || [])]
@@ -66,6 +71,9 @@ export async function launchBrowser(options = { headless: true }) {
       // Try the next candidate.
     }
   }
+  if (process.env.REQUIRE_BROWSER === '1') {
+    throw new Error('Chromium is required (REQUIRE_BROWSER=1) but no executable could be launched')
+  }
   return null
 }
 
@@ -78,11 +86,16 @@ export async function browserAvailable() {
 }
 
 // True when a command exists on PATH (for tests that need ffmpeg/exiftool...).
+// CI sets REQUIRE_TEST_TOOLS=1 so a missing tool fails the job instead of
+// skipping the tests that depend on it.
 export function have(cmd) {
   try {
     execFileSync('which', [cmd], { stdio: 'ignore' })
     return true
   } catch {
+    if (process.env.REQUIRE_TEST_TOOLS === '1') {
+      throw new Error(`Required test tool is not on PATH: ${cmd}`)
+    }
     return false
   }
 }

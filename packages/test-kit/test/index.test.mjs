@@ -60,7 +60,27 @@ test('waitFor polls until the predicate matches', async () => {
 
 test('have detects commands on PATH', () => {
   assert.equal(have('node'), true)
-  assert.equal(have('definitely-not-a-real-command-xyz'), false)
+
+  // The negative case is only about detection; CI's REQUIRE_TEST_TOOLS
+  // deliberately turns a missing tool into a fatal error.
+  const previous = process.env.REQUIRE_TEST_TOOLS
+  delete process.env.REQUIRE_TEST_TOOLS
+  try {
+    assert.equal(have('definitely-not-a-real-command-xyz'), false)
+  } finally {
+    if (previous !== undefined) process.env.REQUIRE_TEST_TOOLS = previous
+  }
+
+  process.env.REQUIRE_TEST_TOOLS = '1'
+  try {
+    assert.throws(
+      () => have('definitely-not-a-real-command-xyz'),
+      /Required test tool is not on PATH/,
+    )
+  } finally {
+    if (previous === undefined) delete process.env.REQUIRE_TEST_TOOLS
+    else process.env.REQUIRE_TEST_TOOLS = previous
+  }
 })
 
 test('launchBrowser returns a browser or null, and browserAvailable agrees', async () => {

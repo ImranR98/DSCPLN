@@ -1,11 +1,64 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "docker:pinDigests",
+    "helpers:pinGitHubActionDigests",
+    "security:minimumReleaseAgeNpm",
+    ":configMigration"
+  ],
+  "timezone": "America/Toronto",
   "rangeStrategy": "replace",
   "labels": [
     "deps"
   ],
   "prHourlyLimit": 10,
   "prConcurrentLimit": 10,
+  "automerge": true,
+  "automergeType": "pr",
+  "automergeStrategy": "merge-commit",
+  "platformAutomerge": true,
+  "ignoreTests": false,
+  "osvVulnerabilityAlerts": true,
+  "ignorePaths": [
+    "docker-compose.example.yaml"
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "at any time"
+    ]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "restic release baked into the unified app image",
+      "managerFilePatterns": [
+        "/^docker\\/app\\.Dockerfile$/"
+      ],
+      "matchStrings": [
+        "ARG RESTIC_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "restic/restic",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+\\.\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "kubectl release baked into the unified app image",
+      "managerFilePatterns": [
+        "/^docker\\/app\\.Dockerfile$/"
+      ],
+      "matchStrings": [
+        "ARG KUBECTL_VERSION=v(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "kubernetes/kubernetes",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+\\.\\d+)$"
+    }
+  ],
   "packageRules": [
     {
       "description": "Batch non-major npm updates into one PR; majors stay separate",
@@ -21,18 +74,42 @@
       "groupName": "npm deps (non-major)"
     },
     {
-      "description": "Auto-merge non-major updates after CI passes",
-      "matchUpdateTypes": [
-        "minor",
-        "patch",
-        "pin",
-        "digest"
+      "description": "One PR for every Python downloader dependency",
+      "matchManagers": [
+        "pip_requirements"
       ],
-      "automerge": true,
-      "automergeType": "pr",
-      "automergeStrategy": "merge-commit",
-      "platformAutomerge": true,
-      "ignoreTests": false
+      "groupName": "python deps"
+    },
+    {
+      "description": "Node Docker majors are adopted manually when the new major becomes LTS; minor/patch/digest refresh automatically",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "node"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "One PR for the Node base image digest refreshes",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchUpdateTypes": [
+        "digest",
+        "pinDigest"
+      ],
+      "groupName": "docker base images"
+    },
+    {
+      "description": "One PR for GitHub Actions updates",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github actions"
     }
   ]
 }

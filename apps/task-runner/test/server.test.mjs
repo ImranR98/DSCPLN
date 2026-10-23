@@ -95,7 +95,12 @@ async function stage(taskName, filename, content) {
 async function hasPtyTools() {
   for (const bin of ['python3', 'age', 'tar']) {
     const { rc } = await bctl.shCapture(`command -v ${bin} >/dev/null 2>&1`);
-    if (rc !== 0) return false;
+    if (rc !== 0) {
+      if (process.env.REQUIRE_TEST_TOOLS === '1') {
+        throw new Error(`Required test tool is not on PATH: ${bin}`);
+      }
+      return false;
+    }
   }
   return true;
 }

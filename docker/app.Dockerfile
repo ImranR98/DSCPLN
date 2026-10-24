@@ -5,10 +5,10 @@
 # (see docker/entrypoint.sh); system packages are therefore shared instead of
 # copied into six near-identical images.
 #
-# The app requires Node 26+, so pin the 26 line rather than `lts` (which still
-# points at Node 24 until 26 reaches LTS). Renovate pins/refreshes the digest;
-# Node majors are proposed as PRs but not auto-merged (see renovate.json).
-FROM node:26-slim@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec
+# Track the Node LTS tag and pin its digest. Renovate refreshes the digest on
+# every Node/Debian update, including LTS line transitions, so the image and
+# the CI suite (node-version: lts/*) move together automatically.
+FROM node:lts-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
 
 ARG RESTIC_VERSION=0.19.1
 ARG KUBECTL_VERSION=v1.37.1

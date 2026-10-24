@@ -27,7 +27,6 @@ echo "==> Checking runtime tools in $APP_IMAGE"
     set -eu
 
     node --version
-    node -p "'Node ' + process.versions.node + ' (LTS: ' + (process.release.lts || 'no') + ')'"
 
     # Runtime tools used by one or more apps. A missing tool here means a
     # base-image or apt change broke the unified image.

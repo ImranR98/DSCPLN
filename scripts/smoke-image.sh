@@ -27,7 +27,7 @@ echo "==> Checking runtime tools in $APP_IMAGE"
     set -eu
 
     node --version
-    node -e "const major = parseInt(process.versions.node, 10); if (major < 26) process.exit(1)"
+    node -e "if (!process.release.lts) process.exit(1)"
 
     # Runtime tools used by one or more apps. A missing tool here means a
     # base-image or apt change broke the unified image.

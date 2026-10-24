@@ -10,7 +10,7 @@
     "apps/*"
   ],
   "engines": {
-    "node": ">=26"
+    "node": ">=24"
   },
   "scripts": {
     "lint": "eslint .",

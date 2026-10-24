@@ -81,19 +81,6 @@
       "groupName": "python deps"
     },
     {
-      "description": "Node Docker majors are adopted manually when the new major becomes LTS; minor/patch/digest refresh automatically",
-      "matchDatasources": [
-        "docker"
-      ],
-      "matchPackageNames": [
-        "node"
-      ],
-      "matchUpdateTypes": [
-        "major"
-      ],
-      "automerge": false
-    },
-    {
       "description": "One PR for the Node base image digest refreshes",
       "matchManagers": [
         "dockerfile"

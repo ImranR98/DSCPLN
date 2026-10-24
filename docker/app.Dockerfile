@@ -5,10 +5,14 @@
 # (see docker/entrypoint.sh); system packages are therefore shared instead of
 # copied into six near-identical images.
 #
-# Track the Node LTS tag and pin its digest. Renovate refreshes the digest on
-# every Node/Debian update, including LTS line transitions, so the image and
-# the CI suite (node-version: lts/*) move together automatically.
-FROM node:lts-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
+# Track the Node latest tag (currently Node 26 on Debian 13) and pin its
+# digest. Renovate refreshes the digest, so Node 27 arrives automatically and
+# the CI suite (node-version: latest) moves with it.
+#
+# Do not switch this to node:lts-slim: that tag currently resolves to Debian
+# 12/bookworm, whose nftables 1.0.6 breaks the lockdown port-blocker. The
+# Debian trixie image ships nftables 1.1.x.
+FROM node:latest@sha256:a98e6fda54fdbb22d4238054cca9a2a113bcd1191c09193a535aae22f400aa8e
 
 ARG RESTIC_VERSION=0.19.1
 ARG KUBECTL_VERSION=v1.37.1

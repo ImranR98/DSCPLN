@@ -175,6 +175,8 @@ jobs:
           file: docker/app.Dockerfile
           platforms: linux/amd64
           push: true
+          provenance: true
+          sbom: true
           tags: ${{ steps.images.outputs.tags }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -190,6 +192,8 @@ jobs:
           file: docker/agent.Dockerfile
           platforms: linux/amd64
           push: true
+          provenance: true
+          sbom: true
           tags: ${{ steps.images.outputs.agent_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

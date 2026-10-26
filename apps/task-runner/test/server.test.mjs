@@ -386,6 +386,14 @@ test('startup: state tree and per-user runtime dirs are created 0700', () => {
   }
 })
 
+test('startup: long uploads are not capped by the five-minute request timeout', () => {
+  const server = http.createServer();
+  bctl.configureServer(server);
+  assert.equal(server.requestTimeout, 0);
+  assert.equal(server.timeout, 10 * 60 * 1000);
+  server.close();
+});
+
 test('run: commands see a per-run TMPDIR subdir, wiped when the run ends', async () => {
   const t = task('Tmpdir Test', { capture: true, commands: 'echo $TMPDIR' });
   const cfgPath = makeConfig([t]);

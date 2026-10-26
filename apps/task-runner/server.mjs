@@ -1009,6 +1009,15 @@ export function createApp(options = {}) {
 
 // CLI ------------------------------------------------------------------------
 
+// Node aborts a request after five minutes by default and answers 408, which
+// is far too short for multi-gigabyte uploads. Disable the whole-request cap
+// and use an inactivity timeout instead so a live upload can take hours while
+// a stalled client is still dropped.
+export function configureServer(server) {
+  server.requestTimeout = 0
+  server.timeout = 10 * 60 * 1000
+}
+
 export function main() {
   const { values } = parseArgs({
     options: {
@@ -1031,6 +1040,7 @@ export function main() {
   }
   const app = createApp();
   const server = app.listen(port, values.host, () => console.log(`Task Runner listening on ${url}`));
+  configureServer(server);
   if (browserEnabled()) {
     const authConfig = authFromEnv();
     attachBrowserWebSocket(server, process.env.BASE_PATH ?? '', process.env.BROWSER_REMOTE, {

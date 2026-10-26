@@ -443,6 +443,10 @@ Other endpoints:
 | `POST` | `/api/cancel` |
 | `POST` | `/api/paste_done/{task}` |
 
+Uploads are one streamed request (no chunking) capped at 50 GB. Node's default
+five-minute whole-request timeout is disabled so multi-gigabyte uploads can take
+hours; an interrupted upload still has to restart from zero.
+
 Mutating `/api/*` requests are CSRF-checked. `POST /api/run` returns `409` when
 the task is already running and `400` when it is unavailable; it queues when
 the task's `serial_key` is held.

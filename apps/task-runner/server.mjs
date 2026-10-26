@@ -52,7 +52,8 @@ import {
 export { attachBrowserWebSocket };
 import {
   clearRunning,
-  ensureStateDir,
+  ensureRuntimeDirs,
+  ensureStateTree,
   loadScheduleState,
   loadTaskState,
   markRunning,
@@ -409,7 +410,11 @@ export async function boot(configPath = undefined) {
   try {
     [LOCAL, TASK_LIST] = await loadConfig(configPath);
     LOCAL.host = instanceHost();
-    ensureStateDir();
+    try {
+      ensureStateTree();
+    } catch (err) {
+      throw new ConfigError(`Could not prepare the Task Runner state directory: ${err.message}`);
+    }
   } catch (e) {
     if (e instanceof ConfigMissingError) {
       console.warn(`WARNING: ${e.message}`);
@@ -1036,6 +1041,13 @@ export function main() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   await boot();
+  try {
+    ensureRuntimeDirs();
+    console.log('Task Runner runtime directories ready');
+  } catch (err) {
+    console.error(`Could not prepare Task Runner runtime directories: ${err.message}`);
+    process.exit(1);
+  }
   startSchedulers();
   main();
 }

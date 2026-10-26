@@ -48,6 +48,34 @@ echo "==> Checking runtime tools in $APP_IMAGE"
     npm ls --omit=dev --depth=0 >/dev/null
 '
 
+echo "==> Checking Task Runner run_as permissions in $APP_IMAGE"
+# Regression for the fresh-root staging bug: root creates the state/runtime
+# dirs, then the actual task user (1000) must traverse and read them.
+# shellcheck disable=SC2016 # the -c script must not expand on the host
+"$ENGINE" run --rm --user 0 --entrypoint sh "$APP_IMAGE" -c '
+    set -eu
+    export BACKUPCTL_STATE_DIR=/tmp/task-runner-smoke
+    export BACKUPCTL_STATE_UID=1000
+    export BACKUPCTL_STATE_GID=1000
+    export HOME=/tmp/task-runner-home
+    rm -rf "$BACKUPCTL_STATE_DIR" "$HOME"
+    mkdir -p "$HOME"
+
+    node --input-type=module -e "
+        import { ensureRuntimeDirs, stagingDir } from \"/app/apps/task-runner/state.mjs\";
+        import fs from \"node:fs\";
+        ensureRuntimeDirs();
+        const dir = stagingDir(\"permission probe\");
+        fs.writeFileSync(dir + \"/probe.txt\", \"probe\");
+        fs.chownSync(dir + \"/probe.txt\", 1000, 1000);
+    "
+
+    setpriv --reuid=1000 --regid=1000 --clear-groups cat /tmp/task-runner-smoke/staging/permission_probe/probe.txt
+    setpriv --reuid=1000 --regid=1000 --clear-groups test -w /tmp/task-runner-smoke/staging
+    setpriv --reuid=1000 --regid=1000 --clear-groups test -w /tmp/task-runner-home/.venvs
+    rm -rf "$BACKUPCTL_STATE_DIR" "$HOME"
+'
+
 echo "==> Checking portal health in $APP_IMAGE"
 container="dscpln-smoke-$$"
 cleanup() { "$ENGINE" rm -f "$container" >/dev/null 2>&1 || true; }

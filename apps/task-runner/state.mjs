@@ -1,6 +1,7 @@
 // Run state + staging: per-task state files, running markers (crash
 // detection) and the per-run temp/staging directories.
 
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -31,6 +32,50 @@ function handToOwner(target, mode) {
 export function ensureStateDir(dir = STATE_DIR) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   handToOwner(dir, 0o700);
+}
+
+const RUNTIME_DIRS = ['.cache', '.venvs', '.android', 'tmp'];
+
+function assertTaskUserAccess(target, flag = '-x') {
+  if (process.getuid?.() !== 0 || OWNER_UID === 0) return;
+  const result = spawnSync('test', [flag, target], {
+    uid: OWNER_UID,
+    gid: OWNER_GID,
+    stdio: 'ignore',
+  });
+  if (result.error) {
+    throw new Error(`Could not verify ${target} as ${OWNER_UID}:${OWNER_GID}: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    const verb = flag === '-w' ? 'writable' : 'accessible';
+    throw new Error(`${target} is not ${verb} by task user ${OWNER_UID}:${OWNER_GID}`);
+  }
+}
+
+// The whole state layout is created at boot, not lazily on the first upload.
+// This also makes a fresh container or config checkout deterministic.
+export function ensureStateTree() {
+  ensureStateDir();
+  ensureStateDir(path.join(STATE_DIR, 'tasks'));
+  ensureStateDir(path.join(STATE_DIR, 'schedules'));
+  ensureStateDir(path.join(STATE_DIR, 'staging'));
+  assertTaskUserAccess(STATE_DIR);
+  assertTaskUserAccess(path.join(STATE_DIR, 'staging'));
+}
+
+// Runtime directories used directly by run_as tasks (venvs, caches, adb,
+// temp files). The deployment init container normalizes HOME itself; this
+// keeps local/container runs working and verifies the result.
+export function ensureRuntimeDirs(home = os.homedir()) {
+  if (process.getuid?.() === 0 && process.env.BACKUPCTL_STATE_UID) {
+    handToOwner(home, 0o755);
+  }
+  assertTaskUserAccess(home, '-w');
+  for (const name of RUNTIME_DIRS) {
+    const dir = path.join(home, name);
+    ensureStateDir(dir);
+    assertTaskUserAccess(dir, '-w');
+  }
 }
 
 // Run state is centralized under BACKUPCTL_STATE_DIR/tasks/ so it never lands

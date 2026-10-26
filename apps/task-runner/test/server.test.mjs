@@ -372,6 +372,20 @@ test('running marker + staging', () => {
   assert.equal(fs.statSync(parent).mode & 0o777, 0o700);
 });
 
+test('startup: state tree and per-user runtime dirs are created 0700', () => {
+  bctl.ensureStateTree();
+  for (const name of ['', 'tasks', 'schedules', 'staging']) {
+    const dir = name ? path.join(bctl.STATE_DIR, name) : bctl.STATE_DIR;
+    assert.equal(fs.statSync(dir).mode & 0o777, 0o700, dir);
+  }
+
+  const home = fs.mkdtempSync(path.join(SANDBOX, 'home-'))
+  bctl.ensureRuntimeDirs(home)
+  for (const name of ['.cache', '.venvs', '.android', 'tmp']) {
+    assert.equal(fs.statSync(path.join(home, name)).mode & 0o777, 0o700, name)
+  }
+})
+
 test('run: commands see a per-run TMPDIR subdir, wiped when the run ends', async () => {
   const t = task('Tmpdir Test', { capture: true, commands: 'echo $TMPDIR' });
   const cfgPath = makeConfig([t]);

@@ -408,6 +408,23 @@ pseudo-terminal for tools that refuse non-TTY stdin, such as `lib.sh encrypt`.
   Commands get a per-run `TMPDIR` under `BACKUPCTL_TMP_DIR` (default
   `~/Downloads/backupctl-tmp`).
 
+## Permissions / fresh installs
+
+The server runs as root to read PVC data, while user-data tasks drop to
+`BACKUPCTL_STATE_UID`/`GID`. At boot it creates the complete state tree
+(`tasks/`, `schedules/`, `staging/`) and, when launched from the CLI, the
+runtime dirs user tasks need: `~/.cache`, `~/.venvs`, `~/.android` and `~/tmp`.
+When running as root it verifies those paths as the task user and fails startup
+with the exact path if a permission is wrong.
+
+The deployment also runs a `prepare-runtime` initContainer to normalize the
+home root, the top level of the mounted `Main/{Backups,Media,Documents}` trees,
+and the writable config-repo files. On a fresh host, run
+`Infra/scripts/preflight-task-runner.sh --fix` before deploying; it creates the
+hostPath directories and checks that the private `dscpln-config` checkout is
+owned by the task user. The image smoke test repeats the root-to-UID/GID
+permission probe so this cannot regress silently.
+
 ## API
 
 `GET /api/tasks` returns tasks, groups, attributes, availability and run state.

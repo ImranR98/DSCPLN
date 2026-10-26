@@ -637,6 +637,7 @@ export function taskJson(t) {
     browser: Boolean(t.browser),
     prompts: t.prompts ?? [],
     uploads: supportsUploads(t),
+    client_prune: t.client_prune ?? [],
     export_url: t.export_url,
     avail,
     avail_reason: reason,

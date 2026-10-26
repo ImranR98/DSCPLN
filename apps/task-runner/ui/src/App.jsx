@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { AppHeader, Field, getJson, postJson, putJson, showToast, ThemeToggle, Toasts, uploadFile as uploadFileRequest, usePolling } from '@dscpln/ui-kit'
 import { useDropzone } from './hooks/useDropzone.js'
+import { pruneTarGz } from './lib/prune-tar-gz.js'
 import TaskCard from './components/TaskCard.jsx'
 import AttributesModal from './components/AttributesModal.jsx'
 import TaskSettingsModal from './components/TaskSettingsModal.jsx'
@@ -40,6 +41,7 @@ export default function App() {
   const [tasks, setTasks] = useState([])
   const [missingConfig, setMissingConfig] = useState(false)
   const [queues, setQueues] = useState({})
+  const [preparing, setPreparing] = useState({})
   const [uploading, setUploading] = useState({})
   const [browserAvailable, setBrowserAvailable] = useState(false)
   const [openBrowsers, setOpenBrowsers] = useState({})
@@ -170,10 +172,36 @@ export default function App() {
     }
     if (task.uploads) {
       setUploading((current) => ({ ...current, [task.name]: 0 }))
+      const prunePaths = task.client_prune ?? []
       try {
         let done = 0
-        for (const file of files) {
+        for (const original of files) {
+          let file = original
           try {
+            if (prunePaths.length && /\.tar\.gz$/i.test(file.name)) {
+              const controller = new AbortController()
+              uploadAborts.current.set(task.name, { abort: () => controller.abort() })
+              setPreparing((current) => ({ ...current, [task.name]: (done / files.length) * 100 }))
+              try {
+                file = await pruneTarGz(file, {
+                  drop: prunePaths,
+                  signal: controller.signal,
+                  onProgress: (fraction) => {
+                    setPreparing((current) => ({
+                      ...current,
+                      [task.name]: ((done + fraction) / files.length) * 100,
+                    }))
+                  },
+                })
+              } finally {
+                setPreparing((current) => {
+                  const next = { ...current }
+                  delete next[task.name]
+                  return next
+                })
+                uploadAborts.current.delete(task.name)
+              }
+            }
             await uploadFile(task, file, (fraction) => {
               setUploading((current) => ({ ...current, [task.name]: ((done + fraction) / files.length) * 100 }))
             })
@@ -185,6 +213,11 @@ export default function App() {
           setUploading((current) => ({ ...current, [task.name]: (done / files.length) * 100 }))
         }
       } finally {
+        setPreparing((current) => {
+          const next = { ...current }
+          delete next[task.name]
+          return next
+        })
         setUploading((current) => {
           const next = { ...current }
           delete next[task.name]
@@ -251,8 +284,13 @@ export default function App() {
   }
 
   const cancelRun = async (taskName) => {
-    if (uploading[taskName] != null) {
+    if (uploading[taskName] != null || preparing[taskName] != null || uploadAborts.current.has(taskName)) {
       setUploading((current) => {
+        const next = { ...current }
+        delete next[taskName]
+        return next
+      })
+      setPreparing((current) => {
         const next = { ...current }
         delete next[taskName]
         return next
@@ -500,6 +538,7 @@ export default function App() {
                   attributes={attributes}
                   groupBy={groupBy}
                   now={now}
+                  preparing={preparing}
                   uploading={uploading}
                   queues={queues}
                   browserAvailable={browserAvailable}

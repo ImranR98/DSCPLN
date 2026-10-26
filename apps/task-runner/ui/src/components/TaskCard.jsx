@@ -22,6 +22,7 @@ export default function TaskCard({
   attributes,
   groupBy,
   now,
+  preparing = {},
   uploading,
   queues,
   browserAvailable,
@@ -41,18 +42,22 @@ export default function TaskCard({
     .filter((chip) => chip.value)
   const dropRef = useDropzone((dropped) => onQueueFiles(task, dropped))
   const running = task.running
+  const isPreparing = preparing[task.name] != null
   const isUploading = uploading[task.name] != null
   const queued = task.queued
-  const busy = running || isUploading || queued
+  const busy = running || isPreparing || isUploading || queued
   const files = queues[task.name] ?? []
+  const uploadPercent = isPreparing ? preparing[task.name] : uploading[task.name]
 
   return (
     <section className="card task-card" data-task={task.name} data-testid={`task-${task.name}`}>
       <div className="card__header">
         <h2 className="card-title">{task.name}</h2>
-        <span className={`pill pill--${running || isUploading ? 'running' : queued ? 'neutral' : (task.state ? task.pill : 'none') ?? 'none'}`}>
+        <span className={`pill pill--${running || isPreparing || isUploading ? 'running' : queued ? 'neutral' : (task.state ? task.pill : 'none') ?? 'none'}`}>
           {running ? (
             <>Running · {formatElapsed(now / 1000 - (task.started ?? now / 1000))}</>
+          ) : isPreparing ? (
+            <>Pruning… {Math.round(preparing[task.name])}%</>
           ) : isUploading ? (
             <>Uploading… {Math.round(uploading[task.name])}%</>
           ) : queued ? (
@@ -86,8 +91,8 @@ export default function TaskCard({
         </div>
       ) : null}
 
-      {isUploading ? (
-        <div className="upload-bar"><div className="upload-fill" style={{ width: `${Math.round(uploading[task.name])}%` }}></div></div>
+      {isPreparing || isUploading ? (
+        <div className="upload-bar"><div className="upload-fill" style={{ width: `${Math.round(uploadPercent)}%` }}></div></div>
       ) : null}
 
       {!task.avail ? (

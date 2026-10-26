@@ -201,6 +201,10 @@ Optional fields:
 
 - `cwd`: working directory.
 - `uploads: true` + `glob`: add a drop zone; `glob` is a string or list.
+- `client_prune: ['dir', ...]`: for `.tar.gz` uploads, drop these top-level
+  archive directories in the browser before uploading. The retained archive
+  is held in memory, so use it only when the kept portion is small. Requires
+  browser Compression Streams; if unavailable, upload a pre-pruned archive.
 - `require: [key...]`: fail unless each prompt key has a value.
 - `capture: true` + `commit_dir`: show output in a copy/paste dialog; Done
   git-commits `commit_dir`.

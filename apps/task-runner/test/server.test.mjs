@@ -173,6 +173,32 @@ test('loadConfig: validates groups, tasks, defaults, duplicates', async () => {
     /Duplicate group name/
   );
   await assert.rejects(bctl.loadConfig(path.join(SANDBOX, 'absent.mjs')), bctl.ConfigMissingError);
+
+  const [, pruned] = await bctl.loadConfig(
+    writeConfig('prune.mjs', {
+      maindir: '/tmp',
+      groups: [{
+        name: 'G',
+        tasks: [{
+          name: 'p', state_dir: '/tmp/p', uploads: true, glob: '*.tar.gz', commands: 'true',
+          client_prune: ['./repositories/', 'releases', 'releases'],
+        }],
+      }],
+    })
+  );
+  assert.deepEqual(pruned[0].client_prune, ['repositories', 'releases']);
+  await assert.rejects(
+    bctl.loadConfig(writeConfig('bad-prune.mjs', {
+      groups: [{ name: 'G', tasks: [{ name: 'p', state_dir: '/tmp/p', commands: 'true', client_prune: 'repositories' }] }],
+    })),
+    /client_prune must be a list/
+  );
+  await assert.rejects(
+    bctl.loadConfig(writeConfig('bad-prune-path.mjs', {
+      groups: [{ name: 'G', tasks: [{ name: 'p', state_dir: '/tmp/p', commands: 'true', client_prune: ['../x'] }] }],
+    })),
+    /relative archive path/
+  );
 });
 
 test('loadConfig: script/move/ingest shorthands normalize into commands', async () => {

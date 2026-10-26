@@ -92,6 +92,21 @@ function validateEnv(value, label) {
   return value;
 }
 
+// Top-level archive prefixes the UI removes before uploading a .tar.gz.
+function validateClientPrune(value, label) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new ConfigError(`${label} must be a list of archive paths`);
+  const prefixes = value.map((entry, index) => {
+    if (typeof entry !== 'string') throw new ConfigError(`${label}[${index}] must be a string`);
+    const clean = entry.trim().replace(/^\.\/+/, '').replace(/\/+$/, '');
+    if (!clean || clean.startsWith('/') || clean.split('/').includes('..')) {
+      throw new ConfigError(`${label}[${index}] must be a relative archive path`);
+    }
+    return clean;
+  });
+  return [...new Set(prefixes)];
+}
+
 function validatePrompts(value, label) {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new ConfigError(`${label} must be a list`);
@@ -309,6 +324,7 @@ export async function loadConfig(configPath = CONFIG_FILE) {
       merged.host ??= 'any';
       merged.env = validateEnv(merged.env, `Task '${merged.name}': env`);
       merged.secrets = validateSecrets(merged.secrets, `Task '${merged.name}': secrets`);
+      merged.client_prune = validateClientPrune(merged.client_prune, `Task '${merged.name}': client_prune`);
       merged.actions = normalizeActions(merged.actions, merged.name);
       const entry = meta?.tasks?.[merged.name];
       merged.attributes = { ...(entry?.attributes ?? {}) };

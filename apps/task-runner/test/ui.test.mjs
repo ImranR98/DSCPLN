@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -122,6 +124,78 @@ test('ui: header, groups and task cards render on the shared kit', async () => {
         [...document.querySelectorAll('[data-testid="task-Drop Task"] .queue-name')]
           .some((node) => node.textContent === 'card.txt'))
       assert.deepEqual(errors, []);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
+test('ui: archives with client_prune upload only the retained files', async () => {
+  const browser = await launchBrowser();
+  if (!browser) {
+    test.skip('chromium not available (playwright browsers missing)');
+    return;
+  }
+  try {
+    const work = fs.mkdtempSync(path.join(SANDBOX, 'prune-ui-'));
+    const src = path.join(work, 'src');
+    fs.mkdirSync(path.join(src, 'big'), { recursive: true });
+    fs.writeFileSync(path.join(src, 'users_000001.json'), '[]\n');
+    fs.writeFileSync(path.join(src, 'big', 'blob.bin'), crypto.randomBytes(2 * 1024 * 1024));
+    const archive = path.join(work, 'github-export.tar.gz');
+    execFileSync('tar', ['-czf', archive, '-C', src, '.']);
+    const source = fs.readFileSync(archive);
+
+    const configPath = writeConfig({
+      maindir: path.join(SANDBOX, 'prune-data'),
+      groups: [{
+        name: 'Everyday',
+        tasks: [{
+          name: 'Prune Task',
+          state_dir: '{{maindir}}/State/prune',
+          uploads: true,
+          glob: '*.tar.gz',
+          client_prune: ['big'],
+          commands: 'true',
+        }],
+      }],
+    });
+    await bctl.boot(configPath);
+    const app = bctl.createApp();
+    const server = await new Promise((resolve) => {
+      const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    const uploadSizes = [];
+    server.on('request', (req) => {
+      if (req.method === 'POST' && req.url.includes('/api/upload/Prune%20Task')) {
+        uploadSizes.push(Number(req.headers['content-length']));
+      }
+    });
+    const base = `http://127.0.0.1:${server.address().port}`;
+    try {
+      const page = await browser.newPage();
+      await page.goto(base);
+      await page.waitForSelector('[data-testid="task-Prune Task"]');
+      await page.setInputFiles('[data-testid="task-Prune Task"] input[type="file"]', {
+        name: 'github-export.tar.gz',
+        mimeType: 'application/gzip',
+        buffer: source,
+      });
+      await page.waitForFunction(() =>
+        document.querySelector('[data-testid="task-Prune Task"] .queue-name')?.textContent === 'github-export.tar.gz');
+
+      const upload = page.waitForRequest((request) =>
+        request.method() === 'POST' && request.url().includes('/api/upload/Prune%20Task'));
+      const run = page.waitForRequest((request) =>
+        request.method() === 'POST' && request.url().includes('/api/run/Prune%20Task'));
+      await page.locator('[data-testid="task-Prune Task"] button', { hasText: 'Run' }).click();
+      await upload;
+      await run;
+      assert.equal(uploadSizes.length, 1);
+      assert.ok(uploadSizes[0] > 0, 'upload did not send a content length');
+      assert.ok(uploadSizes[0] < source.length / 4, `${uploadSizes[0]} vs ${source.length}`);
     } finally {
       await new Promise((resolve) => server.close(resolve));
     }

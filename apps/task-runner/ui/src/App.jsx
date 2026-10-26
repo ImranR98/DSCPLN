@@ -158,7 +158,9 @@ export default function App() {
       const ok = await confirmModal(`Run ${task.name}?`)
       if (!ok) return
     }
-    const files = queues[task.name] ?? []
+    // Global-drop detection queues files and runs in the same tick; pass the
+    // detected batch explicitly so the run does not read a stale queue state.
+    const files = options.files ?? queues[task.name] ?? []
     if (task.uploads && !files.length) {
       toast('Drop files here first', 'error')
       return
@@ -301,7 +303,9 @@ export default function App() {
       entries.map(({ task, files }) => `${task.name} (${files.length} file${files.length > 1 ? 's' : ''})`),
     )
     if (!ok) return
-    for (const { task } of entries) runTask(task, { skipGenericConfirm: true })
+    for (const { task, files } of entries) {
+      runTask(task, { skipGenericConfirm: true, files })
+    }
   }
 
   const globalDropRef = useDropzone(handleGlobalFiles)

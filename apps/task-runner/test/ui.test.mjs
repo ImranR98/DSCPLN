@@ -92,6 +92,24 @@ test('ui: header, groups and task cards render on the shared kit', async () => {
       await page.locator('dialog[open] button', { hasText: 'Cancel' }).click();
       await page.click('#refreshButton');
       await page.waitForTimeout(300);
+
+      // The global drop zone queues and runs in one flow. The detected batch
+      // must be passed straight into the run instead of reading stale state.
+      const uploadRequest = page.waitForRequest((request) =>
+        request.method() === 'POST' && request.url().includes('/api/upload/Drop%20Task')
+      );
+      const runRequest = page.waitForRequest((request) =>
+        request.method() === 'POST' && request.url().includes('/api/run/Drop%20Task')
+      );
+      await page.setInputFiles('#global-dropzone input[type="file"]', {
+        name: 'a.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from('hello'),
+      });
+      await page.waitForSelector('dialog[open]');
+      await page.locator('dialog[open] button', { hasText: 'Run' }).click();
+      await uploadRequest;
+      await runRequest;
       assert.deepEqual(errors, []);
     } finally {
       await new Promise((resolve) => server.close(resolve));

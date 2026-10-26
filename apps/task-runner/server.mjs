@@ -114,7 +114,9 @@ async function notifyTask(task, ok, summary) {
 function clearStaging(ctx) {
   const d = stagingDir(ctx.task.name);
   fs.rmSync(d, { recursive: true, force: true });
-  fs.mkdirSync(d, { recursive: true });
+  // Recreate through stagingDir so the directory keeps the host owner/mode
+  // needed by run_as tasks; a bare mkdir would make it root-owned again.
+  stagingDir(ctx.task.name);
 }
 
 function failRun(rc) {

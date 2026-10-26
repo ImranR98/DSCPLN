@@ -362,6 +362,14 @@ test('running marker + staging', () => {
   const d = bctl.stagingDir('Task With Spaces');
   assert.ok(d.endsWith('Task_With_Spaces'));
   assert.ok(fs.existsSync(d));
+  assert.equal(fs.statSync(d).mode & 0o777, 0o700);
+
+  // The shared parent must be traversable by run_as users even if an upgrade
+  // left it root-owned or too permissive.
+  const parent = path.dirname(d);
+  fs.chmodSync(parent, 0o777);
+  bctl.stagingDir('Task With Spaces');
+  assert.equal(fs.statSync(parent).mode & 0o777, 0o700);
 });
 
 test('run: commands see a per-run TMPDIR subdir, wiped when the run ends', async () => {
@@ -598,7 +606,9 @@ test('uploads: staging is cleared after a failed run too', async () => {
   const files = [path.join(bctl.stagingDir('Fail Upload'), 'a.txt')];
   const [ok] = await bctl.runTask(tasks[0], local, files);
   assert.equal(ok, false);
-  assert.deepEqual(fs.readdirSync(bctl.stagingDir('Fail Upload')), []);
+  const staging = bctl.stagingDir('Fail Upload');
+  assert.deepEqual(fs.readdirSync(staging), []);
+  assert.equal(fs.statSync(staging).mode & 0o777, 0o700);
 });
 
 test('ingest subcommand: extracts, identifies account, names the folder', async () => {

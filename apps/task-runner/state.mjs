@@ -111,6 +111,9 @@ export function runningMarker() {
 
 export function stagingDir(taskName) {
   ensureStateDir();
+  // The shared parent needs to be traversable by run_as task users too. It
+  // may predate this helper or have been created by root during an upgrade.
+  ensureStateDir(path.join(STATE_DIR, 'staging'));
   const d = path.join(STATE_DIR, 'staging', slugify(taskName));
   fs.mkdirSync(d, { recursive: true, mode: 0o700 });
   // mkdir mode only applies to new dirs; uploads wait here between stages.

@@ -129,3 +129,80 @@ test('ui: header, groups and task cards render on the shared kit', async () => {
     await browser.close();
   }
 });
+
+test('ui: long chips and filenames do not widen mobile cards', async () => {
+  const browser = await launchBrowser();
+  if (!browser) {
+    test.skip('chromium not available (playwright browsers missing)');
+    return;
+  }
+  try {
+    const longValue = 'Anywhere (manual, but only when the desktop is awake and on the same network)';
+    const longName = `drop_${'x'.repeat(180)}.txt`;
+    const configPath = writeConfig({
+      maindir: path.join(SANDBOX, 'mobile-data'),
+      groups: [{
+        name: 'Everyday',
+        tasks: [
+          { name: 'Long Drop Task', state_dir: '{{maindir}}/State/long', uploads: true, glob: '*.txt', commands: 'true' },
+        ],
+      }],
+    });
+    writeMeta(configPath, {
+      version: 1,
+      attributes: [
+        { name: 'Category', values: ['Everyday'] },
+        { name: 'Best run from', values: [longValue] },
+      ],
+      default_group_by: 'Best run from',
+      tasks: {
+        'Long Drop Task': { attributes: { Category: 'Everyday', 'Best run from': longValue } },
+      },
+    });
+    await bctl.boot(configPath);
+    const app = bctl.createApp();
+    const server = await new Promise((resolve) => {
+      const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    const base = `http://127.0.0.1:${server.address().port}`;
+    try {
+      const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+      await page.goto(base);
+      await page.waitForSelector('[data-testid="task-Long Drop Task"]');
+
+      const layout = () => page.evaluate(() => {
+        const vw = document.documentElement.clientWidth;
+        const overflowing = [...document.querySelectorAll('body *')]
+          .filter((el) => el.getBoundingClientRect().right > vw + 0.5)
+          .map((el) => el.className?.toString() || el.tagName);
+        return { vw, scrollWidth: document.documentElement.scrollWidth, overflowing };
+      });
+      assert.deepEqual(await layout(), { vw: 390, scrollWidth: 390, overflowing: [] });
+
+      await page.setInputFiles('[data-testid="task-Long Drop Task"] input[type="file"]', {
+        name: longName,
+        mimeType: 'text/plain',
+        buffer: Buffer.from('hello'),
+      });
+      await page.waitForFunction((name) =>
+        document.querySelector('[data-testid="task-Long Drop Task"] .queue-name')?.textContent === name, longName);
+      assert.deepEqual(await layout(), { vw: 390, scrollWidth: 390, overflowing: [] });
+
+      // Toasts are viewport-fixed; a card must never push them below or
+      // beside the visible area on a phone.
+      await page.evaluate(() => {
+        const toast = document.createElement('div');
+        toast.className = 'toast toast--error';
+        toast.textContent = 'A long error message that still has to stay inside the phone viewport.';
+        document.querySelector('.toasts').appendChild(toast);
+      });
+      const toast = await page.locator('.toast').boundingBox();
+      assert.ok(toast.x >= 0 && toast.x + toast.width <= 390, JSON.stringify(toast));
+      assert.ok(toast.y >= 0 && toast.y + toast.height <= 844, JSON.stringify(toast));
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  } finally {
+    await browser.close();
+  }
+});

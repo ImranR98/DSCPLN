@@ -108,13 +108,16 @@ main.page-wrap {
     align-items: baseline;
     justify-content: space-between;
     gap: var(--space-2);
+    min-width: 0;
     margin: var(--space-4) 0 var(--space-2);
 }
 
 .category-title {
+    min-width: 0;
     font-size: var(--fs-lg);
     font-weight: 800;
     letter-spacing: -0.01em;
+    overflow-wrap: anywhere;
 }
 
 .category-count {
@@ -124,7 +127,9 @@ main.page-wrap {
 
 .task-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr));
+    /* min() keeps one track from becoming wider than the phone: a single
+       long chip, queue filename or status line must not force the grid. */
+    grid-template-columns: repeat(auto-fill, minmax(min(21rem, 100%), 1fr));
     gap: var(--space-3);
 }
 
@@ -132,7 +137,21 @@ main.page-wrap {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+    min-width: 0;
     padding: var(--space-3);
+}
+
+/* Flex/grid children default to min-width:auto, which lets nowrap content
+   widen the whole card. Every direct child opts out; the leaf rules below
+   decide whether it wraps, truncates or scrolls. */
+.task-card > * {
+    min-width: 0;
+}
+
+.task-card .pill {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .task-card .card-title {
@@ -174,6 +193,7 @@ main.page-wrap {
 }
 
 .card-live {
+    max-width: 100%;
     font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
     font-size: var(--fs-xs);
     color: var(--text-muted);
@@ -217,6 +237,7 @@ main.page-wrap {
 .queue-list {
     display: grid;
     gap: var(--space-1);
+    min-width: 0;
 }
 
 .queue-item {
@@ -224,6 +245,7 @@ main.page-wrap {
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2);
+    min-width: 0;
     padding: 0.2rem 0.2rem 0.2rem var(--space-2);
     border: 1px solid var(--border);
     border-radius: var(--radius-xs);
@@ -232,26 +254,36 @@ main.page-wrap {
 }
 
 .queue-name {
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+.queue-item > button {
+    flex: 0 0 auto;
+}
+
 .card-note {
     color: var(--text-muted);
     font-size: var(--fs-sm);
+    overflow-wrap: anywhere;
 }
 
 .attribute-chips {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-1);
+    min-width: 0;
 }
 
 .attribute-chip {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
+    max-width: 100%;
+    min-width: 0;
     padding: 0.15rem 0.55rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-pill);
@@ -260,6 +292,11 @@ main.page-wrap {
     font-size: var(--fs-xs);
     font-weight: 500;
     line-height: 1.3;
+}
+
+.attribute-chip > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .attribute-chip__name {
@@ -272,7 +309,12 @@ main.page-wrap {
     flex-wrap: wrap;
     gap: var(--space-2);
     align-items: center;
+    min-width: 0;
     margin-top: auto;
+}
+
+.card-actions > * {
+    max-width: 100%;
 }
 
 .card-actions > :first-child {
@@ -384,7 +426,7 @@ main.page-wrap {
 
 @media (max-width: 900px) {
     .task-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 }
 

@@ -21,7 +21,7 @@ WORKDIR /app
 
 # Runtime tools used by one or more apps:
 #   file-pipelines: ffmpeg, perl, rsync, tar
-#   whatsapp-txt:   unzip
+#   whatsapp-txt:   python3 (zip extraction), unzip (validation)
 #   balance-xlsx:   git (workbook commits)
 #   task-runner:    restic, kubectl, adb, python3, age, jq
 #   lockdown:       nftables (privileged port-blocker mode)

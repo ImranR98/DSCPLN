@@ -236,8 +236,8 @@ const uploadFileName = (value) => {
 }
 
 // Reject archives that could escape extraction: absolute or `..` member
-// names, or any symlink entry (unzip creates it and a later member written
-// through it lands outside the staging dir — sanitizeStaging runs too late).
+// names, or any symlink entry (a later member written through it could land
+// outside the staging dir — sanitizeStaging runs too late).
 const assertSafeZip = async (file) => {
     const names = await execFile('unzip', ['-Z1', file])
     for (const name of names.stdout.split('\n')) {
@@ -251,9 +251,17 @@ const assertSafeZip = async (file) => {
     }
 }
 
+// Info-ZIP 6.00 (the Debian package in the image) writes invalid UTF-8 names
+// for FAT-origin archives with emoji, which WhatsApp Android exports use.
+// Python's zipfile honours the UTF-8 flag and the CP437 fallback, so names
+// stay readable by Node and the merge can open them.
+const extractZip = async (file, staging) => {
+    await execFile('python3', ['-m', 'zipfile', '-e', file, staging])
+}
+
 // Extracted archives must stay inside the staging dir: symlinks are removed
-// (unzip can create them and a later read would follow them) and every real
-// path is re-checked against the staging root (zip-slip defense in depth).
+// and every real path is re-checked against the staging root (zip-slip
+// defense in depth).
 export const sanitizeStaging = async (staging) => {
     const root = await fsp.realpath(staging)
     const walk = async (dir) => {
@@ -416,7 +424,7 @@ export const createApp = (state, options = {}) => {
                 if (!stat.isFile()) continue
                 if (name.toLowerCase().endsWith('.zip')) {
                     await assertSafeZip(full)
-                    await execFile('unzip', ['-oq', full, '-d', staging])
+                    await extractZip(full, staging)
                 } else {
                     await fsp.copyFile(full, path.join(staging, name))
                 }
@@ -426,7 +434,7 @@ export const createApp = (state, options = {}) => {
                 if (!name.toLowerCase().endsWith('.zip')) continue
                 const nested = path.join(staging, name)
                 await assertSafeZip(nested)
-                await execFile('unzip', ['-oq', nested, '-d', staging])
+                await extractZip(nested, staging)
                 await fsp.rm(nested, { force: true })
             }
             await sanitizeStaging(staging)

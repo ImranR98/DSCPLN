@@ -327,6 +327,15 @@ const haveZip = (() => {
     }
 })()
 
+const havePython = (() => {
+    try {
+        execFileSync('which', ['python3'], { stdio: 'ignore' })
+        return true
+    } catch {
+        return false
+    }
+})()
+
 test('api: import extracts zipped exports (including nested zips) and strips vcf files', { skip: !haveZip }, async () => {
     const { dir, state } = makeImportState()
     await withServer(state, async base => {
@@ -345,6 +354,35 @@ test('api: import extracts zipped exports (including nested zips) and strips vcf
         const body = await merged.json()
         assert.equal(body.names.includes('20240115 - Zipped.json'), true)
         assert.equal(fs.existsSync(path.join(dir, '20240115 - Zipped.json')), true)
+    })
+})
+
+test('api: previews FAT-origin zips with unicode file names', { skip: !havePython }, async () => {
+    const { state } = makeImportState()
+    await withServer(state, async base => {
+        const work = fs.mkdtempSync(path.join(os.tmpdir(), 'whatsapptxt-unicode-'))
+        const chatName = 'WhatsApp Chat with Café 🤍.txt'
+        const chatFile = path.join(work, 'chat.txt')
+        fs.writeFileSync(chatFile, TXT_EXPORT)
+        const zipFile = path.join(work, 'unicode.zip')
+        // WhatsApp Android writes FAT-origin archives. Info-ZIP 6.00 mangles
+        // non-ASCII names in those, so the fixture must use create_system 0
+        // rather than the Unix origin the `zip` CLI produces.
+        execFileSync('python3', ['-c', `
+import sys
+import zipfile
+info = zipfile.ZipInfo(sys.argv[1])
+info.create_system = 0
+with zipfile.ZipFile(sys.argv[2], 'w') as archive:
+    archive.writestr(info, open(sys.argv[3], 'rb').read())
+`, chatName, zipFile, chatFile])
+
+        const uploaded = await upload(base, 'unicode', 'unicode.zip', fs.readFileSync(zipFile))
+        assert.equal(uploaded.status, 200)
+        const preview = await merge(base, { batch: 'unicode', dryRun: true })
+        assert.equal(preview.status, 200)
+        const body = await preview.json()
+        assert.ok(body.names.some((name) => name.includes('Café 🤍')), JSON.stringify(body))
     })
 })
 

@@ -269,8 +269,9 @@ docker run --rm -p 8787:8787 \
 The container uses `/data` by default. Mount the conversation directory there;
 it can be read-only for browsing, but importing needs write access. `DATA_DIR`,
 `HOST` and `PORT` override the defaults. The image runs as uid 1000; if your
-files use another owner, add `--user "$(id -u):$(id -g)"`. `unzip` is bundled
-for archive imports.
+files use another owner, add `--user "$(id -u):$(id -g)"`. `python3` and
+`unzip` are bundled: Python's `zipfile` extracts archives (including WhatsApp's
+FAT-origin unicode names) and `unzip` validates them first.
 
 ## Layout
 

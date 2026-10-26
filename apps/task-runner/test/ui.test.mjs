@@ -110,6 +110,17 @@ test('ui: header, groups and task cards render on the shared kit', async () => {
       await page.locator('dialog[open] button', { hasText: 'Run' }).click();
       await uploadRequest;
       await runRequest;
+
+      // The per-card picker clears its input immediately after selection.
+      // Snapshot the FileList first so the queue is not left empty.
+      await page.setInputFiles('[data-testid="task-Drop Task"] input[type="file"]', {
+        name: 'card.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from('hello from the card'),
+      });
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll('[data-testid="task-Drop Task"] .queue-name')]
+          .some((node) => node.textContent === 'card.txt'))
       assert.deepEqual(errors, []);
     } finally {
       await new Promise((resolve) => server.close(resolve));

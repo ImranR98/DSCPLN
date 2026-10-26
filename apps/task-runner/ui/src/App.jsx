@@ -107,9 +107,12 @@ export default function App() {
 
   const queueFiles = (task, files) => {
     if (!task) return
+    // The caller clears the input value right after this call; that empties
+    // the live FileList. Snapshot it before scheduling the state update.
+    const incoming = Array.from(files)
     setQueues((current) => {
       const list = [...(current[task.name] ?? [])]
-      for (const file of files) {
+      for (const file of incoming) {
         const index = list.findIndex((queued) => queued.name === file.name)
         if (index !== -1) list.splice(index, 1)
         list.push(file)

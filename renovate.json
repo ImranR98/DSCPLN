@@ -14,10 +14,8 @@
   ],
   "prHourlyLimit": 10,
   "prConcurrentLimit": 10,
-  "automerge": true,
   "automergeType": "pr",
   "automergeStrategy": "merge-commit",
-  "platformAutomerge": true,
   "ignoreTests": false,
   "osvVulnerabilityAlerts": true,
   "ignorePaths": [

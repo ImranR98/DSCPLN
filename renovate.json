@@ -14,8 +14,6 @@
   ],
   "prHourlyLimit": 10,
   "prConcurrentLimit": 10,
-  "automergeType": "pr",
-  "automergeStrategy": "merge-commit",
   "ignoreTests": false,
   "osvVulnerabilityAlerts": true,
   "ignorePaths": [
@@ -96,5 +94,7 @@
       ],
       "groupName": "github actions"
     }
-  ]
+  ],
+  "dependencyDashboard": true,
+  "minimumReleaseAge": "3 days"
 }

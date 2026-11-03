@@ -93,6 +93,50 @@ test('webhook downloads a binary response', async () => {
   }
 });
 
+test('webhook reads bodyFile per run', async () => {
+  const root = tempRoot();
+  let received = '';
+  let contentType = '';
+  const server = await localServer((req, res) => {
+    contentType = req.headers['content-type'] ?? '';
+    req.on('data', (chunk) => { received += chunk; });
+    req.on('end', () => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ summary: 'body-ok' }));
+    });
+  });
+  const bodyFile = path.join(root, 'config.yaml');
+  fs.writeFileSync(bodyFile, 'hello: world\n');
+  try {
+    const run = () => runWebhook({
+      webhook: {
+        url: `${server.base}/hook`,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-yaml' },
+        bodyFile,
+        timeoutMs: 10_000,
+      },
+      local: {},
+      log: () => {},
+      redact: [],
+      cwd: root,
+    });
+    const first = await run();
+    assert.equal(first.summary, 'body-ok');
+    assert.equal(received, 'hello: world\n');
+    assert.equal(contentType, 'application/x-yaml');
+
+    received = '';
+    fs.writeFileSync(bodyFile, 'hello: again\n');
+    const second = await run();
+    assert.equal(second.summary, 'body-ok');
+    assert.equal(received, 'hello: again\n');
+  } finally {
+    await server.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('ensureTokenFile reuses an existing token', () => {
   const root = tempRoot();
   try {
@@ -147,6 +191,53 @@ test('config loader accepts webhook tasks and rejects webhook+script', async () 
       };
     `);
     await assert.rejects(() => loadConfig(bad), /cannot be combined/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('config loader accepts bodyFile and rejects body+bodyFile', async () => {
+  const root = tempRoot();
+  try {
+    const bodyFile = path.join(root, 'config.yaml');
+    fs.writeFileSync(bodyFile, 'hello: world\n');
+    const file = path.join(root, 'config.mjs');
+    fs.writeFileSync(file, `
+      export default {
+        groups: [{
+          name: 'Remote',
+          tasks: [{
+            name: 'Remote process',
+            state_dir: '${root.replaceAll("'", "\\'")}',
+            webhook: {
+              url: 'https://agent.example/v1/jobs/example/run',
+              bodyFile: '${bodyFile.replaceAll("'", "\\'")}',
+            },
+          }],
+        }],
+      };
+    `);
+    const [, tasks] = await loadConfig(file);
+    assert.equal(tasks[0].webhook.bodyFile, bodyFile);
+
+    const bad = path.join(root, 'bad.mjs');
+    fs.writeFileSync(bad, `
+      export default {
+        groups: [{
+          name: 'Remote',
+          tasks: [{
+            name: 'Bad',
+            state_dir: '${root.replaceAll("'", "\\'")}',
+            webhook: {
+              url: 'https://agent.example/v1/jobs/example/run',
+              body: 'x',
+              bodyFile: '${bodyFile.replaceAll("'", "\\'")}',
+            },
+          }],
+        }],
+      };
+    `);
+    await assert.rejects(() => loadConfig(bad), /mutually exclusive/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

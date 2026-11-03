@@ -152,6 +152,14 @@ function validateWebhook(value, taskName) {
       throw new ConfigError(`${label}.body must be a string, number, boolean or object`);
     }
   }
+  if (value.bodyFile !== undefined) {
+    if (typeof value.bodyFile !== 'string' || !value.bodyFile.trim()) {
+      throw new ConfigError(`${label}.bodyFile must be a non-empty string`);
+    }
+    if (value.body !== undefined && value.body !== null) {
+      throw new ConfigError(`${label}: body and bodyFile are mutually exclusive`);
+    }
+  }
 
   const timeoutMs = value.timeoutMs === undefined ? 300_000 : Number(value.timeoutMs);
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 86_400_000) {
@@ -188,6 +196,7 @@ function validateWebhook(value, taskName) {
     method,
     headers: { ...headers },
     body: value.body,
+    bodyFile: value.bodyFile,
     timeoutMs,
     expectStatus,
     maxBytes,

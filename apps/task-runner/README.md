@@ -259,6 +259,7 @@ Fields:
 | `method` | HTTP method; defaults to `POST` |
 | `headers` | Header object; supports config tokens |
 | `body` | Raw string or JSON object |
+| `bodyFile` | Read the request body from a file at run time; mutually exclusive with `body` |
 | `timeoutMs` | Request timeout; defaults to 300000 |
 | `expectStatus` | Expected status or list; defaults to 2xx |
 | `downloadTo` | Save the response body to a file; binary-safe |
@@ -268,6 +269,25 @@ Fields:
 | `tokenFile` | Auto-generate a bearer token on first use, store it `0600`, and send it unless a header already sets `Authorization` |
 | `enrollUrl` | Optional enrollment endpoint called before the request; requires `tokenFile` |
 | `caFile`, `certFile`, `keyFile` | Optional TLS CA/client certificate paths |
+
+A process job sends its config file as the request body and returns a JSON
+summary instead of downloading an archive:
+
+```js
+{
+  name: 'Remote process',
+  state_dir: '{{maindir}}/.tasks',
+  webhook: {
+    url: 'http://dscpln-agent-example:8788/v1/jobs/example/run',
+    method: 'POST',
+    enrollUrl: 'http://dscpln-agent-example:8788/v1/enroll',
+    tokenFile: '/home/example/.config/dscpln/example-agent.token',
+    bodyFile: '{{config_dir}}/apps/example/config.yaml',
+    headers: { 'Content-Type': 'application/x-yaml' },
+    timeoutMs: 2100000,
+  },
+}
+```
 
 With `tokenFile` + `enrollUrl`, no token is created by hand. The first run
 generates a random token, enrolls it, and the agent stores only its SHA-256

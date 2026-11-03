@@ -17,6 +17,8 @@ export default {
   // container that is $HOME, e.g. /home/node).
   maindir: '~/Backups',
   manual_dir: '{{maindir}}/Manual',
+  // Folder holding per-tool config files sent to remote process jobs.
+  config_dir: '/config-src',
 
   // Folder holding your helper scripts, referenced as {{scriptroot}}/name.
   // This default points at the bundled examples (shipped inside the image, so
@@ -179,6 +181,19 @@ export default {
           },
           commands: [`echo "Downloaded to {{maindir}}/example-archive.tar.gz"`],
           summary_last_line: true,
+        },
+        {
+          name: 'Remote process',
+          note: 'Run a configured process job and send its config file as the body.',
+          webhook: {
+            url: 'https://agent.example/v1/jobs/example-process/run',
+            method: 'POST',
+            enrollUrl: 'https://agent.example/v1/enroll',
+            tokenFile: '{{maindir}}/.tasks/example-agent.token',
+            bodyFile: '{{config_dir}}/apps/example/config.yaml',
+            headers: { 'Content-Type': 'application/x-yaml' },
+            timeoutMs: 1800000,
+          },
         },
       ],
     },

@@ -20,6 +20,28 @@
       ],
       "format": "tar.gz",
       "maxBytes": 1073741824
+    },
+    "example-process": {
+      "type": "process",
+      "binary": "/state/tool/bin/tool",
+      "args": [
+        "--config",
+        "{configDir}",
+        "--output",
+        "{outputDir}"
+      ],
+      "configDir": "/state/tool/config",
+      "configFile": "config.yaml",
+      "outputDir": "/data/output",
+      "home": "/home/user",
+      "timeoutSeconds": 1800,
+      "result": {
+        "json": "overall",
+        "summary": "tool: {processedGames} games",
+        "require": {
+          "processedGames": 1
+        }
+      }
     }
   }
 }

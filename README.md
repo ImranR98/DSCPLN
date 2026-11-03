@@ -82,9 +82,10 @@ For the full model, including environment variables and state locations, see
 ## Deploy and operate
 
 Images are published to GHCR as
-`ghcr.io/imranr98/dscpln-<app>:latest`; the agent is
-`ghcr.io/imranr98/dscpln-agent`. Pin image digests for reproducible deployments,
-put the apps behind a reverse proxy, and keep runtime data on mounted volumes.
+`ghcr.io/imranr98/dscpln-<app>:latest`; the agents are
+`ghcr.io/imranr98/dscpln-agent` (slim) and `dscpln-agent-gtk` (GTK runtime).
+Pin image digests for reproducible deployments, put the apps behind a reverse
+proxy, and keep runtime data on mounted volumes.
 
 Deployment, upgrades, health checks, logs, backups and the remote agent are
 covered in [Operations](docs/OPERATIONS.md).

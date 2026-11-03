@@ -13,8 +13,10 @@ import { pathToFileURL } from 'node:url';
 import { ArchiveError, createArchive } from './archive.mjs';
 import { enroll, verify } from './auth.mjs';
 import { ConfigError, loadConfig } from './config.mjs';
+import { ProcessError, runProcess } from './process.mjs';
 
 export const SERVICE_NAME = 'dscpln-agent';
+const MAX_BODY_BYTES = 1024 * 1024;
 
 function json(res, status, body) {
   const text = JSON.stringify(body);
@@ -36,13 +38,33 @@ function hasBody(req) {
 }
 
 function jobFromPath(pathname) {
-  const match = /^\/v1\/jobs\/([^/]+)\/archive$/.exec(pathname);
+  const match = /^\/v1\/jobs\/([^/]+)\/(archive|run)$/.exec(pathname);
   if (!match) return null;
   try {
-    return decodeURIComponent(match[1]);
+    return { id: decodeURIComponent(match[1]), action: match[2] };
   } catch {
     return null;
   }
+}
+
+async function readRequestBody(req, maxBytes) {
+  const chunks = [];
+  let size = 0;
+  let tooLarge = false;
+  try {
+    for await (const chunk of req) {
+      size += chunk.length;
+      if (size > maxBytes) {
+        tooLarge = true;
+        continue;
+      }
+      chunks.push(chunk);
+    }
+  } catch (e) {
+    if (req.destroyed) throw new ProcessError('request aborted', 499);
+    throw e;
+  }
+  return { body: Buffer.concat(chunks), tooLarge };
 }
 
 export function createAgentServer(config) {
@@ -78,58 +100,92 @@ export function createAgentServer(config) {
         return res.end();
       }
 
-      const jobId = jobFromPath(url.pathname);
-      if (req.method === 'POST' && jobId) {
-        if (hasBody(req)) {
-          req.resume();
-          return json(res, 400, { error: 'archive requests take no body' });
-        }
+      const target = jobFromPath(url.pathname);
+      if (req.method === 'POST' && target) {
         const token = bearer(req);
         const auth = verify({ stateDir: config.stateDir, token });
         if (!auth.ok) {
           res.setHeader('WWW-Authenticate', 'Bearer');
           return json(res, 401, { error: auth.reason ?? 'unauthorized' });
         }
-        const job = Object.prototype.hasOwnProperty.call(config.jobs, jobId) ? config.jobs[jobId] : null;
+        const job = Object.prototype.hasOwnProperty.call(config.jobs, target.id)
+          ? config.jobs[target.id]
+          : null;
         if (!job) return json(res, 404, { error: 'unknown job' });
-        if (job.type !== 'archive') return json(res, 400, { error: 'job is not an archive job' });
-        if (busy) return json(res, 429, { error: 'agent is busy' });
+        if (busy) {
+          req.resume();
+          return json(res, 429, { error: 'agent is busy' });
+        }
+
+        if (target.action === 'archive') {
+          if (job.type !== 'archive') return json(res, 400, { error: 'job is not an archive job' });
+          if (hasBody(req)) {
+            req.resume();
+            return json(res, 400, { error: 'archive requests take no body' });
+          }
+
+          busy = true;
+          let result;
+          try {
+            const controller = new AbortController();
+            req.on('aborted', () => controller.abort());
+            result = await createArchive(job, workDir, { signal: controller.signal });
+            if (res.destroyed || controller.signal.aborted) return;
+
+            res.writeHead(200, {
+              'Content-Type': 'application/gzip',
+              'Content-Length': result.size,
+              'Content-Disposition': `attachment; filename="${target.id}.tar.gz"`,
+              'Cache-Control': 'no-store',
+              'X-DSCPLN-SHA256': result.sha256,
+              'X-DSCPLN-Summary': `archive ${target.id} ${result.size} bytes`,
+            });
+            await new Promise((resolve, reject) => {
+              const stream = fs.createReadStream(result.archive);
+              stream.on('error', reject);
+              stream.on('end', resolve);
+              res.on('close', resolve);
+              stream.pipe(res);
+            });
+          } finally {
+            result?.cleanup?.();
+            busy = false;
+          }
+          return;
+        }
+
+        if (job.type !== 'process') return json(res, 400, { error: 'job is not a process job' });
 
         busy = true;
-        let result;
         try {
+          let body = Buffer.alloc(0);
+          if (job.configFile) {
+            const read = await readRequestBody(req, MAX_BODY_BYTES);
+            if (read.tooLarge) {
+              return json(res, 413, { error: `request body exceeds ${MAX_BODY_BYTES} bytes` });
+            }
+            body = read.body;
+          } else if (hasBody(req)) {
+            req.resume();
+            return json(res, 400, { error: 'process request takes no body' });
+          }
+
           const controller = new AbortController();
           req.on('aborted', () => controller.abort());
-          result = await createArchive(job, workDir, { signal: controller.signal });
+          const result = await runProcess(job, workDir, { body, signal: controller.signal });
           if (res.destroyed || controller.signal.aborted) return;
-
-          res.writeHead(200, {
-            'Content-Type': 'application/gzip',
-            'Content-Length': result.size,
-            'Content-Disposition': `attachment; filename="${jobId}.tar.gz"`,
-            'Cache-Control': 'no-store',
-            'X-DSCPLN-SHA256': result.sha256,
-            'X-DSCPLN-Summary': `archive ${jobId} ${result.size} bytes`,
-          });
-          await new Promise((resolve, reject) => {
-            const stream = fs.createReadStream(result.archive);
-            stream.on('error', reject);
-            stream.on('end', resolve);
-            res.on('close', resolve);
-            stream.pipe(res);
-          });
+          return json(res, 200, { ok: true, ...result });
         } finally {
-          result?.cleanup?.();
           busy = false;
         }
-        return;
       }
 
       return json(res, 404, { error: 'not found' });
     } catch (e) {
-      const status = e instanceof ArchiveError ? e.status : 500;
-      const message = e instanceof ArchiveError ? e.message : 'internal error';
-      if (!(e instanceof ArchiveError)) console.error(`agent error: ${e.stack ?? e.message}`);
+      const known = e instanceof ArchiveError || e instanceof ProcessError;
+      const status = known ? e.status : 500;
+      const message = known ? e.message : 'internal error';
+      if (!known) console.error(`agent error: ${e.stack ?? e.message}`);
       if (res.headersSent) {
         res.destroy();
       } else {

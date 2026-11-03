@@ -216,7 +216,18 @@ export async function runWebhook({ webhook, local, log, redact, cwd, runAs, sign
       headers.Authorization = `Bearer ${token}`;
     }
     let body;
-    if (webhook.body !== undefined && webhook.body !== null) {
+    if (webhook.bodyFile !== undefined && webhook.bodyFile !== null) {
+      const bodyPath = path.resolve(cwd, String(resolve(webhook.bodyFile, local)));
+      try {
+        body = fs.readFileSync(bodyPath, 'utf8');
+      } catch (e) {
+        throw new Error(`cannot read webhook bodyFile ${bodyPath}: ${e.message}`, { cause: e });
+      }
+      if (!Object.keys(headers).some((key) => key.toLowerCase() === 'content-type')) {
+        headers['Content-Type'] = 'application/octet-stream';
+      }
+      headers['Content-Length'] = String(Buffer.byteLength(body));
+    } else if (webhook.body !== undefined && webhook.body !== null) {
       const resolved = resolveValue(webhook.body, local, token, extra);
       body = typeof resolved === 'string' ? resolved : JSON.stringify(resolved);
       if (!Object.keys(headers).some((key) => key.toLowerCase() === 'content-type')) {

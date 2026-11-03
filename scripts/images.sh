@@ -8,6 +8,7 @@ DEFAULT_IMAGE_ORG=imranr98
 
 ALL_APPS=(portal balance-xlsx file-pipelines whatsapp-txt task-runner lockdown)
 AGENT_IMAGE=dscpln-agent
+AGENT_GTK_IMAGE=dscpln-agent-gtk
 
 # app -> image name (repo under IMAGE_ORG)
 declare -A IMAGE_NAMES=(

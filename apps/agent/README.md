@@ -22,22 +22,30 @@ path or a shell command.
 
 | | |
 |---|---|
-| Image | `ghcr.io/imranr98/dscpln-agent:latest` |
+| Image | `ghcr.io/imranr98/dscpln-agent:latest` (slim) or `dscpln-agent-gtk:latest` |
 | Config | `/config/agent.json`, or `DSCPLN_AGENT_CONFIG` |
 | State | `stateDir` in the agent config |
-| API | `POST /v1/jobs/<job-id>/archive` |
+| API | `POST /v1/jobs/<job-id>/archive` and `/run` |
 | First use | Task Runner generates a token and enrolls it |
 | Security | Trust-on-first-use, restricted by source CIDR |
 
 ## How it works
 
-1. You define an `archive` job with a root path and optional filters.
-2. The Task Runner calls `POST /v1/jobs/<job-id>/archive`.
-3. The agent returns a `tar.gz` archive with a SHA-256 header.
-4. The Task Runner downloads it and runs any follow-up commands, such as
-   restic.
+1. You define a job in the agent config. An `archive` job has a root path and
+   optional filters; a `process` job has a fixed binary, args, config file and
+   output directory.
+2. The Task Runner calls `POST /v1/jobs/<job-id>/archive` or
+   `POST /v1/jobs/<job-id>/run`.
+3. Archive jobs return a `tar.gz` with a SHA-256 header; process jobs run the
+   configured binary and return a JSON summary.
+4. The Task Runner downloads the archive or records the summary and runs any
+   follow-up commands.
 5. On first use, the Task Runner generates a bearer token, enrolls it with
    `POST /v1/enroll`, and reuses the stored token.
+
+The request never supplies a command or a path. Archive roots, process
+binaries, args, and output directories all come from the deployment-owned
+agent config. Process jobs accept only an optional config file body.
 
 The agent stores only a SHA-256 hash of the token, in
 `<stateDir>/token.sha256` with mode `0600`. No token needs to be created by
@@ -68,11 +76,37 @@ Mount a JSON config at `/config/agent.json`:
 }
 ```
 
-Job fields:
+A process job runs a deployment-configured binary. The request body, when
+`configFile` is set, is written to `<configDir>/<configFile>`; the binary can
+write to `outputDir` and print JSON for the summary/success check:
+
+```json
+{
+  "jobs": {
+    "example-process": {
+      "type": "process",
+      "binary": "/state/tool/bin/tool",
+      "args": ["--config", "{configDir}", "--output", "{outputDir}"],
+      "configDir": "/state/tool/config",
+      "configFile": "config.yaml",
+      "outputDir": "/data/output",
+      "home": "/home/user",
+      "timeoutSeconds": 1800,
+      "result": {
+        "json": "overall",
+        "summary": "tool: {processedGames} games",
+        "require": { "processedGames": 1 }
+      }
+    }
+  }
+}
+```
+
+Archive job fields:
 
 | Field | Description |
 |---|---|
-| `type` | `archive` (the only type for now) |
+| `type` | `archive` |
 | `root` | Absolute directory to archive |
 | `include` | Optional relative glob patterns; when set, only matching paths are archived |
 | `exclude` | Optional tar exclude patterns |
@@ -80,6 +114,25 @@ Job fields:
 | `format` | `tar.gz` |
 | `maxBytes` | Maximum archive size; defaults to 1 GiB |
 | `timeoutSeconds` | Maximum tar runtime; defaults to 30 minutes |
+
+Process job fields:
+
+| Field | Description |
+|---|---|
+| `type` | `process` |
+| `binary` | Absolute path to the executable |
+| `args` | Fixed string list; `{configDir}`, `{configFile}` and `{outputDir}` are substituted from the job config |
+| `configDir` | Absolute writable directory for the config, manifest/cache and `XDG_CACHE_HOME` |
+| `configFile` | File name inside `configDir` that receives the request body; omit to run without a body |
+| `outputDir` | Optional absolute output directory, created before the run |
+| `home` | Optional `HOME` for the process (`~` paths in tools such as Ludusavi) |
+| `timeoutSeconds` | Maximum runtime; defaults to 30 minutes |
+| `maxStdoutBytes` | Maximum captured stdout; defaults to 16 MiB |
+| `result.json` | Optional dot path to the JSON node used for summary/require |
+| `result.summary` | Optional summary template; `{field}` reads from the result node |
+| `result.require` | Optional map of field → minimum numeric value |
+
+`timeoutSeconds` applies to both job types.
 
 Enrollment fields:
 
@@ -109,13 +162,36 @@ Optional TLS:
 - `POST /v1/enroll`: bearer token; stores its hash; `204` on success.
 - `POST /v1/jobs/<job-id>/archive`: bearer token; returns
   `application/gzip`.
+- `POST /v1/jobs/<job-id>/run`: bearer token; runs a `process` job. The body
+  is the config file when the job sets `configFile`. Returns JSON with
+  `summary` and `durationMs`.
 
 The archive response includes:
 
 - `X-DSCPLN-SHA256`: archive SHA-256.
 - `X-DSCPLN-Summary`: a short summary.
 
-Only one archive runs at a time per agent; concurrent requests get `429`.
+Only one job runs at a time per agent; concurrent requests get `429`.
+
+## Artifact fetch helper
+
+The agent images include `fetch-artifact.sh` for initContainers that download a
+versioned `.tar.gz` release into a canonical destination. It is deliberately
+version-keyed: the same version is reused indefinitely, while a different
+version replaces the binary and prunes stale copies. There is no checksum or
+time-based refresh.
+
+| Variable | Description |
+|---|---|
+| `ARTIFACT_URL` | Release archive URL |
+| `ARTIFACT_VERSION` | Cache key, version stamp and check needle |
+| `ARTIFACT_DEST` | Canonical destination path |
+| `ARTIFACT_MEMBER` | File name inside the tar archive |
+| `ARTIFACT_CHECK_ARGS` | Optional args that print the version, e.g. `--version` |
+
+The GTK image (`dscpln-agent-gtk`) contains the GTK3 runtime needed by tools
+such as Ludusavi; the slim image is the default for archive-only agents. Both
+images contain the same process/artifact code.
 
 ## Compose example
 
@@ -180,5 +256,7 @@ No token needs to be created by hand.
 scripts/build-agent.sh
 ```
 
-The same image runs on every host. Configuration, token state and data mounts
-are host-specific and belong in the private deployment repository.
+This builds and pushes both `dscpln-agent` (slim, Alpine) and
+`dscpln-agent-gtk` (Debian + GTK3). The same code runs on every host;
+configuration, token state, runtime image choice and data mounts are
+host-specific and belong in the private deployment repository.

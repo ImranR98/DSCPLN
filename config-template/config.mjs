@@ -22,6 +22,8 @@ export default {
   // Root of the data tree your tasks operate on.
   maindir: '~/Backups',
   manual_dir: '{{maindir}}/Manual',
+  // Folder holding per-tool config files sent to remote process jobs.
+  config_dir: '/config-src',
 
   // The bundled examples ship inside the task-runner image and work without a
   // separate tools mount. Point this at '/config-src/tools' (or your mount)

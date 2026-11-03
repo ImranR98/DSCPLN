@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Smoke-test the production images before they are published.
 #
-#   scripts/smoke-image.sh [APP_IMAGE] [AGENT_IMAGE]
+#   scripts/smoke-image.sh [APP_IMAGE] [AGENT_IMAGE] [AGENT_GTK_IMAGE]
 #
 # Verifies that the base image provides every runtime tool the apps expect,
 # that production dependencies survived `npm prune`, and that the unified
@@ -11,6 +11,7 @@ set -euo pipefail
 
 APP_IMAGE="${1:-dscpln-app:ci}"
 AGENT_IMAGE="${2:-dscpln-agent:ci}"
+AGENT_GTK_IMAGE="${3:-dscpln-agent-gtk:ci}"
 SMOKE_PORT="${SMOKE_PORT:-18080}"
 
 ENGINE="${ENGINE:-}"
@@ -113,7 +114,21 @@ echo "==> Checking $AGENT_IMAGE"
     set -eu
     node --version
     tar --version | head -1
+    curl --version | head -1
+    sh -n /app/fetch-artifact.sh
     node --check /app/server.mjs
+'
+
+echo "==> Checking $AGENT_GTK_IMAGE"
+# shellcheck disable=SC2016 # the -c script must not expand on the host
+"$ENGINE" run --rm --entrypoint sh "$AGENT_GTK_IMAGE" -c '
+    set -eu
+    node --version
+    tar --version | head -1
+    curl --version | head -1
+    sh -n /app/fetch-artifact.sh
+    node --check /app/server.mjs
+    ldconfig -p | grep -q "libgtk-3"
 '
 
 echo "==> Image smoke tests passed"

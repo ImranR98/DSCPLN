@@ -43,8 +43,8 @@ automatically; see [Backups and version control](#backups-and-version-control).
 - The insights page is a historical viewer with date ranges and comparisons.
 - The forecasts page is a live projection planner; changes are only written
   when you press Save.
-- Budget checks run periodically and send a notification through the Portal
-  when a limit is reached.
+- Budget checks run periodically and send a notification through DA5H when a
+  limit is reached.
 
 ## Configuration
 

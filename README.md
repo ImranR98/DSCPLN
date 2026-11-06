@@ -1,4 +1,4 @@
-# Balance XLSX
+# D$CPLN — Balance XLSX
 
 **Track your budget in an Excel workbook.**
 

@@ -3,7 +3,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const DEFAULT_CONFIG_PATH = './config.json'
+const DEFAULT_CONFIG_PATH = './config/config.json'
 
 const DEFAULTS = {
     port: 3300,
@@ -71,7 +71,7 @@ const loadConfig = (configPath) => {
     const requestedPath = configPath || process.env['DSCPLN_CONFIG'] || DEFAULT_CONFIG_PATH
     const resolvedPath = path.resolve(requestedPath)
     if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
-        throw new Error(`Config file not found: ${resolvedPath}. Copy config.example.json to config.json and edit it, or set DSCPLN_CONFIG to its path.`)
+        throw new Error(`Config file not found: ${resolvedPath}. Copy config.example.json to config/config.json and edit it, or set DSCPLN_CONFIG to its path.`)
     }
     let parsed
     try {

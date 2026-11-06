@@ -14,20 +14,20 @@ monthly spending, explore trends, or project a cash-flow plan.
 
 | | |
 |---|---|
-| Runs at | `/balance` (or port `3300` locally) |
+| Runs at | `https://dscpln.<domain>/` (or port `3300` locally) |
 | Data | An Excel workbook in a git repository |
-| Config | `DSCPLN_CONFIG`, default `./config.json` |
+| Config | `DSCPLN_CONFIG`, default `./config/config.json` |
 | Needs | A workbook with the expected sheets; git for automatic commits |
-| Notifications | Monthly budget alerts through the Portal |
+| Notifications | Monthly budget alerts through the DA5H notification relay |
 
 ## Quick start
 
-From the D$CPLN repository root:
-
 ```sh
 npm install
-cp apps/balance-xlsx/config.example.json apps/balance-xlsx/config.json
-npm run balance-xlsx
+git submodule update --init --recursive
+mkdir -p config
+cp config.example.json config/config.json
+npm start
 ```
 
 Open <http://localhost:3300>. The example config uses the included
@@ -59,9 +59,10 @@ automatically; see [Backups and version control](#backups-and-version-control).
 | `notifications.onlyWarnOnce` | When `true`, a given currency's monthly notification is only sent the first time it goes over budget, not for subsequent increases. |
 | `api.stateFile` | The file holding the external API token and its edit-token signing secret (defaults to `./api-state.json`; created on first run, mode `0600`). Relative paths resolve against the config file's directory. |
 
-Budget notifications are relayed through the portal (`DSCPLN_PORTAL_URL`, e.g.
-`http://portal:8080` in Kubernetes), whose Settings hold the ntfy URL and
-token; without a relay configured the check is a no-op.
+Budget notifications are relayed through DA5H (`NOTIFY_RELAY_URL`, e.g.
+`http://da5h:8080` in Kubernetes), whose Settings hold the ntfy URL and token;
+without a relay configured the check is a no-op. `APP_ORIGIN` supplies the
+public URL used in notification links.
 
 ### `excelDataProvider` options
 

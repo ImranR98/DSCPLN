@@ -19,11 +19,11 @@ const plainAmount = (value) => {
 const startNotifications = (config, dataProvider, options = {}) => {
     const { checkIntervalMinutes } = config.notifications
     const onlyWarnOnce = config.notifications.onlyWarnOnce !== false
-    const relayUrl = options.relayUrl ?? process.env.DSCPLN_PORTAL_URL ?? ''
+    const relayUrl = options.relayUrl ?? process.env.NOTIFY_RELAY_URL ?? process.env.DSCPLN_PORTAL_URL ?? ''
     if (!relayUrl) {
         return
     }
-    const origin = String(process.env.DSCPLN_ORIGIN ?? '').trim().replace(/\/+$/, '')
+    const origin = String(process.env.APP_ORIGIN ?? process.env.DSCPLN_ORIGIN ?? '').trim().replace(/\/+$/, '')
     const clickUrl = /^https?:\/\//i.test(origin) ? `${origin}/balance` : ''
     const notifier = new Notifier({
         app: 'Balance XLSX',

@@ -3,7 +3,7 @@
   "dataProvider": "excelDataProvider",
   "providers": {
     "excelDataProvider": {
-      "workbookFile": "./mock-data.xlsx",
+      "workbookFile": "../mock-data.xlsx",
       "transactionsSheet": "Transactions",
       "constantsSheet": "Constants"
     }

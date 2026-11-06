@@ -1,0 +1,10 @@
+node_modules/
+config/
+static/
+api-state.json
+*.xlsx.bak
+*.xlsx.tmp
+*.log
+logs/
+.env
+.DS_Store

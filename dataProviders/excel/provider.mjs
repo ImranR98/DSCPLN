@@ -754,6 +754,16 @@ export default (config = {}, configDir = process.cwd()) => {
     let parsedCache = null
     let parseInFlight = null
 
+    // Every mutation is a read-modify-write of the same workbook. Serialize
+    // them so two requests cannot write the same .tmp file or commit the same
+    // git index concurrently; a failed mutation must not break the chain.
+    let writeChain = Promise.resolve()
+    const withWriteLock = (operation) => {
+        const run = writeChain.then(operation)
+        writeChain = run.then(() => undefined, () => undefined)
+        return run
+    }
+
     const loadWorkbook = async () => {
         if (!fs.existsSync(workbookFile)) {
             throw new Error(`Workbook not found: ${workbookFile}`)
@@ -1160,9 +1170,16 @@ export default (config = {}, configDir = process.cwd()) => {
         }
         parseInFlight = (async () => {
             try {
-                const workbook = await loadWorkbook()
-                const parsed = parseWorkbook(workbook)
-                const freshStat = fs.statSync(workbookFile)
+                let workbook = await loadWorkbook()
+                let parsed = parseWorkbook(workbook)
+                let freshStat = fs.statSync(workbookFile)
+                // A write can land between readFile and statSync. Retry a few
+                // times so an old parse is never cached under the new stat.
+                for (let attempt = 0; attempt < 3 && (freshStat.mtimeMs !== stat.mtimeMs || freshStat.size !== stat.size); attempt += 1) {
+                    workbook = await loadWorkbook()
+                    parsed = parseWorkbook(workbook)
+                    freshStat = fs.statSync(workbookFile)
+                }
                 parsedCache = { ...parsed, mtimeMs: freshStat.mtimeMs, size: freshStat.size }
                 return parsedCache
             } finally {
@@ -2042,18 +2059,20 @@ export default (config = {}, configDir = process.cwd()) => {
         }
     }
 
+    const serialized = (operation) => (...args) => withWriteLock(() => operation(...args))
+
     return {
         getData,
         getTransactions,
         getForecast,
-        saveForecast,
-        updateMonthlyBudget,
-        updateDefaultExcludedCategories,
-        addTransaction,
+        saveForecast: serialized(saveForecast),
+        updateMonthlyBudget: serialized(updateMonthlyBudget),
+        updateDefaultExcludedCategories: serialized(updateDefaultExcludedCategories),
+        addTransaction: serialized(addTransaction),
         checkImportLines,
-        importTransactions,
-        updateTransaction,
-        deleteTransaction,
+        importTransactions: serialized(importTransactions),
+        updateTransaction: serialized(updateTransaction),
+        deleteTransaction: serialized(deleteTransaction),
         suggestCategories,
         scoreCategories,
         suggestDetails,

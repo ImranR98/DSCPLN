@@ -24,7 +24,12 @@ const startNotifications = (config, dataProvider, options = {}) => {
         return
     }
     const origin = String(process.env.APP_ORIGIN ?? process.env.DSCPLN_ORIGIN ?? '').trim().replace(/\/+$/, '')
-    const clickUrl = /^https?:\/\//i.test(origin) ? `${origin}/balance` : ''
+    // APP_ORIGIN is the host root; the app may be mounted under BASE_PATH.
+    // Older builds appended a hard-coded /balance even when BASE_PATH was
+    // empty, which produced a 404 in the deployed (root-mounted) app.
+    const basePath = String(config.basePath ?? process.env.BASE_PATH ?? '').trim().replace(/^\/+|\/+$/g, '')
+    const suffix = basePath && !origin.endsWith(`/${basePath}`) ? `/${basePath}` : ''
+    const clickUrl = /^https?:\/\//i.test(origin) ? `${origin}${suffix}/` : ''
     const notifier = new Notifier({
         app: 'Balance XLSX',
         relayUrl,

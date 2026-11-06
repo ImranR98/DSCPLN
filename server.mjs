@@ -82,10 +82,20 @@ const createApp = (config) => {
 
     const requireApiToken = (req, res, next) => {
         const match = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || '')
-        if (!match || !apiAuth.checkToken(match[1].trim())) {
+        const candidate = match ? match[1].trim() : ''
+        // Reject oversized candidates before hashing them: the header is
+        // attacker-controlled and the comparison deliberately uses a hash.
+        if (!candidate || candidate.length > 512 || !apiAuth.checkToken(candidate)) {
             res.status(401).json({ error: 'Invalid or missing API token' })
             return
         }
+        next()
+    }
+
+    // The token is a credential; never let a browser or intermediary cache it.
+    const noStore = (req, res, next) => {
+        res.set('Cache-Control', 'no-store')
+        res.set('Pragma', 'no-cache')
         next()
     }
 
@@ -207,11 +217,11 @@ const createApp = (config) => {
                 res.send(await dataProvider.suggestCategories(req.query['q'], req.query['kind']))
             }))
 
-            router.get('/token', (req, res) => {
+            router.get('/token', noStore, (req, res) => {
                 res.send({ token: apiAuth.getToken() })
             })
 
-            router.post('/token/regenerate', (req, res) => {
+            router.post('/token/regenerate', noStore, (req, res) => {
                 // Requiring JSON keeps cross-site form posts from rotating the token.
                 if (!req.is('application/json')) {
                     res.status(415).send('Expected application/json')

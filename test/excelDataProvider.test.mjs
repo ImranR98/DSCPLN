@@ -203,6 +203,34 @@ test('caps the viewed month in history and flags it partial', async () => {
     assert.equal(complete.history[complete.history.length - 1].currencies.CAD.spend, 100)
 })
 
+test('serializes concurrent workbook mutations without losing rows', async () => {
+    const { provider } = createTestProvider()
+    const inputs = Array.from({ length: 6 }, (_, index) => ({
+        kind: 'expense',
+        amount: index + 1,
+        details: `Concurrent ${index}`,
+        date: '2026-09-20',
+        category: 'Snacks',
+        currency: 'CAD',
+        notes: '',
+    }))
+    const results = await Promise.allSettled(inputs.map((input) => provider.addTransaction(input)))
+    assert.deepEqual(results.map((result) => result.status), inputs.map(() => 'fulfilled'))
+    const data = await provider.getTransactions('2026-09-20', '2026-09-20')
+    const details = data.transactions.map((transaction) => transaction.details).sort()
+    assert.deepEqual(details, inputs.map((input) => input.details).sort())
+
+    // A rejected mutation must not poison the queue for the next writer.
+    const mixed = await Promise.allSettled([
+        provider.addTransaction({ ...inputs[0], category: 'Nope' }),
+        provider.addTransaction({ ...inputs[0], details: 'After failure', amount: 9 }),
+    ])
+    assert.equal(mixed[0].status, 'rejected')
+    assert.equal(mixed[1].status, 'fulfilled')
+    const after = await provider.getTransactions('2026-09-20', '2026-09-20')
+    assert.ok(after.transactions.some((transaction) => transaction.details === 'After failure'))
+})
+
 test('preserves high-precision amounts like fractional XMR', async () => {
     const { provider, workbookFile } = createTestProvider()
     const created = await provider.addTransaction({

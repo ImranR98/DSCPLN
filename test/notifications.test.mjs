@@ -90,3 +90,31 @@ test('notifications are a no-op without a portal relay', async () => {
     startNotifications({ notifications: { checkIntervalMinutes: 30, onlyWarnOnce: false } }, provider, { relayUrl: '' })
     assert.equal(called, 0)
 })
+
+test('notification links follow APP_ORIGIN and the app base path', async (t) => {
+    const relay = await fakeRelay(t)
+    relay.setFail(false)
+    const provider = {
+        getData: async () => ({ currencies: [{ code: 'CAD', monthlyBudget: 100, monthsSpend: 120 }] }),
+    }
+    const realSetInterval = global.setInterval
+    const realOrigin = process.env.APP_ORIGIN
+    const ticks = []
+    global.setInterval = (callback) => {
+        ticks.push(callback)
+        return { unref() { } }
+    }
+    try {
+        process.env.APP_ORIGIN = 'https://dscpln.example'
+        startNotifications({ notifications: { checkIntervalMinutes: 30, onlyWarnOnce: false }, basePath: '' }, provider, { relayUrl: relay.url })
+        startNotifications({ notifications: { checkIntervalMinutes: 30, onlyWarnOnce: false }, basePath: '/balance' }, provider, { relayUrl: relay.url })
+        await ticks[0]()
+        await ticks[1]()
+    } finally {
+        global.setInterval = realSetInterval
+        if (realOrigin === undefined) delete process.env.APP_ORIGIN
+        else process.env.APP_ORIGIN = realOrigin
+    }
+    assert.equal(relay.received[0].click, 'https://dscpln.example/')
+    assert.equal(relay.received[1].click, 'https://dscpln.example/balance/')
+})

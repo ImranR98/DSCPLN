@@ -60,6 +60,14 @@ test('requires the API token on the external API', async (t) => {
         amount: -1, details: 'x', currency: 'CAD', category: 'Snacks',
     })
     assert.equal(wrongPost.status, 401)
+
+    // Oversized credentials are rejected before hashing, and the token
+    // endpoint must never be cached by a browser or intermediary.
+    const oversized = await api(baseUrl, 'x'.repeat(513), '/api/categories')
+    assert.equal(oversized.status, 401)
+    const tokenResponse = await fetch(`${baseUrl}/token`)
+    assert.equal(tokenResponse.headers.get('cache-control'), 'no-store')
+    assert.equal(tokenResponse.headers.get('pragma'), 'no-cache')
 })
 
 test('lists and scores categories', async (t) => {

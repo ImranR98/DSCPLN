@@ -234,7 +234,13 @@ test('forecast recurring adjustments and scheduled changes round-trip', async (t
     page.on('dialog', (dialog) => dialog.accept())
 
     await page.goto(`${baseUrl}/balance/forecasts`)
-    await page.waitForSelector('.forecast-recurring__item')
+    // Pin the as-of date: the workbook fixture ends in September 2026 and the
+    // detector drops items once they age out (~56 days for a monthly cadence),
+    // so "today" makes the item count drift with the calendar. October 1 keeps
+    // every fixture month inside the window, so the second-item assertions
+    // below stay deterministic.
+    await page.fill('[data-testid="forecast-asof"]', '2026-10-01')
+    await page.waitForFunction(() => document.querySelectorAll('.forecast-recurring__item').length >= 2)
     const first = page.locator('.forecast-recurring__item').first()
     await first.locator('.forecast-recurring__adjust').click()
     await first.locator('[data-recurring-amount]').fill('1500')
